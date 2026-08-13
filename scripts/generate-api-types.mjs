@@ -21,6 +21,8 @@ const resolveFromRoot = (path) => join(root, path)
 const readJson = async (path) => JSON.parse(await readFile(resolveFromRoot(path), 'utf8'))
 
 const sha256 = (content) => createHash('sha256').update(content).digest('hex')
+const canonicalizeSnapshotBytes = (bytes) =>
+  Buffer.from(bytes.toString('utf8').replace(/\r\n/gu, '\n'), 'utf8')
 
 const countOperations = (paths) => {
   let operationCount = 0
@@ -41,7 +43,7 @@ const validateContractProvenance = async () => {
   const provenance = await readJson(openApiGenerationConfig.provenancePath)
   const installedGenerator = await readJson('node_modules/openapi-typescript/package.json')
 
-  const actualHash = sha256(snapshotBytes)
+  const actualHash = sha256(canonicalizeSnapshotBytes(snapshotBytes))
   if (actualHash !== provenance.sha256) {
     throw new Error(
       `OpenAPI snapshot hash mismatch. Expected ${provenance.sha256}, received ${actualHash}.`,

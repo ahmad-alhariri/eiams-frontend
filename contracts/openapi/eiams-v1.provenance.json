@@ -6,7 +6,7 @@
   "publishedAt": "2026-08-09T09:53:07+03:00",
   "revisedAt": "2026-08-09T10:54:56+03:00",
   "snapshotPath": "contracts/openapi/eiams-v1.openapi.json",
-  "sha256": "a433aadecf78e9ff2bf02a03702493f9ced37ad1d80ef6013ab5a347a24d5d00",
+  "sha256": "7c96981ab1155eb2c8a38023f378063ce0b2cd8719f4233d10623c04eb7b591e",
   "source": {
     "kind": "DesignFirstFromApprovedRepositorySources",
     "apidogExport": false,

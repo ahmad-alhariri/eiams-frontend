@@ -1,8 +1,8 @@
 {
   "contractId": "eiams-v1",
   "contractVersion": "1.0.0-provisional.3",
-  "snapshotSha256": "a433aadecf78e9ff2bf02a03702493f9ced37ad1d80ef6013ab5a347a24d5d00",
-  "reportedAt": "2026-08-11T18:19:02.705Z",
+  "snapshotSha256": "7c96981ab1155eb2c8a38023f378063ce0b2cd8719f4233d10623c04eb7b591e",
+  "reportedAt": "2026-08-13T05:57:45.685Z",
   "tooling": {
     "redoclyCli": "2.46.0",
     "openapiTypescript": "7.13.0"
@@ -10,8 +10,8 @@
   "results": {
     "checksum matches provenance": {
       "status": "pass",
-      "expected": "a433aadecf78e9ff2bf02a03702493f9ced37ad1d80ef6013ab5a347a24d5d00",
-      "actual": "a433aadecf78e9ff2bf02a03702493f9ced37ad1d80ef6013ab5a347a24d5d00"
+      "expected": "7c96981ab1155eb2c8a38023f378063ce0b2cd8719f4233d10623c04eb7b591e",
+      "actual": "7c96981ab1155eb2c8a38023f378063ce0b2cd8719f4233d10623c04eb7b591e"
     },
     "reference audit": {
       "status": "pass",

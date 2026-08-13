@@ -12,6 +12,8 @@ const tmpA = join(root, 'node_modules/.tmp/contract-gen-a.ts')
 const tmpB = join(root, 'node_modules/.tmp/contract-gen-b.ts')
 
 const results = {}
+const canonicalizeSnapshotBytes = (bytes) =>
+  Buffer.from(bytes.toString('utf8').replace(/\r\n/gu, '\n'), 'utf8')
 const run = async (name, fn) => {
   try {
     results[name] = { status: 'pass', ...(await fn()) }
@@ -28,8 +30,11 @@ const provenance = JSON.parse(await readFile(provenancePath, 'utf8'))
 
 await run('checksum matches provenance', async () => {
   const bytes = await readFile(snapshotPath)
-  const sha256 = createHash('sha256').update(bytes).digest('hex')
-  return { expected: provenance.sha256, actual: sha256 }
+  const actual = createHash('sha256').update(canonicalizeSnapshotBytes(bytes)).digest('hex')
+  if (actual !== provenance.sha256) {
+    throw new Error(`Expected ${provenance.sha256}, received ${actual}.`)
+  }
+  return { expected: provenance.sha256, actual }
 })
 
 await run('reference audit', async () => {

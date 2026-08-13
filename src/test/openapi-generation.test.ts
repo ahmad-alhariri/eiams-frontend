@@ -1,5 +1,6 @@
 import generationConfigRaw from '../../scripts/openapi-generation.config.mjs?raw'
 import generationScriptRaw from '../../scripts/generate-api-types.mjs?raw'
+import gitAttributesRaw from '../../.gitattributes?raw'
 import eslintConfigRaw from '../../eslint.config.js?raw'
 import generatedApiRaw from '@/shared/types/generated/eiams-v1.ts?raw'
 import packageJsonRaw from '../../package.json?raw'
@@ -102,5 +103,7 @@ describe('OpenAPI generation configuration', () => {
     expect(generationScriptRaw).toContain('Contract version mismatch')
     expect(generationScriptRaw).toContain('OpenAPI coverage mismatch')
     expect(generationScriptRaw).toContain('openapi-typescript version mismatch')
+    expect(generationScriptRaw).toContain("replace(/\\r\\n/gu, '\\n')")
+    expect(gitAttributesRaw).toContain('contracts/openapi/eiams-v1.openapi.json text eol=lf')
   })
 })
