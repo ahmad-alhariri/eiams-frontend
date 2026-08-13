@@ -1,0 +1,89 @@
+{
+  "contractId": "eiams-v1",
+  "contractVersion": "1.0.0-provisional.3",
+  "openapiVersion": "3.0.3",
+  "status": "ArchitectureOwnedProvisional",
+  "publishedAt": "2026-08-09T09:53:07+03:00",
+  "revisedAt": "2026-08-09T10:54:56+03:00",
+  "snapshotPath": "contracts/openapi/eiams-v1.openapi.json",
+  "sha256": "a433aadecf78e9ff2bf02a03702493f9ced37ad1d80ef6013ab5a347a24d5d00",
+  "source": {
+    "kind": "DesignFirstFromApprovedRepositorySources",
+    "apidogExport": false,
+    "apidogProjectId": null,
+    "apidogEnvironmentId": null,
+    "upstreamBackendRevision": null,
+    "statement": "The backend API and authoritative Apidog project were not available when this snapshot was published. This artifact is the provisional design contract for Apidog import, mocks, and frontend generation."
+  },
+  "coverage": {
+    "paths": 78,
+    "operations": 112,
+    "schemas": 141
+  },
+  "sourceDocuments": [
+    {
+      "path": "docs/PRD.md",
+      "version": "2.0"
+    },
+    {
+      "path": "docs/ERD.md",
+      "version": "4.1"
+    },
+    {
+      "path": "docs/schema.md",
+      "version": "5.0"
+    },
+    {
+      "path": "docs/SAD.md",
+      "version": "repository baseline"
+    },
+    {
+      "path": "docs/business-domain-model-v1.md",
+      "version": "1.0.0"
+    },
+    {
+      "path": "docs/requirements-conflict-matrix.md",
+      "version": "authoritative frontend-planning baseline"
+    },
+    {
+      "path": "docs/polymorphic-counterpart-lookup-contract-decision.md",
+      "decisionId": "D-POST-01"
+    },
+    {
+      "path": "docs/return-asset-movement-event-contract-decision.md",
+      "decisionId": "D-RAE-01"
+    },
+    {
+      "path": "docs/adjustment-workflow-decision.md",
+      "decisionId": "D-ADJ-01"
+    },
+    {
+      "path": "docs/inventory-count-freeze-policy-decision.md",
+      "decisionId": "D-ICF-01"
+    },
+    {
+      "path": "docs/openapi-contract-surface-inventory.md",
+      "decisionId": "D-OAS-01"
+    },
+    {
+      "path": "docs/authentication-session-scope-contract-decision.md",
+      "decisionId": "D-AUTH-01"
+    },
+    {
+      "path": "docs/document-lifecycle-history-contract-decision.md",
+      "decisionId": "D-LIFE-01"
+    }
+  ],
+  "validation": {
+    "redoclyCli": "passed with zero warnings",
+    "openapiTypescript": "generated 5428 lines with openapi-typescript 7.13.0",
+    "referenceAudit": "passed; zero missing schema references and zero duplicate operationIds"
+  },
+  "ratification": {
+    "required": true,
+    "owner": "Backend/API owner",
+    "bead": "eiams-frontend-e01.7",
+    "status": "Pending",
+    "policy": "Before production integration, compare the implemented backend and authoritative Apidog project with this snapshot. Resolve every divergence through an explicit versioned contract change; do not silently patch generated frontend code."
+  }
+}

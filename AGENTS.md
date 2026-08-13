@@ -42,20 +42,20 @@ A government-grade **Document-Driven** inventory and asset management system. Ev
 
 | Layer        | Technology                                                                     |
 | ------------ | ------------------------------------------------------------------------------ |
-| Framework    | React 19 + TypeScript + Vite 6                                                 |
+| Framework    | React 19 + TypeScript 6 + Vite 8                                               |
 | Styling      | TailwindCSS v4                                                                 |
-| Routing      | React Router v7                                                                |
+| Routing      | React Router v8                                                                |
 | Server State | TanStack Query v5                                                              |
 | Client State | Zustand v5                                                                     |
 | UI Library   | shadcn/ui (Base UI)                                              |
-| Tables       | TanStack Table v8                                                              |
+| Tables       | TanStack Table v9                                                              |
 | Forms        | React Hook Form + Zod                                                          |
 | HTTP         | Axios                                                                          |
 | Icons        | Tabler Icons                                                                   |
 | Charts       | Recharts                                                                       |
 | Date         | Day.js                                                                         |
 | File Upload  | react-dropzone                                                                 |
-| PDF          | react-pdf                                                                      |
+| PDF          | react-pdf (viewer) + @react-pdf/renderer (report exports)                    |
 | Testing      | Vitest + Testing Library + MSW                                                 |
 | API Types    |(Will be exported from Apidog OpenAPI ) |
 
@@ -145,7 +145,7 @@ src/
 - Schema should match the API contract (auto-generated types from openapi-typescript).
 - Show validation errors inline, in Arabic.
 
-### Tables (TanStack Table v8)
+### Tables (TanStack Table v9)
 
 - **Server-side pagination** for all data tables (sending page/index/offset to API).
 - Sorting, filtering, and searching via query params.
@@ -194,13 +194,19 @@ src/
 ## Verification Commands
 
 ```bash
-npm run dev        # Dev server
-npm run build      # Production build
-npm run lint       # ESLint
-npm run typecheck  # tsc --noEmit
-npm run test       # Vitest
-npm run format     # Prettier
+pnpm run dev        # Dev server
+pnpm run build      # Production build
+pnpm run lint       # ESLint
+pnpm run lint:fix   # ESLint autofix
+pnpm run typecheck  # tsc --noEmit
+pnpm run format     # Prettier write
+pnpm run format:check  # Prettier check
+pnpm run quality    # lint + typecheck + format:check + test + build
+pnpm run preview    # Preview the production build
 ```
+
+The GitHub Actions quality workflow runs the same `pnpm run quality` gate after
+a frozen pnpm install.
 
 Always run `lint` and `typecheck` after making changes. Never commit code with type errors or lint warnings.
 

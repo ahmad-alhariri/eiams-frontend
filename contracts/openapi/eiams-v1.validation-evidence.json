@@ -1,0 +1,48 @@
+{
+  "contractId": "eiams-v1",
+  "contractVersion": "1.0.0-provisional.3",
+  "snapshotSha256": "a433aadecf78e9ff2bf02a03702493f9ced37ad1d80ef6013ab5a347a24d5d00",
+  "reportedAt": "2026-08-11T18:19:02.705Z",
+  "tooling": {
+    "redoclyCli": "2.46.0",
+    "openapiTypescript": "7.13.0"
+  },
+  "results": {
+    "checksum matches provenance": {
+      "status": "pass",
+      "expected": "a433aadecf78e9ff2bf02a03702493f9ced37ad1d80ef6013ab5a347a24d5d00",
+      "actual": "a433aadecf78e9ff2bf02a03702493f9ced37ad1d80ef6013ab5a347a24d5d00"
+    },
+    "reference audit": {
+      "status": "pass",
+      "refCount": 880,
+      "missing": 0
+    },
+    "duplicate operationIds": {
+      "status": "pass",
+      "operationCount": 112,
+      "duplicates": 0
+    },
+    "coverage matches provenance": {
+      "status": "pass",
+      "pathCount": 78,
+      "operationCount": 112,
+      "schemaCount": 141,
+      "expected": {
+        "paths": 78,
+        "operations": 112,
+        "schemas": 141
+      }
+    },
+    "redocly lint (zero warnings)": {
+      "status": "pass",
+      "output": "Woohoo! Your API description is valid. 🎉"
+    },
+    "deterministic type generation": {
+      "status": "pass",
+      "lines": 5429,
+      "byteHash": "e964b8e6345f938bbfaeced17a521269bd4fb49d2bdd2fa946752005ac9853b8"
+    }
+  },
+  "note": "Pre-ratification validation battery. Ratification itself requires the backend/API owner review recorded by Beads eiams-frontend-e01.7."
+}

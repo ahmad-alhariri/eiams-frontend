@@ -1,0 +1,14 @@
+.agents
+.claude
+.beads
+AGENTS.md
+CLAUDE.md
+coverage
+docs
+dist
+node_modules
+contracts/openapi/*.json
+src/shared/types/generated
+pnpm-lock.yaml
+vite-dev.err.log
+vite-dev.out.log

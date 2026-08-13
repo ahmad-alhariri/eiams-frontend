@@ -60,12 +60,17 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+pnpm install --frozen-lockfile
+pnpm run lint
+pnpm run lint:fix
+pnpm run typecheck
+pnpm run test
+pnpm run format
+pnpm run format:check
+pnpm run quality
+pnpm run build
+pnpm run preview
 ```
 
 ## Architecture Overview
