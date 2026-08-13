@@ -19,8 +19,17 @@ describe('continuous quality workflow', () => {
   it('uses frozen pnpm installation before the quality gate', () => {
     expect(packageManifest.packageManager).toBe('pnpm@11.20.0')
     expect(qualityWorkflow).toContain('node-version: 24')
-    expect(qualityWorkflow).toContain('corepack prepare pnpm@11.20.0 --activate')
+    expect(qualityWorkflow).toContain('uses: pnpm/action-setup@v4')
+    expect(qualityWorkflow).toContain('version: 11.20.0')
     expect(qualityWorkflow).toContain('pnpm install --frozen-lockfile')
     expect(qualityWorkflow).toContain('pnpm run quality')
+  })
+
+  it('installs pnpm before setup-node resolves the pnpm cache path', () => {
+    const pnpmSetupIndex = qualityWorkflow.indexOf('uses: pnpm/action-setup@v4')
+    const nodeSetupIndex = qualityWorkflow.indexOf('uses: actions/setup-node@v4')
+
+    expect(pnpmSetupIndex).toBeGreaterThanOrEqual(0)
+    expect(nodeSetupIndex).toBeGreaterThan(pnpmSetupIndex)
   })
 })
