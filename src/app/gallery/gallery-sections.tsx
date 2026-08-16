@@ -13,6 +13,7 @@ import { scopedWarehouseSelectorGallerySections } from '@/app/gallery/demos/scop
 import { attachmentPanelGallerySections } from '@/app/gallery/demos/attachment-panel-demo'
 import { documentTimelineGallerySections } from '@/app/gallery/demos/document-timeline-demo'
 import { lifecycleActionBarGallerySections } from '@/app/gallery/demos/lifecycle-action-bar-demo'
+import { documentHeaderGallerySections } from '@/app/gallery/demos/document-header-section-demo'
 
 export interface GallerySection {
   /** Stable key used by BDD/doc slots, e.g. "data-gallery-section". */
@@ -39,6 +40,7 @@ export const gallerySections: GallerySection[] = [
   ...attachmentPanelGallerySections,
   ...documentTimelineGallerySections,
   ...lifecycleActionBarGallerySections,
+  ...documentHeaderGallerySections,
   {
     id: 'file-dropzone',
     titleAr: 'رفع الملفات (FileDropzone)',
