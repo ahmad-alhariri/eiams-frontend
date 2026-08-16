@@ -1,12 +1,12 @@
 {
   "contractId": "eiams-v1",
-  "contractVersion": "1.0.0-provisional.3",
+  "contractVersion": "1.0.0-provisional.6",
   "openapiVersion": "3.0.3",
   "status": "ArchitectureOwnedProvisional",
   "publishedAt": "2026-08-09T09:53:07+03:00",
-  "revisedAt": "2026-08-09T10:54:56+03:00",
+  "revisedAt": "2026-08-14T16:35:18+03:00",
   "snapshotPath": "contracts/openapi/eiams-v1.openapi.json",
-  "sha256": "7c96981ab1155eb2c8a38023f378063ce0b2cd8719f4233d10623c04eb7b591e",
+  "sha256": "8b119a2f06698e4eed145f5189846c147213df18306c6fe28f6a3187c4afd9de",
   "source": {
     "kind": "DesignFirstFromApprovedRepositorySources",
     "apidogExport": false,
@@ -16,9 +16,9 @@
     "statement": "The backend API and authoritative Apidog project were not available when this snapshot was published. This artifact is the provisional design contract for Apidog import, mocks, and frontend generation."
   },
   "coverage": {
-    "paths": 78,
-    "operations": 112,
-    "schemas": 141
+    "paths": 80,
+    "operations": 116,
+    "schemas": 156
   },
   "sourceDocuments": [
     {
@@ -72,11 +72,21 @@
     {
       "path": "docs/document-lifecycle-history-contract-decision.md",
       "decisionId": "D-LIFE-01"
+    },
+    {
+      "path": "Beads eiams-frontend-bt60",
+      "decisionId": "D-MAT-01",
+      "version": "owner-approved 2026-08-14"
+    },
+    {
+      "path": "Beads eiams-frontend-vded",
+      "decisionId": "D-UOM-01",
+      "version": "owner-approved 2026-08-14"
     }
   ],
   "validation": {
     "redoclyCli": "passed with zero warnings",
-    "openapiTypescript": "generated 5428 lines with openapi-typescript 7.13.0",
+    "openapiTypescript": "regenerated from provisional.6 after exact DECIMAL(18,6) string transport was applied to material conversion factors and document-line conversion snapshots",
     "referenceAudit": "passed; zero missing schema references and zero duplicate operationIds"
   },
   "ratification": {

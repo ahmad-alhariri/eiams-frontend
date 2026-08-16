@@ -52,11 +52,12 @@ custody to an entity that is not an EIAMS employee.
 
 | Operation | Allowed counterpart and resulting custody behavior |
 | --- | --- |
-| Issue of consumables/durables | Any active counterpart is allowed; no Custody row is created. |
+| Issue of consumables | Any active counterpart is allowed; no Custody row is created. |
+| Issue of durables | The recipient must become responsible through D-MAT-01's provisional `MaterialQuantity` or `TrackedUnit` custody subject. Backend implementation and ratification remain required; no fake Asset or client-only record is allowed. |
 | Issue of assets to Employee | Create Personal custody for the selected Employee. |
 | Issue of assets to OrganizationalUnit, Site, or External | Create Operational custody for the selected counterpart. |
 | Pending-custody assignment | The new holder must be an active Employee; it creates Personal custody and closes the prior Operational row. |
-| Custody responsibility transfer | Active Employee creates Personal custody; active OrganizationalUnit, Site, or External creates Operational custody. The server closes the previous active row atomically. |
+| Custody responsibility transfer | For Assets, active Employee creates Personal custody; active OrganizationalUnit, Site, or External creates Operational custody. The server closes the previous active row atomically. D-MAT-01's provisional contract provides equivalent Durable subject transfer, including partial quantity; backend ratification remains required. |
 | Return and historical views | Display the counterpart from the server read model even after deactivation; the historical record remains immutable. |
 
 ## Lookup and read-model contract
@@ -143,6 +144,7 @@ than allowing a document screen to create anonymous counterpart records.
 | `e09-t09` | Implement active and historical counterpart lookup adapters from the generated contract. |
 | `e16-t03`, `e16-t06` | Use the Issue recipient matrix and responsibility preview. |
 | `e19-t03`, `e19-t05` | Use the custody assignment and transfer matrix. |
+| `eiams-frontend-bt60`, `e10-t09` | Consume D-MAT-01; do not offer an independent asset-number toggle or Durable-as-Asset workaround. |
 | `e09.1` | Deliver controlled ExternalParty reference-data administration. |
 
 ## Consequences

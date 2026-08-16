@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router'
 import type { ReactNode } from 'react'
 
+import { AppChromeBoundary } from '@/shared/layout/app-chrome-boundary'
 import { Sidebar } from '@/shared/layout/sidebar/sidebar'
 import { AppHeader } from '@/shared/layout/header/app-header'
 import { Breadcrumbs } from '@/shared/layout/header/breadcrumb'
@@ -23,9 +24,13 @@ type AppLayoutProps = {
 function AppLayout({ hasPermission, scopeSwitcher }: AppLayoutProps) {
   return (
     <div className="flex min-h-svh flex-col bg-ivory text-foreground" dir="rtl">
-      <AppHeader breadcrumb={<Breadcrumbs />} scopeSwitcher={scopeSwitcher} />
+      <AppChromeBoundary label="الشريط العلوي">
+        <AppHeader breadcrumb={<Breadcrumbs />} scopeSwitcher={scopeSwitcher} />
+      </AppChromeBoundary>
       <div className="flex flex-1 items-stretch">
-        <Sidebar hasPermission={hasPermission} />
+        <AppChromeBoundary label="القائمة الجانبية">
+          <Sidebar hasPermission={hasPermission} />
+        </AppChromeBoundary>
         <main
           data-slot="app-main"
           className="min-w-0 flex-1 px-4 py-8 md:px-6 lg:px-8"

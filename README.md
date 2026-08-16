@@ -73,6 +73,28 @@ use the configured same-origin HTTPS proxy and host-only refresh cookie. Vite
 exposes every `VITE_*` value to browser code, so these variables must never
 contain credentials or other secrets.
 
+### Development API proxy
+
+The Vite dev server proxies the configured API path (default `/api/v1`) to a
+locally running EIAMS backend. The browser always talks to the same origin, so
+the host-only refresh cookie works without CORS. With `VITE_ENABLE_API_MOCKS`
+at its default (`true`), MSW still answers known endpoints first and the proxy
+only receives bypassed requests; set mocks to `false` to exercise the real
+backend. The proxy is development-only:
+
+- it is never part of the production build, and
+- its target comes from `EIAMS_DEV_PROXY_TARGET`, which is deliberately not
+  `VITE_*`-prefixed so the backend origin never reaches browser code. Set it
+  in `.env.local`, e.g.:
+
+```dotenv
+EIAMS_DEV_PROXY_TARGET=http://localhost:8080
+```
+
+The default target is `http://localhost:8080`; when no backend is listening,
+API requests fail with a clear gateway error state instead of falling through
+to the SPA HTML fallback.
+
 ## Production build and hosting
 
 Create the release artifact with the same quality gate used by CI:

@@ -1,6 +1,6 @@
 import { Combobox } from '@base-ui/react/combobox'
 import { IconPlus } from '@tabler/icons-react'
-import type { ReactNode } from 'react'
+import type { ComponentPropsWithoutRef, ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 
 import { DEFAULT_DEBOUNCE_MS, useDebounce } from '@/shared/hooks/use-debounce'
@@ -47,6 +47,8 @@ export interface AsyncSelectProps<T> {
   renderOption?: (option: AsyncSelectOption<T>, query: string) => ReactNode
   /** Fired whenever the dropdown panel opens or closes. */
   onOpenChange?: (open: boolean) => void
+  /** Standard attributes forwarded to the inner combobox input (id, aria-*, ...). */
+  inputProps?: ComponentPropsWithoutRef<'input'>
   className?: string
 }
 
@@ -117,6 +119,7 @@ function AsyncSelect<T>({
   createLabel = defaultCreateLabel,
   renderOption,
   onOpenChange: onOpenChangeProp,
+  inputProps,
   className,
 }: AsyncSelectProps<T>) {
   const [inputText, setInputText] = useState(value ?? '')
@@ -307,6 +310,7 @@ function AsyncSelect<T>({
       >
         <Combobox.Input
           data-slot="async-select-input"
+          {...inputProps}
           placeholder={placeholder}
           disabled={disabled}
           readOnly={readOnly}

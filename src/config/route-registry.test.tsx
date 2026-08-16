@@ -11,11 +11,14 @@ import {
   toRouteObject,
 } from '@/config/route-registry'
 import { ROUTE_PATHS } from '@/config/routes'
+import { RouteSuspense } from '@/shared/layout/route-suspense'
 
 describe('Lazy route registry', () => {
   it('wires the login, module placeholders, not-found page, and dev gallery', () => {
     expect(getWiredRouteKeys()).toContain('dashboard')
     expect(getWiredRouteKeys()).toContain('catalogMaterials')
+    expect(getWiredRouteKeys()).toContain('catalogMaterialDetail')
+    expect(getWiredRouteKeys()).toContain('warehouses')
     expect(getWiredRouteKeys()).toContain('adminUsers')
     expect(hasWiredPage('login')).toBe(true)
     expect(hasWiredPage('notFound')).toBe(true)
@@ -24,6 +27,8 @@ describe('Lazy route registry', () => {
 
   it('gives every declared protected module path a lazy placeholder', () => {
     expect(hasWiredPage('catalogMaterials')).toBe(true)
+    expect(hasWiredPage('catalogMaterialDetail')).toBe(true)
+    expect(hasWiredPage('warehouses')).toBe(true)
     expect(hasWiredPage('dashboard')).toBe(true)
     expect(hasWiredPage('adminUsers')).toBe(true)
   })
@@ -55,14 +60,16 @@ describe('Lazy route registry', () => {
     expect(element.type).toBeDefined()
   })
 
-  it('wraps route elements in the per-domain error boundary', async () => {
-    const route = toRouteObject('devGallery')
+  it('wraps a lazy route in the per-domain error boundary within its suspense composition', async () => {
+    const route = toRouteObject('dashboard')
     const router = createMemoryRouter([{ ...route, path: '/' }], { initialEntries: ['/'] })
-    render(<RouterProvider router={router} />)
+    render(
+      <RouteSuspense>
+        <RouterProvider router={router} />
+      </RouteSuspense>,
+    )
 
-    expect(
-      await screen.findByText('معرض المكونات المشتركة', undefined, { timeout: 3000 }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'لوحة المعلومات' })).toBeInTheDocument()
     expect(document.querySelector('[data-slot="domain-error-boundary"]')).not.toBeNull()
   })
 

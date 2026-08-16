@@ -1,7 +1,7 @@
 # EIAMS Business Domain Model — V1 Planning Baseline
 
 **Status:** Approved canonical BDM for EIAMS v1 frontend and OpenAPI planning  
-**Version:** 1.0.0  
+**Version:** 1.2.0
 **Owner:** EIAMS Architecture and Contract Decisions workstream  
 **Beads:** `eiams-frontend-e01.1`  
 **Decision date:** 2026-08-09
@@ -45,9 +45,11 @@ is ratified; this planning baseline makes no claim to replace that governance.
 | D-ICF-01 | `inventory-count-freeze-policy-decision.md` | V1 SoftFreeze subset and non-blocking advisory contract. | HardFreeze/NoFreeze remain v2 decisions. |
 | D-AUTH-01 | `authentication-session-scope-contract-decision.md` | Authentication token boundary, authoritative session projection, active-scope semantics, and effective role/permission calculation. | Exact permission-code vocabulary remains D-RBAC work; production security parameters require backend ratification. |
 | D-LIFE-01 | `document-lifecycle-history-contract-decision.md` | Generic and adjustment/disposal transitions, immutable lifecycle events, server-owned action policy, reason/version request boundaries, and compensating reversal semantics. | Exact permission ownership, attachment verification, audit-detail redaction, and backend persistence remain separately owned. |
+| D-MAT-01 | `material-classification-and-custody-decision.md` | Material classification, tracking, distinct asset/serial identity, and Durable-custody extension. | Exact payload and persistence shape remain OpenAPI/backend work. |
+| D-UOM-01 | `material-unit-conversion-contract-decision.md` | Material-owned base units, per-material alternate-unit factors, immutable posted-line snapshots, and change control for packaging changes. | Generated endpoint/type names and backend ratification remain provisional. |
 
 The ERD reference to “BDM v1.0” is therefore satisfied by this repository
-artifact, version 1.0.0, rather than by an unverified external document.
+artifact, version 1.1.0, rather than by an unverified external document.
 
 ## Domain map
 
@@ -64,8 +66,12 @@ types and read models rather than database tables.
 | Operational documents | `WarehouseDocument`, `DocumentLine`, `DocumentAttachment`, document sequence/reference, `ReceivingInfo`, `IssueTo`, `TransferInfo` | WarehouseDocument is the document spine. Lines and attachments belong to it; the named petals supply type-specific data. Document types are Receiving, Issue, Transfer, Adjustment, Opening, and Return. A document is the provenance of every stock movement. |
 | Inventory and ledger | `InventoryBalance`, `StockMovement` | Balance is the cached signed sum of immutable movements for one warehouse/material. StockMovement belongs to a posted document and source line. No UI or service directly edits balance. |
 | Counts and adjustments | `InventoryCount`, `InventoryCountLine`, `InventoryAdjustment`, `AdjustmentLine` | A count belongs to a warehouse and has scoped snapshot/actual lines. Adjustment is document-backed, may reference a count, and has purpose-specific lines. Disposal is a special single asset-backed adjustment, not an independent undocumented asset action. |
-| Assets and custody | `Asset`, `AssetMovementHistory`, `Custody`, `CustodyHistory` | Asset belongs to a material and has immutable lifecycle events. Custody is one unified responsibility timeline with at most one active row per asset; current asset status and holder are server-derived rather than mutable pointers. |
+| Assets and custody | `Asset`, `AssetMovementHistory`, `Custody`, `CustodyHistory` | Asset belongs only to an Asset material and has immutable lifecycle events. The provisional D-MAT-01 Custody contract adds Durable MaterialQuantity/TrackedUnit subjects without making them Asset records; backend ratification remains required. Asset status and holder remain server-derived. |
 | Audit | `AuditLog`, `AuditLogEntry` | Audit records preserve who/what/when for business operations. They are not reconstructed in the frontend from current document state. |
+
+`MaterialUnitConversion` is a Catalog relationship owned by a Material. It
+records that Material's alternate unit and its direct factor to the Material's
+base unit; it is not a global UnitOfMeasure conversion concept.
 
 Supplier is a free/reference field on receiving in v1, not a Supplier domain
 entity. Storage locations, maintenance, two-phase transfer, reserved/available
@@ -118,6 +124,42 @@ balances, and asset transfer are not v1 domain concepts.
 - Access tokens are memory-only and refresh credentials are browser-managed
   HttpOnly cookies. Token material is never domain/UI state.
 
+### Material classification and accountability
+
+- `Consumable` is Quantity-only with no asset number and no custody.
+  `Durable` is Quantity or Serial with mandatory custody and no asset number.
+  `Asset` is Serial-only with mandatory custody and asset-registry entry.
+- An enterprise asset number is required and unique for every Asset. A
+  manufacturer serial is optional for an Asset and may identify a Durable;
+  serial number never means asset number or accounting capitalization.
+- Kind/tracking may change only before the first posted movement, with
+  confirmation and audit evidence. They are immutable afterwards. Legacy
+  violations remain readable and require explicit server-owned remediation.
+- Historical Custody persistence represents Asset subjects. D-MAT-01's
+  provisional OpenAPI adds `MaterialQuantity` and `TrackedUnit` subjects for
+  Durable custody, including partial assignment and return; backend/API-owner
+  ratification remains required and frontend code must not emulate server work.
+
+### Material units and conversion
+
+- Every Material owns exactly one base unit. It is the canonical unit for
+  balances, stock movements, and the base quantity recorded on a document line;
+  it is not inherited from a MaterialFamily or warehouse.
+- `UnitOfMeasure` is reusable vocabulary, not a global conversion table. A
+  `MaterialUnitConversion` makes an alternate unit meaningful for one Material
+  and converts directly to that Material's base unit only.
+- `factor` is a positive `DECIMAL(18,6)` count of base units in one alternate
+  unit. Thus a pen Carton may equal 12 Pieces while an ink Carton equals six
+  Boxes. A Material whose base unit is Carton needs no conversion.
+- The base unit cannot convert to itself, and there is at most one active
+  conversion for `(materialId, fromUnitId)`. Server-side authorization, scope,
+  active-reference, factor, duplicate, and optimistic-concurrency validation
+  are authoritative.
+- A converted posted DocumentLine retains its conversion identity, factor, and
+  resulting base quantity. A used conversion is archived/deactivated and
+  replaced for a packaging change; it is never deleted or overwritten, and
+  historical quantities are never recalculated.
+
 ### Asset, custody, and counterpart identity
 
 - Asset status is derived from authoritative custody and asset movement history:
@@ -162,6 +204,7 @@ types. Unsupported historical values must not appear as selectable v1 UI.
 | Adjustment state | `Draft`, `Posted`, `Reversed` |
 | Counterpart type | `Employee`, `OrganizationalUnit`, `Site`, `External` (resolved to `ExternalParty`) |
 | Custody kind | `Operational`, `Personal` |
+| Material kind and tracking | Consumable/Quantity only; Durable/Quantity or Serial; Asset/Serial only |
 | Attachment type | `SignedOriginal`, `Supporting` |
 
 ## Contract gaps and deliberately excluded assumptions
@@ -177,6 +220,8 @@ stop at the relevant Beads decision instead of guessing in these areas:
 | Backend-ratified endpoint paths, pagination, errors, uploads, generated types, and response envelopes | D-OAS-02 pins the provisional surface in `contracts/openapi/eiams-v1.openapi.json`; backend/API-owner ratification remains required before production integration. |
 | Exact permission-code vocabulary and RBAC mapping | `e01-t07` |
 | Document context not modeled by the sources, including Return-to-original-Issue traceability | D-OAS-02 provisionally pins `originalIssueDocumentId` and its read-only reference; backend ratification may change it only through a versioned contract update. |
+| Durable custody backend implementation and partial-return ratification | D-MAT-01 is published in provisional OpenAPI as `MaterialQuantity` and `TrackedUnit`; backend/API-owner ratification is required before production custody implementation. |
+| Material-unit conversion endpoint, payload, row-version, and posting-snapshot ratification | D-UOM-01 defines the accepted policy. The provisional API must publish the generated conversion surface and backend/API-owner ratification is required before production integration. |
 
 ## Required source and OpenAPI alignment
 
@@ -197,6 +242,13 @@ frontend code changes.
 - Align historical stock/asset event names with D-RAE-01 and record
   ExternalParty plus the adjustment purpose/asset-line semantics from the
   approved decisions.
+- Replace independent `requires_asset_number` behavior with D-MAT-01's policy
+  matrix; distinguish internal asset number from manufacturer serial, and
+  record the Durable-custody contract gap.
+- Move the base-unit relationship from MaterialFamily/warehouse historical
+  sketches to Material. Replace nullable/global or conversion-chain sketches
+  with D-UOM-01's per-material, alternate-to-base rule and DocumentLine
+  conversion/factor/base-quantity snapshot.
 
 ### OpenAPI / backend contract
 
@@ -209,6 +261,11 @@ frontend code changes.
   purpose-specific validation and terminal-disposal response semantics.
 - Publish attachment verification and all remaining errors/endpoints before
   frontend feature tasks write service or form code.
+- Publish the Durable-custody subject, quantity/serial identity, partial
+  assignment/return, and legacy-remediation contracts before custody features.
+- Publish the D-UOM-01 material-conversion read/create/update surface, positive
+  decimal factor, active/archive state, row version, and posting-line snapshot
+  fields before unit-conversion production integration.
 
 ## Affected Beads
 
@@ -220,6 +277,9 @@ frontend code changes.
 | `e01-t04` | Apply D-LIFE-01 to the provisional OpenAPI and downstream lifecycle infrastructure. |
 | `e01-t05`–`e01-t07` | Complete the remaining attachment, audit, and permission decisions without contradicting this model or D-LIFE-01. |
 | `e09.1` | Deliver ExternalParty administration as required reference data, not a free-text issue/custody fallback. |
+| `e10-t09` | Implement D-MAT-01 catalog policy from a generated contract; never expose an independent asset-number toggle. |
+| `e10-t11` | Implement D-UOM-01 material unit-conversion management from generated provisional types; do not add a global unit factor or client-side posting calculation. |
+| `e19-t01`â€“`e19-t09` | Consume the Asset/Durable custody-subject contract; Durable custody is not the current asset-only timeline. |
 | All feature/service tasks | Consume generated OpenAPI models, respect bounded contexts, and do not recreate an absent domain field or business rule. |
 
 ## Rejected alternatives
@@ -229,6 +289,7 @@ frontend code changes.
 | Treat the PRD or ERD as an implicit BDM | Both contain known conflicts and neither designates a repository-resolvable canonical BDM artifact. |
 | Waive BDM alignment indefinitely | Leaves every frontend and OpenAPI task to infer semantics independently, undermining traceability. |
 | Write a complete new BDM from architectural preference | Would invent business rules beyond the documented sources. This baseline records only sourced/approved behavior and visible gaps. |
+| Treat serial number as asset number | Conflates physical identity with accounting classification and registers Durable items incorrectly. |
 | Treat database tables as frontend models | Violates the generated OpenAPI boundary and locks UI behavior to historical persistence terminology. |
 
 ## Consequences

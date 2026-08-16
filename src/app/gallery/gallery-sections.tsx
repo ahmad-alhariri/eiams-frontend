@@ -9,6 +9,7 @@ import { confirmDialogGallerySections } from '@/app/gallery/demos/confirm-dialog
 import { statusBadgeGallerySections } from '@/app/gallery/demos/status-badge-demo'
 import { dataTableServerGallerySections } from '@/app/gallery/demos/data-table-server-demo'
 import { selectorAdaptersGallerySections } from '@/app/gallery/demos/selector-adapters-demo'
+import { scopedWarehouseSelectorGallerySections } from '@/app/gallery/demos/scoped-warehouse-selector-demo'
 import { attachmentPanelGallerySections } from '@/app/gallery/demos/attachment-panel-demo'
 import { documentTimelineGallerySections } from '@/app/gallery/demos/document-timeline-demo'
 import { lifecycleActionBarGallerySections } from '@/app/gallery/demos/lifecycle-action-bar-demo'
@@ -34,6 +35,7 @@ export const gallerySections: GallerySection[] = [
   ...statusBadgeGallerySections,
   ...dataTableServerGallerySections,
   ...selectorAdaptersGallerySections,
+  ...scopedWarehouseSelectorGallerySections,
   ...attachmentPanelGallerySections,
   ...documentTimelineGallerySections,
   ...lifecycleActionBarGallerySections,

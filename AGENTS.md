@@ -159,6 +159,20 @@ src/
 
 ### Routing
 
+Data-mode router (`createBrowserRouter` + `RouterProvider` in `src/app/app-router.tsx`).
+Everything is metadata-driven from `src/config/routes.ts` — guards, breadcrumbs, sidebar,
+titles all derive from `ROUTE_PATHS` + `ROUTE_METADATA`; do not add route logic elsewhere.
+
+**To wire a new page** (3 steps):
+1. Declare the path + Arabic metadata (`labelAr`, `group`, `permissions`/`permissionAny`,
+   `parent`) in `src/config/routes.ts` if not already present.
+2. Add one line to the `PAGES` map in `src/config/route-registry.tsx`:
+   `key: lazy(() => import('@/modules/<domain>/pages/<page>'))`.
+3. Done — the router auto-wraps every non-`public` route with `RouteAccessGuard`
+   (scope + permission) and the lazy page in `DomainErrorBoundary`. No `app-router.tsx`
+   change. A declared-but-unwired key stays unrouted and falls through to not-found.
+   Dev-only routes: set `devOnly: true` metadata + add to `DEV_ONLY_PAGES`.
+
 - Lazy-load all domain pages via `React.lazy()` + `Suspense`.
 - Protected routes check authentication + permission.
 - Route constants in `config/routes.ts`.

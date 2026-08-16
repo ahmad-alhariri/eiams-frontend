@@ -10,7 +10,7 @@ import {
   ScopeSelectionRoute,
 } from '@/modules/auth/components/route-guards'
 import { ActiveScopeSwitcher } from '@/modules/auth/components/active-scope-switcher'
-import { ROUTE_PATHS } from '@/config/routes'
+import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import {
   getWiredRouteKeys,
   isDevOnlyRoute,
@@ -24,16 +24,18 @@ import {
  * behave as unlisted URLs and fall through to the not-found catch-all
  * (D-RBAC-01).
  *
+ * Protected routes are driven entirely by ROUTE_METADATA: every non-public
+ * wired route gets the RouteAccessGuard (scope + permission). Public routes
+ * (login, scope select, no-access, not-found, dev gallery) are composed
+ * explicitly below instead.
+ *
  * App routes render inside the AppLayout frame; anonymous routes own their
  * standalone composition and mount outside that frame. Lazy routes retain the
  * shared per-domain error boundary, while AppLayout supplies its own suspense
  * boundary for framed pages.
  */
 const PROTECTED_ROUTE_OBJECTS = getWiredRouteKeys().flatMap((key) => {
-  if (key === 'login' || key === 'notFound' || key === 'devGallery') {
-    return []
-  }
-  if (isDevOnlyRoute(key) && !import.meta.env.DEV) {
+  if (ROUTE_METADATA[key].public) {
     return []
   }
   const route = toRouteObject(key)

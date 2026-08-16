@@ -6,8 +6,6 @@ import { DomainErrorBoundary } from '@/shared/layout/domain-error-boundary'
 
 export type LazyPage = LazyExoticComponent<ComponentType>
 
-const notFoundPage = lazy(() => import('@/app/pages/not-found-page'))
-const loginPage = lazy(() => import('@/modules/auth/pages/login-page'))
 const routePlaceholderPage = lazy(() => import('@/app/pages/route-placeholder-page'))
 
 /**
@@ -25,21 +23,29 @@ const DEV_ONLY_PAGES: Partial<Record<RouteKey, LazyPage>> = import.meta.env.DEV
  * Wired pages by route key. Each epic appends its delivered pages here; a key
  * without an entry stays unrouted even though ROUTE_PATHS declares it — an
  * unwired route behaves as an unlisted URL (not-found).
+ *
+ * To wire a page: `key: lazy(() => import('@/modules/<domain>/pages/<page>'))`.
+ * The lazy import keeps every page in its own chunk, downloaded only when the
+ * route is first visited.
  */
 const PAGES: Partial<Record<RouteKey, LazyPage>> = {
-  login: loginPage,
-  notFound: notFoundPage,
+  login: lazy(() => import('@/modules/auth/pages/login-page')),
+  notFound: lazy(() => import('@/app/pages/not-found-page')),
   dashboard: routePlaceholderPage,
-  catalogDomains: routePlaceholderPage,
-  catalogCategories: routePlaceholderPage,
-  catalogFamilies: routePlaceholderPage,
-  catalogMaterials: routePlaceholderPage,
-  catalogUnits: routePlaceholderPage,
-  organizationSites: routePlaceholderPage,
-  organizationOrgUnits: routePlaceholderPage,
-  organizationEmployees: routePlaceholderPage,
-  organizationExternalParties: routePlaceholderPage,
-  warehouses: routePlaceholderPage,
+  catalogDomains: lazy(() => import('@/modules/catalog/pages/material-domains-page')),
+  catalogCategories: lazy(() => import('@/modules/catalog/pages/material-categories-page')),
+  catalogFamilies: lazy(() => import('@/modules/catalog/pages/material-families-page')),
+  catalogMaterials: lazy(() => import('@/modules/catalog/pages/materials-list-page')),
+  catalogMaterialDetail: lazy(() => import('@/modules/catalog/pages/material-detail-page')),
+  catalogUnits: lazy(() => import('@/modules/catalog/pages/units-of-measure-page')),
+  organizationSites: lazy(() => import('@/modules/organization/pages/sites-list-page')),
+  organizationSiteDetail: lazy(() => import('@/modules/organization/pages/site-detail-page')),
+  organizationOrgUnits: lazy(() => import('@/modules/organization/pages/organizational-units-page')),
+  organizationEmployees: lazy(() => import('@/modules/organization/pages/employees-list-page')),
+  organizationEmployeeDetail: lazy(() => import('@/modules/organization/pages/employee-detail-page')),
+  organizationExternalParties: lazy(() => import('@/modules/organization/pages/external-parties-page')),
+  warehouses: lazy(() => import('@/modules/warehouse/pages/warehouses-list-page')),
+  warehouseDetail: lazy(() => import('@/modules/warehouse/pages/warehouse-detail-page')),
   inventoryBalances: routePlaceholderPage,
   inventoryMovements: routePlaceholderPage,
   documentReceiving: routePlaceholderPage,
@@ -79,8 +85,6 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
  * Dev-only surface — stripped from production builds by the router when it
  * skips `devOnly` metadata (import.meta.env.DEV is statically replaced).
  */
-export const DEV_ONLY_ROUTE_KEYS: readonly RouteKey[] = ['devGallery']
-
 export function isDevOnlyRoute(key: RouteKey): boolean {
   return ROUTE_METADATA[key].devOnly === true
 }
@@ -100,9 +104,7 @@ export function getWiredPage(key: RouteKey): LazyPage {
 }
 
 export function getWiredRouteKeys(): RouteKey[] {
-  return (Object.keys(PAGES) as RouteKey[]).filter(
-    (key) => !DEV_ONLY_ROUTE_KEYS.includes(key) || import.meta.env.DEV,
-  )
+  return (Object.keys(PAGES) as RouteKey[]).filter((key) => !isDevOnlyRoute(key) || import.meta.env.DEV)
 }
 
 /**

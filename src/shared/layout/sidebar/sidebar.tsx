@@ -105,6 +105,7 @@ function SidebarScopeIndicator({ collapsed }: { collapsed: boolean }) {
   // replacement of the authoritative session query.
   const { data: session } = useQuery<SessionResponse>({
     queryKey: authSessionQueryKey,
+    queryFn: () => Promise.reject(new Error('Session hydration is owned by the application root.')),
     enabled: false,
     staleTime: Number.POSITIVE_INFINITY,
   })

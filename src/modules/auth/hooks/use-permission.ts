@@ -61,6 +61,7 @@ export function hasRoutePermission(permissionCodes: readonly string[], route: Ro
 export function usePermission(): PermissionPredicates {
   const { data: session } = useQuery<SessionResponse>({
     queryKey: authSessionQueryKey,
+    queryFn: () => Promise.reject(new Error('Session hydration is owned by the application root.')),
     enabled: false,
     staleTime: Number.POSITIVE_INFINITY,
   })
