@@ -22,15 +22,18 @@ function ReceivingPetalSlot() {
     <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4">
       <p className="text-sm font-medium text-foreground">بتلة إيصال الاستلام (مثال)</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        يقود هذا العرّض منطقة البتلة الخاصة بوحدة الاستلام: حقل المورد ورقم الفاتورة المرتبطة — ينتمي
-        تنفيذها إلى وحدة الاستلام، وليس إلى قسم الرأس المشترك.
+        يقود هذا العرّض منطقة البتلة الخاصة بوحدة الاستلام: حقل المورد ورقم الفاتورة المرتبطة —
+        ينتمي تنفيذها إلى وحدة الاستلام، وليس إلى قسم الرأس المشترك.
       </p>
       <dl className="mt-3 grid gap-1 text-sm sm:grid-cols-2">
         <div className="flex justify-between gap-2 rounded border border-border bg-background px-2 py-1.5">
           <dt className="text-muted-foreground">المورد</dt>
           <dd className="font-medium text-foreground">الشركة العامة للتجهيز</dd>
         </div>
-        <div dir="ltr" className="flex justify-between gap-2 rounded border border-border bg-background px-2 py-1.5">
+        <div
+          dir="ltr"
+          className="flex justify-between gap-2 rounded border border-border bg-background px-2 py-1.5"
+        >
           <dt className="text-muted-foreground">الفاتورة</dt>
           <dd className="font-medium text-foreground">INV-2026/0841</dd>
         </div>
@@ -68,8 +71,8 @@ function EditableSectionDemo() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        القسم يعمل ضمن نموذج وحدة الاستلام: المستودع مرتبط بالنطاق النشط (يبحث في الخادم)، ويجري التحقق
-        بالعربية عند الحفظ (أرقام إنجليزية فقط، سنة ضمن الحدود).
+        القسم يعمل ضمن نموذج وحدة الاستلام: المستودع مرتبط بالنطاق النشط (يبحث في الخادم)، ويجري
+        التحقق بالعربية عند الحفظ (أرقام إنجليزية فقط، سنة ضمن الحدود).
       </p>
       <FormProvider {...form}>
         <form
@@ -84,11 +87,7 @@ function EditableSectionDemo() {
           />
           <div className="flex items-center gap-2">
             <Button type="submit">حفظ المسودة</Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void form.trigger()}
-            >
+            <Button type="button" variant="outline" onClick={() => void form.trigger()}>
               تحقق من الحقول
             </Button>
           </div>
@@ -131,8 +130,8 @@ function DisabledSectionDemo() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        حالة التعطيل: تبقى الحقول مسجلة لكنها معطّلة (تُستخدم أثناء انتظار إذن التحرير أو داخل
-        سير عمل مقفول).
+        حالة التعطيل: تبقى الحقول مسجلة لكنها معطّلة (تُستخدم أثناء انتظار إذن التحرير أو داخل سير
+        عمل مقفول).
       </p>
       <FormProvider {...form}>
         <form onReset={(event) => event.preventDefault()}>

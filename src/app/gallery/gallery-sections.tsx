@@ -14,6 +14,9 @@ import { attachmentPanelGallerySections } from '@/app/gallery/demos/attachment-p
 import { documentTimelineGallerySections } from '@/app/gallery/demos/document-timeline-demo'
 import { lifecycleActionBarGallerySections } from '@/app/gallery/demos/lifecycle-action-bar-demo'
 import { documentHeaderGallerySections } from '@/app/gallery/demos/document-header-section-demo'
+import { documentPermissionsGallerySections } from '@/app/gallery/demos/document-permissions-demo'
+import { assetLineEditorGallerySections } from '@/app/gallery/demos/asset-line-editor-demo'
+import { documentDetailGallerySections } from '@/app/gallery/demos/document-detail-demo'
 
 export interface GallerySection {
   /** Stable key used by BDD/doc slots, e.g. "data-gallery-section". */
@@ -41,6 +44,9 @@ export const gallerySections: GallerySection[] = [
   ...documentTimelineGallerySections,
   ...lifecycleActionBarGallerySections,
   ...documentHeaderGallerySections,
+  ...documentPermissionsGallerySections,
+  ...assetLineEditorGallerySections,
+  ...documentDetailGallerySections,
   {
     id: 'file-dropzone',
     titleAr: 'رفع الملفات (FileDropzone)',
