@@ -41,7 +41,13 @@ export function useWarehouseCapabilityValidation(warehouseId: string | undefined
 
   const validates = useCallback(
     (domainId: string | undefined, operation: CapabilityOperation): CapabilityValidation => {
-      if (warehouseId === undefined || domainId == null || isLoading || isError) {
+      if (
+        warehouseId === undefined ||
+        domainId == null ||
+        domainId === '' ||
+        isLoading ||
+        isError
+      ) {
         return { status: 'unknown' }
       }
       const operations = domainOperations.get(domainId)

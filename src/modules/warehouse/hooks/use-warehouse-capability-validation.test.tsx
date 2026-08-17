@@ -189,6 +189,26 @@ describe('useWarehouseCapabilityValidation', () => {
     expect(result.current.validates(fixtureUuid(20), 'Issue')).toEqual({ status: 'unknown' })
   })
 
+  it('treats an empty-string domain id (unselected material line) as unknown, not blocked', async () => {
+    const capability = createWarehouseCapability({
+      warehouseId: WAREHOUSE_ID,
+      operations: ['Receiving'],
+    })
+    server.use(
+      http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
+        HttpResponse.json([capability]),
+      ),
+    )
+
+    const { result } = renderHook(() => useWarehouseCapabilityValidation(WAREHOUSE_ID), {
+      wrapper: createWrapper(),
+    })
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.validates('', 'Receiving')).toEqual({ status: 'unknown' })
+  })
+
   it('validates two capabilities with independent domains independently', async () => {
     const itCapability = createWarehouseCapability({
       warehouseId: WAREHOUSE_ID,

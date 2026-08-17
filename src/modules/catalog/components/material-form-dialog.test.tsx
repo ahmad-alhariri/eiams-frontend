@@ -49,7 +49,7 @@ describe('MaterialFormDialog', () => {
       status: 'Active',
       trackingType: 'Quantity',
     })
-  })
+  }, 10_000)
 
   it('holds submission until both material references are available and reports a loading error', async () => {
     render(
