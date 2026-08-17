@@ -40,29 +40,35 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   catalogUnits: lazy(() => import('@/modules/catalog/pages/units-of-measure-page')),
   organizationSites: lazy(() => import('@/modules/organization/pages/sites-list-page')),
   organizationSiteDetail: lazy(() => import('@/modules/organization/pages/site-detail-page')),
-  organizationOrgUnits: lazy(() => import('@/modules/organization/pages/organizational-units-page')),
+  organizationOrgUnits: lazy(
+    () => import('@/modules/organization/pages/organizational-units-page'),
+  ),
   organizationEmployees: lazy(() => import('@/modules/organization/pages/employees-list-page')),
-  organizationEmployeeDetail: lazy(() => import('@/modules/organization/pages/employee-detail-page')),
-  organizationExternalParties: lazy(() => import('@/modules/organization/pages/external-parties-page')),
+  organizationEmployeeDetail: lazy(
+    () => import('@/modules/organization/pages/employee-detail-page'),
+  ),
+  organizationExternalParties: lazy(
+    () => import('@/modules/organization/pages/external-parties-page'),
+  ),
   warehouses: lazy(() => import('@/modules/warehouse/pages/warehouses-list-page')),
   warehouseDetail: lazy(() => import('@/modules/warehouse/pages/warehouse-detail-page')),
   inventoryBalances: routePlaceholderPage,
   inventoryMovements: routePlaceholderPage,
-  documentReceiving: routePlaceholderPage,
+  documentReceiving: lazy(() => import('@/shared/documents/pages/document-list-page')),
   documentReceivingNew: routePlaceholderPage,
-  documentReceivingDetail: routePlaceholderPage,
-  documentIssue: routePlaceholderPage,
+  documentReceivingDetail: lazy(() => import('@/shared/documents/pages/document-detail-page')),
+  documentIssue: lazy(() => import('@/shared/documents/pages/document-list-page')),
   documentIssueNew: routePlaceholderPage,
-  documentIssueDetail: routePlaceholderPage,
-  documentTransfer: routePlaceholderPage,
+  documentIssueDetail: lazy(() => import('@/shared/documents/pages/document-detail-page')),
+  documentTransfer: lazy(() => import('@/shared/documents/pages/document-list-page')),
   documentTransferNew: routePlaceholderPage,
-  documentTransferDetail: routePlaceholderPage,
-  documentOpening: routePlaceholderPage,
+  documentTransferDetail: lazy(() => import('@/shared/documents/pages/document-detail-page')),
+  documentOpening: lazy(() => import('@/shared/documents/pages/document-list-page')),
   documentOpeningNew: routePlaceholderPage,
-  documentOpeningDetail: routePlaceholderPage,
-  documentReturn: routePlaceholderPage,
+  documentOpeningDetail: lazy(() => import('@/shared/documents/pages/document-detail-page')),
+  documentReturn: lazy(() => import('@/shared/documents/pages/document-list-page')),
   documentReturnNew: routePlaceholderPage,
-  documentReturnDetail: routePlaceholderPage,
+  documentReturnDetail: lazy(() => import('@/shared/documents/pages/document-detail-page')),
   adjustments: routePlaceholderPage,
   adjustmentNew: routePlaceholderPage,
   adjustmentDetail: routePlaceholderPage,
@@ -104,7 +110,9 @@ export function getWiredPage(key: RouteKey): LazyPage {
 }
 
 export function getWiredRouteKeys(): RouteKey[] {
-  return (Object.keys(PAGES) as RouteKey[]).filter((key) => !isDevOnlyRoute(key) || import.meta.env.DEV)
+  return (Object.keys(PAGES) as RouteKey[]).filter(
+    (key) => !isDevOnlyRoute(key) || import.meta.env.DEV,
+  )
 }
 
 /**

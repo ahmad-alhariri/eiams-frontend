@@ -82,9 +82,7 @@ describe('documentHeaderSchema', () => {
       const result = documentHeaderSchema.safeParse(validHeader({ paperDocumentNumber }))
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.issues[0]?.message).toBe(
-          'يجب ألا يتجاوز رقم المستند الورقي 15 محرفاً.',
-        )
+        expect(result.error.issues[0]?.message).toBe('يجب ألا يتجاوز رقم المستند الورقي 15 محرفاً.')
       }
     },
   )

@@ -1,13 +1,15 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import type {
   AttachmentPanelPolicy,
   PendingAttachmentUpload,
 } from '@/shared/documents/attachment-panel'
 import { attachmentService } from '@/shared/documents/document-attachment-service'
-import { documentQueryKeys, useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
+import {
+  useDocumentDetailQuery,
+  useInvalidateDocumentDetail,
+} from '@/shared/documents/use-document-queries'
 import { normalizeApiError } from '@/shared/services/api-error'
 import type { AttachmentType, DocumentAttachment } from '@/shared/types/generated/eiams-v1'
 
@@ -34,28 +36,6 @@ export interface DocumentAttachmentManager {
    * the full 409/403 recovery flow lands in a later task.
    */
   deleteError: string | null
-}
-
-/**
- * Invalidates the scoped document-detail branch (detail/history/policy of one
- * document) after a mutation. Mirrors the warehouse invalidation pattern: the
- * scoped key factory guarantees the invalidation only touches this scope.
- */
-function useInvalidateDocumentDetail() {
-  const queryClient = useQueryClient()
-  const { activeScopeCacheKey } = useActiveScopeContext()
-
-  return useCallback(
-    async (documentId: string) => {
-      if (activeScopeCacheKey === undefined) return
-
-      await queryClient.invalidateQueries({
-        queryKey: documentQueryKeys.document(activeScopeCacheKey, documentId),
-        exact: false,
-      })
-    },
-    [queryClient, activeScopeCacheKey],
-  )
 }
 
 function isUploadable(document: { documentStatus: string } | undefined): boolean {

@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import {
@@ -31,6 +32,29 @@ export const documentQueryKeys = {
 
 function useActiveScopeCacheKey() {
   return useActiveScopeContext().activeScopeCacheKey
+}
+
+/**
+ * Invalidates the scoped document-detail branch (detail/history/policy of one
+ * document) after a mutation. The scoped key factory guarantees the
+ * invalidation only touches this scope. Shared by attachment and lifecycle
+ * mutation hooks.
+ */
+export function useInvalidateDocumentDetail() {
+  const queryClient = useQueryClient()
+  const { activeScopeCacheKey } = useActiveScopeContext()
+
+  return useCallback(
+    async (documentId: string) => {
+      if (activeScopeCacheKey === undefined) return
+
+      await queryClient.invalidateQueries({
+        queryKey: documentQueryKeys.document(activeScopeCacheKey, documentId),
+        exact: false,
+      })
+    },
+    [queryClient, activeScopeCacheKey],
+  )
 }
 
 export function useDocumentListQuery(

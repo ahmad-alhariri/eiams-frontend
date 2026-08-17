@@ -88,21 +88,15 @@ describe('DocumentHeaderSection', () => {
   it('disables the warehouse control until the active scope is ready', () => {
     activeScope.key = undefined
     const { host } = createTestHost()
-    render(
-      host(() => <DocumentHeaderSection documentType="Issue" />),
-    )
+    render(host(() => <DocumentHeaderSection documentType="Issue" />))
 
     expect(screen.getByRole('combobox')).toBeDisabled()
   })
 
   it('enables the warehouse control once the scope is ready', async () => {
     const { host } = createTestHost()
-    server.use(
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
-    )
-    render(
-      host(() => <DocumentHeaderSection documentType="Issue" />),
-    )
+    server.use(http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))))
+    render(host(() => <DocumentHeaderSection documentType="Issue" />))
 
     await waitFor(() => expect(screen.getByRole('combobox')).toBeEnabled())
   })
@@ -124,9 +118,7 @@ describe('DocumentHeaderSection', () => {
 
   it('renders a note instead of a petal slot for petal-less types', () => {
     const { host } = createTestHost()
-    render(
-      host(() => <DocumentHeaderSection documentType="Opening" />),
-    )
+    render(host(() => <DocumentHeaderSection documentType="Opening" />))
 
     expect(screen.getByRole('note')).toHaveTextContent('لا تتطلب هذه الوثيقة بيانات إضافية')
   })
@@ -163,8 +155,6 @@ describe('DocumentHeaderSection', () => {
     await userEvent.type(screen.getByLabelText('رقم المستند الورقي'), '٣٤٥')
     await form!.trigger('header.paperDocumentNumber')
 
-    await waitFor(() =>
-      expect(screen.getByText(/استخدم أرقاماً إنجليزية فقط/)).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText(/استخدم أرقاماً إنجليزية فقط/)).toBeInTheDocument())
   })
 })

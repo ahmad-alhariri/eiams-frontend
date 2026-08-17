@@ -488,7 +488,7 @@ export function actionsForDocumentStatus(status: DocumentStatus): ActionAvailabi
       return [
         createActionAvailability('Edit'),
         createActionAvailability('Submit'),
-        createActionAvailability('Cancel'),
+        createActionAvailability('Cancel', { confirmationRequired: true, reasonRequired: true }),
         createActionAvailability('UploadAttachment'),
         createActionAvailability('DeleteAttachment'),
         createActionAvailability('Post', {
@@ -509,7 +509,7 @@ export function actionsForDocumentStatus(status: DocumentStatus): ActionAvailabi
     case 'Submitted':
       return [
         createActionAvailability('Post'),
-        createActionAvailability('Reject'),
+        createActionAvailability('Reject', { confirmationRequired: true, reasonRequired: true }),
         createActionAvailability('Edit', {
           allowed: false,
           presentation: 'Disabled',

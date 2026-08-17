@@ -237,7 +237,8 @@ function SpineInfoValues({
       <div className="flex flex-col gap-1">
         <dt className="text-sm text-muted-foreground">المستودع</dt>
         <dd className="text-sm font-medium text-foreground">
-          {warehouseDisplayName ?? (warehouseId === undefined || warehouseId === '' ? '—' : warehouseId)}
+          {warehouseDisplayName ??
+            (warehouseId === undefined || warehouseId === '' ? '—' : warehouseId)}
         </dd>
       </div>
       <div className="flex flex-col gap-1">
@@ -290,6 +291,9 @@ export function DocumentHeaderSection({
     control: form.control,
     name: HEADER_VALUE_NAMES,
   })
+  const headerValuesByName = Object.fromEntries(
+    HEADER_VALUE_NAMES.map((name, index) => [name, headerValues[index]]),
+  ) as Record<(typeof HEADER_VALUE_NAMES)[number], string | number | undefined>
 
   return (
     <section
@@ -301,12 +305,7 @@ export function DocumentHeaderSection({
       {readOnly ? (
         <SpineInfoValues
           warehouseDisplayName={initialValues.warehouseDisplayName}
-          values={
-            headerValues as unknown as Record<
-              (typeof HEADER_VALUE_NAMES)[number],
-              string | number | undefined
-            >
-          }
+          values={headerValuesByName}
         />
       ) : (
         <div className="grid gap-5 md:grid-cols-3">
