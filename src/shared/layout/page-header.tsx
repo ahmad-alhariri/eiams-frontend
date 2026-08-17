@@ -2,7 +2,7 @@ import { useId, type ComponentProps, type ReactNode } from 'react'
 
 import { cn } from '@/shared/utils/class-names'
 
-type PageHeaderProps = ComponentProps<'section'> & {
+type PageHeaderProps = Omit<ComponentProps<'section'>, 'title'> & {
   actions?: ReactNode
   subtitle?: ReactNode
   title: ReactNode
