@@ -545,6 +545,56 @@ export type paths = {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/catalog/materials/{materialId}/unit-conversions": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly materialId: components["parameters"]["MaterialId"];
+            };
+            readonly cookie?: never;
+        };
+        /**
+         * List material unit conversions
+         * @description Returns the material-specific alternative-unit conversions to that material's server-owned base unit. One common unit name, such as Carton, never implies a global factor.
+         */
+        readonly get: operations["listMaterialUnitConversions"];
+        readonly put?: never;
+        /**
+         * Create material unit conversion
+         * @description Requires catalog.manage. The server derives the material base unit and rejects an inactive or out-of-scope material/unit, a base-unit/self conversion, or an active duplicate for the same material and fromUnit.
+         */
+        readonly post: operations["createMaterialUnitConversion"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/catalog/materials/{materialId}/unit-conversions/{conversionId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly conversionId: components["schemas"]["Uuid"];
+                readonly materialId: components["parameters"]["MaterialId"];
+            };
+            readonly cookie?: never;
+        };
+        /** Get material unit conversion */
+        readonly get: operations["getMaterialUnitConversion"];
+        /**
+         * Update or deactivate material unit conversion
+         * @description Requires catalog.manage and the current rowVersion. The server rejects stale versions, invalid scope/status, and any factor overwrite after the conversion has been used in a posted document. A used conversion may be deactivated; create a replacement instead. DELETE is intentionally unsupported so historical document snapshots remain auditable.
+         */
+        readonly put: operations["updateMaterialUnitConversion"];
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/catalog/units-of-measure": {
         readonly parameters: {
             readonly query?: never;
@@ -1454,8 +1504,9 @@ export type components = {
             /** Format: date */
             readonly acquisitionDate?: string | null;
             readonly assetId: components["schemas"]["Uuid"];
+            /** @description Immutable institutional asset identifier. It is mandatory on every Asset record and is distinct from the optional manufacturer serial number. */
             readonly assetNumber: string;
-            readonly currentCustody?: components["schemas"]["Custody"];
+            readonly currentCustody?: components["schemas"]["AssetCustody"];
             readonly currentWarehouse?: components["schemas"]["NamedReference"];
             readonly derivedStatus: components["schemas"]["AssetDerivedStatus"];
             readonly material: components["schemas"]["NamedReference"];
@@ -1466,8 +1517,47 @@ export type components = {
             /** Format: date */
             readonly warrantyExpiry?: string | null;
         };
+        readonly AssetCustody: {
+            readonly assetId: components["schemas"]["Uuid"];
+            readonly assetNumber: string;
+            readonly custodyId: components["schemas"]["Uuid"];
+            readonly custodyKind: components["schemas"]["CustodyKind"];
+            /** Format: date-time */
+            readonly fromTs: string;
+            readonly holder: components["schemas"]["CounterpartOption"];
+            readonly issueDocumentId: components["schemas"]["Uuid"];
+            readonly returnDocumentId?: components["schemas"]["Uuid"];
+            /** Format: int64 */
+            readonly rowVersion: number;
+            readonly status: components["schemas"]["CustodyStatus"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            readonly subjectType: "Asset";
+            /** Format: date-time */
+            readonly toTs?: string | null;
+        };
+        readonly AssetCustodyMutationRequest: {
+            readonly assetId: components["schemas"]["Uuid"];
+            readonly custodyKind: components["schemas"]["CustodyKind"];
+            /** Format: date-time */
+            readonly effectiveAt: string;
+            readonly holderId: components["schemas"]["Uuid"];
+            readonly holderType: components["schemas"]["CounterpartType"];
+            readonly issueDocumentId: components["schemas"]["Uuid"];
+            readonly reason?: string | null;
+            /** Format: int64 */
+            readonly rowVersion: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            readonly subjectType: "Asset";
+        };
         /** @enum {string} */
         readonly AssetDerivedStatus: "InStock" | "Issued" | "InCustody" | "Disposed";
+        /** @description Input for one Asset material unit. assetNumber may be supplied by an authorized user or allocated by the server during posting; every resulting Asset has a non-null institutional asset number. serialNumber is an optional manufacturer identifier. */
         readonly AssetInput: {
             /** Format: date */
             readonly acquisitionDate?: string | null;
@@ -1475,6 +1565,18 @@ export type components = {
             readonly serialNumber?: string | null;
             /** Format: date */
             readonly warrantyExpiry?: string | null;
+        };
+        /** @description D-MAT-01: Fixed assets are individually serial-tracked, must receive an institutional asset number, create Asset records, and are issued through Asset custody. A manufacturer serial number remains optional on the Asset record. */
+        readonly AssetMaterialPolicy: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            readonly materialKind: "Asset";
+            /** @enum {boolean} */
+            readonly requiresAssetNumber: true;
+            /** @enum {string} */
+            readonly trackingType: "Serial";
         };
         readonly AssetMovement: {
             readonly assetId: components["schemas"]["Uuid"];
@@ -1548,6 +1650,18 @@ export type components = {
         };
         /** @enum {string} */
         readonly CapabilityOperation: "Receiving" | "Issue" | "Transfer" | "Count" | "Return";
+        /** @description D-MAT-01: Consumables are quantity-tracked and have no asset number. Issuing them closes warehouse responsibility; no custody row is created. */
+        readonly ConsumableMaterialPolicy: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            readonly materialKind: "Consumable";
+            /** @enum {boolean} */
+            readonly requiresAssetNumber: false;
+            /** @enum {string} */
+            readonly trackingType: "Quantity";
+        };
         readonly CounterpartOption: {
             readonly displayName: string;
             readonly id: components["schemas"]["Uuid"];
@@ -1561,36 +1675,12 @@ export type components = {
         };
         /** @enum {string} */
         readonly CounterpartType: "Employee" | "OrganizationalUnit" | "Site" | "External";
-        readonly Custody: {
-            readonly assetId: components["schemas"]["Uuid"];
-            readonly assetNumber: string;
-            readonly custodyId: components["schemas"]["Uuid"];
-            readonly custodyKind: components["schemas"]["CustodyKind"];
-            /** Format: date-time */
-            readonly fromTs: string;
-            readonly holder: components["schemas"]["CounterpartOption"];
-            readonly issueDocumentId: components["schemas"]["Uuid"];
-            readonly returnDocumentId?: components["schemas"]["Uuid"];
-            /** Format: int64 */
-            readonly rowVersion: number;
-            readonly status: components["schemas"]["CustodyStatus"];
-            /** Format: date-time */
-            readonly toTs?: string | null;
-        };
+        /** @description D-MAT-01 custody subject union. Consumables are excluded. Asset is for fixed assets; MaterialQuantity and TrackedUnit are for durable operational-custody materials. */
+        readonly Custody: components["schemas"]["AssetCustody"] | components["schemas"]["MaterialQuantityCustody"] | components["schemas"]["TrackedUnitCustody"];
         /** @enum {string} */
         readonly CustodyKind: "Operational" | "Personal";
-        readonly CustodyMutationRequest: {
-            readonly assetId: components["schemas"]["Uuid"];
-            readonly custodyKind: components["schemas"]["CustodyKind"];
-            /** Format: date-time */
-            readonly effectiveAt: string;
-            readonly holderId: components["schemas"]["Uuid"];
-            readonly holderType: components["schemas"]["CounterpartType"];
-            readonly issueDocumentId: components["schemas"]["Uuid"];
-            readonly reason?: string | null;
-            /** Format: int64 */
-            readonly rowVersion: number;
-        };
+        /** @description D-MAT-01 polymorphic custody command. The server validates that the chosen subject type matches the catalog material policy and, on transfer, matches the custody addressed by the route. The command does not create or discover TrackedUnit records; a generic tracked-unit selection/lifecycle surface remains outside this provisional v1 route set pending backend/API ratification. */
+        readonly CustodyMutationRequest: components["schemas"]["AssetCustodyMutationRequest"] | components["schemas"]["MaterialQuantityCustodyMutationRequest"] | components["schemas"]["TrackedUnitCustodyMutationRequest"];
         readonly CustodyPage: {
             readonly items: readonly components["schemas"]["Custody"][];
             readonly meta: components["schemas"]["PageMeta"];
@@ -1657,12 +1747,20 @@ export type components = {
             readonly events: readonly components["schemas"]["DocumentLifecycleEvent"][];
         };
         readonly DocumentLine: {
+            /** @description Required one-per-unit for Asset material lines; each resulting Asset has an institutional asset number and an optional manufacturer serial number. */
             readonly assetInputs?: readonly components["schemas"]["AssetInput"][];
             /** Format: double */
             readonly availableBalance?: number | null;
             /** Format: double */
             readonly baseQuantity: number;
             readonly batchNumber?: string | null;
+            /** @description Immutable exact factor captured when the line is created or posted. Base-unit lines use the string `1.000000`. */
+            readonly conversionFactor: components["schemas"]["PositiveDecimal18_6"];
+            /**
+             * Format: uuid
+             * @description Immutable conversion snapshot identifier. Null only when the selected unit is the material base unit.
+             */
+            readonly conversionId: string | null;
             /** Format: date */
             readonly expiryDate?: string | null;
             readonly lineId: components["schemas"]["Uuid"];
@@ -1672,13 +1770,28 @@ export type components = {
             readonly openingType?: components["schemas"]["OpeningType"];
             /** Format: double */
             readonly quantity: number;
+            /** @description Created non-asset durable units for a Durable + Serial receiving line. This field is never used for Consumable or Asset material lines. */
+            readonly trackedUnits?: readonly components["schemas"]["TrackedUnit"][];
             readonly unit?: components["schemas"]["NamedReference"];
             /** Format: double */
             readonly unitPrice?: number | null;
         };
         readonly DocumentLineInput: {
+            /** @description Allowed only for Asset material lines. The server creates one Asset per input and requires an institutional asset number after posting. */
             readonly assetInputs?: readonly components["schemas"]["AssetInput"][];
+            /**
+             * Format: decimal
+             * @description Optional draft preview only. The server derives and persists quantity multiplied by the immutable factor; it never trusts a client override.
+             */
+            readonly baseQuantity?: number | null;
             readonly batchNumber?: string | null;
+            /** @description Optional exact-string draft preview only. The server derives and persists the immutable factor; it never trusts a client override. */
+            readonly conversionFactor?: (string & components["schemas"]["PositiveDecimal18_6"]) | null;
+            /**
+             * Format: uuid
+             * @description Optional selected alternative conversion for a draft. Null or omitted denotes the material base unit. The server derives the authoritative snapshot and rejects an inactive, out-of-scope, mismatched, or non-material conversion.
+             */
+            readonly conversionId?: string | null;
             /** Format: date */
             readonly expiryDate?: string | null;
             readonly lineId?: components["schemas"]["Uuid"];
@@ -1686,6 +1799,8 @@ export type components = {
             readonly openingType?: components["schemas"]["OpeningType"];
             /** Format: double */
             readonly quantity: number;
+            /** @description Allowed only for Receiving lines whose material policy is Durable + Serial. It creates non-asset TrackedUnit records and the input count must equal the line quantity. */
+            readonly trackedUnitInputs?: readonly components["schemas"]["TrackedUnitInput"][];
             readonly unitId?: components["schemas"]["Uuid"];
             /** Format: double */
             readonly unitPrice?: number | null;
@@ -1707,6 +1822,18 @@ export type components = {
         readonly DocumentStatus: "Draft" | "Submitted" | "Posted" | "Reversed" | "Cancelled" | "Rejected";
         /** @enum {string} */
         readonly DocumentType: "Receiving" | "Issue" | "Transfer" | "Adjustment" | "Opening" | "Return";
+        /** @description D-MAT-01: Durable operational-custody materials never have an asset number. Quantity tracking uses MaterialQuantity custody; serial tracking uses a non-asset TrackedUnit custody. The v1 snapshot represents TrackedUnit IDs in document-line and custody payloads only; a generic tracked-unit picker/lifecycle endpoint requires separate backend/API ratification. */
+        readonly DurableMaterialPolicy: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            readonly materialKind: "Durable";
+            /** @enum {boolean} */
+            readonly requiresAssetNumber: false;
+            /** @enum {string} */
+            readonly trackingType: "Quantity" | "Serial";
+        };
         readonly EffectiveRole: {
             readonly code: string;
             readonly nameAr: string;
@@ -1941,7 +2068,7 @@ export type components = {
             readonly rowVersion: number;
             readonly status: components["schemas"]["RecordStatus"];
             readonly trackingType: components["schemas"]["TrackingType"];
-        };
+        } & (components["schemas"]["ConsumableMaterialPolicy"] | components["schemas"]["DurableMaterialPolicy"] | components["schemas"]["AssetMaterialPolicy"]);
         readonly MaterialCategory: {
             readonly categoryId: components["schemas"]["Uuid"];
             readonly code: string;
@@ -1994,6 +2121,79 @@ export type components = {
             readonly items: readonly components["schemas"]["Material"][];
             readonly meta: components["schemas"]["PageMeta"];
         };
+        /** @description Custody of a positive base-unit quantity for a Durable + Quantity material. It never creates an Asset record or asset number and supports partial transfer/return by quantity. */
+        readonly MaterialQuantityCustody: {
+            readonly baseUnit?: components["schemas"]["NamedReference"];
+            readonly custodyId: components["schemas"]["Uuid"];
+            readonly custodyKind: components["schemas"]["CustodyKind"];
+            /** Format: date-time */
+            readonly fromTs: string;
+            readonly holder: components["schemas"]["CounterpartOption"];
+            readonly issueDocumentId: components["schemas"]["Uuid"];
+            readonly material: components["schemas"]["NamedReference"];
+            /** Format: double */
+            readonly quantity: number;
+            readonly returnDocumentId?: components["schemas"]["Uuid"];
+            /** Format: int64 */
+            readonly rowVersion: number;
+            readonly status: components["schemas"]["CustodyStatus"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            readonly subjectType: "MaterialQuantity";
+            /** Format: date-time */
+            readonly toTs?: string | null;
+        };
+        /** @description Assign or transfer a positive quantity of a Durable + Quantity material. For transfer, the target custody route identifies the source row and the quantity may be less than its active quantity. */
+        readonly MaterialQuantityCustodyMutationRequest: {
+            readonly custodyKind: components["schemas"]["CustodyKind"];
+            /** Format: date-time */
+            readonly effectiveAt: string;
+            readonly holderId: components["schemas"]["Uuid"];
+            readonly holderType: components["schemas"]["CounterpartType"];
+            readonly issueDocumentId: components["schemas"]["Uuid"];
+            readonly materialId: components["schemas"]["Uuid"];
+            /** Format: double */
+            readonly quantity: number;
+            readonly reason?: string | null;
+            /** Format: int64 */
+            readonly rowVersion: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            readonly subjectType: "MaterialQuantity";
+        };
+        /** @description A material-specific conversion from an alternative unit directly to the material's server-owned base unit. A unit name never carries a global factor: for example, Carton may equal 12 Pieces for one material and 6 Boxes for another. */
+        readonly MaterialUnitConversion: {
+            /** @description The material base unit derived by the server; it is never client-supplied for a conversion. */
+            readonly baseUnit: components["schemas"]["NamedReference"];
+            readonly conversionId: components["schemas"]["Uuid"];
+            /** @description One fromUnit equals factor multiplied by the material base-unit quantity. */
+            readonly factor: components["schemas"]["PositiveDecimal18_6"];
+            readonly fromUnit: components["schemas"]["NamedReference"];
+            readonly material: components["schemas"]["NamedReference"];
+            /** Format: int64 */
+            readonly rowVersion: number;
+            /** @description Inactive archives a conversion; no DELETE operation exists. */
+            readonly status: components["schemas"]["RecordStatus"];
+            /** @description Server-owned historical-use indicator. When true, the factor cannot be overwritten; deactivate and create a replacement if packaging changes. */
+            readonly usedInPostedDocuments: boolean;
+        };
+        /** @description Creates one active alternative unit for the material in the URL. Do not supply materialId or baseUnitId: the server derives both. The server enforces one active record per material/fromUnit and rejects self/base-unit, inactive, out-of-scope, and duplicate inputs. */
+        readonly MaterialUnitConversionCreateRequest: {
+            readonly factor: components["schemas"]["PositiveDecimal18_6"];
+            readonly fromUnitId: components["schemas"]["Uuid"];
+        };
+        /** @description Uses optimistic concurrency. For an unused conversion the factor may be changed. For a conversion used in any posted document, the server permits only the Active-to-Inactive archival transition with the current rowVersion; a changed factor is rejected. fromUnitId and baseUnitId are immutable and are never supplied. */
+        readonly MaterialUnitConversionUpdateRequest: {
+            /** @description The server rejects a changed factor value after historical use. */
+            readonly factor: components["schemas"]["PositiveDecimal18_6"];
+            /** Format: int64 */
+            readonly rowVersion: number;
+            readonly status: components["schemas"]["RecordStatus"];
+        };
         readonly MaterialUpsertRequest: {
             readonly baseUnitId: components["schemas"]["Uuid"];
             readonly code: string;
@@ -2006,7 +2206,7 @@ export type components = {
             readonly rowVersion: number;
             readonly status: components["schemas"]["RecordStatus"];
             readonly trackingType: components["schemas"]["TrackingType"];
-        };
+        } & (components["schemas"]["ConsumableMaterialPolicy"] | components["schemas"]["DurableMaterialPolicy"] | components["schemas"]["AssetMaterialPolicy"]);
         readonly NamedCodeUpsertRequest: {
             readonly code: string;
             readonly nameAr: string;
@@ -2083,6 +2283,12 @@ export type components = {
             readonly field?: string | null;
             readonly messageAr: string;
         };
+        /**
+         * Format: decimal
+         * @description Exact positive DECIMAL(18,6) transport value, encoded as a JSON string so JavaScript clients do not lose precision. Accepted grammar: `0.<1-6 fractional digits containing at least one non-zero digit>` or `<1-12 non-zero-leading integer digits>[.<1-6 fractional digits>]`; no sign, exponent, thousands separator, or leading zero is accepted. Minimum is `0.000001`; maximum is `999999999999.999999`. Examples: `12`, `12.000000`, `0.250000`, and `999999999999.999999`.
+         * @example 12.000000
+         */
+        readonly PositiveDecimal18_6: string;
         readonly ProblemDetails: {
             /** @example validation.failed */
             readonly code: string;
@@ -2226,6 +2432,59 @@ export type components = {
         };
         /** @enum {string} */
         readonly StockMovementType: "Receipt" | "Issue" | "TransferIn" | "TransferOut" | "AdjustmentIn" | "AdjustmentOut" | "Opening";
+        /** @description A durable operational item tracked individually by serial number. It is not a fixed asset, has no asset number, and can be the subject of custody. This snapshot exposes tracked units through document-line and custody payloads; it deliberately does not add an unratified generic list, lookup, or lifecycle endpoint. */
+        readonly TrackedUnit: {
+            readonly currentWarehouse?: components["schemas"]["NamedReference"];
+            readonly material: components["schemas"]["NamedReference"];
+            readonly receiptLineId?: components["schemas"]["Uuid"];
+            /** Format: int64 */
+            readonly rowVersion: number;
+            readonly serialNumber: string;
+            readonly trackedUnitId: components["schemas"]["Uuid"];
+        };
+        /** @description Custody of one Durable + Serial TrackedUnit. It is individually traceable by serial number but is not an Asset and has no asset number. */
+        readonly TrackedUnitCustody: {
+            readonly custodyId: components["schemas"]["Uuid"];
+            readonly custodyKind: components["schemas"]["CustodyKind"];
+            /** Format: date-time */
+            readonly fromTs: string;
+            readonly holder: components["schemas"]["CounterpartOption"];
+            readonly issueDocumentId: components["schemas"]["Uuid"];
+            readonly returnDocumentId?: components["schemas"]["Uuid"];
+            /** Format: int64 */
+            readonly rowVersion: number;
+            readonly status: components["schemas"]["CustodyStatus"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            readonly subjectType: "TrackedUnit";
+            /** Format: date-time */
+            readonly toTs?: string | null;
+            readonly trackedUnit: components["schemas"]["TrackedUnit"];
+        };
+        /** @description Assign or transfer one existing Durable + Serial TrackedUnit. It is distinct from an Asset and no asset number is accepted. */
+        readonly TrackedUnitCustodyMutationRequest: {
+            readonly custodyKind: components["schemas"]["CustodyKind"];
+            /** Format: date-time */
+            readonly effectiveAt: string;
+            readonly holderId: components["schemas"]["Uuid"];
+            readonly holderType: components["schemas"]["CounterpartType"];
+            readonly issueDocumentId: components["schemas"]["Uuid"];
+            readonly reason?: string | null;
+            /** Format: int64 */
+            readonly rowVersion: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            readonly subjectType: "TrackedUnit";
+            readonly trackedUnitId: components["schemas"]["Uuid"];
+        };
+        /** @description A supplier/manufacturer serial for one Durable + Serial unit. It is explicitly not an asset number and does not create an Asset record. */
+        readonly TrackedUnitInput: {
+            readonly serialNumber: string;
+        };
         /** @enum {string} */
         readonly TrackingType: "Quantity" | "Serial";
         readonly TransferInfo: {
@@ -2574,8 +2833,11 @@ export type AdjustmentPurpose = components['schemas']['AdjustmentPurpose'];
 export type AdjustmentReverseResult = components['schemas']['AdjustmentReverseResult'];
 export type AdjustmentStatus = components['schemas']['AdjustmentStatus'];
 export type Asset = components['schemas']['Asset'];
+export type AssetCustody = components['schemas']['AssetCustody'];
+export type AssetCustodyMutationRequest = components['schemas']['AssetCustodyMutationRequest'];
 export type AssetDerivedStatus = components['schemas']['AssetDerivedStatus'];
 export type AssetInput = components['schemas']['AssetInput'];
+export type AssetMaterialPolicy = components['schemas']['AssetMaterialPolicy'];
 export type AssetMovement = components['schemas']['AssetMovement'];
 export type AssetMovementPage = components['schemas']['AssetMovementPage'];
 export type AssetMovementType = components['schemas']['AssetMovementType'];
@@ -2589,6 +2851,7 @@ export type AuthErrorCode = components['schemas']['AuthErrorCode'];
 export type AuthProblemDetails = components['schemas']['AuthProblemDetails'];
 export type AuthTokenResponse = components['schemas']['AuthTokenResponse'];
 export type CapabilityOperation = components['schemas']['CapabilityOperation'];
+export type ConsumableMaterialPolicy = components['schemas']['ConsumableMaterialPolicy'];
 export type CounterpartOption = components['schemas']['CounterpartOption'];
 export type CounterpartPage = components['schemas']['CounterpartPage'];
 export type CounterpartType = components['schemas']['CounterpartType'];
@@ -2609,6 +2872,7 @@ export type DocumentLineInput = components['schemas']['DocumentLineInput'];
 export type DocumentPolicy = components['schemas']['DocumentPolicy'];
 export type DocumentStatus = components['schemas']['DocumentStatus'];
 export type DocumentType = components['schemas']['DocumentType'];
+export type DurableMaterialPolicy = components['schemas']['DurableMaterialPolicy'];
 export type EffectiveRole = components['schemas']['EffectiveRole'];
 export type Employee = components['schemas']['Employee'];
 export type EmployeePage = components['schemas']['EmployeePage'];
@@ -2648,6 +2912,11 @@ export type MaterialFamily = components['schemas']['MaterialFamily'];
 export type MaterialFamilyUpsertRequest = components['schemas']['MaterialFamilyUpsertRequest'];
 export type MaterialKind = components['schemas']['MaterialKind'];
 export type MaterialPage = components['schemas']['MaterialPage'];
+export type MaterialQuantityCustody = components['schemas']['MaterialQuantityCustody'];
+export type MaterialQuantityCustodyMutationRequest = components['schemas']['MaterialQuantityCustodyMutationRequest'];
+export type MaterialUnitConversion = components['schemas']['MaterialUnitConversion'];
+export type MaterialUnitConversionCreateRequest = components['schemas']['MaterialUnitConversionCreateRequest'];
+export type MaterialUnitConversionUpdateRequest = components['schemas']['MaterialUnitConversionUpdateRequest'];
 export type MaterialUpsertRequest = components['schemas']['MaterialUpsertRequest'];
 export type NamedCodeUpsertRequest = components['schemas']['NamedCodeUpsertRequest'];
 export type NamedReference = components['schemas']['NamedReference'];
@@ -2660,6 +2929,7 @@ export type OrganizationalUnitUpsertRequest = components['schemas']['Organizatio
 export type PageMeta = components['schemas']['PageMeta'];
 export type Permission = components['schemas']['Permission'];
 export type PolicyBlocker = components['schemas']['PolicyBlocker'];
+export type PositiveDecimal18_6 = components['schemas']['PositiveDecimal18_6'];
 export type ProblemDetails = components['schemas']['ProblemDetails'];
 export type ReasonedDocumentActionRequest = components['schemas']['ReasonedDocumentActionRequest'];
 export type ReceivingInfo = components['schemas']['ReceivingInfo'];
@@ -2682,6 +2952,10 @@ export type SiteUpsertRequest = components['schemas']['SiteUpsertRequest'];
 export type StockMovement = components['schemas']['StockMovement'];
 export type StockMovementPage = components['schemas']['StockMovementPage'];
 export type StockMovementType = components['schemas']['StockMovementType'];
+export type TrackedUnit = components['schemas']['TrackedUnit'];
+export type TrackedUnitCustody = components['schemas']['TrackedUnitCustody'];
+export type TrackedUnitCustodyMutationRequest = components['schemas']['TrackedUnitCustodyMutationRequest'];
+export type TrackedUnitInput = components['schemas']['TrackedUnitInput'];
 export type TrackingType = components['schemas']['TrackingType'];
 export type TransferInfo = components['schemas']['TransferInfo'];
 export type UnitOfMeasure = components['schemas']['UnitOfMeasure'];
@@ -3271,7 +3545,7 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": readonly components["schemas"]["Custody"][];
+                    readonly "application/json": readonly components["schemas"]["AssetCustody"][];
                 };
             };
             readonly 404: components["responses"]["NotFound"];
@@ -3875,6 +4149,120 @@ export interface operations {
                     readonly "application/json": components["schemas"]["Material"];
                 };
             };
+            readonly 409: components["responses"]["Conflict"];
+            readonly 422: components["responses"]["ValidationFailed"];
+        };
+    };
+    readonly listMaterialUnitConversions: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly materialId: components["parameters"]["MaterialId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Material unit conversions, including inactive historical conversions */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": readonly components["schemas"]["MaterialUnitConversion"][];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly createMaterialUnitConversion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly materialId: components["parameters"]["MaterialId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["MaterialUnitConversionCreateRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Material unit conversion created */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["MaterialUnitConversion"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            readonly 422: components["responses"]["ValidationFailed"];
+        };
+    };
+    readonly getMaterialUnitConversion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly conversionId: components["schemas"]["Uuid"];
+                readonly materialId: components["parameters"]["MaterialId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Material unit conversion */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["MaterialUnitConversion"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly updateMaterialUnitConversion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly conversionId: components["schemas"]["Uuid"];
+                readonly materialId: components["parameters"]["MaterialId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["MaterialUnitConversionUpdateRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Material unit conversion updated */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["MaterialUnitConversion"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
             readonly 409: components["responses"]["Conflict"];
             readonly 422: components["responses"]["ValidationFailed"];
         };

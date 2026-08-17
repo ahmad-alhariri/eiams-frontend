@@ -1,31 +1,62 @@
 import type {
+  ActionAvailability,
   AuthTokenResponse,
+  DocumentActionResult,
+  DocumentActionType,
+  DocumentAttachment,
+  DocumentLifecycleEvent,
+  DocumentLine,
+  DocumentPolicy,
+  DocumentStatus,
+  Employee,
+  ExternalParty,
   EffectiveRole,
   FieldError,
   InventoryBalance,
+  LifecycleActorSnapshot,
+  LifecycleEventType,
   Material,
   MaterialCategory,
   MaterialDomain,
   MaterialFamily,
+  MaterialUnitConversion,
   NamedReference,
+  OperationalAdvisory,
   PageMeta,
+  PolicyBlocker,
   ProblemDetails,
   ScopeContext,
   SessionResponse,
+  Site,
+  OrganizationalUnit,
   UnitOfMeasure,
   UserSummary,
   Warehouse,
+  WarehouseCapability,
+  WarehouseDocument,
+  WarehouseMaterialSetting,
 } from '@/shared/types/generated/eiams-v1'
 
-/**
- * Contract-backed fixture helpers for MSW tests.
+/** Contract-backed fixture helpers for MSW tests.
  *
  * Keep factories here, instead of inside feature tests, so every mock payload
  * is checked against the generated OpenAPI surface. Factories deliberately
  * produce ordinary data only; endpoint-specific handlers remain owned by the
  * feature that exercises the endpoint.
  */
-export type FixtureOverrides<T> = Partial<T>
+/**
+ * Recursive override type: a full `T[K]` value (spread semantics), an explicit
+ * `undefined` (clear an optional field), or — for plain objects only — a
+ * partial nested override merged by `mergeDeep`. Arrays and non-object values
+ * are always replaced wholesale.
+ */
+export type FixtureOverrides<T> = {
+  [K in keyof T]?: T[K] extends readonly unknown[]
+    ? T[K] | undefined
+    : T[K] extends object
+      ? T[K] | FixtureOverrides<T[K]> | undefined
+      : T[K] | undefined
+}
 
 const FIXTURE_TIMESTAMP = '2026-01-01T00:00:00.000Z'
 
@@ -36,6 +67,30 @@ export function fixtureUuid(sequence = 1): string {
 
 function withOverrides<T extends object>(defaults: T, overrides: FixtureOverrides<T>): T {
   return { ...defaults, ...overrides }
+}
+
+/**
+ * Recursive merge used by factories that spawn nested entities (document
+ * policy, lines, actor snapshots, ...). Callers keep overriding one nested
+ * field without re-supplying the whole subtree; arrays replace wholesale and
+ * an explicit `undefined` clears an optional field, mirroring spread
+ * semantics.
+ */
+function mergeDeep<T extends object>(defaults: T, overrides: FixtureOverrides<T>): T {
+  const merged: Record<string, unknown> = { ...(defaults as Record<string, unknown>) }
+  for (const [key, value] of Object.entries(overrides)) {
+    const baseValue = (defaults as Record<string, unknown>)[key]
+    if (isMergeableObject(baseValue) && isMergeableObject(value)) {
+      merged[key] = mergeDeep(baseValue as unknown as T, value as unknown as Partial<T>)
+    } else {
+      merged[key] = value
+    }
+  }
+  return merged as T
+}
+
+function isMergeableObject(value: unknown): value is object {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 export function createNamedReference(
@@ -208,12 +263,30 @@ export function createMaterial(overrides: FixtureOverrides<Material> = {}): Mate
       domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
       category: createNamedReference({ id: fixtureUuid(21), displayName: 'الأجهزة' }),
       family: createNamedReference({ id: fixtureUuid(22), displayName: 'الحواسيب' }),
-      baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة' }),
+      baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة', code: 'EA' }),
       materialKind: 'Durable',
       requiresAssetNumber: false,
       trackingType: 'Quantity',
       rowVersion: 1,
       status: 'Active',
+    },
+    overrides,
+  )
+}
+
+export function createMaterialUnitConversion(
+  overrides: FixtureOverrides<MaterialUnitConversion> = {},
+): MaterialUnitConversion {
+  return withOverrides(
+    {
+      baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة', code: 'EA' }),
+      conversionId: fixtureUuid(25),
+      factor: '12',
+      fromUnit: createNamedReference({ id: fixtureUuid(26), displayName: 'كرتونة', code: 'CTN' }),
+      material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
+      rowVersion: 1,
+      status: 'Active',
+      usedInPostedDocuments: false,
     },
     overrides,
   )
@@ -227,6 +300,104 @@ export function createWarehouse(overrides: FixtureOverrides<Warehouse> = {}): Wa
       nameAr: 'المستودع المركزي',
       locationAr: 'دمشق',
       site: createNamedReference({ id: fixtureUuid(31), displayName: 'المقر الرئيسي' }),
+      rowVersion: 1,
+      status: 'Active',
+    },
+    overrides,
+  )
+}
+
+export function createWarehouseCapability(
+  overrides: FixtureOverrides<WarehouseCapability> = {},
+): WarehouseCapability {
+  return withOverrides(
+    {
+      capabilityId: fixtureUuid(32),
+      warehouseId: fixtureUuid(30),
+      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
+      operations: ['Receiving', 'Issue'],
+      rowVersion: 1,
+    },
+    overrides,
+  )
+}
+
+export function createWarehouseMaterialSetting(
+  overrides: FixtureOverrides<WarehouseMaterialSetting> = {},
+): WarehouseMaterialSetting {
+  return withOverrides(
+    {
+      settingId: fixtureUuid(33),
+      warehouseId: fixtureUuid(30),
+      material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
+      minQuantity: 2,
+      maxQuantity: 10,
+      rowVersion: 1,
+      status: 'Active',
+    },
+    overrides,
+  )
+}
+
+export function createSite(overrides: FixtureOverrides<Site> = {}): Site {
+  return withOverrides(
+    {
+      siteId: fixtureUuid(50),
+      organizationId: fixtureUuid(51),
+      code: 'DAM-HQ',
+      nameAr: 'المقر الرئيسي',
+      address: 'دمشق',
+      governorate: 'دمشق',
+      rowVersion: 1,
+      status: 'Active',
+    },
+    overrides,
+  )
+}
+
+export function createOrganizationalUnit(
+  overrides: FixtureOverrides<OrganizationalUnit> = {},
+): OrganizationalUnit {
+  return withOverrides(
+    {
+      orgUnitId: fixtureUuid(52),
+      siteId: fixtureUuid(50),
+      code: 'DAM-ADMIN',
+      nameAr: 'الإدارة',
+      pathDisplay: 'المقر الرئيسي / الإدارة',
+      rowVersion: 1,
+      status: 'Active',
+    },
+    overrides,
+  )
+}
+
+export function createEmployee(overrides: FixtureOverrides<Employee> = {}): Employee {
+  return withOverrides(
+    {
+      employeeId: fixtureUuid(53),
+      employeeNumber: 'EMP-001',
+      fullNameAr: 'موظف تجريبي',
+      jobTitleAr: 'أمين مستودع',
+      orgUnit: createNamedReference({ id: fixtureUuid(52), displayName: 'الإدارة' }),
+      site: createNamedReference({ id: fixtureUuid(50), displayName: 'المقر الرئيسي' }),
+      rowVersion: 1,
+      status: 'Active',
+    },
+    overrides,
+  )
+}
+
+export function createExternalParty(
+  overrides: FixtureOverrides<ExternalParty> = {},
+): ExternalParty {
+  return withOverrides(
+    {
+      externalPartyId: fixtureUuid(54),
+      code: 'EXT-001',
+      contactInfo: '011-0000000',
+      nameAr: 'جهة خارجية تجريبية',
+      notes: null,
       rowVersion: 1,
       status: 'Active',
     },
@@ -248,6 +419,529 @@ export function createInventoryBalance(
     },
     overrides,
   )
+}
+
+/**
+ * --- Document engine fixtures -------------------------------------------------
+ *
+ * Shared mock-data spine for the document engine: attachment/line/policy/event
+ * fixtures plus the canonical lifecycle transition table that both the mock
+ * API (src/mocks/handlers.ts) and the scenario handlers
+ * (src/test/msw/warehouse-document-handlers.ts) replay.
+ */
+
+export type DocumentTransition = Readonly<{
+  eventType: LifecycleEventType
+  from: DocumentStatus
+  to: DocumentStatus
+}>
+
+/** Canonical action → state-transition table; non-transition actions map to undefined. */
+export const DOCUMENT_TRANSITIONS: Readonly<
+  Record<DocumentActionType, DocumentTransition | undefined>
+> = {
+  Cancel: { from: 'Draft', to: 'Cancelled', eventType: 'Cancelled' },
+  DeleteAttachment: undefined,
+  Edit: undefined,
+  Post: { from: 'Submitted', to: 'Posted', eventType: 'Posted' },
+  Reject: { from: 'Submitted', to: 'Rejected', eventType: 'Rejected' },
+  Reverse: { from: 'Posted', to: 'Reversed', eventType: 'Reversed' },
+  Revise: { from: 'Rejected', to: 'Draft', eventType: 'RevisionStarted' },
+  Submit: { from: 'Draft', to: 'Submitted', eventType: 'Submitted' },
+  UploadAttachment: undefined,
+}
+
+const ACTIONS_REQUIRING_REASON: ReadonlySet<DocumentActionType> = new Set([
+  'Cancel',
+  'Reject',
+  'Reverse',
+])
+
+/** Draft edits and attachment uploads carry no lifecycle reason; reject/cancel/reverse do. */
+export function actionRequiresReason(action: DocumentActionType): boolean {
+  return ACTIONS_REQUIRING_REASON.has(action)
+}
+
+const DOCUMENT_ACTOR: LifecycleActorSnapshot = {
+  userId: fixtureUuid(10),
+  displayName: 'مستخدم تجريبي',
+  roleNameAr: 'أمين المستودع',
+}
+
+/** Lengthy default policy: every action is available so a bare factory call never blocks. */
+const LENIENT_ACTIONS: readonly ActionAvailability[] = [
+  createActionAvailability('Edit'),
+  createActionAvailability('Submit'),
+  createActionAvailability('Post'),
+  createActionAvailability('Reject'),
+  createActionAvailability('Revise'),
+  createActionAvailability('Cancel'),
+  createActionAvailability('Reverse'),
+  createActionAvailability('UploadAttachment'),
+  createActionAvailability('DeleteAttachment'),
+]
+
+/** Status-aware action availability: only transitions the lifecycle actually permits. */
+export function actionsForDocumentStatus(status: DocumentStatus): ActionAvailability[] {
+  switch (status) {
+    case 'Draft':
+      return [
+        createActionAvailability('Edit'),
+        createActionAvailability('Submit'),
+        createActionAvailability('Cancel', { confirmationRequired: true, reasonRequired: true }),
+        createActionAvailability('UploadAttachment'),
+        createActionAvailability('DeleteAttachment'),
+        createActionAvailability('Post', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'يجب إرسال المستند أولاً قبل رصده.',
+          reasonCode: 'document.not_submitted',
+        }),
+        createActionAvailability('Reverse', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'لا يمكن عكس مستند غير مُرصد.',
+          reasonCode: 'document.not_posted',
+        }),
+        createActionAvailability('Reject', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('Revise', { allowed: false, presentation: 'Hidden' }),
+      ]
+    case 'Submitted':
+      return [
+        createActionAvailability('Post'),
+        createActionAvailability('Reject', { confirmationRequired: true, reasonRequired: true }),
+        createActionAvailability('Edit', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند مُرسل ولا يمكن تعديله.',
+          reasonCode: 'document.submitted',
+        }),
+        createActionAvailability('Submit', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند مُرسل بالفعل.',
+          reasonCode: 'document.submitted',
+        }),
+        createActionAvailability('Cancel', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'يمكن إلغاء المسودات فقط.',
+          reasonCode: 'document.not_draft',
+        }),
+        createActionAvailability('UploadAttachment', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('DeleteAttachment', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('Reverse', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'لا يمكن عكس مستند غير مُرصد.',
+          reasonCode: 'document.not_posted',
+        }),
+        createActionAvailability('Revise', { allowed: false, presentation: 'Hidden' }),
+      ]
+    case 'Posted':
+      return [
+        createActionAvailability('Reverse', { confirmationRequired: true, reasonRequired: true }),
+        createActionAvailability('Edit', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند مُرصد ولا يمكن تعديله.',
+          reasonCode: 'document.posted',
+        }),
+        createActionAvailability('Submit', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند مُرصد بالفعل.',
+          reasonCode: 'document.posted',
+        }),
+        createActionAvailability('Post', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند مُرصد بالفعل.',
+          reasonCode: 'document.posted',
+        }),
+        createActionAvailability('Cancel', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند مُرصد ولا يمكن إلغاؤه.',
+          reasonCode: 'document.posted',
+        }),
+        createActionAvailability('Reject', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('Revise', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('UploadAttachment', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('DeleteAttachment', { allowed: false, presentation: 'Hidden' }),
+      ]
+    case 'Reversed':
+      return [
+        createActionAvailability('Edit', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند معكوس.',
+          reasonCode: 'document.reversed',
+        }),
+        createActionAvailability('Submit', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند معكوس.',
+          reasonCode: 'document.reversed',
+        }),
+        createActionAvailability('Post', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند معكوس.',
+          reasonCode: 'document.reversed',
+        }),
+        createActionAvailability('Cancel', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند معكوس.',
+          reasonCode: 'document.reversed',
+        }),
+        createActionAvailability('Reverse', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند معكوس بالفعل.',
+          reasonCode: 'document.reversed',
+        }),
+        createActionAvailability('Reject', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('Revise', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('UploadAttachment', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('DeleteAttachment', { allowed: false, presentation: 'Hidden' }),
+      ]
+    case 'Cancelled':
+      return [
+        createActionAvailability('Edit', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند ملغي.',
+          reasonCode: 'document.cancelled',
+        }),
+        createActionAvailability('Submit', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند ملغي.',
+          reasonCode: 'document.cancelled',
+        }),
+        createActionAvailability('Post', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند ملغي.',
+          reasonCode: 'document.cancelled',
+        }),
+        createActionAvailability('Cancel', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند ملغي بالفعل.',
+          reasonCode: 'document.cancelled',
+        }),
+        createActionAvailability('Reverse', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند ملغي.',
+          reasonCode: 'document.cancelled',
+        }),
+        createActionAvailability('Reject', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('Revise', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('UploadAttachment', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('DeleteAttachment', { allowed: false, presentation: 'Hidden' }),
+      ]
+    case 'Rejected':
+      return [
+        createActionAvailability('Revise'),
+        createActionAvailability('Edit', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'أعد المستند إلى مسودة قبل تعديله.',
+          reasonCode: 'document.rejected',
+        }),
+        createActionAvailability('Submit', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'أعد المستند إلى مسودة قبل إعادة الإرسال.',
+          reasonCode: 'document.rejected',
+        }),
+        createActionAvailability('Post', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند مرفوض.',
+          reasonCode: 'document.rejected',
+        }),
+        createActionAvailability('Cancel', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'يمكن إلغاء المسودات فقط.',
+          reasonCode: 'document.not_draft',
+        }),
+        createActionAvailability('Reverse', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'لا يمكن عكس مستند مرفوض.',
+          reasonCode: 'document.rejected',
+        }),
+        createActionAvailability('Reject', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'المستند مرفوض بالفعل.',
+          reasonCode: 'document.rejected',
+        }),
+        createActionAvailability('UploadAttachment', { allowed: false, presentation: 'Hidden' }),
+        createActionAvailability('DeleteAttachment', { allowed: false, presentation: 'Hidden' }),
+      ]
+  }
+}
+
+export function createActionAvailability(
+  actionType: DocumentActionType,
+  overrides: FixtureOverrides<ActionAvailability> = {},
+): ActionAvailability {
+  return withOverrides(
+    {
+      action: actionType,
+      allowed: true,
+      confirmationRequired: false,
+      presentation: 'Enabled',
+      reasonAr: null,
+      reasonCode: null,
+      reasonRequired: false,
+    },
+    overrides,
+  )
+}
+
+export function createPolicyBlocker(
+  overrides: FixtureOverrides<PolicyBlocker> = {},
+): PolicyBlocker {
+  return withOverrides(
+    {
+      code: 'document.signed_original_missing',
+      field: 'attachmentType',
+      messageAr: 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
+    },
+    overrides,
+  )
+}
+
+export function createOperationalAdvisory(
+  overrides: FixtureOverrides<OperationalAdvisory> = {},
+): OperationalAdvisory {
+  return withOverrides(
+    {
+      code: 'ActiveSoftFreeze',
+      messageAr: 'هناك جرد نشط يغطي نطاق هذا المستودع.',
+      severity: 'Warning',
+    },
+    overrides,
+  )
+}
+
+export function createDocumentPolicy(
+  overrides: FixtureOverrides<DocumentPolicy> = {},
+): DocumentPolicy {
+  const documentStatus = overrides.documentStatus ?? 'Draft'
+  const actions =
+    overrides.actions ??
+    (overrides.documentStatus === undefined
+      ? LENIENT_ACTIONS
+      : actionsForDocumentStatus(documentStatus))
+  return withOverrides(
+    {
+      actions,
+      advisories: [],
+      blockers: [],
+      documentId: fixtureUuid(200),
+      documentStatus,
+      evaluatedAt: FIXTURE_TIMESTAMP,
+      policyKind: 'Generic',
+      rowVersion: 1,
+      signedOriginalSatisfied: false,
+    },
+    overrides,
+  )
+}
+
+export function createDocumentAttachment(
+  overrides: FixtureOverrides<DocumentAttachment> = {},
+): DocumentAttachment {
+  return mergeDeep(
+    {
+      attachmentId: fixtureUuid(202),
+      attachmentType: 'SignedOriginal',
+      checksum: 'sha256:fixture-checksum',
+      documentId: fixtureUuid(200),
+      downloadUrl: null,
+      fileSize: 2048,
+      mimeType: 'application/pdf',
+      originalFilename: 'document-original.pdf',
+      uploadedAt: FIXTURE_TIMESTAMP,
+      uploadedBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مستخدم تجريبي' }),
+    },
+    overrides,
+  )
+}
+
+export function createWarehouseDocumentLine(
+  overrides: FixtureOverrides<DocumentLine> = {},
+): DocumentLine {
+  const material = createMaterial()
+  return mergeDeep(
+    {
+      availableBalance: null,
+      baseQuantity: overrides.quantity ?? 5,
+      conversionFactor: '1.000000',
+      conversionId: null,
+      lineId: fixtureUuid(201),
+      lineType: 'Normal',
+      material,
+      quantity: 5,
+      unit: material.baseUnit,
+      unitPrice: null,
+    },
+    overrides,
+  )
+}
+
+export function createLifecycleEvent(
+  overrides: FixtureOverrides<DocumentLifecycleEvent> = {},
+): DocumentLifecycleEvent {
+  return mergeDeep(
+    {
+      correlationId: null,
+      documentId: fixtureUuid(200),
+      documentRowVersion: 1,
+      eventId: fixtureUuid(203),
+      eventType: 'Created',
+      occurredAt: FIXTURE_TIMESTAMP,
+      occurredBy: DOCUMENT_ACTOR,
+      reason: null,
+      toStatus: 'Draft',
+    },
+    overrides,
+  )
+}
+
+/**
+ * Synthesizes the canonical immutable lifecycle chain implied by a document's
+ * current status. Seed fixtures only — real transitions run through the action
+ * engine which appends one event per accepted action.
+ */
+export function deriveLifecycleEvents(document: WarehouseDocument): DocumentLifecycleEvent[] {
+  const events: DocumentLifecycleEvent[] = [
+    createLifecycleEvent({
+      documentId: document.documentId,
+      documentRowVersion: 1,
+      eventId: fixtureUuid(203),
+      eventType: 'Created',
+      occurredAt: document.createdAt,
+      toStatus: 'Draft',
+    }),
+  ]
+  const step = (
+    eventType: LifecycleEventType,
+    from: DocumentStatus,
+    to: DocumentStatus,
+    index: number,
+  ): void => {
+    events.push(
+      createLifecycleEvent({
+        documentId: document.documentId,
+        documentRowVersion: index + 2,
+        eventId: fixtureUuid(204 + index),
+        eventType,
+        fromStatus: from,
+        occurredAt: document.createdAt,
+        toStatus: to,
+      }),
+    )
+  }
+  switch (document.documentStatus) {
+    case 'Submitted':
+      step('Submitted', 'Draft', 'Submitted', 0)
+      break
+    case 'Rejected':
+      step('Submitted', 'Draft', 'Submitted', 0)
+      step('Rejected', 'Submitted', 'Rejected', 1)
+      break
+    case 'Posted':
+      step('Submitted', 'Draft', 'Submitted', 0)
+      step('Posted', 'Submitted', 'Posted', 1)
+      break
+    case 'Reversed':
+      step('Submitted', 'Draft', 'Submitted', 0)
+      step('Posted', 'Submitted', 'Posted', 1)
+      step('Reversed', 'Posted', 'Reversed', 2)
+      break
+    case 'Cancelled':
+      step('Cancelled', 'Draft', 'Cancelled', 0)
+      break
+    case 'Draft':
+      break
+  }
+  return events
+}
+
+export function createDocumentActionResult(
+  actionType: DocumentActionType,
+  overrides: FixtureOverrides<DocumentActionResult> = {},
+): DocumentActionResult {
+  const transition = DOCUMENT_TRANSITIONS[actionType]
+  if (transition === undefined) {
+    throw new Error(
+      `createDocumentActionResult: '${actionType}' is not a lifecycle transition action; use one of Submit, Post, Reject, Revise, Cancel, Reverse.`,
+    )
+  }
+  const documentId = fixtureUuid(200)
+  const nextRowVersion = 2
+  const defaults: DocumentActionResult = {
+    document: createWarehouseDocument({
+      documentId,
+      documentStatus: transition.to,
+      rowVersion: nextRowVersion,
+    }),
+    lifecycleEvent: createLifecycleEvent({
+      documentId,
+      documentRowVersion: nextRowVersion,
+      eventId: fixtureUuid(203),
+      eventType: transition.eventType,
+      fromStatus: transition.from,
+      reason: actionRequiresReason(actionType) ? 'سبب تجريبي' : null,
+      toStatus: transition.to,
+    }),
+  }
+  return mergeDeep(defaults, overrides)
+}
+
+export function createWarehouseDocument(
+  overrides: FixtureOverrides<WarehouseDocument> = {},
+): WarehouseDocument {
+  const documentId = overrides.documentId ?? fixtureUuid(200)
+  const documentStatus = overrides.documentStatus ?? 'Draft'
+  const rowVersion = overrides.rowVersion ?? 1
+  const defaults: WarehouseDocument = {
+    attachments: [],
+    createdAt: FIXTURE_TIMESTAMP,
+    createdBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مستخدم تجريبي' }),
+    documentId,
+    documentStatus,
+    documentType: 'Receiving',
+    lines: [createWarehouseDocumentLine({ lineId: fixtureUuid(201) })],
+    paperDocumentNumber: '2024/123',
+    paperDocumentYear: 2024,
+    policy: createDocumentPolicy({
+      documentId,
+      documentStatus,
+      rowVersion,
+    }),
+    postedAt: null,
+    receivingInfo: {
+      receivingType: 'Purchase',
+      supplierInvoiceRef: 'INV-2024-001',
+      supplierRef: 'SUP-001',
+    },
+    rowVersion,
+    site: createNamedReference({ id: fixtureUuid(31), displayName: 'المقر الرئيسي' }),
+    systemReferenceNumber: 'EIAMS-DOC-2024-0001',
+    warehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
+  }
+  return mergeDeep(defaults, overrides)
 }
 
 /** Produces the shared `{ items, meta }` page shape used by v1 list responses. */

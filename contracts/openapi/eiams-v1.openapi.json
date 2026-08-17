@@ -2,8 +2,8 @@
     "openapi":  "3.0.3",
     "info":  {
                  "title":  "EIAMS API",
-                 "version":  "1.0.0-provisional.3",
-                 "description":  "Provisional design-first API contract derived from the EIAMS PRD 2.0, Schema v5, canonical BDM, and approved P0 decisions including D-AUTH-01 and D-LIFE-01. Importable into Apidog for mocking and frontend generation. Backend ratification is required before production integration.",
+                 "version":  "1.0.0-provisional.6",
+                 "description":  "Provisional design-first API contract derived from the EIAMS PRD 2.0, Schema v5, canonical BDM, and approved decisions including D-AUTH-01, D-LIFE-01, D-MAT-01, and D-UOM-01. Material-unit conversion factors use exact DECIMAL(18,6) JSON strings. Importable into Apidog for mocking and frontend generation. Backend ratification is required before production integration.",
                  "contact":  {
                                  "name":  "EIAMS Architecture and Contract Decisions"
                              },
@@ -1393,6 +1393,178 @@
                                                                       "summary":  "Update Material"
                                                                   }
                                                       },
+                  "/catalog/materials/{materialId}/unit-conversions": {
+                    "parameters": [
+                      {
+                        "$ref": "#/components/parameters/MaterialId"
+                      }
+                    ],
+                    "get": {
+                      "tags": [
+                        "Catalog"
+                      ],
+                      "operationId": "listMaterialUnitConversions",
+                      "summary": "List material unit conversions",
+                      "description": "Returns the material-specific alternative-unit conversions to that material's server-owned base unit. One common unit name, such as Carton, never implies a global factor.",
+                      "responses": {
+                        "200": {
+                          "description": "Material unit conversions, including inactive historical conversions",
+                          "content": {
+                            "application/json": {
+                              "schema": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/MaterialUnitConversion"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "401": {
+                          "$ref": "#/components/responses/Unauthorized"
+                        },
+                        "403": {
+                          "$ref": "#/components/responses/Forbidden"
+                        },
+                        "404": {
+                          "$ref": "#/components/responses/NotFound"
+                        }
+                      }
+                    },
+                    "post": {
+                      "tags": [
+                        "Catalog"
+                      ],
+                      "operationId": "createMaterialUnitConversion",
+                      "summary": "Create material unit conversion",
+                      "description": "Requires catalog.manage. The server derives the material base unit and rejects an inactive or out-of-scope material/unit, a base-unit/self conversion, or an active duplicate for the same material and fromUnit.",
+                      "requestBody": {
+                        "required": true,
+                        "content": {
+                          "application/json": {
+                            "schema": {
+                              "$ref": "#/components/schemas/MaterialUnitConversionCreateRequest"
+                            }
+                          }
+                        }
+                      },
+                      "responses": {
+                        "201": {
+                          "description": "Material unit conversion created",
+                          "content": {
+                            "application/json": {
+                              "schema": {
+                                "$ref": "#/components/schemas/MaterialUnitConversion"
+                              }
+                            }
+                          }
+                        },
+                        "401": {
+                          "$ref": "#/components/responses/Unauthorized"
+                        },
+                        "403": {
+                          "$ref": "#/components/responses/Forbidden"
+                        },
+                        "404": {
+                          "$ref": "#/components/responses/NotFound"
+                        },
+                        "409": {
+                          "$ref": "#/components/responses/Conflict"
+                        },
+                        "422": {
+                          "$ref": "#/components/responses/ValidationFailed"
+                        }
+                      }
+                    }
+                  },
+                  "/catalog/materials/{materialId}/unit-conversions/{conversionId}": {
+                    "parameters": [
+                      {
+                        "$ref": "#/components/parameters/MaterialId"
+                      },
+                      {
+                        "name": "conversionId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                          "$ref": "#/components/schemas/Uuid"
+                        }
+                      }
+                    ],
+                    "get": {
+                      "tags": [
+                        "Catalog"
+                      ],
+                      "operationId": "getMaterialUnitConversion",
+                      "summary": "Get material unit conversion",
+                      "responses": {
+                        "200": {
+                          "description": "Material unit conversion",
+                          "content": {
+                            "application/json": {
+                              "schema": {
+                                "$ref": "#/components/schemas/MaterialUnitConversion"
+                              }
+                            }
+                          }
+                        },
+                        "401": {
+                          "$ref": "#/components/responses/Unauthorized"
+                        },
+                        "403": {
+                          "$ref": "#/components/responses/Forbidden"
+                        },
+                        "404": {
+                          "$ref": "#/components/responses/NotFound"
+                        }
+                      }
+                    },
+                    "put": {
+                      "tags": [
+                        "Catalog"
+                      ],
+                      "operationId": "updateMaterialUnitConversion",
+                      "summary": "Update or deactivate material unit conversion",
+                      "description": "Requires catalog.manage and the current rowVersion. The server rejects stale versions, invalid scope/status, and any factor overwrite after the conversion has been used in a posted document. A used conversion may be deactivated; create a replacement instead. DELETE is intentionally unsupported so historical document snapshots remain auditable.",
+                      "requestBody": {
+                        "required": true,
+                        "content": {
+                          "application/json": {
+                            "schema": {
+                              "$ref": "#/components/schemas/MaterialUnitConversionUpdateRequest"
+                            }
+                          }
+                        }
+                      },
+                      "responses": {
+                        "200": {
+                          "description": "Material unit conversion updated",
+                          "content": {
+                            "application/json": {
+                              "schema": {
+                                "$ref": "#/components/schemas/MaterialUnitConversion"
+                              }
+                            }
+                          }
+                        },
+                        "401": {
+                          "$ref": "#/components/responses/Unauthorized"
+                        },
+                        "403": {
+                          "$ref": "#/components/responses/Forbidden"
+                        },
+                        "404": {
+                          "$ref": "#/components/responses/NotFound"
+                        },
+                        "409": {
+                          "$ref": "#/components/responses/Conflict"
+                        },
+                        "422": {
+                          "$ref": "#/components/responses/ValidationFailed"
+                        }
+                      }
+                    }
+                  },
                   "/catalog/units-of-measure":  {
                                                     "get":  {
                                                                 "tags":  [
@@ -3226,7 +3398,7 @@
                                                                                                                                        "schema":  {
                                                                                                                                                       "type":  "array",
                                                                                                                                                       "items":  {
-                                                                                                                                                                    "$ref":  "#/components/schemas/Custody"
+                                                                                                                                                                    "$ref":  "#/components/schemas/AssetCustody"
                                                                                                                                                                 }
                                                                                                                                                   }
                                                                                                                                    }
@@ -5980,7 +6152,95 @@
                                                                                                             }
                                                                                          }
                                                                       },
-                                       "Material":  {
+                                        "ConsumableMaterialPolicy":  {
+                                                                          "type":  "object",
+                                                                          "description":  "D-MAT-01: Consumables are quantity-tracked and have no asset number. Issuing them closes warehouse responsibility; no custody row is created.",
+                                                                          "required":  [
+                                                                                           "materialKind",
+                                                                                           "trackingType",
+                                                                                           "requiresAssetNumber"
+                                                                                       ],
+                                                                          "properties":  {
+                                                                                             "materialKind":  {
+                                                                                                                  "type":  "string",
+                                                                                                                  "enum":  [
+                                                                                                                               "Consumable"
+                                                                                                                           ]
+                                                                                                              },
+                                                                                             "trackingType":  {
+                                                                                                                   "type":  "string",
+                                                                                                                   "enum":  [
+                                                                                                                                "Quantity"
+                                                                                                                            ]
+                                                                                                               },
+                                                                                             "requiresAssetNumber":  {
+                                                                                                                         "type":  "boolean",
+                                                                                                                         "enum":  [
+                                                                                                                                      false
+                                                                                                                                  ]
+                                                                                                                     }
+                                                                                         }
+                                                                      },
+                                        "DurableMaterialPolicy":  {
+                                                                       "type":  "object",
+                                                                       "description":  "D-MAT-01: Durable operational-custody materials never have an asset number. Quantity tracking uses MaterialQuantity custody; serial tracking uses a non-asset TrackedUnit custody. The v1 snapshot represents TrackedUnit IDs in document-line and custody payloads only; a generic tracked-unit picker/lifecycle endpoint requires separate backend/API ratification.",
+                                                                       "required":  [
+                                                                                        "materialKind",
+                                                                                        "trackingType",
+                                                                                        "requiresAssetNumber"
+                                                                                    ],
+                                                                       "properties":  {
+                                                                                          "materialKind":  {
+                                                                                                               "type":  "string",
+                                                                                                               "enum":  [
+                                                                                                                            "Durable"
+                                                                                                                        ]
+                                                                                                           },
+                                                                                          "trackingType":  {
+                                                                                                                "type":  "string",
+                                                                                                                "enum":  [
+                                                                                                                             "Quantity",
+                                                                                                                             "Serial"
+                                                                                                                         ]
+                                                                                                            },
+                                                                                          "requiresAssetNumber":  {
+                                                                                                                      "type":  "boolean",
+                                                                                                                      "enum":  [
+                                                                                                                                   false
+                                                                                                                               ]
+                                                                                                                  }
+                                                                                      }
+                                                                   },
+                                        "AssetMaterialPolicy":  {
+                                                                     "type":  "object",
+                                                                     "description":  "D-MAT-01: Fixed assets are individually serial-tracked, must receive an institutional asset number, create Asset records, and are issued through Asset custody. A manufacturer serial number remains optional on the Asset record.",
+                                                                     "required":  [
+                                                                                      "materialKind",
+                                                                                      "trackingType",
+                                                                                      "requiresAssetNumber"
+                                                                                  ],
+                                                                     "properties":  {
+                                                                                        "materialKind":  {
+                                                                                                             "type":  "string",
+                                                                                                             "enum":  [
+                                                                                                                          "Asset"
+                                                                                                                      ]
+                                                                                                         },
+                                                                                        "trackingType":  {
+                                                                                                              "type":  "string",
+                                                                                                              "enum":  [
+                                                                                                                           "Serial"
+                                                                                                                       ]
+                                                                                                          },
+                                                                                        "requiresAssetNumber":  {
+                                                                                                                    "type":  "boolean",
+                                                                                                                    "enum":  [
+                                                                                                                                 true
+                                                                                                                             ]
+                                                                                                                }
+                                                                                    }
+                                                                 },
+                                        "Material":  {
                                                         "type":  "object",
                                                         "required":  [
                                                                          "materialId",
@@ -6034,13 +6294,32 @@
                                                                            "status":  {
                                                                                           "$ref":  "#/components/schemas/RecordStatus"
                                                                                       },
-                                                                           "rowVersion":  {
-                                                                                              "type":  "integer",
-                                                                                              "format":  "int64"
-                                                                                          }
-                                                                       }
-                                                    },
-                                       "MaterialUpsertRequest":  {
+                                                                            "rowVersion":  {
+                                                                                               "type":  "integer",
+                                                                                               "format":  "int64"
+                                                                                           }
+                                                                        },
+                                                         "oneOf":  [
+                                                                         {
+                                                                             "$ref":  "#/components/schemas/ConsumableMaterialPolicy"
+                                                                         },
+                                                                         {
+                                                                             "$ref":  "#/components/schemas/DurableMaterialPolicy"
+                                                                         },
+                                                                         {
+                                                                             "$ref":  "#/components/schemas/AssetMaterialPolicy"
+                                                                         }
+                                                                     ],
+                                                         "discriminator":  {
+                                                                               "propertyName":  "materialKind",
+                                                                               "mapping":  {
+                                                                                               "Consumable":  "#/components/schemas/ConsumableMaterialPolicy",
+                                                                                               "Durable":  "#/components/schemas/DurableMaterialPolicy",
+                                                                                               "Asset":  "#/components/schemas/AssetMaterialPolicy"
+                                                                                           }
+                                                                           }
+                                                     },
+                                        "MaterialUpsertRequest":  {
                                                                      "type":  "object",
                                                                      "required":  [
                                                                                       "code",
@@ -6085,14 +6364,33 @@
                                                                                         "status":  {
                                                                                                        "$ref":  "#/components/schemas/RecordStatus"
                                                                                                    },
-                                                                                        "rowVersion":  {
-                                                                                                           "type":  "integer",
-                                                                                                           "format":  "int64",
-                                                                                                           "minimum":  0
-                                                                                                       }
-                                                                                    }
-                                                                 },
-                                       "MaterialPage":  {
+                                                                                         "rowVersion":  {
+                                                                                                            "type":  "integer",
+                                                                                                            "format":  "int64",
+                                                                                                            "minimum":  0
+                                                                                                        }
+                                                                                     },
+                                                                      "oneOf":  [
+                                                                                      {
+                                                                                          "$ref":  "#/components/schemas/ConsumableMaterialPolicy"
+                                                                                      },
+                                                                                      {
+                                                                                          "$ref":  "#/components/schemas/DurableMaterialPolicy"
+                                                                                      },
+                                                                                      {
+                                                                                          "$ref":  "#/components/schemas/AssetMaterialPolicy"
+                                                                                      }
+                                                                                  ],
+                                                                      "discriminator":  {
+                                                                                            "propertyName":  "materialKind",
+                                                                                            "mapping":  {
+                                                                                                            "Consumable":  "#/components/schemas/ConsumableMaterialPolicy",
+                                                                                                            "Durable":  "#/components/schemas/DurableMaterialPolicy",
+                                                                                                            "Asset":  "#/components/schemas/AssetMaterialPolicy"
+                                                                                                        }
+                                                                                        }
+                                                                  },
+                                        "MaterialPage":  {
                                                             "type":  "object",
                                                             "required":  [
                                                                              "items",
@@ -6140,11 +6438,11 @@
                                                                             "status":  {
                                                                                            "$ref":  "#/components/schemas/RecordStatus"
                                                                                        },
-                                                                            "rowVersion":  {
-                                                                                               "type":  "integer",
-                                                                                               "format":  "int64"
-                                                                                           }
-                                                                        }
+                                                                             "rowVersion":  {
+                                                                                                "type":  "integer",
+                                                                                                "format":  "int64"
+                                                                                            }
+                                                                         }
                                                      },
                                        "WarehouseUpsertRequest":  {
                                                                       "type":  "object",
@@ -6175,12 +6473,12 @@
                                                                                          "status":  {
                                                                                                         "$ref":  "#/components/schemas/RecordStatus"
                                                                                                     },
-                                                                                         "rowVersion":  {
-                                                                                                            "type":  "integer",
-                                                                                                            "format":  "int64",
-                                                                                                            "minimum":  0
-                                                                                                        }
-                                                                                     }
+                                                                                          "rowVersion":  {
+                                                                                                             "type":  "integer",
+                                                                                                             "format":  "int64",
+                                                                                                             "minimum":  0
+                                                                                                         }
+                                                                                      }
                                                                   },
                                        "WarehousePage":  {
                                                              "type":  "object",
@@ -6484,6 +6782,115 @@
                                                                         "Correction"
                                                                     ]
                                                        },
+                                       "PositiveDecimal18_6": {
+                                         "type": "string",
+                                         "format": "decimal",
+                                         "minLength": 1,
+                                         "maxLength": 19,
+                                         "pattern": "^(?:0\\.(?=[0-9]{1,6}$)[0-9]*[1-9][0-9]*|[1-9][0-9]{0,11}(?:\\.[0-9]{1,6})?)$",
+                                         "example": "12.000000",
+                                         "description": "Exact positive DECIMAL(18,6) transport value, encoded as a JSON string so JavaScript clients do not lose precision. Accepted grammar: `0.<1-6 fractional digits containing at least one non-zero digit>` or `<1-12 non-zero-leading integer digits>[.<1-6 fractional digits>]`; no sign, exponent, thousands separator, or leading zero is accepted. Minimum is `0.000001`; maximum is `999999999999.999999`. Examples: `12`, `12.000000`, `0.250000`, and `999999999999.999999`."
+                                       },
+                                       "MaterialUnitConversion": {
+                                         "type": "object",
+                                         "description": "A material-specific conversion from an alternative unit directly to the material's server-owned base unit. A unit name never carries a global factor: for example, Carton may equal 12 Pieces for one material and 6 Boxes for another.",
+                                         "required": [
+                                           "conversionId",
+                                           "material",
+                                           "fromUnit",
+                                           "baseUnit",
+                                           "factor",
+                                           "status",
+                                           "usedInPostedDocuments",
+                                           "rowVersion"
+                                         ],
+                                         "properties": {
+                                           "conversionId": {
+                                             "$ref": "#/components/schemas/Uuid"
+                                           },
+                                           "material": {
+                                             "$ref": "#/components/schemas/NamedReference"
+                                           },
+                                           "fromUnit": {
+                                             "$ref": "#/components/schemas/NamedReference"
+                                           },
+                                           "baseUnit": {
+                                             "allOf": [
+                                               {
+                                                 "$ref": "#/components/schemas/NamedReference"
+                                               }
+                                             ],
+                                             "description": "The material base unit derived by the server; it is never client-supplied for a conversion."
+                                           },
+                                           "factor": {
+                                             "allOf": [
+                                               {
+                                                 "$ref": "#/components/schemas/PositiveDecimal18_6"
+                                               }
+                                             ],
+                                             "description": "One fromUnit equals factor multiplied by the material base-unit quantity."
+                                           },
+                                           "status": {
+                                             "allOf": [
+                                               {
+                                                 "$ref": "#/components/schemas/RecordStatus"
+                                               }
+                                             ],
+                                             "description": "Inactive archives a conversion; no DELETE operation exists."
+                                           },
+                                           "usedInPostedDocuments": {
+                                             "type": "boolean",
+                                             "description": "Server-owned historical-use indicator. When true, the factor cannot be overwritten; deactivate and create a replacement if packaging changes."
+                                           },
+                                           "rowVersion": {
+                                             "type": "integer",
+                                             "format": "int64"
+                                           }
+                                         }
+                                       },
+                                       "MaterialUnitConversionCreateRequest": {
+                                         "type": "object",
+                                         "description": "Creates one active alternative unit for the material in the URL. Do not supply materialId or baseUnitId: the server derives both. The server enforces one active record per material/fromUnit and rejects self/base-unit, inactive, out-of-scope, and duplicate inputs.",
+                                         "required": [
+                                           "fromUnitId",
+                                           "factor"
+                                         ],
+                                         "properties": {
+                                           "fromUnitId": {
+                                             "$ref": "#/components/schemas/Uuid"
+                                           },
+                                           "factor": {
+                                             "$ref": "#/components/schemas/PositiveDecimal18_6"
+                                           }
+                                         }
+                                       },
+                                       "MaterialUnitConversionUpdateRequest": {
+                                         "type": "object",
+                                         "description": "Uses optimistic concurrency. For an unused conversion the factor may be changed. For a conversion used in any posted document, the server permits only the Active-to-Inactive archival transition with the current rowVersion; a changed factor is rejected. fromUnitId and baseUnitId are immutable and are never supplied.",
+                                         "required": [
+                                           "factor",
+                                           "status",
+                                           "rowVersion"
+                                         ],
+                                         "properties": {
+                                           "factor": {
+                                             "allOf": [
+                                               {
+                                                 "$ref": "#/components/schemas/PositiveDecimal18_6"
+                                               }
+                                             ],
+                                             "description": "The server rejects a changed factor value after historical use."
+                                           },
+                                           "status": {
+                                             "$ref": "#/components/schemas/RecordStatus"
+                                           },
+                                           "rowVersion": {
+                                             "type": "integer",
+                                             "format": "int64",
+                                             "minimum": 0
+                                           }
+                                         }
+                                       },
                                        "DocumentLine":  {
                                                             "type":  "object",
                                                             "required":  [
@@ -6491,7 +6898,9 @@
                                                                              "material",
                                                                              "lineType",
                                                                              "quantity",
-                                                                             "baseQuantity"
+                                                                             "baseQuantity",
+                                                                             "conversionId",
+                                                                             "conversionFactor"
                                                                          ],
                                                             "properties":  {
                                                                                "lineId":  {
@@ -6516,6 +6925,20 @@
                                                                                "unit":  {
                                                                                             "$ref":  "#/components/schemas/NamedReference"
                                                                                         },
+                                                                               "conversionId": {
+                                                                                 "type": "string",
+                                                                                 "format": "uuid",
+                                                                                 "nullable": true,
+                                                                                 "description": "Immutable conversion snapshot identifier. Null only when the selected unit is the material base unit."
+                                                                               },
+                                                                               "conversionFactor": {
+                                                                                 "allOf": [
+                                                                                   {
+                                                                                     "$ref": "#/components/schemas/PositiveDecimal18_6"
+                                                                                   }
+                                                                                 ],
+                                                                                 "description": "Immutable exact factor captured when the line is created or posted. Base-unit lines use the string `1.000000`."
+                                                                               },
                                                                                "baseQuantity":  {
                                                                                                     "type":  "number",
                                                                                                     "format":  "double",
@@ -6546,12 +6969,20 @@
                                                                                                         "format":  "double",
                                                                                                         "nullable":  true
                                                                                                     },
-                                                                               "assetInputs":  {
-                                                                                                   "type":  "array",
-                                                                                                   "items":  {
-                                                                                                                 "$ref":  "#/components/schemas/AssetInput"
-                                                                                                             }
-                                                                                               }
+                                                                                "assetInputs":  {
+                                                                                                    "type":  "array",
+                                                                                                    "description":  "Required one-per-unit for Asset material lines; each resulting Asset has an institutional asset number and an optional manufacturer serial number.",
+                                                                                                    "items":  {
+                                                                                                                  "$ref":  "#/components/schemas/AssetInput"
+                                                                                                              }
+                                                                                                },
+                                                                                "trackedUnits":  {
+                                                                                                     "type":  "array",
+                                                                                                     "description":  "Created non-asset durable units for a Durable + Serial receiving line. This field is never used for Consumable or Asset material lines.",
+                                                                                                     "items":  {
+                                                                                                                   "$ref":  "#/components/schemas/TrackedUnit"
+                                                                                                               }
+                                                                                                 }
                                                                            }
                                                         },
                                        "DocumentLineInput":  {
@@ -6576,6 +7007,30 @@
                                                                                     "unitId":  {
                                                                                                    "$ref":  "#/components/schemas/Uuid"
                                                                                                },
+                                                                                    "conversionId": {
+                                                                                      "type": "string",
+                                                                                      "format": "uuid",
+                                                                                      "nullable": true,
+                                                                                      "description": "Optional selected alternative conversion for a draft. Null or omitted denotes the material base unit. The server derives the authoritative snapshot and rejects an inactive, out-of-scope, mismatched, or non-material conversion."
+                                                                                    },
+                                                                                    "conversionFactor": {
+                                                                                      "type": "string",
+                                                                                      "nullable": true,
+                                                                                      "allOf": [
+                                                                                        {
+                                                                                          "$ref": "#/components/schemas/PositiveDecimal18_6"
+                                                                                        }
+                                                                                      ],
+                                                                                      "description": "Optional exact-string draft preview only. The server derives and persists the immutable factor; it never trusts a client override."
+                                                                                    },
+                                                                                    "baseQuantity": {
+                                                                                      "type": "number",
+                                                                                      "format": "decimal",
+                                                                                      "nullable": true,
+                                                                                      "exclusiveMinimum": true,
+                                                                                      "minimum": 0,
+                                                                                      "description": "Optional draft preview only. The server derives and persists quantity multiplied by the immutable factor; it never trusts a client override."
+                                                                                    },
                                                                                     "unitPrice":  {
                                                                                                       "type":  "number",
                                                                                                       "format":  "double",
@@ -6595,16 +7050,38 @@
                                                                                     "openingType":  {
                                                                                                         "$ref":  "#/components/schemas/OpeningType"
                                                                                                     },
-                                                                                    "assetInputs":  {
-                                                                                                        "type":  "array",
-                                                                                                        "items":  {
-                                                                                                                      "$ref":  "#/components/schemas/AssetInput"
-                                                                                                                  }
-                                                                                                    }
+                                                                                     "assetInputs":  {
+                                                                                                         "type":  "array",
+                                                                                                         "description":  "Allowed only for Asset material lines. The server creates one Asset per input and requires an institutional asset number after posting.",
+                                                                                                         "items":  {
+                                                                                                                       "$ref":  "#/components/schemas/AssetInput"
+                                                                                                                   }
+                                                                                                     },
+                                                                                     "trackedUnitInputs":  {
+                                                                                                             "type":  "array",
+                                                                                                             "description":  "Allowed only for Receiving lines whose material policy is Durable + Serial. It creates non-asset TrackedUnit records and the input count must equal the line quantity.",
+                                                                                                             "items":  {
+                                                                                                                           "$ref":  "#/components/schemas/TrackedUnitInput"
+                                                                                                                       }
+                                                                                                         }
                                                                                 }
                                                              },
-                                       "AssetInput":  {
+                                        "TrackedUnitInput":  {
+                                                                  "type":  "object",
+                                                                  "description":  "A supplier/manufacturer serial for one Durable + Serial unit. It is explicitly not an asset number and does not create an Asset record.",
+                                                                  "required":  [
+                                                                                   "serialNumber"
+                                                                               ],
+                                                                  "properties":  {
+                                                                                     "serialNumber":  {
+                                                                                                          "type":  "string",
+                                                                                                          "maxLength":  200
+                                                                                                      }
+                                                                                 }
+                                                              },
+                                        "AssetInput":  {
                                                           "type":  "object",
+                                                          "description":  "Input for one Asset material unit. assetNumber may be supplied by an authorized user or allocated by the server during posting; every resulting Asset has a non-null institutional asset number. serialNumber is an optional manufacturer identifier.",
                                                           "properties":  {
                                                                              "assetNumber":  {
                                                                                                  "type":  "string",
@@ -7698,8 +8175,9 @@
                                                                         "assetId":  {
                                                                                         "$ref":  "#/components/schemas/Uuid"
                                                                                     },
-                                                                        "assetNumber":  {
-                                                                                            "type":  "string"
+                                                                         "assetNumber":  {
+                                                                                             "type":  "string",
+                                                                                             "description":  "Immutable institutional asset identifier. It is mandatory on every Asset record and is distinct from the optional manufacturer serial number."
                                                                                         },
                                                                         "serialNumber":  {
                                                                                              "type":  "string",
@@ -7727,16 +8205,48 @@
                                                                         "derivedStatus":  {
                                                                                               "$ref":  "#/components/schemas/AssetDerivedStatus"
                                                                                           },
-                                                                        "currentCustody":  {
-                                                                                               "$ref":  "#/components/schemas/Custody"
+                                                                         "currentCustody":  {
+                                                                                                "$ref":  "#/components/schemas/AssetCustody"
                                                                                            },
                                                                         "rowVersion":  {
                                                                                            "type":  "integer",
                                                                                            "format":  "int64"
                                                                                        }
                                                                     }
-                                                 },
-                                       "AssetPage":  {
+                                                  },
+                                        "TrackedUnit":  {
+                                                              "type":  "object",
+                                                              "description":  "A durable operational item tracked individually by serial number. It is not a fixed asset, has no asset number, and can be the subject of custody. This snapshot exposes tracked units through document-line and custody payloads; it deliberately does not add an unratified generic list, lookup, or lifecycle endpoint.",
+                                                              "required":  [
+                                                                               "trackedUnitId",
+                                                                               "serialNumber",
+                                                                               "material",
+                                                                               "rowVersion"
+                                                                           ],
+                                                              "properties":  {
+                                                                                 "trackedUnitId":  {
+                                                                                                       "$ref":  "#/components/schemas/Uuid"
+                                                                                                   },
+                                                                                 "serialNumber":  {
+                                                                                                      "type":  "string",
+                                                                                                      "maxLength":  200
+                                                                                                  },
+                                                                                 "material":  {
+                                                                                                  "$ref":  "#/components/schemas/NamedReference"
+                                                                                              },
+                                                                                 "receiptLineId":  {
+                                                                                                       "$ref":  "#/components/schemas/Uuid"
+                                                                                                   },
+                                                                                 "currentWarehouse":  {
+                                                                                                        "$ref":  "#/components/schemas/NamedReference"
+                                                                                                    },
+                                                                                 "rowVersion":  {
+                                                                                                   "type":  "integer",
+                                                                                                   "format":  "int64"
+                                                                                               }
+                                                                             }
+                                                          },
+                                        "AssetPage":  {
                                                          "type":  "object",
                                                          "required":  [
                                                                           "items",
@@ -7820,10 +8330,11 @@
                                                                                              }
                                                                                 }
                                                              },
-                                       "Custody":  {
+                                        "AssetCustody":  {
                                                        "type":  "object",
                                                        "required":  [
-                                                                        "custodyId",
+                                                                         "custodyId",
+                                                                         "subjectType",
                                                                         "assetId",
                                                                         "assetNumber",
                                                                         "holder",
@@ -7834,9 +8345,15 @@
                                                                         "rowVersion"
                                                                     ],
                                                        "properties":  {
-                                                                          "custodyId":  {
+                                                                           "custodyId":  {
                                                                                             "$ref":  "#/components/schemas/Uuid"
                                                                                         },
+                                                                           "subjectType":  {
+                                                                                               "type":  "string",
+                                                                                               "enum":  [
+                                                                                                            "Asset"
+                                                                                                        ]
+                                                                                           },
                                                                           "assetId":  {
                                                                                           "$ref":  "#/components/schemas/Uuid"
                                                                                       },
@@ -7871,9 +8388,155 @@
                                                                                              "type":  "integer",
                                                                                              "format":  "int64"
                                                                                          }
-                                                                      }
-                                                   },
-                                       "CustodyPage":  {
+                                                                       }
+                                                    },
+                                        "MaterialQuantityCustody":  {
+                                                                            "type":  "object",
+                                                                            "description":  "Custody of a positive base-unit quantity for a Durable + Quantity material. It never creates an Asset record or asset number and supports partial transfer/return by quantity.",
+                                                                            "required":  [
+                                                                                             "custodyId",
+                                                                                             "subjectType",
+                                                                                             "material",
+                                                                                             "quantity",
+                                                                                             "holder",
+                                                                                             "custodyKind",
+                                                                                             "status",
+                                                                                             "fromTs",
+                                                                                             "issueDocumentId",
+                                                                                             "rowVersion"
+                                                                                         ],
+                                                                            "properties":  {
+                                                                                               "custodyId":  {
+                                                                                                                 "$ref":  "#/components/schemas/Uuid"
+                                                                                                             },
+                                                                                               "subjectType":  {
+                                                                                                                   "type":  "string",
+                                                                                                                   "enum":  [
+                                                                                                                                "MaterialQuantity"
+                                                                                                                            ]
+                                                                                                               },
+                                                                                               "material":  {
+                                                                                                                "$ref":  "#/components/schemas/NamedReference"
+                                                                                                            },
+                                                                                               "quantity":  {
+                                                                                                                "type":  "number",
+                                                                                                                "format":  "double",
+                                                                                                                "minimum":  0,
+                                                                                                                "exclusiveMinimum":  true
+                                                                                                            },
+                                                                                               "baseUnit":  {
+                                                                                                                "$ref":  "#/components/schemas/NamedReference"
+                                                                                                            },
+                                                                                               "holder":  {
+                                                                                                              "$ref":  "#/components/schemas/CounterpartOption"
+                                                                                                          },
+                                                                                               "custodyKind":  {
+                                                                                                                   "$ref":  "#/components/schemas/CustodyKind"
+                                                                                                               },
+                                                                                               "status":  {
+                                                                                                              "$ref":  "#/components/schemas/CustodyStatus"
+                                                                                                          },
+                                                                                               "fromTs":  {
+                                                                                                              "type":  "string",
+                                                                                                              "format":  "date-time"
+                                                                                                          },
+                                                                                               "toTs":  {
+                                                                                                            "type":  "string",
+                                                                                                            "format":  "date-time",
+                                                                                                            "nullable":  true
+                                                                                                        },
+                                                                                               "issueDocumentId":  {
+                                                                                                                     "$ref":  "#/components/schemas/Uuid"
+                                                                                                                 },
+                                                                                               "returnDocumentId":  {
+                                                                                                                      "$ref":  "#/components/schemas/Uuid"
+                                                                                                                  },
+                                                                                               "rowVersion":  {
+                                                                                                                 "type":  "integer",
+                                                                                                                 "format":  "int64"
+                                                                                                             }
+                                                                                           }
+                                                                        },
+                                        "TrackedUnitCustody":  {
+                                                                  "type":  "object",
+                                                                  "description":  "Custody of one Durable + Serial TrackedUnit. It is individually traceable by serial number but is not an Asset and has no asset number.",
+                                                                  "required":  [
+                                                                                   "custodyId",
+                                                                                   "subjectType",
+                                                                                   "trackedUnit",
+                                                                                   "holder",
+                                                                                   "custodyKind",
+                                                                                   "status",
+                                                                                   "fromTs",
+                                                                                   "issueDocumentId",
+                                                                                   "rowVersion"
+                                                                               ],
+                                                                  "properties":  {
+                                                                                     "custodyId":  {
+                                                                                                       "$ref":  "#/components/schemas/Uuid"
+                                                                                                   },
+                                                                                     "subjectType":  {
+                                                                                                         "type":  "string",
+                                                                                                         "enum":  [
+                                                                                                                      "TrackedUnit"
+                                                                                                                  ]
+                                                                                                     },
+                                                                                     "trackedUnit":  {
+                                                                                                         "$ref":  "#/components/schemas/TrackedUnit"
+                                                                                                     },
+                                                                                     "holder":  {
+                                                                                                    "$ref":  "#/components/schemas/CounterpartOption"
+                                                                                                },
+                                                                                     "custodyKind":  {
+                                                                                                         "$ref":  "#/components/schemas/CustodyKind"
+                                                                                                     },
+                                                                                     "status":  {
+                                                                                                    "$ref":  "#/components/schemas/CustodyStatus"
+                                                                                                },
+                                                                                     "fromTs":  {
+                                                                                                    "type":  "string",
+                                                                                                    "format":  "date-time"
+                                                                                                },
+                                                                                     "toTs":  {
+                                                                                                  "type":  "string",
+                                                                                                  "format":  "date-time",
+                                                                                                  "nullable":  true
+                                                                                              },
+                                                                                     "issueDocumentId":  {
+                                                                                                           "$ref":  "#/components/schemas/Uuid"
+                                                                                                       },
+                                                                                     "returnDocumentId":  {
+                                                                                                            "$ref":  "#/components/schemas/Uuid"
+                                                                                                        },
+                                                                                     "rowVersion":  {
+                                                                                                       "type":  "integer",
+                                                                                                       "format":  "int64"
+                                                                                                   }
+                                                                                 }
+                                                              },
+                                        "Custody":  {
+                                                        "description":  "D-MAT-01 custody subject union. Consumables are excluded. Asset is for fixed assets; MaterialQuantity and TrackedUnit are for durable operational-custody materials.",
+                                                        "oneOf":  [
+                                                                        {
+                                                                            "$ref":  "#/components/schemas/AssetCustody"
+                                                                        },
+                                                                        {
+                                                                            "$ref":  "#/components/schemas/MaterialQuantityCustody"
+                                                                        },
+                                                                        {
+                                                                            "$ref":  "#/components/schemas/TrackedUnitCustody"
+                                                                        }
+                                                                    ],
+                                                        "discriminator":  {
+                                                                              "propertyName":  "subjectType",
+                                                                              "mapping":  {
+                                                                                              "Asset":  "#/components/schemas/AssetCustody",
+                                                                                              "MaterialQuantity":  "#/components/schemas/MaterialQuantityCustody",
+                                                                                              "TrackedUnit":  "#/components/schemas/TrackedUnitCustody"
+                                                                                          }
+                                                                          }
+                                                    },
+                                        "CustodyPage":  {
                                                            "type":  "object",
                                                            "required":  [
                                                                             "items",
@@ -7891,10 +8554,11 @@
                                                                                        }
                                                                           }
                                                        },
-                                       "CustodyMutationRequest":  {
+                                        "AssetCustodyMutationRequest":  {
                                                                       "type":  "object",
                                                                       "required":  [
-                                                                                       "assetId",
+                                                                                        "subjectType",
+                                                                                        "assetId",
                                                                                        "holderType",
                                                                                        "holderId",
                                                                                        "custodyKind",
@@ -7903,7 +8567,13 @@
                                                                                        "rowVersion"
                                                                                    ],
                                                                       "properties":  {
-                                                                                         "assetId":  {
+                                                                                          "subjectType":  {
+                                                                                                              "type":  "string",
+                                                                                                              "enum":  [
+                                                                                                                           "Asset"
+                                                                                                                       ]
+                                                                                                          },
+                                                                                          "assetId":  {
                                                                                                          "$ref":  "#/components/schemas/Uuid"
                                                                                                      },
                                                                                          "holderType":  {
@@ -7932,9 +8602,140 @@
                                                                                                             "format":  "int64",
                                                                                                             "minimum":  0
                                                                                                         }
+                                                                                      }
+                                                                   },
+                                        "MaterialQuantityCustodyMutationRequest":  {
+                                                                                      "type":  "object",
+                                                                                      "description":  "Assign or transfer a positive quantity of a Durable + Quantity material. For transfer, the target custody route identifies the source row and the quantity may be less than its active quantity.",
+                                                                                      "required":  [
+                                                                                                       "subjectType",
+                                                                                                       "materialId",
+                                                                                                       "quantity",
+                                                                                                       "holderType",
+                                                                                                       "holderId",
+                                                                                                       "custodyKind",
+                                                                                                       "issueDocumentId",
+                                                                                                       "effectiveAt",
+                                                                                                       "rowVersion"
+                                                                                                   ],
+                                                                                      "properties":  {
+                                                                                         "subjectType":  {
+                                                                                                             "type":  "string",
+                                                                                                             "enum":  [
+                                                                                                                          "MaterialQuantity"
+                                                                                                                      ]
+                                                                                                         },
+                                                                                         "materialId":  {
+                                                                                                            "$ref":  "#/components/schemas/Uuid"
+                                                                                                        },
+                                                                                         "quantity":  {
+                                                                                                          "type":  "number",
+                                                                                                          "format":  "double",
+                                                                                                          "minimum":  0,
+                                                                                                          "exclusiveMinimum":  true
+                                                                                                      },
+                                                                                         "holderType":  {
+                                                                                                            "$ref":  "#/components/schemas/CounterpartType"
+                                                                                                        },
+                                                                                         "holderId":  {
+                                                                                                          "$ref":  "#/components/schemas/Uuid"
+                                                                                                      },
+                                                                                         "custodyKind":  {
+                                                                                                            "$ref":  "#/components/schemas/CustodyKind"
+                                                                                                        },
+                                                                                         "issueDocumentId":  {
+                                                                                                              "$ref":  "#/components/schemas/Uuid"
+                                                                                                          },
+                                                                                         "effectiveAt":  {
+                                                                                                            "type":  "string",
+                                                                                                            "format":  "date-time"
+                                                                                                        },
+                                                                                         "reason":  {
+                                                                                                        "type":  "string",
+                                                                                                        "maxLength":  500,
+                                                                                                        "nullable":  true
+                                                                                                    },
+                                                                                         "rowVersion":  {
+                                                                                                             "type":  "integer",
+                                                                                                             "format":  "int64",
+                                                                                                             "minimum":  0
+                                                                                                         }
                                                                                      }
+                                                                                  },
+                                        "TrackedUnitCustodyMutationRequest":  {
+                                                                                 "type":  "object",
+                                                                                 "description":  "Assign or transfer one existing Durable + Serial TrackedUnit. It is distinct from an Asset and no asset number is accepted.",
+                                                                                 "required":  [
+                                                                                                  "subjectType",
+                                                                                                  "trackedUnitId",
+                                                                                                  "holderType",
+                                                                                                  "holderId",
+                                                                                                  "custodyKind",
+                                                                                                  "issueDocumentId",
+                                                                                                  "effectiveAt",
+                                                                                                  "rowVersion"
+                                                                                              ],
+                                                                                 "properties":  {
+                                                                                    "subjectType":  {
+                                                                                                        "type":  "string",
+                                                                                                        "enum":  [
+                                                                                                                     "TrackedUnit"
+                                                                                                                 ]
+                                                                                                    },
+                                                                                    "trackedUnitId":  {
+                                                                                                       "$ref":  "#/components/schemas/Uuid"
+                                                                                                   },
+                                                                                    "holderType":  {
+                                                                                                       "$ref":  "#/components/schemas/CounterpartType"
+                                                                                                   },
+                                                                                    "holderId":  {
+                                                                                                     "$ref":  "#/components/schemas/Uuid"
+                                                                                                 },
+                                                                                    "custodyKind":  {
+                                                                                                       "$ref":  "#/components/schemas/CustodyKind"
+                                                                                                   },
+                                                                                    "issueDocumentId":  {
+                                                                                                         "$ref":  "#/components/schemas/Uuid"
+                                                                                                     },
+                                                                                    "effectiveAt":  {
+                                                                                                       "type":  "string",
+                                                                                                       "format":  "date-time"
+                                                                                                   },
+                                                                                    "reason":  {
+                                                                                                   "type":  "string",
+                                                                                                   "maxLength":  500,
+                                                                                                   "nullable":  true
+                                                                                               },
+                                                                                    "rowVersion":  {
+                                                                                                        "type":  "integer",
+                                                                                                        "format":  "int64",
+                                                                                                        "minimum":  0
+                                                                                                    }
+                                                                                }
+                                                                             },
+                                        "CustodyMutationRequest":  {
+                                                                      "description":  "D-MAT-01 polymorphic custody command. The server validates that the chosen subject type matches the catalog material policy and, on transfer, matches the custody addressed by the route. The command does not create or discover TrackedUnit records; a generic tracked-unit selection/lifecycle surface remains outside this provisional v1 route set pending backend/API ratification.",
+                                                                      "oneOf":  [
+                                                                                      {
+                                                                                          "$ref":  "#/components/schemas/AssetCustodyMutationRequest"
+                                                                                      },
+                                                                                      {
+                                                                                          "$ref":  "#/components/schemas/MaterialQuantityCustodyMutationRequest"
+                                                                                      },
+                                                                                      {
+                                                                                          "$ref":  "#/components/schemas/TrackedUnitCustodyMutationRequest"
+                                                                                      }
+                                                                                  ],
+                                                                      "discriminator":  {
+                                                                                            "propertyName":  "subjectType",
+                                                                                            "mapping":  {
+                                                                                                            "Asset":  "#/components/schemas/AssetCustodyMutationRequest",
+                                                                                                            "MaterialQuantity":  "#/components/schemas/MaterialQuantityCustodyMutationRequest",
+                                                                                                            "TrackedUnit":  "#/components/schemas/TrackedUnitCustodyMutationRequest"
+                                                                                                        }
+                                                                                        }
                                                                   },
-                                       "ReturnEligibleItem":  {
+                                        "ReturnEligibleItem":  {
                                                                   "type":  "object",
                                                                   "required":  [
                                                                                    "originalIssueDocumentId",

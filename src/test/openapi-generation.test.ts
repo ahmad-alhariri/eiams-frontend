@@ -34,7 +34,7 @@ describe('OpenAPI generation configuration', () => {
     expect(provenance.contractId).toBe('eiams-v1')
     expect(provenance.snapshotPath).toBe('contracts/openapi/eiams-v1.openapi.json')
     expect(provenance.sha256).toMatch(/^[a-f0-9]{64}$/)
-    expect(provenance.coverage).toEqual({ paths: 78, operations: 112, schemas: 141 })
+    expect(provenance.coverage).toEqual({ paths: 80, operations: 116, schemas: 156 })
 
     expect(generationConfigRaw).toContain("contractId: 'eiams-v1'")
     expect(generationConfigRaw).toContain("snapshotPath: 'contracts/openapi/eiams-v1.openapi.json'")
@@ -86,6 +86,13 @@ describe('OpenAPI generation configuration', () => {
       'readonly DocumentStatus: "Draft" | "Submitted" | "Posted" | "Reversed" | "Cancelled" | "Rejected";',
     )
     expect(generatedApiRaw).toContain('readonly ProblemDetails:')
+    expect(generatedApiRaw).toContain('readonly PositiveDecimal18_6: string;')
+    expect(generatedApiRaw).toContain(
+      'readonly factor: components["schemas"]["PositiveDecimal18_6"];',
+    )
+    expect(generatedApiRaw).toContain(
+      'readonly conversionFactor: components["schemas"]["PositiveDecimal18_6"];',
+    )
     expect(generatedApiRaw.split('\n').length).toBeGreaterThan(5_000)
   })
 

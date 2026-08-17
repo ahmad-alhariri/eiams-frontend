@@ -182,13 +182,15 @@ Groups similar materials — e.g., "A4 Paper", "Desk Chairs", "Laptops".
 | family_id | UUID PK | |
 | category_id | UUID FK | → MaterialCategory |
 | name | VARCHAR(200) | |
-| base_unit_id | UUID FK | → UnitOfMeasure |
 | status | VARCHAR(20) | Active / Inactive |
 
 **Relationships:** `N:1 ← MaterialCategory`, `1:N → Material`
 
 ### Material
-A specific item that can be stocked. Asset-type materials can become fixed assets.
+A specific catalogued item. D-MAT-01 is authoritative over this historical
+table sketch: `Consumable` is Quantity-only/no asset number/no custody;
+`Durable` is Quantity or Serial/no asset number/mandatory custody; `Asset` is
+Serial-only/required internal asset number/mandatory custody and registry.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -196,7 +198,10 @@ A specific item that can be stocked. Asset-type materials can become fixed asset
 | family_id | UUID FK nullable | → MaterialFamily |
 | name | VARCHAR(300) | |
 | code | VARCHAR(50) UNIQUE | |
-| material_type | VARCHAR(30) | Consumable / Asset / Service |
+| material_kind | VARCHAR(20) | Consumable / Durable / Asset |
+| tracking_type | VARCHAR(20) | Quantity / Serial; constrained by D-MAT-01 |
+| base_unit_id | UUID FK | → UnitOfMeasure; this Material's single inventory base unit |
+| requires_asset_number | BOOLEAN | derived only; true exactly for Asset |
 | attributes | JSONB | Extra attributes (flexible, replaces MaterialAttribute in v2) |
 | status | VARCHAR(20) | Active / Archived |
 
@@ -205,7 +210,8 @@ A specific item that can be stocked. Asset-type materials can become fixed asset
 **Relationships:** `N:1 ← MaterialFamily`, `1:N → InventoryBalance`, `1:N → DocumentLine`, `1:N → Asset`, `1:N → StockMovement`
 
 ### UnitOfMeasure
-Measurement units with optional conversions.
+Reusable measurement-unit vocabulary. Unit names do not carry a global
+packaging quantity; a MaterialUnitConversion is the material-specific meaning.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -214,18 +220,26 @@ Measurement units with optional conversions.
 | abbreviation | VARCHAR(20) | |
 | category | VARCHAR(30) | Count / Weight / Volume / Length |
 
-**Relationships:** `1:N → MaterialFamily (base_unit)`, `1:N → MaterialUnitConversion`
+**Relationships:** `1:N → Material (base_unit)`, `1:N → MaterialUnitConversion`
 
 ### MaterialUnitConversion
-Conversion rates between units for a specific material (e.g., 1 Box = 12 Pieces).
+An alternate-unit relationship for one Material, directly to that Material's
+base unit. For example, one Carton can be 12 Pieces of pens and six Boxes of
+printer ink without creating a global Carton conversion.
 
 | Column | Type | Notes |
 |--------|------|-------|
 | conversion_id | UUID PK | |
-| material_id | UUID FK | → Material (nullable) — global if null |
+| material_id | UUID FK | → Material; required |
 | from_unit_id | UUID FK | → UnitOfMeasure |
-| to_unit_id | UUID FK | → UnitOfMeasure |
-| factor | DECIMAL(18,6) | |
+| factor | DECIMAL(18,6) | > 0; base units in one alternate unit |
+| status | VARCHAR(20) | Active / Archived |
+| row_version | INTEGER | Optimistic concurrency |
+
+The target base unit is derived from `Material.base_unit_id`. A base-unit
+self-conversion and a duplicate active `(material_id, from_unit_id)` are
+prohibited. A conversion used by a posted document is archived/deactivated and
+replaced rather than deleted or overwritten.
 
 ---
 
@@ -307,7 +321,6 @@ Per-warehouse material settings (min/max levels).
 | min_quantity | DECIMAL(18,3) | |
 | max_quantity | DECIMAL(18,3) | |
 | reorder_point | DECIMAL(18,3) | |
-| base_unit_id | UUID FK | → UnitOfMeasure |
 | status | VARCHAR(20) | Active / Inactive |
 
 ### StockMovement (Append-only)
@@ -361,6 +374,8 @@ Line items for any document type. Shared across all operations.
 | line_type | VARCHAR(30) | Normal / Asset |
 | quantity | DECIMAL(18,3) | Entered quantity |
 | unit_id | UUID FK nullable | → UnitOfMeasure |
+| conversion_id | UUID FK nullable | → MaterialUnitConversion; selected snapshot |
+| conversion_factor | DECIMAL(18,6) nullable | Factor snapshot when conversion is used |
 | base_quantity | DECIMAL(18,3) | In base unit |
 | unit_price | DECIMAL(18,2) nullable | |
 | batch_number | VARCHAR(100) nullable | |
@@ -413,7 +428,9 @@ Helper table for supplier name autocomplete — populated automatically, no mana
 ## 7. Asset Domain (2 tables)
 
 ### Asset
-An individual instance of an Asset-type material. Tracked by serial number.
+An individual instance of an Asset-type material. It has a required internal
+enterprise asset number and an optional manufacturer serial number; the two
+identifiers are not interchangeable.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -421,8 +438,8 @@ An individual instance of an Asset-type material. Tracked by serial number.
 | material_id | UUID FK | → Material |
 | warehouse_id | UUID FK nullable | → Warehouse |
 | receipt_line_id | UUID FK nullable | → DocumentLine |
-| asset_number | VARCHAR(100) UNIQUE | Internal asset number |
-| serial_number | VARCHAR(200) nullable | Manufacturer serial |
+| asset_number | VARCHAR(100) UNIQUE NOT NULL | Required internal asset number |
+| serial_number | VARCHAR(200) nullable | Optional manufacturer serial |
 | acquisition_date | DATE | |
 | warranty_expiry | DATE nullable | |
 | row_version | INTEGER | |
@@ -445,7 +462,11 @@ Ledger of all asset movements.
 ## 8. Custody Domain (2 tables)
 
 ### Custody (Unified)
-Tracks who is responsible for an asset. Polymorphic holder replaces separate Personal/Operational tables.
+Tracks who is responsible for an Asset in the historical physical schema.
+Polymorphic holder replaces separate Personal/Operational tables. D-MAT-01's
+provisional OpenAPI extends custody with `MaterialQuantity` and `TrackedUnit`
+subjects for Durable partial assignment/return; backend implementation and
+API-owner ratification remain required.
 
 | Column | Type | Notes |
 |--------|------|-------|

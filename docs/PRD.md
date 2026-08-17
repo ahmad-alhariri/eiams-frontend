@@ -69,6 +69,34 @@ The Authority is a government oversight body that owns warehouses and assets dis
 ### 3.2 Central multi-level catalog
 `MaterialDomain → MaterialCategory (tree) → MaterialFamily → Material`. A material is defined once, centrally. **Domain is derived from the category** (no direct material-to-domain link). Family is **mandatory** (v5 decision).
 
+### 3.2.1 Material classification, identity, and accountability
+Material kind is authoritative and is not inferred from an identifier. A
+`Consumable` is Quantity-tracked, has neither asset number nor custody, and
+responsibility ends when its Issue is posted. A `Durable` is Quantity- or
+Serial-tracked, never has an asset number, and must remain under custody after
+issue. An `Asset` is a fixed accounting classification: it is Serial-tracked,
+registered one unit at a time, has an enterprise-unique internal asset number,
+and must remain under custody after issue.
+
+`asset_number` is EIAMS's internal fixed-asset identity. `serial_number` is a
+manufacturer/operational identifier and may identify a Durable without making
+it an Asset. A serial number is never an asset number or capitalization proof.
+
+### 3.2.2 Material units and packaging
+Each Material has exactly one base unit. Stock balances, stock movements, and
+the canonical quantity in a posted document line are expressed in that unit.
+`UnitOfMeasure` names reusable units such as Piece, Carton, Box, and Bag, but
+never gives them a global packaging quantity. An alternate unit is related to
+one Material only and converts directly to that Material's base unit.
+
+The conversion factor means `1 alternate unit = factor × base units` and is a
+positive `DECIMAL(18,6)`. For example, one Carton of blue pens can equal 12
+Pieces while one Carton of printer ink equals 6 Boxes. A material whose
+commercial and stock unit is Carton simply has Carton as its base unit and has
+no conversion. Converted posted lines retain their conversion identity,
+factor, and resulting base quantity; a later packaging change cannot
+reinterpret history. D-UOM-01 governs this policy.
+
 ### 3.3 Domain and Warehouse Capability
 A material is made available to a warehouse based on its **domain**, not by binding it manually. `WarehouseCapability` defines, per warehouse, which domains it may handle and which operations are allowed (receiving/issue/transfer/count).
 
@@ -76,13 +104,20 @@ A material is made available to a warehouse based on its **domain**, not by bind
 `Employee` is an organizational entity (may hold custody); `User` is a login account that may link to an employee. The separation is binding.
 
 ### 3.5 Operational responsibility vs. personal custody
-Two independent levels of responsibility for an asset:
+Two independent levels of responsibility for accountable property:
 - **Operational Responsibility**: the party that received the asset from the warehouse (organizational unit / site / external party).
 - **Personal Custody**: the employee personally responsible for the asset.
-`Issue` (the asset leaving the warehouse) and `Custody Assignment` (assigning it to an employee) are distinct operations; the latter may occur later or not at all, leaving the asset pending custody. Both levels are managed through a **single unified custody timeline** (see 3.6 and D-CUS-01).
+Issue and custody assignment are distinct operations. An Asset may remain in
+operational responsibility before personal assignment. A Durable must also
+remain accountable after issue through the D-MAT-01 `MaterialQuantity` or
+`TrackedUnit` custody subject; this is not an Asset row.
 
 ### 3.6 Unified custody model
-Responsibility is managed through one `Custody` entity that distinguishes `holder_type` (Employee/OrganizationalUnit/Site/External) and `custody_kind` (Operational/Personal), with **one active row per asset**. The current responsible party is derived from the open row, without storing a duplicated pointer on the asset.
+The historical Schema v5 `Custody` entity manages Asset responsibility with
+one active row per asset. D-MAT-01 extends the provisional OpenAPI custody
+projection to Durable `MaterialQuantity` and `TrackedUnit` subjects, including
+partial returns. Backend implementation and ratification remain required; this
+extension never represents Durable property as an Asset row.
 
 ---
 
@@ -112,13 +147,13 @@ Responsibility is managed through one `Custody` entity that distinguishes `holde
 ### 6.1 Receiving
 - Enter a receiving document (type `Receiving`) with material lines, quantities, and units; supplier details in `ReceivingInfo`.
 - On posting: a positive `Receipt` movement per line and an `InventoryBalance` update.
-- Asset-type materials (`material_kind = Asset` or `requires_asset_number`) create one `Asset` per unit (line `line_type = Asset`).
+- Asset materials (`material_kind = Asset`) create one `Asset` per unit (line `line_type = Asset`), with a required internal asset number. `requires_asset_number` is derived by policy and is not an independent condition.
 - Posting requires: a signed copy attached, and the warehouse holding the required `WarehouseCapabilityOperation` for the operation and material's domain.
 
 ### 6.2 Issue
 - An issue document (type `Issue`) with a recipient defined in `IssueTo` (`recipient_type` + `recipient_id`).
 - On posting: a negative `Issue` movement and a balance update.
-- Issuing an asset moves it to `Issued` and opens an operational custody row for the receiving party (pending personal assignment).
+- Issuing an Asset moves it to `Issued` and opens custody for the receiving party. Issuing a Durable also requires custody through D-MAT-01's pending contract extension; issuing a Consumable creates no custody.
 - Issue is blocked when the balance is insufficient (per the negative-stock policy).
 
 ### 6.3 Transfer — atomic
@@ -140,12 +175,13 @@ Responsibility is managed through one `Custody` entity that distinguishes `holde
 - On posting: `AdjustmentIn`/`AdjustmentOut` movements per the sign of the difference. Status `Draft | Posted | Reversed`.
 
 ### 6.7 Assets
-- Each asset has an enterprise-unique `asset_number` and links to its material and its receiving line.
+- Each Asset has a required enterprise-unique internal `asset_number`, an optional manufacturer `serial_number`, and links to its Asset material and receiving line. The identifiers are not interchangeable.
 - Asset states: `InStock | Issued | InCustody | Disposed` (D-AST-01). Maintenance/retirement are out of v1.
 - `AssetMovementHistory` records asset movements.
 
 ### 6.8 Custody
-- A unified custody timeline; one active row per asset, with `holder_type`/`holder_id`/`custody_kind`.
+- The historical persistence model is an Asset timeline with one active row per asset, with `holder_type`/`holder_id`/`custody_kind`.
+- D-MAT-01's provisional OpenAPI adds `MaterialQuantity` and `TrackedUnit` custody subjects for Durable property and partial returns. Backend implementation and ratification remain required.
 - Assignment and return are tied to documents (`issue_document_id`/`return_document_id`). Status `Active | Closed`.
 - `CustodyHistory` records state changes.
 
@@ -195,6 +231,7 @@ General rules: no transition to a disallowed state; every transition is logged i
 | **D-DOC-01** | Signed copy | `signed_copy_attachment_id` required when Posted; `attachment_type` distinguishes `SignedOriginal` from `Supporting`. |
 | **D-AST-01** | Asset states | One set: `InStock / Issued / InCustody / Disposed`. **Maintenance is out of v1**. |
 | **D-CUS-01** | Responsibility & custody | One timeline: `holder_type + holder_id + custody_kind`, one active row per asset, no `current_custody_id`, status `Active/Closed`. |
+| **D-MAT-01** | Material classification & accountability | Consumable = Quantity/no asset number/no custody; Durable = Quantity or Serial/no asset number/mandatory custody; Asset = Serial/internal asset number/mandatory custody and registry. Serial number is not asset number. Durable custody requires an explicit subject/partial-return contract. |
 | **D-TRN-01** | Transfer | **Atomic** via `TransferInfo` (single destination) — one document + two movements in one transaction. Two-phase transfer deferred to v2. |
 | **D-CAT-01** | Domain & family | Domain derived via `Family → Category` (no direct link). **Family is mandatory**. Type is authoritative on `Material` only. |
 | **D-INV-01** | Balances | `InventoryBalance = quantity` only. Reserved/Available/In-Transit/Damaged deferred to v2. |
@@ -205,6 +242,7 @@ General rules: no transition to a disallowed state; every transition is logged i
 | **D-AST-02** | Asset status derived | `Asset.status` is **removed** from the schema. The current asset state is derived from the latest `Custody` row (if any) and the `AssetMovementHistory` ledger. A database view `v_asset_current_status` computes `InStock / Issued / InCustody / Disposed` from these two sources. This eliminates the synchronisation gap between `Asset.status` and `Custody.status`. |
 | **D-CAP-01** | Warehouse capability | `WarehouseCapability` BOOLEAN columns (`allow_receiving`, `allow_issue`, `allow_transfer`, `allow_count`) are replaced by `WarehouseCapabilityOperation` — a child table with one row per allowed operation per domain. Adding a new operation type (e.g., `Return`) in v2 requires only a new row, not an `ALTER TABLE`. |
 | **D-AUD-01** | Audit log granularity | `AuditLog.old_values` / `new_values` JSONB are replaced by a two-table model: `AuditLog` (header with optional JSONB summary) + `AuditLogEntry` (one row per changed field with `field_name`, `old_value`, `new_value`). This enables indexed per-field search and avoids unbounded JSONB bloat. |
+| **D-UOM-01** | Material unit conversion | Each Material owns one base unit. An alternate unit converts directly to that base unit by a positive per-material `DECIMAL(18,6)` factor; units have no global packaging factor. A used conversion is archived/deactivated and replaced, never overwritten or deleted, and posted lines retain conversion/factor/base-quantity snapshots. |
 
 ---
 
@@ -349,7 +387,6 @@ Mandatory grouping family (fourth level).
 | `category_id` | UUID | FK | → MaterialCategory |
 | `name` | VARCHAR(200) |  |  |
 | `code` | VARCHAR(50) |  |  |
-| `base_unit_id` | UUID | FK | → UnitOfMeasure |
 | `status` | VARCHAR(20) |  |  |
 | | | | ⚠ ⚠ carries no tracking/kind — type is authoritative on Material only |
 
@@ -365,8 +402,9 @@ Material. Domain is derived via Family→Category (no direct domain FK).
 | `code` | VARCHAR(100) | UNIQUE |  |
 | `material_kind` | VARCHAR(20) |  | Consumable / Durable / Asset — authoritative |
 | `tracking_type` | VARCHAR(20) |  | Quantity / Serial — authoritative |
+| `base_unit_id` | UUID | FK | → UnitOfMeasure; this Material's single inventory base unit |
 | `has_expiry` | BOOLEAN |  |  |
-| `requires_asset_number` | BOOLEAN |  |  |
+| `requires_asset_number` | BOOLEAN |  | derived policy projection only: true exactly for `material_kind = Asset`; not independently editable |
 | `attributes` | JSONB |  | extra attributes (bridge for MaterialAttribute until v2) |
 | `status` | VARCHAR(20) |  | Active / Inactive / Archived |
 
@@ -381,15 +419,23 @@ Unit of measure.
 | `unit_type` | VARCHAR(50) |  |  |
 
 #### `MaterialUnitConversion`
-Unit conversions for a material.
+Per-material alternate-unit conversions to the Material's single base unit.
+`UnitOfMeasure` itself has no global conversion factor.
 
 | Column | Type | Key | Description |
 |---|---|---|---|
 | `conversion_id` | UUID | PK |  |
 | `material_id` | UUID | FK | → Material |
 | `from_unit_id` | UUID | FK | → UnitOfMeasure |
-| `to_base_unit_id` | UUID | FK | → UnitOfMeasure |
-| `factor` | DECIMAL(18,6) |  |  |
+| `factor` | DECIMAL(18,6) |  | > 0; one alternate unit in Material base units |
+| `status` | VARCHAR(20) |  | Active / Archived |
+| `row_version` | INTEGER |  | optimistic lock |
+
+The target unit is derived from `Material.base_unit_id`. The server rejects a
+self-conversion, duplicate active `(material_id, from_unit_id)`, invalid
+factor, inactive reference, unauthorized/out-of-scope request, or stale
+`row_version`. A conversion used by a posted line is archived/deactivated and
+replaced rather than overwritten or deleted.
 
 ### Domain: Warehouses & Inventory
 
@@ -505,6 +551,8 @@ Document lines (shared across all document types).
 | `line_type` | VARCHAR(20) |  | Normal / Asset |
 | `quantity` | DECIMAL(18,3) |  | entered quantity |
 | `unit_id` | UUID | FK | → UnitOfMeasure (nullable) |
+| `conversion_id` | UUID | FK | nullable; selected per-material conversion snapshot |
+| `conversion_factor` | DECIMAL(18,6) |  | nullable; factor snapshot when a conversion is used |
 | `base_quantity` | DECIMAL(18,3) |  | in the base unit |
 | `unit_price` | DECIMAL(18,2) |  | nullable |
 | `batch_number` | VARCHAR(100) |  | nullable |
@@ -623,8 +671,8 @@ A single asset instance. No custody pointer (derived from the open row). **`stat
 | `material_id` | UUID | FK | → Material |
 | `warehouse_id` | UUID | FK | → Warehouse (nullable) |
 | `receipt_line_id` | UUID | FK | → DocumentLine (nullable) |
-| `asset_number` | VARCHAR(100) | UNIQUE | internal number, unique enterprise-wide |
-| `serial_number` | VARCHAR(200) |  | nullable |
+| `asset_number` | VARCHAR(100) | UNIQUE, NOT NULL | required EIAMS internal number, unique enterprise-wide; only for Asset records |
+| `serial_number` | VARCHAR(200) |  | optional manufacturer serial; distinct from asset_number |
 | `acquisition_date` | DATE |  |  |
 | `warranty_expiry` | DATE |  | nullable |
 | `row_version` | INTEGER |  |  |
@@ -649,7 +697,11 @@ Asset movement history.
 | `moved_at` | TIMESTAMP |  |  |
 
 #### `Custody`
-Unified responsibility timeline. One active row per asset. Uses **polymorphic FK** pattern (D-POLY-01).
+Historical physical **Asset** responsibility timeline. One active row per
+asset. It uses the **polymorphic FK** pattern (D-POLY-01). D-MAT-01's
+provisional OpenAPI extends the read/mutation model with Durable
+`MaterialQuantity` and `TrackedUnit` responsibility and partial returns;
+backend ratification remains required before production integration.
 
 | Column | Type | Key | Description |
 |---|---|---|---|
@@ -744,7 +796,7 @@ erDiagram
   MaterialFamily ||--o{ Material : templates
   Material ||--o{ MaterialUnitConversion : converts
   UnitOfMeasure ||--o{ MaterialUnitConversion : from
-  UnitOfMeasure ||--o{ MaterialFamily : "base unit"
+  UnitOfMeasure ||--o{ Material : "base unit"
   Warehouse ||--o{ WarehouseCapability : has
   WarehouseCapability ||--o{ WarehouseCapabilityOperation : permits
   MaterialDomain ||--o{ WarehouseCapability : enables
@@ -803,6 +855,7 @@ Every value below is constrained via `CHECK` or a reference table — no free-te
 | `InventoryAdjustment.status` | Draft | Posted | Reversed |
 | `Material.material_kind` | Consumable | Durable | Asset |
 | `Material.tracking_type` | Quantity | Serial |
+| `Material` policy | Consumable = Quantity/no asset number/no custody; Durable = Quantity or Serial/no asset number/custody required; Asset = Serial/asset number/custody required |
 | `IssueTo.recipient_type` | Employee | OrganizationalUnit | Site | External |
 | `DocumentAttachment.attachment_type` | SignedOriginal | Supporting |
 | `UserRoleScope.scope_type` | Enterprise | Site | Warehouse |
@@ -815,6 +868,8 @@ These invariants are enforced by database constraints, not application code:
 | Constraint | Expression |
 |---|---|---|
 | One active custody per asset | `UNIQUE(asset_id) WHERE status = 'Active'` (partial) |
+| Material policy | enforce the D-MAT-01 kind/tracking/asset-number matrix on catalog writes and document posting; prevent change after first posted movement |
+| Material unit conversion | Material owns one non-null base unit; `factor > 0`; prohibit base-unit self conversion and duplicate active `(material_id, from_unit_id)`; preserve `conversion_id`, factor, and base quantity on posted DocumentLine; archive/deactivate used conversions rather than delete or overwrite |
 | One balance per material per warehouse | `UNIQUE(warehouse_id, material_id)` |
 | Unique identifiers | `UNIQUE`: asset_number, Material.code, Site.code, Warehouse.code, employee_number, system_reference_number |
 | Non-negative & valid time ranges | `CHECK(quantity >= 0)` · `CHECK(from_ts < to_ts)` on Custody |
@@ -875,7 +930,7 @@ Out of scope for the first release: the maintenance module, notifications, detai
 
 **Business rules:**
 - The receiving warehouse must have a `WarehouseCapability` with a `WarehouseCapabilityOperation` row for `operation_type = Receiving` for the material's domain.
-- Asset-type materials (`material_kind = Asset` or `requires_asset_number = true`) must be entered with `line_type = Asset`.
+- Only `material_kind = Asset` is entered with `line_type = Asset`; a serial-tracked Durable remains a Durable and never creates an Asset record.
 - A single document may mix consumable materials and asset-type materials.
 
 ### 12.3 Issue flow
@@ -887,7 +942,7 @@ Out of scope for the first release: the maintenance module, notifications, detai
 | 3. Add lines | Enter material lines: material, quantity, unit. For asset-type materials, set `line_type = Asset` and select the specific asset serial/ID. | Warehouse Keeper |
 | 4. Upload signed copy | Upload the scanned signed paper document (`attachment_type = SignedOriginal`). | Warehouse Keeper |
 | 5. Submit for posting | Submit the document → status becomes `Submitted`. The document is now locked for editing. | Warehouse Keeper |
-| 6. Post document | Review and post the document. The system: (a) verifies sufficient balance for each material, (b) creates a negative `Issue` `StockMovement` per line, (c) updates `InventoryBalance`, (d) opens an `Operational` custody row for the receiving party for asset-type lines, (e) records the `AuditLog` entry. The asset's current status (`Issued`) is derived via `v_asset_current_status`. | Warehouse Manager |
+| 6. Post document | Review and post the document. The system: (a) verifies sufficient balance for each material, (b) creates a negative `Issue` `StockMovement` per line, (c) updates `InventoryBalance`, (d) opens Asset custody for Asset lines and, once D-MAT-01's contract is published, Durable custody for Durable lines, (e) records the `AuditLog` entry. Consumable lines create no custody. Asset status (`Issued`) is derived via `v_asset_current_status`. | Warehouse Manager |
 | 7. Notification | System records the completed operation. | System |
 
 **Business rules:**

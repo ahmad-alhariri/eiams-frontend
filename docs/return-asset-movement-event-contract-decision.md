@@ -43,10 +43,12 @@ semantics.
 | Receiving, asset line | `Receipt`, positive quantity | `Received` per asset | Asset is placed in the receiving warehouse; no active custody. |
 | Opening, consumable/durable line | `Opening`, positive quantity | None | Inventory balance is initialized. |
 | Opening, asset line | `Opening`, positive quantity | `Received` per asset | Asset is placed in the opening warehouse; no active custody. |
-| Issue, consumable/durable line | `Issue`, negative quantity | None | Inventory balance decreases. |
+| Issue, consumable line | `Issue`, negative quantity | None | Inventory balance decreases; no custody is created. |
+| Issue, durable line | `Issue`, negative quantity | None | Inventory balance decreases and D-MAT-01's provisional contract opens Durable custody through `MaterialQuantity` or `TrackedUnit`; backend implementation and ratification remain required. |
 | Issue, asset line | `Issue`, negative quantity | `Issued` per asset | Asset leaves warehouse stock and the custody contract opens the required active row. |
 | Transfer, non-asset line | `TransferOut`, negative source quantity and `TransferIn`, positive destination quantity | None | One atomic document transaction. |
-| Return, consumable/durable line | `Receipt`, positive quantity | None | Inventory balance increases. |
+| Return, consumable line | `Receipt`, positive quantity | None | Inventory balance increases. |
+| Return, durable line | `Receipt`, positive quantity | None | Inventory balance increases and closes or partially reduces the Durable custody subject atomically under D-MAT-01; backend implementation and ratification remain required. |
 | Return, asset line | `Receipt`, positive quantity | `Returned` per asset | Asset returns to the target warehouse and the active custody row closes atomically. |
 | Disposal, asset currently in warehouse stock | `AdjustmentOut`, negative quantity | `Disposed` | Asset is removed from stock; any active custody is closed before the terminal event. |
 | Disposal, issued/custodied asset | No additional StockMovement | `Disposed` | Active custody closes before the terminal event; no duplicate balance deduction occurs. |
@@ -143,6 +145,7 @@ asset legal status and the generic document lifecycle behavior.
 | `e14-t05`, `e23-t06` | Render canonical stock provenance and reports. |
 | `e18-t05` | Render immutable AssetMovementHistory with canonical events. |
 | `e19-t01`, `e19-t06`, `e19-t07` | Implement contract-backed custody/return services and pages. |
+| `eiams-frontend-bt60`, `e10-t09` | Implement D-MAT-01 policy only after the generated catalog/custody contract exposes it. |
 | `e21-t08`, `e21-t09` | Implement and verify disposal without duplicate stock movements. |
 | `e23-t07`, `e24-t03`, `e24-t05` | Report and verify derived status and end-to-end event chains. |
 

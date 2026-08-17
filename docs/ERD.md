@@ -109,7 +109,7 @@ erDiagram
     MaterialFamily ||--o{ Material : templates
     Material ||--o{ MaterialUnitConversion : converts
     UnitOfMeasure ||--o{ MaterialUnitConversion : "from"
-    UnitOfMeasure ||--o{ MaterialFamily : "base unit"
+    UnitOfMeasure ||--o{ Material : "base unit"
     %% NOTE: Material domain is derived via chain: Material -> Family -> Category -> Domain
 
     %% ==================== WAREHOUSE DOMAIN ====================
@@ -378,11 +378,6 @@ erDiagram
 | category_id | UUID | FK → MaterialCategory | التصنيف |
 | name | VARCHAR(200) | | اسم العائلة |
 | code | VARCHAR(20) | | رمز العائلة |
-| tracking_type | VARCHAR(20) | | None / Serial / Batch / Asset |
-| material_kind | VARCHAR(20) | | Consumable / Durable / Asset |
-| has_expiry | BOOLEAN | | هل لها صلاحية |
-| requires_asset_number | BOOLEAN | | هل تتطلب رقم أصل |
-| base_unit_id | UUID | FK → UnitOfMeasure | وحدة القياس الأساسية |
 | status | VARCHAR(20) | | Active / Inactive |
 | created_at | TIMESTAMP | | |
 | updated_at | TIMESTAMP | | |
@@ -390,6 +385,17 @@ erDiagram
 ---
 
 #### Material
+
+> **D-MAT-01 override:** Material kind and tracking belong on Material, not
+> MaterialFamily. `Consumable` is Quantity-only with no asset number or
+> custody; `Durable` is Quantity or Serial with mandatory custody but no asset
+> number; `Asset` is Serial-only with a required internal asset number,
+> registry record, and mandatory custody. A serial number is not an asset
+> number and does not make a Durable an Asset.
+>
+> **D-UOM-01 override:** the Material, not its family or warehouse, owns one
+> base unit. A reusable unit such as Carton has no global packaging factor;
+> its alternate-unit relationship and factor are specific to one Material.
 المادة — تعريف مادة في الكتالوج المركزي.
 
 | العمود | النوع | المفتاح | الشرح |
@@ -402,7 +408,10 @@ erDiagram
 | description | TEXT | nullable | وصف المادة |
 | search_aliases | TEXT | nullable | أسماء بديلة للبحث |
 | attributes | JSONB | nullable | خصائص إضافية (بديل MaterialAttribute في v1) |
-| is_asset | BOOLEAN | | هل هذه المادة من نوع أصل؟ |
+| material_kind | VARCHAR(20) | | Consumable / Durable / Asset — authoritative |
+| tracking_type | VARCHAR(20) | | Quantity / Serial — constrained by D-MAT-01 |
+| base_unit_id | UUID | FK → UnitOfMeasure | وحدة أساس المخزون الوحيدة لهذه المادة |
+| requires_asset_number | BOOLEAN | | derived only: true exactly for Asset; not independently editable |
 | status | VARCHAR(20) | | Active / Inactive / Archived |
 | row_version | INTEGER | | للتحقق من التزامن |
 | created_at | TIMESTAMP | | |
@@ -419,7 +428,7 @@ erDiagram
 - 1:N مع MaterialUnitConversion
 - 1:N مع InventoryBalance
 - 1:N مع DocumentLine
-- 1:N مع Asset (إذا is_asset = true)
+- 1:N مع Asset (فقط إذا material_kind = Asset)
 
 ---
 
@@ -436,17 +445,23 @@ erDiagram
 ---
 
 #### MaterialUnitConversion
-تحويل بين وحدات القياس لنفس المادة.
+علاقة وحدة بديلة خاصة بمادة واحدة، وتتحول مباشرة إلى وحدة أساس المادة.
+اسم وحدة القياس العام، مثل Carton، لا يحدد كمية عالمية.
 
 | العمود | النوع | المفتاح | الشرح |
 |---|---|---|---|
 | conversion_id | UUID | PK | |
 | material_id | UUID | FK → Material | المادة |
-| from_unit_id | UUID | FK → UnitOfMeasure | من وحدة |
-| to_base_unit_id | UUID | FK → UnitOfMeasure | إلى الوحدة الأساسية |
-| conversion_factor | DECIMAL(18,6) | | عامل التحويل |
+| from_unit_id | UUID | FK → UnitOfMeasure | الوحدة البديلة |
+| conversion_factor | DECIMAL(18,6) | | موجب؛ عدد وحدات أساس المادة في وحدة بديلة واحدة |
+| status | VARCHAR(20) | | Active / Archived |
+| row_version | INTEGER | | للتحقق من التزامن |
 
-مثال: 1 Carton = 12 Pieces, conversion_factor = 12
+الوحدة الهدف مشتقة من `Material.base_unit_id`. يمنع الخادم تحويل وحدة الأساس
+إلى نفسها أو تكرار التحويل النشط `(material_id, from_unit_id)`. لا تُحذف أو
+تُستبدل قيمة تحويل استُخدمت في بند مرحّل؛ تُؤرشف/تُعطّل ثم ينشأ تحويل بديل.
+
+مثالان: 1 Carton من الأقلام = 12 Pieces، و1 Carton من حبر الطابعات = 6 Boxes.
 
 ---
 
@@ -548,7 +563,6 @@ erDiagram
 | min_quantity | DECIMAL(18,3) | | الحد الأدنى |
 | max_quantity | DECIMAL(18,3) | | الحد الأعلى |
 | reorder_point | DECIMAL(18,3) | | نقطة إعادة الطلب (مستقبلاً) |
-| base_unit_id | UUID | FK → UnitOfMeasure | وحدة القياس الأساسية للمستودع |
 | status | VARCHAR(20) | | Active / Inactive |
 | row_version | INTEGER | | |
 
@@ -657,6 +671,8 @@ Petal خاص بمستندات الصرف — يحدد جهة الصرف.
 | line_type | VARCHAR(30) | | Normal / Asset |
 | quantity | DECIMAL(18,3) | | الكمية المدخلة |
 | unit_id | UUID | FK → UnitOfMeasure (nullable) | وحدة القياس المدخلة |
+| conversion_id | UUID | FK → MaterialUnitConversion (nullable) | لقطة التحويل المختار |
+| conversion_factor | DECIMAL(18,6) | nullable | عامل التحويل وقت الترحيل |
 | base_quantity | DECIMAL(18,3) | | الكمية المحسوبة بالوحدة الأساسية |
 | unit_price | DECIMAL(18,2) | nullable | سعر الوحدة |
 | batch_number | VARCHAR(100) | nullable | رقم الدفعة |
@@ -819,6 +835,12 @@ CREATE INDEX idx_supplier_name_trgm ON supplier_autocomplete USING GIN (name gin
 ### 2.9 Custody Domain (العهد)
 
 #### Custody
+
+> **D-MAT-01 provisional-contract note:** This historical physical table is
+> Asset-backed only. The provisional OpenAPI extends custody with
+> `MaterialQuantity` and `TrackedUnit` responsibility subjects with partial
+> assignment and return; backend implementation and API-owner ratification
+> remain required, and frontend work must not fake server behavior.
 سجل المسؤولية الموحد للأصل — العهدة الشخصية والمسؤولية الإدارية في جدول واحد.
 
 | العمود | النوع | المفتاح | الشرح |

@@ -20,6 +20,13 @@ export type LifecycleActionBarProps = {
   onExecute: (action: DocumentActionType, reason?: string) => void | Promise<void>
   /** Defence-in-depth gate supplied by the parent; combined with presentation. */
   disabled?: boolean
+  /**
+   * Optional defence-in-depth permission gate. When provided, actions it
+   * rejects are removed from `visibleActions` and never rendered — mirroring
+   * how the server Hides unauthorized actions. When omitted, every action the
+   * policy presents is rendered (backwards compatible).
+   */
+  isActionPermitted?: (action: DocumentActionType) => boolean
   className?: string
 }
 
@@ -82,6 +89,7 @@ function LifecycleActionBar({
   busyAction,
   className,
   disabled = false,
+  isActionPermitted,
   onExecute,
   policy,
 }: LifecycleActionBarProps) {
@@ -92,7 +100,9 @@ function LifecycleActionBar({
   }
 
   const visibleActions = policy.actions.filter(
-    (availability) => availability.presentation !== 'Hidden',
+    (availability) =>
+      availability.presentation !== 'Hidden' &&
+      (isActionPermitted === undefined || isActionPermitted(availability.action)),
   )
 
   const handleClick = (availability: ActionAvailability) => {

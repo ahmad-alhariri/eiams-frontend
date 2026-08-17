@@ -22,14 +22,18 @@ export const ROUTE_PATHS = {
   catalogCategories: '/catalog/categories',
   catalogFamilies: '/catalog/families',
   catalogMaterials: '/catalog/materials',
+  catalogMaterialDetail: '/catalog/materials/:materialId',
   catalogUnits: '/catalog/units',
   /** Organization. */
   organizationSites: '/organization/sites',
+  organizationSiteDetail: '/organization/sites/:siteId',
   organizationOrgUnits: '/organization/org-units',
   organizationEmployees: '/organization/employees',
+  organizationEmployeeDetail: '/organization/employees/:employeeId',
   organizationExternalParties: '/organization/external-parties',
   /** Warehouses. */
   warehouses: '/warehouses',
+  warehouseDetail: '/warehouses/:warehouseId',
   /** Inventory. */
   inventoryBalances: '/inventory/balances',
   inventoryMovements: '/inventory/movements',
@@ -156,6 +160,12 @@ export const ROUTE_METADATA: RouteMetaMap = {
     permissions: ['catalog.view'],
     parent: 'catalogFamilies',
   },
+  catalogMaterialDetail: {
+    labelAr: 'تفاصيل المادة',
+    group: 'catalog',
+    permissions: ['catalog.view'],
+    parent: 'catalogMaterials',
+  },
   catalogUnits: {
     labelAr: 'وحدات القياس',
     group: 'catalog',
@@ -169,6 +179,12 @@ export const ROUTE_METADATA: RouteMetaMap = {
     permissions: ['organization.view'],
     parent: 'dashboard',
   },
+  organizationSiteDetail: {
+    labelAr: 'تفاصيل الموقع',
+    group: 'organization',
+    permissions: ['organization.view'],
+    parent: 'organizationSites',
+  },
   organizationOrgUnits: {
     labelAr: 'الوحدات التنظيمية',
     group: 'organization',
@@ -180,6 +196,12 @@ export const ROUTE_METADATA: RouteMetaMap = {
     group: 'organization',
     permissions: ['organization.view'],
     parent: 'organizationOrgUnits',
+  },
+  organizationEmployeeDetail: {
+    labelAr: 'تفاصيل الموظف',
+    group: 'organization',
+    permissions: ['organization.view'],
+    parent: 'organizationEmployees',
   },
   organizationExternalParties: {
     labelAr: 'الجهات الخارجية',
@@ -193,6 +215,12 @@ export const ROUTE_METADATA: RouteMetaMap = {
     group: 'warehouses',
     permissions: ['warehouse.view'],
     parent: 'dashboard',
+  },
+  warehouseDetail: {
+    labelAr: 'تفاصيل المستودع',
+    group: 'warehouses',
+    permissions: ['warehouse.view'],
+    parent: 'warehouses',
   },
 
   inventoryBalances: {

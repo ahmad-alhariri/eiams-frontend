@@ -21,8 +21,14 @@ const apiBaseUrlSchema = z
   .transform((value) => (value === '/' ? value : value.replace(/\/+$/, '')))
   .default(defaultApiBaseUrl)
 
+const enableApiMocksSchema = z
+  .enum(['true', 'false'])
+  .default('true')
+  .transform((value) => value === 'true')
+
 const environmentSchema = z.object({
   VITE_API_BASE_URL: apiBaseUrlSchema,
+  VITE_ENABLE_API_MOCKS: enableApiMocksSchema,
   MODE: z.string().trim().min(1, 'MODE must not be empty'),
   DEV: z.boolean(),
   PROD: z.boolean(),
@@ -30,6 +36,7 @@ const environmentSchema = z.object({
 
 export type AppEnvironment = Readonly<{
   apiBaseUrl: string
+  enableApiMocks: boolean
   mode: string
   isDevelopment: boolean
   isProduction: boolean
@@ -48,6 +55,7 @@ export function parseEnvironment(source: Record<string, unknown>): AppEnvironmen
 
   return Object.freeze({
     apiBaseUrl: result.data.VITE_API_BASE_URL,
+    enableApiMocks: result.data.VITE_ENABLE_API_MOCKS,
     mode: result.data.MODE,
     isDevelopment: result.data.DEV,
     isProduction: result.data.PROD,

@@ -232,4 +232,61 @@ describe('LifecycleActionBar', () => {
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
+
+  it('removes actions rejected by the permission gate while keeping permitted ones', () => {
+    renderBar({
+      policy: makePolicy([
+        availability({ action: 'Submit', confirmationRequired: true }),
+        availability({ action: 'Post', confirmationRequired: true }),
+      ]),
+      isActionPermitted: (action) => action !== 'Submit',
+    })
+
+    expect(screen.queryByRole('button', { name: 'إرسال للترحيل' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'ترحيل' })).toBeInTheDocument()
+  })
+
+  it('keeps Disabled-but-permitted actions rendered as disabled buttons', () => {
+    renderBar({
+      policy: makePolicy([
+        availability({
+          action: 'Post',
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'الرصيد غير كافٍ لتغطية بنود الصرف',
+          reasonCode: 'insufficient_balance',
+        }),
+      ]),
+      isActionPermitted: () => true,
+    })
+
+    const postButton = screen.getByRole('button', { name: 'ترحيل' })
+    expect(postButton).toBeDisabled()
+    expect(postButton).toHaveAttribute('title', 'الرصيد غير كافٍ لتغطية بنود الصرف')
+  })
+
+  it('removes Hidden actions before applying the permission filter without crashing', () => {
+    renderBar({
+      policy: makePolicy([
+        availability({ action: 'Reverse', allowed: false, presentation: 'Hidden' }),
+        availability({ action: 'Submit', confirmationRequired: true }),
+      ]),
+      isActionPermitted: () => true,
+    })
+
+    expect(screen.queryByRole('button', { name: 'عكس' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'إرسال للترحيل' })).toBeInTheDocument()
+  })
+
+  it('keeps the historical rendering when the permission gate prop is omitted', () => {
+    renderBar({
+      policy: makePolicy([
+        availability({ action: 'Submit', confirmationRequired: true }),
+        availability({ action: 'Post', confirmationRequired: true }),
+      ]),
+    })
+
+    expect(screen.getByRole('button', { name: 'إرسال للترحيل' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'ترحيل' })).toBeInTheDocument()
+  })
 })

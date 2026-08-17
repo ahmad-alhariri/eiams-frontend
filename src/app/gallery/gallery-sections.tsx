@@ -9,9 +9,14 @@ import { confirmDialogGallerySections } from '@/app/gallery/demos/confirm-dialog
 import { statusBadgeGallerySections } from '@/app/gallery/demos/status-badge-demo'
 import { dataTableServerGallerySections } from '@/app/gallery/demos/data-table-server-demo'
 import { selectorAdaptersGallerySections } from '@/app/gallery/demos/selector-adapters-demo'
+import { scopedWarehouseSelectorGallerySections } from '@/app/gallery/demos/scoped-warehouse-selector-demo'
 import { attachmentPanelGallerySections } from '@/app/gallery/demos/attachment-panel-demo'
 import { documentTimelineGallerySections } from '@/app/gallery/demos/document-timeline-demo'
 import { lifecycleActionBarGallerySections } from '@/app/gallery/demos/lifecycle-action-bar-demo'
+import { documentHeaderGallerySections } from '@/app/gallery/demos/document-header-section-demo'
+import { documentPermissionsGallerySections } from '@/app/gallery/demos/document-permissions-demo'
+import { assetLineEditorGallerySections } from '@/app/gallery/demos/asset-line-editor-demo'
+import { documentDetailGallerySections } from '@/app/gallery/demos/document-detail-demo'
 
 export interface GallerySection {
   /** Stable key used by BDD/doc slots, e.g. "data-gallery-section". */
@@ -34,9 +39,14 @@ export const gallerySections: GallerySection[] = [
   ...statusBadgeGallerySections,
   ...dataTableServerGallerySections,
   ...selectorAdaptersGallerySections,
+  ...scopedWarehouseSelectorGallerySections,
   ...attachmentPanelGallerySections,
   ...documentTimelineGallerySections,
   ...lifecycleActionBarGallerySections,
+  ...documentHeaderGallerySections,
+  ...documentPermissionsGallerySections,
+  ...assetLineEditorGallerySections,
+  ...documentDetailGallerySections,
   {
     id: 'file-dropzone',
     titleAr: 'رفع الملفات (FileDropzone)',
