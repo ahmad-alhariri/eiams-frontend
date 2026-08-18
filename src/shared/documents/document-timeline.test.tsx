@@ -1,9 +1,15 @@
 import { render, screen } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
 import { DocumentTimeline } from '@/shared/documents/document-timeline'
 import type { DocumentLifecycleEvent } from '@/shared/types/generated/eiams-v1'
 import { formatDateTime } from '@/shared/utils/format'
+
+function renderWithRouter(ui: ReactNode) {
+  return render(ui, { wrapper: MemoryRouter })
+}
 
 function buildEvent(
   overrides: Partial<DocumentLifecycleEvent> &
@@ -25,7 +31,7 @@ function buildEvent(
 
 describe('DocumentTimeline event rendering', () => {
   it('renders all seven lifecycle event types with their Arabic titles', () => {
-    render(
+    renderWithRouter(
       <DocumentTimeline
         events={[
           buildEvent({ eventType: 'Created', occurredAt: '2026-08-09T08:00:00.000Z' }),
@@ -50,7 +56,7 @@ describe('DocumentTimeline event rendering', () => {
 
   it('renders the actor, role, and Arabic-formatted date per event', () => {
     const occurredAt = '2026-08-09T10:30:00.000Z'
-    render(
+    renderWithRouter(
       <DocumentTimeline
         events={[
           buildEvent({
@@ -71,7 +77,7 @@ describe('DocumentTimeline event rendering', () => {
   })
 
   it('omits the role from the actor line when roleNameAr is absent', () => {
-    render(
+    renderWithRouter(
       <DocumentTimeline
         events={[
           buildEvent({
@@ -91,7 +97,7 @@ describe('DocumentTimeline event rendering', () => {
   })
 
   it('renders the authorized reason as muted note text', () => {
-    render(
+    renderWithRouter(
       <DocumentTimeline
         events={[
           buildEvent({
@@ -109,7 +115,7 @@ describe('DocumentTimeline event rendering', () => {
   })
 
   it('renders a related document reference chip with Arabic type label and reference number', () => {
-    render(
+    renderWithRouter(
       <DocumentTimeline
         events={[
           buildEvent({
@@ -129,18 +135,59 @@ describe('DocumentTimeline event rendering', () => {
     expect(screen.getByText('صرف')).toBeInTheDocument()
     expect(screen.getByText('ISS-2026-000742')).toHaveAttribute('dir', 'ltr')
   })
+
+  it('navigates to the related compensating document detail route from the chip', () => {
+    renderWithRouter(
+      <DocumentTimeline
+        events={[
+          buildEvent({
+            eventType: 'Reversed',
+            occurredAt: '2026-08-10T09:45:00.000Z',
+            relatedDocument: {
+              documentId: '00000000-0000-0000-0000-0000000000c1',
+              documentType: 'Issue',
+              status: 'Posted',
+              systemReferenceNumber: 'EIAMS-RVS-0001',
+            },
+          }),
+          buildEvent({
+            eventType: 'Reversed',
+            occurredAt: '2026-08-11T10:00:00.000Z',
+            relatedDocument: {
+              documentId: '00000000-0000-0000-0000-0000000000c2',
+              documentType: 'Adjustment',
+              status: 'Posted',
+              systemReferenceNumber: 'EIAMS-RVS-0002',
+            },
+          }),
+        ]}
+      />,
+    )
+
+    const issueChip = screen.getByRole('link', { name: /فتح سند صرف — EIAMS-RVS-0001/ })
+    expect(issueChip).toHaveAttribute(
+      'href',
+      '/documents/issue/00000000-0000-0000-0000-0000000000c1',
+    )
+
+    const adjustmentChip = screen.getByRole('link', { name: /فتح سند تسوية — EIAMS-RVS-0002/ })
+    expect(adjustmentChip).toHaveAttribute(
+      'href',
+      '/adjustments/00000000-0000-0000-0000-0000000000c2',
+    )
+  })
 })
 
 describe('DocumentTimeline structure and resilience', () => {
   it('shows the Arabic empty state and the default title when no events exist', () => {
-    render(<DocumentTimeline events={[]} />)
+    renderWithRouter(<DocumentTimeline events={[]} />)
 
     expect(screen.getByText('سجل الحالة')).toBeInTheDocument()
     expect(screen.getByText('لا توجد أحداث بعد')).toHaveClass('text-muted-foreground')
   })
 
   it('renders an accessible ordered list and flips newest-first input to chronological order', () => {
-    const { container } = render(
+    const { container } = renderWithRouter(
       <DocumentTimeline
         events={[
           buildEvent({
@@ -180,7 +227,7 @@ describe('DocumentTimeline structure and resilience', () => {
   })
 
   it('tags every event row with its contract event type for styling hooks', () => {
-    const { container } = render(
+    const { container } = renderWithRouter(
       <DocumentTimeline
         events={[
           buildEvent({

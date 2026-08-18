@@ -3,6 +3,7 @@ import { HttpResponse, http } from 'msw'
 
 import { environment } from '@/config/env'
 import { apiClient } from '@/shared/services/api.client'
+import { signedOriginalGate } from '@/shared/documents/document-policy-gates'
 import type {
   DocumentActionType,
   DocumentActionResult,
@@ -694,6 +695,20 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     expect(compensating!.systemReferenceNumber).not.toBe(original.systemReferenceNumber)
     expect(compensating!.systemReferenceNumber).toMatch(/^EIAMS-RVS-\d{4}$/)
     expect(compensating!.issueTo).toBeDefined()
+    // D-ATT-01 (3gyr): the compensation is posted in the same transaction as
+    // the reversal, so its signed-original gate is already satisfied and no
+    // signed-original blocker/advisory may surface on the mirror.
+    expect(compensating!.policy.signedOriginalSatisfied).toBe(true)
+    expect(
+      compensating!.policy.blockers.some((blocker) =>
+        blocker.code.endsWith('signed_original_missing'),
+      ),
+    ).toBe(false)
+    expect(signedOriginalGate(compensating!.policy)).toMatchObject({
+      gate: 'signedOriginal',
+      status: 'pass',
+      messageAr: null,
+    })
     expect(result.relatedDocument).toEqual({
       documentId: compensating!.documentId,
       documentType: compensating!.documentType,

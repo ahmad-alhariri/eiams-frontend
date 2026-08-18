@@ -1,5 +1,7 @@
 import { IconFileText } from '@tabler/icons-react'
+import { Link } from 'react-router'
 
+import { ROUTE_PATHS, type RouteKey } from '@/config/routes'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import type {
   DocumentLifecycleEvent,
@@ -59,17 +61,37 @@ function isNewestFirst(events: readonly DocumentLifecycleEvent[]) {
   return first !== undefined && last !== undefined && first.occurredAt >= last.occurredAt
 }
 
+/** Detail route per document type: the chip navigates to the related (compensating) document. */
+const RELATED_DOCUMENT_DETAIL_ROUTE: Record<DocumentType, RouteKey> = {
+  Receiving: 'documentReceivingDetail',
+  Issue: 'documentIssueDetail',
+  Transfer: 'documentTransferDetail',
+  Adjustment: 'adjustmentDetail',
+  Opening: 'documentOpeningDetail',
+  Return: 'documentReturnDetail',
+}
+
+function relatedDocumentPath(reference: LifecycleDocumentReference): string {
+  const pattern = ROUTE_PATHS[RELATED_DOCUMENT_DETAIL_ROUTE[reference.documentType]]
+  return pattern
+    .replace(':documentId', reference.documentId)
+    .replace(':adjustmentId', reference.documentId)
+}
+
 function RelatedDocumentChip({ reference }: { reference: LifecycleDocumentReference }) {
+  const typeLabel = DOCUMENT_TYPE_LABEL[reference.documentType] ?? reference.documentType
   return (
-    <span className="inline-flex w-fit items-center gap-1.5 rounded-4xl border border-antique-sand bg-muted/50 px-3 py-1 text-xs text-foreground">
+    <Link
+      to={relatedDocumentPath(reference)}
+      aria-label={`فتح سند ${typeLabel} — ${reference.systemReferenceNumber}`}
+      className="inline-flex w-fit items-center gap-1.5 rounded-4xl border border-antique-sand bg-muted/50 px-3 py-1 text-xs text-foreground transition-colors outline-none hover:border-accent hover:bg-accent/10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
       <IconFileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="font-medium">
-        {DOCUMENT_TYPE_LABEL[reference.documentType] ?? reference.documentType}
-      </span>
+      <span className="font-medium">{typeLabel}</span>
       <span dir="ltr" className="font-english text-muted-foreground">
         {reference.systemReferenceNumber}
       </span>
-    </span>
+    </Link>
   )
 }
 

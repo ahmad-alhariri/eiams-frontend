@@ -391,11 +391,15 @@ function buildCompensatingDocument(
     documentStatus: 'Posted',
     documentType,
     lines: original.lines,
+    // D-ATT-01: the compensating document is posted by the same transaction
+    // that posted the reversal, so its signed-original gate is satisfied by
+    // the reversing document — no advisory may surface on the mirror.
     policy: createDocumentPolicy({
       documentId: input.documentId,
       documentStatus: 'Posted',
       evaluatedAt: input.occurredAt,
       rowVersion: 1,
+      signedOriginalSatisfied: true,
     }),
     postedAt: input.occurredAt,
     postedBy: actor,
