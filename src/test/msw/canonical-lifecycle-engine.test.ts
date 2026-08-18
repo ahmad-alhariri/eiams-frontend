@@ -9,6 +9,7 @@ import type {
   DocumentLifecycleEvent,
   DocumentLifecycleHistory,
   DocumentStatus,
+  LifecycleDocumentReference,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
 import {
@@ -28,10 +29,13 @@ import {
 
 const DOCUMENT_ID = fixtureUuid(150)
 const IDEMPOTENCY_KEY = '00000000-0000-4000-8000-00000000f00d'
+const IDEMPOTENCY_KEY_2 = '00000000-0000-4000-8000-00000000c0de'
 
 const REASON_REQUIRED_DETAIL_AR = 'يرجى إدخال سبب الإجراء.'
 const VERSION_CONFLICT_DETAIL_AR =
   'تعذر تنفيذ الإجراء: المستند عدَّله مستخدم آخر. أعد تحميل البيانات وحاول مجدداً.'
+const IDEMPOTENCY_MISMATCH_DETAIL_AR =
+  'لا يمكن إعادة استخدام مفتاح التكرار مع طلب مختلف عن الطلب الأصلي.'
 
 const TRANSITION_ACTIONS = Object.keys(DOCUMENT_TRANSITIONS).filter(
   (key): key is DocumentActionType => DOCUMENT_TRANSITIONS[key as DocumentActionType] !== undefined,
@@ -52,6 +56,28 @@ function transitionFor(action: DocumentActionType): DocumentTransition {
     throw new Error(`expected a canonical transition for ${action}`)
   }
   return transition
+}
+
+/**
+ * One representative legal origin status per transition action. Cancel picks
+ * 'Submitted' (not 'Draft') so the D-LIFE-01 §86 multi-origin path is what the
+ * generic per-action suites exercise; every other action has a single origin.
+ */
+const REPRESENTATIVE_FROM: Readonly<Partial<Record<DocumentActionType, DocumentStatus>>> = {
+  Cancel: 'Submitted',
+  Post: 'Submitted',
+  Reject: 'Submitted',
+  Reverse: 'Posted',
+  Revise: 'Rejected',
+  Submit: 'Draft',
+}
+
+function representativeFrom(action: DocumentActionType): DocumentStatus {
+  const from = REPRESENTATIVE_FROM[action]
+  if (from === undefined) {
+    throw new Error(`expected a representative origin status for ${action}`)
+  }
+  return from
 }
 
 function documentInStatus(
@@ -83,7 +109,8 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
 
     for (const action of TRANSITION_ACTIONS) {
       const transition = transitionFor(action)
-      const documents = [documentInStatus(transition.from)]
+      const fromStatus = representativeFrom(action)
+      const documents = [documentInStatus(fromStatus)]
       server.use(
         ...createWarehouseDocumentActionHandler({
           initialDocument: documents[0]!,
@@ -104,7 +131,7 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       })
       expect(result.lifecycleEvent).toMatchObject({
         eventType: transition.eventType,
-        fromStatus: transition.from,
+        fromStatus,
         toStatus: transition.to,
         documentRowVersion: 2,
         reason: actionRequiresReason(action) ? 'سبب الإجراء' : null,
@@ -146,12 +173,15 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     const invalidPairs: Array<{ action: DocumentActionType; from: DocumentStatus }> = []
     for (const action of TRANSITION_ACTIONS) {
       for (const status of ALL_DOCUMENT_STATUSES) {
-        if (transitionFor(action).from !== status) {
+        if (!transitionFor(action).from.includes(status)) {
           invalidPairs.push({ action, from: status })
         }
       }
     }
-    expect(invalidPairs).toHaveLength(30)
+    // 6×6 pairs minus the 8 legal origins (Submit·Draft, Post·Submitted,
+    // Reject·Submitted, Revise·Rejected, Reverse·Posted, Cancel·Draft/
+    // Submitted/Rejected) = 28.
+    expect(invalidPairs).toHaveLength(28)
 
     for (const { action, from } of invalidPairs) {
       const documents = [documentInStatus(from)]
@@ -190,7 +220,8 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     expect(versionOnly).toEqual(['Post', 'Revise', 'Submit'])
 
     for (const action of reasonRequired) {
-      const documents = [documentInStatus(transitionFor(action).from)]
+      const fromStatus = representativeFrom(action)
+      const documents = [documentInStatus(fromStatus)]
       server.use(
         ...createWarehouseDocumentActionHandler({
           initialDocument: documents[0]!,
@@ -214,13 +245,14 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       ])
       expect(failure).not.toHaveProperty('response.data.lifecycleEvent')
       expect(documents[0]).toMatchObject({
-        documentStatus: transitionFor(action).from,
+        documentStatus: fromStatus,
         rowVersion: 1,
       })
     }
 
     for (const action of versionOnly) {
-      const documents = [documentInStatus(transitionFor(action).from)]
+      const fromStatus = representativeFrom(action)
+      const documents = [documentInStatus(fromStatus)]
       server.use(
         ...createWarehouseDocumentActionHandler({
           initialDocument: documents[0]!,
@@ -240,10 +272,101 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     }
   })
 
+  it('cancels Submitted and Rejected documents through the HTTP route with reason required, one Cancelled event, and a terminal Cancelled policy', async () => {
+    for (const from of ['Submitted', 'Rejected'] as const) {
+      const documents = [documentInStatus(from)]
+      server.use(
+        ...createWarehouseDocumentActionHandler({
+          initialDocument: documents[0]!,
+          documentStore: () => documents,
+        }),
+        http.get(`${environment.apiBaseUrl}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
+          HttpResponse.json({
+            documentId: DOCUMENT_ID,
+            currentStatus: documents[0]?.documentStatus ?? 'Draft',
+            currentRowVersion: documents[0]?.rowVersion ?? 0,
+            events: deriveLifecycleEvents(documents[0] ?? createWarehouseDocument(), {
+              cancelledFrom: from,
+            }),
+          }),
+        ),
+      )
+
+      const { data: result } = await apiClient.post<DocumentActionResult>(
+        actionUrl('Cancel'),
+        actionBody('Cancel', documents[0]!.rowVersion, 'إلغاء بسبب خطأ في البيانات'),
+        { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+      )
+
+      expect(result.document).toMatchObject({
+        documentStatus: 'Cancelled',
+        rowVersion: 2,
+        policy: { documentStatus: 'Cancelled', rowVersion: 2 },
+      })
+      expect(result.lifecycleEvent).toMatchObject({
+        eventType: 'Cancelled',
+        fromStatus: from,
+        toStatus: 'Cancelled',
+        documentRowVersion: 2,
+        reason: 'إلغاء بسبب خطأ في البيانات',
+      })
+      expect(documents[0]).toEqual(result.document)
+
+      const { data: history } = await apiClient.get<DocumentLifecycleHistory>(historyUrl())
+      expect(history).toMatchObject({ currentStatus: 'Cancelled', currentRowVersion: 2 })
+      expect(history.events.map((event) => event.eventType)).toEqual(
+        from === 'Submitted'
+          ? ['Created', 'Submitted', 'Cancelled']
+          : ['Created', 'Submitted', 'Rejected', 'Cancelled'],
+      )
+      expect(history.events.filter((event) => event.eventType === 'Cancelled')).toHaveLength(1)
+
+      const cancelled = [documents[0]!]
+      server.use(
+        ...createWarehouseDocumentActionHandler({
+          initialDocument: cancelled[0]!,
+          documentStore: () => cancelled,
+        }),
+      )
+      const replay = await apiClient
+        .post(actionUrl('Cancel'), actionBody('Cancel', cancelled[0]!.rowVersion, 'إلغاء مجدد'), {
+          headers: { 'Idempotency-Key': IDEMPOTENCY_KEY },
+        })
+        .catch((caught: unknown) => caught)
+      expect(replay).toHaveProperty('response.status', 409)
+      expect(replay).toHaveProperty('response.data.code', 'document.action_not_allowed')
+      expect(replay).toHaveProperty('response.data.currentStatus', 'Cancelled')
+    }
+
+    for (const from of ['Submitted', 'Rejected'] as const) {
+      const documents = [documentInStatus(from)]
+      server.use(
+        ...createWarehouseDocumentActionHandler({
+          initialDocument: documents[0]!,
+          documentStore: () => documents,
+        }),
+      )
+
+      const missingReason = await apiClient
+        .post(
+          actionUrl('Cancel'),
+          { rowVersion: 1 },
+          { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+        )
+        .catch((caught: unknown) => caught)
+
+      expect(missingReason).toHaveProperty('response.status', 422)
+      expect(missingReason).toHaveProperty('response.data.code', 'document.reason_required')
+      expect(missingReason).toHaveProperty('response.data.detailAr', REASON_REQUIRED_DETAIL_AR)
+      expect(missingReason).not.toHaveProperty('response.data.lifecycleEvent')
+      expect(documents[0]).toMatchObject({ documentStatus: from, rowVersion: 1 })
+    }
+  })
+
   it('returns the version_conflict envelope with current status, row version, and full policy for every stale transition attempt', async () => {
     for (const action of TRANSITION_ACTIONS) {
-      const transition = transitionFor(action)
-      const documents = [documentInStatus(transition.from)]
+      const fromStatus = representativeFrom(action)
+      const documents = [documentInStatus(fromStatus)]
       server.use(
         ...createWarehouseDocumentActionHandler({
           initialDocument: documents[0]!,
@@ -262,14 +385,84 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       expect(failure).toHaveProperty('response.data.code', 'document.version_conflict')
       expect(failure).toHaveProperty('response.data.detailAr', VERSION_CONFLICT_DETAIL_AR)
       expect(failure).toHaveProperty('response.data.currentRowVersion', 1)
-      expect(failure).toHaveProperty('response.data.currentStatus', transition.from)
+      expect(failure).toHaveProperty('response.data.currentStatus', fromStatus)
       expect(failure).toHaveProperty('response.data.policy', before!.policy)
       expect(failure).not.toHaveProperty('response.data.lifecycleEvent')
       expect(documents[0]).toEqual(before)
     }
   })
 
-  it('replays the same Idempotency-Key as a 409 conflict instead of the original result (known gap vs D-LIFE-01 §94-97)', async () => {
+  it('replays a successful Submit with the same Idempotency-Key as the byte-identical original result (D-LIFE-01 §94-97)', async () => {
+    const documents = [documentInStatus('Draft')]
+    let submittedCalls = 0
+    server.use(
+      ...createWarehouseDocumentActionHandler({
+        initialDocument: documents[0]!,
+        documentStore: () => documents,
+        onDocumentUpdated: () => {
+          submittedCalls += 1
+        },
+      }),
+    )
+
+    const { data: first } = await apiClient.post<DocumentActionResult>(
+      actionUrl('Submit'),
+      { rowVersion: 1 },
+      { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+    )
+    expect(first.document).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
+
+    const { data: replay } = await apiClient.post<DocumentActionResult>(
+      actionUrl('Submit'),
+      { rowVersion: 1 },
+      { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+    )
+
+    expect(replay).toEqual(first)
+    expect(replay.lifecycleEvent.eventId).toBe(first.lifecycleEvent.eventId)
+    expect(replay.document).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
+    expect(documents[0]).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
+    expect(submittedCalls).toBe(1)
+  })
+
+  it('rejects a non-equivalent same-key replay with the Arabic document.idempotency_mismatch envelope and an unchanged store', async () => {
+    const documents = [documentInStatus('Draft')]
+    server.use(
+      ...createWarehouseDocumentActionHandler({
+        initialDocument: documents[0]!,
+        documentStore: () => documents,
+      }),
+    )
+
+    const { data: first } = await apiClient.post<DocumentActionResult>(
+      actionUrl('Cancel'),
+      { reason: 'أ', rowVersion: 1 },
+      { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+    )
+    expect(first.document).toMatchObject({ documentStatus: 'Cancelled', rowVersion: 2 })
+
+    const failure = await apiClient
+      .post(
+        actionUrl('Cancel'),
+        { reason: 'ب', rowVersion: 1 },
+        { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+      )
+      .catch((caught: unknown) => caught)
+
+    expect(failure).toHaveProperty('response.status', 422)
+    expect(failure).toHaveProperty('response.data.code', 'document.idempotency_mismatch')
+    expect(failure).toHaveProperty('response.data.detailAr', IDEMPOTENCY_MISMATCH_DETAIL_AR)
+    expect(failure).toHaveProperty('response.data.fieldErrors', [
+      {
+        code: 'document.idempotency_mismatch',
+        field: 'idempotencyKey',
+        messageAr: IDEMPOTENCY_MISMATCH_DETAIL_AR,
+      },
+    ])
+    expect(documents[0]).toMatchObject({ documentStatus: 'Cancelled', rowVersion: 2 })
+  })
+
+  it('keeps the stale rowVersion guard for a different key: only the key that saw success replays', async () => {
     const documents = [documentInStatus('Draft')]
     server.use(
       ...createWarehouseDocumentActionHandler({
@@ -285,17 +478,92 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     )
     expect(first.document).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
 
-    const replay = await apiClient
+    const failure = await apiClient
       .post(
         actionUrl('Submit'),
         { rowVersion: 1 },
-        { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+        { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY_2 } },
       )
       .catch((caught: unknown) => caught)
 
-    expect(replay).toHaveProperty('response.status', 409)
-    expect(replay).toHaveProperty('response.data.code', 'document.version_conflict')
+    expect(failure).toHaveProperty('response.status', 409)
+    expect(failure).toHaveProperty('response.data.code', 'document.version_conflict')
+    expect(failure).toHaveProperty('response.data.currentRowVersion', 2)
+    expect(failure).toHaveProperty('response.data.currentStatus', 'Submitted')
     expect(documents[0]).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
+  })
+
+  it('never memoizes a failed attempt so the same key retries with the current rowVersion (UI retry flow)', async () => {
+    const documents = [documentInStatus('Draft')]
+    let submittedCalls = 0
+    server.use(
+      ...createWarehouseDocumentActionHandler({
+        initialDocument: documents[0]!,
+        documentStore: () => documents,
+        onDocumentUpdated: () => {
+          submittedCalls += 1
+        },
+      }),
+    )
+
+    const stale = await apiClient
+      .post(
+        actionUrl('Submit'),
+        { rowVersion: 9 },
+        { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+      )
+      .catch((caught: unknown) => caught)
+    expect(stale).toHaveProperty('response.status', 409)
+    expect(stale).toHaveProperty('response.data.code', 'document.version_conflict')
+
+    const { data: retry } = await apiClient.post<DocumentActionResult>(
+      actionUrl('Submit'),
+      { rowVersion: 1 },
+      { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+    )
+    expect(retry.document).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
+
+    const { data: replay } = await apiClient.post<DocumentActionResult>(
+      actionUrl('Submit'),
+      { rowVersion: 1 },
+      { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+    )
+    expect(replay).toEqual(retry)
+    expect(documents[0]).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
+    expect(submittedCalls).toBe(1)
+  })
+
+  it('replays a Reverse without duplicating the compensating document (D-LIFE-01 §94-97)', async () => {
+    const documents = [documentInStatus('Posted')]
+    const compensating: WarehouseDocument[] = []
+    server.use(
+      ...createWarehouseDocumentActionHandler({
+        initialDocument: documents[0]!,
+        documentStore: () => documents,
+        onCompensatingDocumentCreated: (document) => {
+          compensating.push(document)
+        },
+      }),
+    )
+
+    const { data: first } = await apiClient.post<DocumentActionResult>(
+      actionUrl('Reverse'),
+      { reason: 'خطأ في الترحيل', rowVersion: 1 },
+      { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+    )
+    expect(first.relatedDocument).toBeDefined()
+    expect(first.document).toMatchObject({ documentStatus: 'Reversed', rowVersion: 2 })
+
+    const { data: replay } = await apiClient.post<DocumentActionResult>(
+      actionUrl('Reverse'),
+      { reason: 'خطأ في الترحيل', rowVersion: 1 },
+      { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+    )
+
+    expect(replay).toEqual(first)
+    expect(replay.relatedDocument).toEqual(first.relatedDocument)
+    expect(compensating).toHaveLength(1)
+    expect(documents[0]).toMatchObject({ documentStatus: 'Reversed', rowVersion: 2 })
   })
 
   it('reverses atomically: a failed reverse leaves the Posted original and its chain untouched; a successful reverse appends exactly one Reversed event', async () => {
@@ -360,12 +628,16 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     expect(afterSuccess.events.filter((event) => event.eventType === 'Reversed')).toHaveLength(1)
   })
 
-  it('omits the compensating relatedDocument from the Reverse action result (known gap vs D-LIFE-01 §153-157)', async () => {
+  it('returns the compensating relatedDocument on the Reverse action result and its Reversed event (D-LIFE-01 §153-157)', async () => {
     const documents = [documentInStatus('Posted')]
+    let compensating: WarehouseDocument | undefined
     server.use(
       ...createWarehouseDocumentActionHandler({
         initialDocument: documents[0]!,
         documentStore: () => documents,
+        onCompensatingDocumentCreated: (document) => {
+          compensating = document
+        },
       }),
     )
 
@@ -374,9 +646,138 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       { reason: 'خطأ في الترحيل', rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
     )
+
     expect(result.document).toMatchObject({ documentStatus: 'Reversed', rowVersion: 2 })
-    expect(result.relatedDocument).toBeUndefined()
-    expect(result.lifecycleEvent.relatedDocument).toBeUndefined()
+    expect(compensating).toBeDefined()
+    const reference: LifecycleDocumentReference = {
+      documentId: compensating!.documentId,
+      documentType: compensating!.documentType,
+      status: 'Posted',
+      systemReferenceNumber: compensating!.systemReferenceNumber,
+    }
+    expect(result.relatedDocument).toEqual(reference)
+    expect(result.lifecycleEvent.relatedDocument).toEqual(reference)
+    expect(result.relatedDocument?.documentId).not.toBe(DOCUMENT_ID)
+    expect(result.relatedDocument?.documentType).toBe('Issue')
+    expect(result.relatedDocument?.status).toBe('Posted')
+    expect(result.relatedDocument?.systemReferenceNumber).toMatch(/^EIAMS-RVS-\d{4}$/)
+  })
+
+  it('creates a posted compensating document for a reversed Receiving: Issue type, rowVersion 1, posted, unique reference (D-LIFE-01 §146-161)', async () => {
+    const documents = [documentInStatus('Posted')]
+    let compensating: WarehouseDocument | undefined
+    server.use(
+      ...createWarehouseDocumentActionHandler({
+        initialDocument: documents[0]!,
+        documentStore: () => documents,
+        onCompensatingDocumentCreated: (document) => {
+          compensating = document
+        },
+      }),
+    )
+
+    const { data: result } = await apiClient.post<DocumentActionResult>(
+      actionUrl('Reverse'),
+      { reason: 'خطأ في الترحيل', rowVersion: 1 },
+      { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+    )
+
+    const original = documents[0]!
+    expect(original.documentType).toBe('Receiving')
+    expect(compensating).toBeDefined()
+    expect(compensating!.documentId).not.toBe(original.documentId)
+    expect(compensating!.documentType).toBe('Issue')
+    expect(compensating!.documentStatus).toBe('Posted')
+    expect(compensating!.rowVersion).toBe(1)
+    expect(compensating!.postedAt).toEqual(expect.any(String))
+    expect(compensating!.policy).toMatchObject({ documentStatus: 'Posted', rowVersion: 1 })
+    expect(compensating!.systemReferenceNumber).not.toBe(original.systemReferenceNumber)
+    expect(compensating!.systemReferenceNumber).toMatch(/^EIAMS-RVS-\d{4}$/)
+    expect(compensating!.issueTo).toBeDefined()
+    expect(result.relatedDocument).toEqual({
+      documentId: compensating!.documentId,
+      documentType: compensating!.documentType,
+      status: 'Posted',
+      systemReferenceNumber: compensating!.systemReferenceNumber,
+    })
+  })
+
+  it('maps a reversed Transfer to a back-transfer Transfer compensation with the destination swapped to the source warehouse', async () => {
+    const documents = [
+      createWarehouseDocument({
+        documentId: DOCUMENT_ID,
+        documentStatus: 'Posted',
+        documentType: 'Transfer',
+        receivingInfo: undefined,
+        transferInfo: {
+          destinationWarehouseId: fixtureUuid(31),
+          destinationWarehouseName: 'مستودع الفرع',
+          transferReason: 'نقل مخزون إلى الفرع',
+        },
+      }),
+    ]
+    let compensating: WarehouseDocument | undefined
+    server.use(
+      ...createWarehouseDocumentActionHandler({
+        initialDocument: documents[0]!,
+        documentStore: () => documents,
+        onCompensatingDocumentCreated: (document) => {
+          compensating = document
+        },
+      }),
+    )
+
+    const { data: result } = await apiClient.post<DocumentActionResult>(
+      actionUrl('Reverse'),
+      { reason: 'خطأ في الترحيل', rowVersion: 1 },
+      { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+    )
+
+    expect(compensating).toBeDefined()
+    expect(compensating!.documentType).toBe('Transfer')
+    expect(compensating!.warehouse).toMatchObject({
+      id: fixtureUuid(31),
+      displayName: 'مستودع الفرع',
+    })
+    expect(compensating!.transferInfo).toEqual({
+      destinationWarehouseId: documents[0]!.warehouse.id,
+      destinationWarehouseName: documents[0]!.warehouse.displayName,
+      transferReason: 'نقل مخزون إلى الفرع',
+    })
+    expect(result.relatedDocument).toMatchObject({
+      documentType: 'Transfer',
+      status: 'Posted',
+    })
+  })
+
+  it('reverses atomically: a stale-rowVersion Reverse creates no compensating document and leaves the store untouched (D-LIFE-01 §159-161)', async () => {
+    const documents = [documentInStatus('Posted')]
+    const created: WarehouseDocument[] = []
+    server.use(
+      ...createWarehouseDocumentActionHandler({
+        initialDocument: documents[0]!,
+        documentStore: () => documents,
+        onCompensatingDocumentCreated: (document) => {
+          created.push(document)
+        },
+      }),
+    )
+    const before = documents[0]
+
+    const failure = await apiClient
+      .post(
+        actionUrl('Reverse'),
+        { reason: 'خطأ في الترحيل', rowVersion: 2 },
+        { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+      )
+      .catch((caught: unknown) => caught)
+
+    expect(failure).toHaveProperty('response.status', 409)
+    expect(failure).toHaveProperty('response.data.code', 'document.version_conflict')
+    expect(failure).not.toHaveProperty('response.data.relatedDocument')
+    expect(failure).not.toHaveProperty('response.data.compensatingDocument')
+    expect(created).toHaveLength(0)
+    expect(documents[0]).toEqual(before)
   })
 
   it('serves the immutable history contract: envelope from the last event, Created without fromStatus, no duplication on refetch, pagination ignored', async () => {

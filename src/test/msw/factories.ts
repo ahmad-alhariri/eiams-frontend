@@ -432,22 +432,27 @@ export function createInventoryBalance(
 
 export type DocumentTransition = Readonly<{
   eventType: LifecycleEventType
-  from: DocumentStatus
+  /** Every status the action may legally originate from (D-LIFE-01 transition table). */
+  from: readonly DocumentStatus[]
   to: DocumentStatus
 }>
 
-/** Canonical action → state-transition table; non-transition actions map to undefined. */
+/**
+ * Canonical action → state-transition table; non-transition actions map to
+ * undefined. D-LIFE-01 §86: Cancel is permitted from Draft, Submitted, and
+ * Rejected — all converge on the Cancelled terminal state.
+ */
 export const DOCUMENT_TRANSITIONS: Readonly<
   Record<DocumentActionType, DocumentTransition | undefined>
 > = {
-  Cancel: { from: 'Draft', to: 'Cancelled', eventType: 'Cancelled' },
+  Cancel: { from: ['Draft', 'Submitted', 'Rejected'], to: 'Cancelled', eventType: 'Cancelled' },
   DeleteAttachment: undefined,
   Edit: undefined,
-  Post: { from: 'Submitted', to: 'Posted', eventType: 'Posted' },
-  Reject: { from: 'Submitted', to: 'Rejected', eventType: 'Rejected' },
-  Reverse: { from: 'Posted', to: 'Reversed', eventType: 'Reversed' },
-  Revise: { from: 'Rejected', to: 'Draft', eventType: 'RevisionStarted' },
-  Submit: { from: 'Draft', to: 'Submitted', eventType: 'Submitted' },
+  Post: { from: ['Submitted'], to: 'Posted', eventType: 'Posted' },
+  Reject: { from: ['Submitted'], to: 'Rejected', eventType: 'Rejected' },
+  Reverse: { from: ['Posted'], to: 'Reversed', eventType: 'Reversed' },
+  Revise: { from: ['Rejected'], to: 'Draft', eventType: 'RevisionStarted' },
+  Submit: { from: ['Draft'], to: 'Submitted', eventType: 'Submitted' },
   UploadAttachment: undefined,
 }
 
@@ -523,10 +528,8 @@ export function actionsForDocumentStatus(status: DocumentStatus): ActionAvailabi
           reasonCode: 'document.submitted',
         }),
         createActionAvailability('Cancel', {
-          allowed: false,
-          presentation: 'Disabled',
-          reasonAr: 'يمكن إلغاء المسودات فقط.',
-          reasonCode: 'document.not_draft',
+          confirmationRequired: true,
+          reasonRequired: true,
         }),
         createActionAvailability('UploadAttachment', { allowed: false, presentation: 'Hidden' }),
         createActionAvailability('DeleteAttachment', { allowed: false, presentation: 'Hidden' }),
@@ -647,6 +650,10 @@ export function actionsForDocumentStatus(status: DocumentStatus): ActionAvailabi
     case 'Rejected':
       return [
         createActionAvailability('Revise'),
+        createActionAvailability('Cancel', {
+          confirmationRequired: true,
+          reasonRequired: true,
+        }),
         createActionAvailability('Edit', {
           allowed: false,
           presentation: 'Disabled',
@@ -664,12 +671,6 @@ export function actionsForDocumentStatus(status: DocumentStatus): ActionAvailabi
           presentation: 'Disabled',
           reasonAr: 'المستند مرفوض.',
           reasonCode: 'document.rejected',
-        }),
-        createActionAvailability('Cancel', {
-          allowed: false,
-          presentation: 'Disabled',
-          reasonAr: 'يمكن إلغاء المسودات فقط.',
-          reasonCode: 'document.not_draft',
         }),
         createActionAvailability('Reverse', {
           allowed: false,
@@ -822,8 +823,15 @@ export function createLifecycleEvent(
  * Synthesizes the canonical immutable lifecycle chain implied by a document's
  * current status. Seed fixtures only — real transitions run through the action
  * engine which appends one event per accepted action.
+ *
+ * The Cancelled terminal is ambiguous (D-LIFE-01 §86: it may originate from
+ * Draft, Submitted, or Rejected); pass `cancelledFrom` to request a specific
+ * chain for a Cancelled fixture document. Defaults to 'Draft'.
  */
-export function deriveLifecycleEvents(document: WarehouseDocument): DocumentLifecycleEvent[] {
+export function deriveLifecycleEvents(
+  document: WarehouseDocument,
+  options: { cancelledFrom?: DocumentStatus } = {},
+): DocumentLifecycleEvent[] {
   const events: DocumentLifecycleEvent[] = [
     createLifecycleEvent({
       documentId: document.documentId,
@@ -870,7 +878,20 @@ export function deriveLifecycleEvents(document: WarehouseDocument): DocumentLife
       step('Reversed', 'Posted', 'Reversed', 2)
       break
     case 'Cancelled':
-      step('Cancelled', 'Draft', 'Cancelled', 0)
+      switch (options.cancelledFrom ?? 'Draft') {
+        case 'Draft':
+          step('Cancelled', 'Draft', 'Cancelled', 0)
+          break
+        case 'Submitted':
+          step('Submitted', 'Draft', 'Submitted', 0)
+          step('Cancelled', 'Submitted', 'Cancelled', 1)
+          break
+        case 'Rejected':
+          step('Submitted', 'Draft', 'Submitted', 0)
+          step('Rejected', 'Submitted', 'Rejected', 1)
+          step('Cancelled', 'Rejected', 'Cancelled', 2)
+          break
+      }
       break
     case 'Draft':
       break
@@ -901,7 +922,7 @@ export function createDocumentActionResult(
       documentRowVersion: nextRowVersion,
       eventId: fixtureUuid(203),
       eventType: transition.eventType,
-      fromStatus: transition.from,
+      fromStatus: transition.from[0]!,
       reason: actionRequiresReason(actionType) ? 'سبب تجريبي' : null,
       toStatus: transition.to,
     }),

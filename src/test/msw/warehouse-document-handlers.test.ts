@@ -19,6 +19,7 @@ import {
 import type { DocumentActionType, DocumentStatus } from '@/shared/types/generated/eiams-v1'
 
 const IDEMPOTENCY_KEY = '00000000-0000-4000-8000-00000000ffff'
+const SECOND_IDEMPOTENCY_KEY = '00000000-0000-4000-8000-00000000fffd'
 const UNKNOWN_ID = '00000000-0000-4000-8000-00000000fffe'
 
 const TRANSITION_CASES: ReadonlyArray<{
@@ -32,6 +33,8 @@ const TRANSITION_CASES: ReadonlyArray<{
   { action: 'Reject', from: 'Submitted', to: 'Rejected', requiresReason: true },
   { action: 'Revise', from: 'Rejected', to: 'Draft', requiresReason: false },
   { action: 'Cancel', from: 'Draft', to: 'Cancelled', requiresReason: true },
+  { action: 'Cancel', from: 'Submitted', to: 'Cancelled', requiresReason: true },
+  { action: 'Cancel', from: 'Rejected', to: 'Cancelled', requiresReason: true },
   { action: 'Reverse', from: 'Posted', to: 'Reversed', requiresReason: true },
 ]
 
@@ -285,18 +288,33 @@ describe('document-engine scenario handlers', () => {
     expect(result.lifecycleEvent.fromStatus).toBe('Draft')
     expect(documents[0]).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
 
-    const notCancellable = await apiClient
+    const cancelled = await apiClient.post<{
+      document: { documentStatus: DocumentStatus; rowVersion: number }
+      lifecycleEvent: { eventType: string; fromStatus: DocumentStatus }
+    }>(
+      `/warehouse-documents/${fixtureUuid(150)}/cancel`,
+      { rowVersion: 2, reason: 'إلغاء' },
+      { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+    )
+    expect(cancelled.data.document.documentStatus).toBe('Cancelled')
+    expect(cancelled.data.document.rowVersion).toBe(3)
+    expect(cancelled.data.lifecycleEvent.eventType).toBe('Cancelled')
+    expect(cancelled.data.lifecycleEvent.fromStatus).toBe('Submitted')
+    expect(documents[0]).toMatchObject({ documentStatus: 'Cancelled', rowVersion: 3 })
+    expect(documents[0]?.policy.documentStatus).toBe('Cancelled')
+
+    const replayCancel = await apiClient
       .post(
         `/warehouse-documents/${fixtureUuid(150)}/cancel`,
-        { rowVersion: 2, reason: 'إلغاء' },
-        { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+        { rowVersion: 3, reason: 'إلغاء مجدد' },
+        { headers: { 'Idempotency-Key': SECOND_IDEMPOTENCY_KEY } },
       )
       .catch((caught: unknown) => caught)
-    expect(notCancellable).toHaveProperty('response.status', 409)
-    expect(notCancellable).toHaveProperty('response.data.code', 'document.action_not_allowed')
-    expect(notCancellable).toHaveProperty('response.data.currentStatus', 'Submitted')
-    expect(notCancellable).toHaveProperty('response.data.policy.documentStatus', 'Submitted')
-    expect(documents[0]).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
+    expect(replayCancel).toHaveProperty('response.status', 409)
+    expect(replayCancel).toHaveProperty('response.data.code', 'document.action_not_allowed')
+    expect(replayCancel).toHaveProperty('response.data.currentStatus', 'Cancelled')
+    expect(replayCancel).toHaveProperty('response.data.policy.documentStatus', 'Cancelled')
+    expect(documents[0]).toMatchObject({ documentStatus: 'Cancelled', rowVersion: 3 })
   })
 
   it('returns the LifecycleConflict body on stale rowVersion and 422 on missing reason routes', async () => {

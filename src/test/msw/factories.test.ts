@@ -119,12 +119,16 @@ describe('document-engine MSW factories', () => {
 
   it('exposes the six lifecycle transitions with canonical from/to/eventType', () => {
     expect(DOCUMENT_TRANSITIONS).toMatchObject({
-      Submit: { from: 'Draft', to: 'Submitted', eventType: 'Submitted' },
-      Post: { from: 'Submitted', to: 'Posted', eventType: 'Posted' },
-      Reject: { from: 'Submitted', to: 'Rejected', eventType: 'Rejected' },
-      Revise: { from: 'Rejected', to: 'Draft', eventType: 'RevisionStarted' },
-      Cancel: { from: 'Draft', to: 'Cancelled', eventType: 'Cancelled' },
-      Reverse: { from: 'Posted', to: 'Reversed', eventType: 'Reversed' },
+      Submit: { from: ['Draft'], to: 'Submitted', eventType: 'Submitted' },
+      Post: { from: ['Submitted'], to: 'Posted', eventType: 'Posted' },
+      Reject: { from: ['Submitted'], to: 'Rejected', eventType: 'Rejected' },
+      Revise: { from: ['Rejected'], to: 'Draft', eventType: 'RevisionStarted' },
+      Cancel: {
+        from: ['Draft', 'Submitted', 'Rejected'],
+        to: 'Cancelled',
+        eventType: 'Cancelled',
+      },
+      Reverse: { from: ['Posted'], to: 'Reversed', eventType: 'Reversed' },
     })
     expect(DOCUMENT_TRANSITIONS['Edit']).toBeUndefined()
     expect(DOCUMENT_TRANSITIONS['UploadAttachment']).toBeUndefined()
@@ -145,10 +149,26 @@ describe('document-engine MSW factories', () => {
     const submittedEnabled = submitted.actions
       .filter((availability) => availability.presentation === 'Enabled')
       .map((availability) => availability.action)
-    expect(submittedEnabled).toEqual(['Post', 'Reject'])
+    expect(submittedEnabled).toEqual(['Post', 'Reject', 'Cancel'])
     expect(
       submitted.actions.find((availability) => availability.action === 'Submit')?.allowed,
     ).toBe(false)
+    expect(
+      submitted.actions.find((availability) => availability.action === 'Cancel'),
+    ).toMatchObject({
+      allowed: true,
+      confirmationRequired: true,
+      reasonRequired: true,
+    })
+
+    const rejected = createDocumentPolicy({ documentStatus: 'Rejected' })
+    expect(rejected.actions.find((availability) => availability.action === 'Cancel')).toMatchObject(
+      {
+        allowed: true,
+        confirmationRequired: true,
+        reasonRequired: true,
+      },
+    )
 
     const posted = createDocumentPolicy({ documentStatus: 'Posted' })
     const reverse = posted.actions.find((availability) => availability.action === 'Reverse')
