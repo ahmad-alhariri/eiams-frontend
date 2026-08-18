@@ -428,7 +428,10 @@ describe('composed canonical document lifecycle journey', () => {
 
     await user.click(screen.getByRole('button', { name: 'إلغاء' }))
     const cancelDialog = await screen.findByRole('alertdialog', { name: 'تأكيد الإجراء' })
-    await user.type(within(cancelDialog).getByLabelText('سبب الإجراء'), 'إلغاء بسبب خطأ في البيانات')
+    await user.type(
+      within(cancelDialog).getByLabelText('سبب الإجراء'),
+      'إلغاء بسبب خطأ في البيانات',
+    )
     await user.click(confirmIn(cancelDialog, 'إلغاء'))
 
     await screen.findByText('تم إلغاء السند')
