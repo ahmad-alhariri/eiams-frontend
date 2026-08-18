@@ -1,3 +1,7 @@
+# Normalize all text files to LF in the repository and on checkout, so local
+# Prettier format checks agree with CI on both Windows and Linux.
+* text=auto eol=lf
+
 # The OpenAPI provenance checksum is calculated from the committed UTF-8 bytes.
 # Keep the contract LF-normalized across Windows and Linux checkouts.
 contracts/openapi/eiams-v1.openapi.json text eol=lf
