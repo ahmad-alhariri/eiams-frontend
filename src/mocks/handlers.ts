@@ -3,6 +3,7 @@ import { delay, http, HttpResponse, type HttpHandler } from 'msw'
 import { environment } from '@/config/env'
 import { getDb, nextFixtureUuid } from '@/mocks/db'
 import { createDevSession } from '@/shared/services/dev-session'
+import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import {
   createDocumentAttachment,
   createMaterialUnitConversion,
@@ -13,6 +14,8 @@ import {
 } from '@/test/msw/factories'
 import {
   applyDocumentAction,
+  createIdempotencyMemo,
+  idempotencyMismatchProblem,
   WAREHOUSE_DOCUMENT_STATUSES,
   WAREHOUSE_DOCUMENT_TYPES,
 } from '@/test/msw/warehouse-document-handlers'
@@ -241,6 +244,8 @@ const CATALOG_PREFIX = `${environment.apiBaseUrl}/catalog`
 const AUTH_PREFIX = environment.apiBaseUrl
 const DOCUMENT_PREFIX = `${environment.apiBaseUrl}/warehouse-documents`
 
+const DOCUMENT_ACTION_IDEMPOTENCY = createIdempotencyMemo()
+
 function documentActor(): LifecycleActorSnapshot {
   const session = createDevSession().session
   return {
@@ -255,7 +260,9 @@ function documentActor(): LifecycleActorSnapshot {
  * the document, replays `applyDocumentAction` (rowVersion guard → 409 with the
  * LifecycleConflict body, reason validation → 422, status transition table),
  * persists the returned document and appends its lifecycle event so the
- * history endpoint keeps reflecting reality.
+ * history endpoint keeps reflecting reality. A Reverse also persists the
+ * compensating document returned by the engine (with its Created/Submitted/
+ * Posted chain) so it is listable and detailable like any other document.
  */
 async function documentActionRoute(
   action: DocumentActionType,
@@ -270,11 +277,26 @@ async function documentActionRoute(
   const document = db.warehouseDocuments[index]!
   const body = (await request.json()) as
     VersionOnlyDocumentActionRequest | ReasonedDocumentActionRequest
+  const reason = 'reason' in body ? (body.reason ?? null) : null
+  const idempotencyKey = request.headers.get(IDEMPOTENCY_KEY_HEADER)
+  const memoCheck = DOCUMENT_ACTION_IDEMPOTENCY.check({
+    idempotencyKey,
+    action,
+    documentId: document.documentId,
+    rowVersion: body.rowVersion,
+    reason,
+  })
+  if (memoCheck.kind === 'replay') {
+    return HttpResponse.json(memoCheck.result)
+  }
+  if (memoCheck.kind === 'mismatch') {
+    return HttpResponse.json(idempotencyMismatchProblem(), { status: 422 })
+  }
   const outcome = applyDocumentAction({
     action,
     document,
     rowVersion: body.rowVersion,
-    reason: 'reason' in body ? (body.reason ?? null) : null,
+    reason,
     occurredBy: documentActor(),
   })
   if (outcome.kind === 'conflict') {
@@ -283,10 +305,26 @@ async function documentActionRoute(
   if (outcome.kind === 'validation') {
     return HttpResponse.json(outcome.problem, { status: 422 })
   }
+  if (idempotencyKey !== null) {
+    DOCUMENT_ACTION_IDEMPOTENCY.store(
+      idempotencyKey,
+      action,
+      document.documentId,
+      body.rowVersion,
+      reason,
+      outcome.result,
+    )
+  }
   db.warehouseDocuments[index] = outcome.document
   const events = db.documentLifecycleEvents[document.documentId] ?? []
   events.push(outcome.result.lifecycleEvent)
   db.documentLifecycleEvents[document.documentId] = events
+  if (outcome.compensatingDocument !== undefined) {
+    db.warehouseDocuments.push(outcome.compensatingDocument)
+    db.documentLifecycleEvents[outcome.compensatingDocument.documentId] = deriveLifecycleEvents(
+      outcome.compensatingDocument,
+    )
+  }
   return HttpResponse.json(outcome.result)
 }
 

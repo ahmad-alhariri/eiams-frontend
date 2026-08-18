@@ -198,6 +198,31 @@ describe('mock API handlers', () => {
     expect(history.events.map((event) => event.eventType)).toContain('Submitted')
   })
 
+  it('replays a same-key submit with the byte-identical original result (D-LIFE-01 §94-97)', async () => {
+    const draft = getDb().warehouseDocuments[0]!
+    const key = '00000000-0000-4000-8000-00000000a11c'
+
+    const { data: first } = await apiClient.post(
+      `/warehouse-documents/${draft.documentId}/submit`,
+      { rowVersion: draft.rowVersion },
+      { headers: { 'Idempotency-Key': key } },
+    )
+
+    const { data: replay } = await apiClient.post(
+      `/warehouse-documents/${draft.documentId}/submit`,
+      { rowVersion: draft.rowVersion },
+      { headers: { 'Idempotency-Key': key } },
+    )
+
+    expect(replay).toEqual(first)
+    const { data: detail } = await apiClient.get(`/warehouse-documents/${draft.documentId}`)
+    expect(detail.rowVersion).toBe(draft.rowVersion + 1)
+    const { data: history } = await apiClient.get<{
+      events: Array<{ eventType: string }>
+    }>(`/warehouse-documents/${draft.documentId}/history`)
+    expect(history.events.filter((event) => event.eventType === 'Submitted')).toHaveLength(1)
+  })
+
   it('rejects a stale rowVersion with the lifecycle conflict envelope', async () => {
     const draft = getDb().warehouseDocuments[0]!
 

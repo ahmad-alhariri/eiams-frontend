@@ -356,6 +356,109 @@ describe('composed canonical document lifecycle journey', () => {
     })
   })
 
+  it('cancels a Submitted document: the Cancel button enables after Submit, the reason dialog works, and the terminal Cancelled chain shows Created → Submitted → Cancelled', async () => {
+    const journey = useMutableJourney(80)
+    const user = userEvent.setup()
+
+    render(<DocumentDetailPage />, { wrapper: createJourneyWrapper() })
+
+    await screen.findByRole('heading', { level: 1, name: /EIAMS-DOC-2024-0001/ })
+    await screen.findByText('إنشاء الوثيقة')
+
+    await user.click(screen.getByRole('button', { name: 'إرسال للترحيل' }))
+    await screen.findByText('تم إرسال السند للترحيل بنجاح')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'إلغاء' })).toBeEnabled())
+
+    await user.click(screen.getByRole('button', { name: 'إلغاء' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'تأكيد الإجراء' })
+    await user.type(within(dialog).getByLabelText('سبب الإجراء'), 'إلغاء بسبب خطأ في البيانات')
+    await user.click(confirmIn(dialog, 'إلغاء'))
+
+    await screen.findByText('تم إلغاء السند')
+    expect(journey.documents[0]).toMatchObject({ documentStatus: 'Cancelled', rowVersion: 3 })
+    await waitFor(() => expect(screen.getAllByText('ملغي').length).toBeGreaterThanOrEqual(1))
+    await waitFor(() => expect(screen.getAllByText('الإصدار: 3').length).toBeGreaterThan(0))
+    await waitFor(() => expect(timelineWithin().getByText('إرسال للترحيل')).toBeInTheDocument())
+    await waitFor(() => expect(timelineWithin().getByText('إلغاء الوثيقة')).toBeInTheDocument())
+    expect(timelineWithin().getByText('إلغاء بسبب خطأ في البيانات')).toBeInTheDocument()
+    expect(timelineWithin().getAllByRole('listitem')).toHaveLength(3)
+    expect(screen.getByText('عرض للقراءة فقط — المستند ملغى ولا يمكن تعديله')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'إرسال للترحيل' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'ترحيل' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'إلغاء' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'عكس' })).toBeDisabled()
+    })
+    expect(screen.queryByRole('button', { name: 'رفض' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'مراجعة' })).not.toBeInTheDocument()
+    expect(journey.actionCalls).toEqual({
+      Submit: 1,
+      Post: 0,
+      Reject: 0,
+      Revise: 0,
+      Cancel: 1,
+      Reverse: 0,
+    })
+  })
+
+  it('cancels a Rejected document: Cancel enables in the read-only Rejected window and the chain shows Created → Submitted → Rejected → Cancelled', async () => {
+    const journey = useMutableJourney(80)
+    const user = userEvent.setup()
+
+    render(<DocumentDetailPage />, { wrapper: createJourneyWrapper() })
+
+    await screen.findByRole('heading', { level: 1, name: /EIAMS-DOC-2024-0001/ })
+    await screen.findByText('إنشاء الوثيقة')
+
+    await user.click(screen.getByRole('button', { name: 'إرسال للترحيل' }))
+    await screen.findByText('تم إرسال السند للترحيل بنجاح')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'رفض' })).toBeEnabled())
+
+    await user.click(screen.getByRole('button', { name: 'رفض' }))
+    const rejectDialog = await screen.findByRole('alertdialog', { name: 'تأكيد الإجراء' })
+    await user.type(within(rejectDialog).getByLabelText('سبب الإجراء'), 'سبب غير مطابق للمستند')
+    await user.click(within(rejectDialog).getByRole('button', { name: 'رفض' }))
+
+    await screen.findByText('تم رفض السند')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'إلغاء' })).toBeEnabled())
+    expect(
+      screen.getByText('عرض للقراءة فقط — المستند مرفوض — استخدم «مراجعة» لإعادة فتح التعديل'),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'إلغاء' }))
+    const cancelDialog = await screen.findByRole('alertdialog', { name: 'تأكيد الإجراء' })
+    await user.type(within(cancelDialog).getByLabelText('سبب الإجراء'), 'إلغاء بسبب خطأ في البيانات')
+    await user.click(confirmIn(cancelDialog, 'إلغاء'))
+
+    await screen.findByText('تم إلغاء السند')
+    expect(journey.documents[0]).toMatchObject({ documentStatus: 'Cancelled', rowVersion: 4 })
+    await waitFor(() => expect(screen.getAllByText('ملغي').length).toBeGreaterThanOrEqual(1))
+    await waitFor(() => expect(screen.getAllByText('الإصدار: 4').length).toBeGreaterThan(0))
+    await waitFor(() => expect(timelineWithin().getByText('رفض الوثيقة')).toBeInTheDocument())
+    await waitFor(() => expect(timelineWithin().getByText('إلغاء الوثيقة')).toBeInTheDocument())
+    expect(timelineWithin().getByText('إلغاء بسبب خطأ في البيانات')).toBeInTheDocument()
+    expect(timelineWithin().getAllByRole('listitem')).toHaveLength(4)
+    expect(screen.getByText('عرض للقراءة فقط — المستند ملغى ولا يمكن تعديله')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'إرسال للترحيل' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'ترحيل' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'إلغاء' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'عكس' })).toBeDisabled()
+    })
+    expect(screen.queryByRole('button', { name: 'رفض' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'مراجعة' })).not.toBeInTheDocument()
+    expect(journey.actionCalls).toEqual({
+      Submit: 1,
+      Post: 0,
+      Reject: 1,
+      Revise: 0,
+      Cancel: 1,
+      Reverse: 0,
+    })
+  })
+
   it('hides an action the session permission set denies even when the server policy enables it, and never fires a request for it', async () => {
     const journey = useMutableJourney()
     journey.documents[0] = createWarehouseDocument({
