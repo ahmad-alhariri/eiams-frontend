@@ -223,7 +223,10 @@ function QuantityLineRow({
                   placeholder="0"
                   aria-invalid={fieldState.invalid || undefined}
                   value={typeof quantityField.value === 'number' ? quantityField.value : ''}
-                  onChange={(event) => quantityField.onChange(event.target.value)}
+                  onChange={(event) => {
+                    const next = event.target.value
+                    quantityField.onChange(next === '' ? '' : Number(next))
+                  }}
                 />
               </FormControl>
               <FormMessage />

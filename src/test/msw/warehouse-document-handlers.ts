@@ -7,6 +7,9 @@ import {
   actionsForDocumentStatus,
   createDocumentPolicy,
   createLifecycleEvent,
+  createMaterial,
+  createNamedReference,
+  createWarehouse,
   createWarehouseDocument,
   DOCUMENT_TRANSITIONS,
   fixtureUuid,
@@ -15,17 +18,23 @@ import type {
   DocumentActionType,
   DocumentActionResult,
   DocumentLifecycleEvent,
+  DocumentLine,
+  DocumentLineInput,
   DocumentPolicy,
   DocumentStatus,
   DocumentType,
   LifecycleActorSnapshot,
   LifecycleConflictProblemDetails,
   LifecycleDocumentReference,
+  Material,
+  NamedReference,
   PageMeta,
   ProblemDetails,
   ReasonedDocumentActionRequest,
   VersionOnlyDocumentActionRequest,
+  Warehouse,
   WarehouseDocument,
+  WarehouseDocumentDraftRequest,
 } from '@/shared/types/generated/eiams-v1'
 
 /**
@@ -175,7 +184,9 @@ function problemBase(
   }
 }
 
-function versionConflictProblem(document: WarehouseDocument): LifecycleConflictProblemDetails {
+export function versionConflictProblem(
+  document: WarehouseDocument,
+): LifecycleConflictProblemDetails {
   return {
     ...problemBase(
       'document.version_conflict',
@@ -714,4 +725,247 @@ export function createWarehouseDocumentActionHandler(
       return HttpResponse.json(outcome.result)
     }),
   )
+}
+
+// ---------------------------------------------------------------------------
+// Draft persistence (create / update)
+//
+// POST/PUT /warehouse-documents are shared by every document module (the
+// spine draft endpoints). The draft engine below mirrors the contract:
+// - POST builds a Draft document (rowVersion 1, Created policy) from a
+//   WarehouseDocumentDraftRequest and persists it into an optional store.
+// - PUT applies the request onto an existing record and bumps both the
+//   document and its policy rowVersion — mismatches answer the same 409
+//   `versionConflictProblem` the lifecycle engine uses.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_DRAFT_ACTOR: LifecycleActorSnapshot = {
+  userId: fixtureUuid(10),
+  displayName: 'مستخدم تجريبي',
+  roleNameAr: 'أمين المستودع',
+}
+
+const SYSTEM_REFERENCE_PREFIX: Readonly<Record<DocumentType, string>> = {
+  Adjustment: 'ADJ',
+  Issue: 'ISS',
+  Opening: 'OPN',
+  Receiving: 'RCV',
+  Return: 'RTN',
+  Transfer: 'TRF',
+}
+
+export interface DraftLookups {
+  /** Resolves a draft line's material (full Material snapshot per contract). */
+  materialOf: (materialId: string) => Material | undefined
+  /** Resolves a draft line's selected unit; `undefined` for the base unit. */
+  unitOf: (unitId: string | undefined) => NamedReference | undefined
+  /** Resolves the document warehouse (site snapshot comes from it). */
+  warehouseOf: (warehouseId: string) => Warehouse | undefined
+}
+
+const FALLBACK_LOOKUPS: DraftLookups = {
+  materialOf: (materialId) => createMaterial({ materialId }),
+  unitOf: (unitId) => (unitId === undefined ? undefined : createNamedReference({ id: unitId })),
+  warehouseOf: (warehouseId) => createWarehouse({ warehouseId }),
+}
+
+function resolveLookups(lookups: Partial<DraftLookups> | undefined): DraftLookups {
+  return { ...FALLBACK_LOOKUPS, ...lookups }
+}
+
+function mapDraftLine(
+  input: DocumentLineInput,
+  index: number,
+  lookups: DraftLookups,
+): DocumentLine {
+  const material =
+    lookups.materialOf(input.materialId) ?? createMaterial({ materialId: input.materialId })
+  const unit = lookups.unitOf(input.unitId) ?? material.baseUnit
+  return {
+    ...(input.assetInputs === undefined ? {} : { assetInputs: input.assetInputs }),
+    availableBalance: null,
+    baseQuantity: input.baseQuantity ?? input.quantity,
+    batchNumber: input.batchNumber ?? null,
+    conversionFactor: input.conversionFactor ?? '1.000000',
+    conversionId: input.conversionId ?? null,
+    expiryDate: input.expiryDate ?? null,
+    lineId: input.lineId ?? fixtureUuid(201 + index),
+    lineType: material.materialKind === 'Asset' ? 'Asset' : 'Normal',
+    material,
+    ...(input.openingType === undefined ? {} : { openingType: input.openingType }),
+    quantity: input.quantity,
+    unit,
+    unitPrice: input.unitPrice ?? null,
+  }
+}
+
+function mapDraftLines(lines: readonly DocumentLineInput[], lookups: DraftLookups): DocumentLine[] {
+  return lines.map((line, index) => mapDraftLine(line, index, lookups))
+}
+
+function namedActor(actor: LifecycleActorSnapshot): NamedReference {
+  return createNamedReference({ id: actor.userId, displayName: actor.displayName })
+}
+
+/**
+ * Builds a complete Draft `WarehouseDocument` from a
+ * `WarehouseDocumentDraftRequest` — the shared shape the create handler and
+ * the dev mock both persist. Petals (receiving/issue/transfer/return) pass
+ * through untouched; the spine (header, warehouse/site, lines) is derived.
+ */
+export function buildDraftDocument(
+  request: WarehouseDocumentDraftRequest,
+  options: {
+    documentId: string
+    systemReferenceNumber: string
+    occurredBy?: LifecycleActorSnapshot
+    lookups?: Partial<DraftLookups>
+    createdAt?: string
+  },
+): WarehouseDocument {
+  const lookups = resolveLookups(options.lookups)
+  const actor = options.occurredBy ?? DEFAULT_DRAFT_ACTOR
+  const warehouse =
+    lookups.warehouseOf(request.warehouseId) ??
+    createWarehouse({ warehouseId: request.warehouseId })
+  return {
+    attachments: [],
+    createdAt: options.createdAt ?? new Date().toISOString(),
+    createdBy: namedActor(actor),
+    documentId: options.documentId,
+    documentStatus: 'Draft',
+    documentType: request.documentType,
+    ...(request.issueTo === undefined ? {} : { issueTo: request.issueTo }),
+    lines: mapDraftLines(request.lines, lookups),
+    paperDocumentNumber: request.paperDocumentNumber,
+    paperDocumentYear: request.paperDocumentYear,
+    policy: createDocumentPolicy({
+      documentId: options.documentId,
+      documentStatus: 'Draft',
+      rowVersion: 1,
+    }),
+    postedAt: null,
+    ...(request.receivingInfo === undefined ? {} : { receivingInfo: request.receivingInfo }),
+    ...(request.returnInfo === undefined ? {} : { returnInfo: request.returnInfo }),
+    rowVersion: 1,
+    site: warehouse.site,
+    systemReferenceNumber: options.systemReferenceNumber,
+    ...(request.transferInfo === undefined ? {} : { transferInfo: request.transferInfo }),
+    warehouse: createNamedReference({ id: warehouse.warehouseId, displayName: warehouse.nameAr }),
+  }
+}
+
+/**
+ * Applies a draft request onto an existing document (PUT semantics): replaces
+ * header, lines, and petals; bumps document and policy rowVersion by one. The
+ * lifecycle event chain and immutable spine fields are left untouched.
+ */
+export function applyDraftToDocument(
+  document: WarehouseDocument,
+  request: WarehouseDocumentDraftRequest,
+  lookups: Partial<DraftLookups> | undefined = undefined,
+): WarehouseDocument {
+  const resolved = resolveLookups(lookups)
+  const warehouse =
+    resolved.warehouseOf(request.warehouseId) ??
+    createWarehouse({ warehouseId: request.warehouseId })
+  const nextRowVersion = document.rowVersion + 1
+  return {
+    ...document,
+    documentType: request.documentType,
+    ...(request.issueTo === undefined ? {} : { issueTo: request.issueTo }),
+    lines: mapDraftLines(request.lines, resolved),
+    paperDocumentNumber: request.paperDocumentNumber,
+    paperDocumentYear: request.paperDocumentYear,
+    policy: createDocumentPolicy({
+      documentId: document.documentId,
+      documentStatus: document.documentStatus,
+      rowVersion: nextRowVersion,
+    }),
+    ...(request.receivingInfo === undefined ? {} : { receivingInfo: request.receivingInfo }),
+    ...(request.returnInfo === undefined ? {} : { returnInfo: request.returnInfo }),
+    rowVersion: nextRowVersion,
+    site: warehouse.site,
+    ...(request.transferInfo === undefined ? {} : { transferInfo: request.transferInfo }),
+    warehouse: createNamedReference({ id: warehouse.warehouseId, displayName: warehouse.nameAr }),
+  }
+}
+
+export interface DraftPersistenceHandlerOptions {
+  /** Live collection the record is read from / written into on PUT. */
+  documentStore?: () => WarehouseDocument[]
+  /** Called after a successful create, before the 201 response. */
+  onDocumentCreated?: (document: WarehouseDocument) => void
+  /** Called after a successful update, before the 200 response. */
+  onDocumentUpdated?: (document: WarehouseDocument) => void
+  /** Actor stamped on created documents (`createdBy`). */
+  occurredBy?: LifecycleActorSnapshot
+  lookups?: Partial<DraftLookups>
+  /** Per-document-type system reference; defaults to `EIAMS-<PREFIX>-<year>-0001`. */
+  nextSystemReference?: (request: WarehouseDocumentDraftRequest) => string
+  delayMs?: number
+}
+
+const DEFAULT_REFERENCE_SEQUENCE = '0001'
+
+/** POST /warehouse-documents — creates a Draft from the request body. */
+export function createWarehouseDocumentCreateHandler(
+  options: DraftPersistenceHandlerOptions = {},
+): readonly HttpHandler[] {
+  return [
+    http.post(DOCUMENT_PREFIX, async ({ request }) => {
+      await delay(options.delayMs ?? 0)
+      const body = (await request.json()) as WarehouseDocumentDraftRequest
+      const reference =
+        options.nextSystemReference?.(body) ??
+        `EIAMS-${SYSTEM_REFERENCE_PREFIX[body.documentType]}-${body.paperDocumentYear}-${DEFAULT_REFERENCE_SEQUENCE}`
+      const document = buildDraftDocument(body, {
+        documentId: fixtureUuid(900),
+        systemReferenceNumber: reference,
+        ...(options.occurredBy === undefined ? {} : { occurredBy: options.occurredBy }),
+        ...(options.lookups === undefined ? {} : { lookups: options.lookups }),
+      })
+      const store = options.documentStore?.()
+      if (store !== undefined) {
+        store.push(document)
+      }
+      options.onDocumentCreated?.(document)
+      return HttpResponse.json(document, { status: 201 })
+    }),
+  ]
+}
+
+/** PUT /warehouse-documents/:documentId — applies a draft request with a rowVersion guard. */
+export function createWarehouseDocumentUpdateHandler(
+  options: DraftPersistenceHandlerOptions & {
+    initialDocument: WarehouseDocument
+  },
+): readonly HttpHandler[] {
+  let current = options.initialDocument
+  return [
+    http.put(`${DOCUMENT_PREFIX}/:documentId`, async ({ params, request }) => {
+      await delay(options.delayMs ?? 0)
+      const documentId = String(params['documentId'])
+      const store = options.documentStore?.()
+      const stored = store?.find((item) => item.documentId === documentId)
+      const document = stored ?? (current.documentId === documentId ? current : undefined)
+      if (document === undefined) {
+        return notFound()
+      }
+      const body = (await request.json()) as WarehouseDocumentDraftRequest
+      if (body.rowVersion !== document.rowVersion) {
+        return HttpResponse.json(versionConflictProblem(document), { status: 409 })
+      }
+      const updated = applyDraftToDocument(document, body, options.lookups)
+      current = updated
+      if (store !== undefined) {
+        const index = store.findIndex((item) => item.documentId === documentId)
+        if (index !== -1) {
+          store[index] = updated
+        }
+      }
+      options.onDocumentUpdated?.(updated)
+      return HttpResponse.json(updated)
+    }),
+  ]
 }

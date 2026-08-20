@@ -1,0 +1,26 @@
+import type { RouteKey } from '@/config/routes'
+import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+
+/**
+ * Pinned document-list entries shared by the route-driven shared list page
+ * and the per-module page seams (receiving, issue, ...). Kept outside the
+ * component file so both stay fast-refresh compatible.
+ */
+export type DocumentRouteEntry = {
+  documentType: WarehouseDocument['documentType']
+  detailRouteKey: RouteKey
+  routeKey: RouteKey
+  /** New-document route opened by the create action in the list header. */
+  createRouteKey: RouteKey
+  /** Arabic label for the create action, e.g. 'سند استلام جديد'. */
+  createLabelAr: string
+}
+
+/** Receiving list entry — owned by the receiving module seam (e13-t02). */
+export const RECEIVING_DOCUMENT_LIST_ENTRY: DocumentRouteEntry = {
+  routeKey: 'documentReceiving',
+  detailRouteKey: 'documentReceivingDetail',
+  createRouteKey: 'documentReceivingNew',
+  createLabelAr: 'سند استلام جديد',
+  documentType: 'Receiving',
+}

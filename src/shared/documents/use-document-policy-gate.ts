@@ -145,6 +145,7 @@ export function useDocumentPolicyGate(
       documentType: document.documentType,
       policy,
       capability: capabilityEvaluations,
+      documentStatus: document.documentStatus,
     })
   }, [document, policy, effectiveLines, capabilityEvaluations])
 

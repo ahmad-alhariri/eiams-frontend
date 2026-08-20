@@ -1,16 +1,23 @@
+import { IconPlus } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 
-import { ROUTE_METADATA, ROUTE_PATHS, type RouteKey } from '@/config/routes'
+import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
+import {
+  type DocumentRouteEntry,
+  RECEIVING_DOCUMENT_LIST_ENTRY,
+} from '@/shared/documents/document-route-entries'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import type { DocumentListFilters } from '@/shared/documents/use-document-queries'
 import { useDocumentListQuery } from '@/shared/documents/use-document-queries'
+import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { AsyncSelect } from '@/shared/ui/async-select'
+import { Button } from '@/shared/ui/button'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
@@ -18,10 +25,13 @@ import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import { formatDateTime } from '@/shared/utils/format'
 import { pageRows } from '@/shared/utils/table-data'
 
-type DocumentRouteEntry = {
-  documentType: WarehouseDocument['documentType']
-  detailRouteKey: RouteKey
-  routeKey: RouteKey
+export interface DocumentListPageProps {
+  /**
+   * Explicit route entry — module seams (receiving, issue, ...) pin their type
+   * and detail route so the shared page is not bound to pathname lookup.
+   * When omitted, the page derives the entry from the current route path.
+   */
+  entry?: DocumentRouteEntry
 }
 
 const DOCUMENT_STATUS_LABELS_AR: Readonly<Record<WarehouseDocument['documentStatus'], string>> = {
@@ -34,29 +44,33 @@ const DOCUMENT_STATUS_LABELS_AR: Readonly<Record<WarehouseDocument['documentStat
 }
 
 const DOCUMENT_LIST_ROUTE_ENTRIES: Readonly<Record<string, DocumentRouteEntry>> = {
-  [ROUTE_PATHS.documentReceiving]: {
-    routeKey: 'documentReceiving',
-    detailRouteKey: 'documentReceivingDetail',
-    documentType: 'Receiving',
-  },
+  [ROUTE_PATHS.documentReceiving]: RECEIVING_DOCUMENT_LIST_ENTRY,
   [ROUTE_PATHS.documentIssue]: {
     routeKey: 'documentIssue',
     detailRouteKey: 'documentIssueDetail',
+    createRouteKey: 'documentIssueNew',
+    createLabelAr: 'سند إصدار جديد',
     documentType: 'Issue',
   },
   [ROUTE_PATHS.documentTransfer]: {
     routeKey: 'documentTransfer',
     detailRouteKey: 'documentTransferDetail',
+    createRouteKey: 'documentTransferNew',
+    createLabelAr: 'سند تحويل جديد',
     documentType: 'Transfer',
   },
   [ROUTE_PATHS.documentOpening]: {
     routeKey: 'documentOpening',
     detailRouteKey: 'documentOpeningDetail',
+    createRouteKey: 'documentOpeningNew',
+    createLabelAr: 'سند رصيد افتتاحي جديد',
     documentType: 'Opening',
   },
   [ROUTE_PATHS.documentReturn]: {
     routeKey: 'documentReturn',
     detailRouteKey: 'documentReturnDetail',
+    createRouteKey: 'documentReturnNew',
+    createLabelAr: 'سند إرجاع جديد',
     documentType: 'Return',
   },
 }
@@ -69,12 +83,13 @@ const documentColumnHelper = createColumnHelper<typeof dataTableFeatures, Wareho
  * type detail route. The table is a contract-backed server-side list (search,
  * status filter, warehouse filter, pagination) — no client-side data.
  */
-function DocumentListPage() {
+function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) {
   const location = useLocation()
-  const routeEntry = DOCUMENT_LIST_ROUTE_ENTRIES[location.pathname]
+  const routeEntry = explicitEntry ?? DOCUMENT_LIST_ROUTE_ENTRIES[location.pathname]
   const documentType = routeEntry?.documentType
 
   const { page: currentPage, pageSize, setPage, setPageSize } = useServerPagination()
+  const { has } = usePermission()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<WarehouseDocument['documentStatus'] | undefined>()
   const [warehouseId, setWarehouseId] = useState<string | undefined>()
@@ -181,6 +196,18 @@ function DocumentListPage() {
       <PageHeader
         title={ROUTE_METADATA[routeEntry.routeKey].labelAr}
         subtitle={`سجل سندات هذا النوع ضمن نطاق العمل الحالي، مع بحث نصي وتصفية حسب الحالة والمستودع.`}
+        actions={
+          has('document.create') ? (
+            <Button
+              type="button"
+              nativeButton={false}
+              render={<Link to={ROUTE_PATHS[routeEntry.createRouteKey]} />}
+            >
+              <IconPlus aria-hidden data-icon="inline-start" />
+              {routeEntry.createLabelAr}
+            </Button>
+          ) : null
+        }
         toolbar={
           <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2">
             <div className="flex min-w-44 flex-col gap-2">

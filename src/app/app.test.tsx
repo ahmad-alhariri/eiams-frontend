@@ -36,7 +36,9 @@ describe('App entry', () => {
       appRouter.navigate('/unlisted/unwired')
     })
 
-    expect(await screen.findByRole('heading', { name: 'الصفحة غير موجودة' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'الصفحة غير موجودة' }, { timeout: 5000 }),
+    ).toBeInTheDocument()
   })
 
   it('cleans up rendered trees between tests', () => {

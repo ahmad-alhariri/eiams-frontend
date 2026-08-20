@@ -270,4 +270,37 @@ describe('AttachmentPanel — signed-original gate status row', () => {
       'النسخة الأصلية الموقعة مرفوعة',
     )
   })
+
+  it('reports the gate as moot on a Posted document even when the policy is unsatisfied', () => {
+    renderPanel({
+      documentStatus: 'Posted',
+      policy: { signedOriginalSatisfied: false, blockers: [] },
+    })
+
+    expect(screen.getByTestId('attachment-gate-moot')).toHaveTextContent(
+      'النسخة الموقعة غير مطلوبة بعد الآن',
+    )
+    expect(screen.queryByTestId('attachment-gate-missing')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('attachment-gate-satisfied')).not.toBeInTheDocument()
+  })
+
+  it('reports the gate as moot on Reversed and Cancelled documents', () => {
+    const first = renderPanel({ documentStatus: 'Reversed' })
+    expect(first.getByTestId('attachment-gate-moot')).toBeInTheDocument()
+    first.unmount()
+
+    const second = renderPanel({ documentStatus: 'Cancelled' })
+    expect(second.getByTestId('attachment-gate-moot')).toBeInTheDocument()
+    second.unmount()
+  })
+
+  it('still warns on Draft and Submitted documents', () => {
+    const first = renderPanel({ documentStatus: 'Draft' })
+    expect(first.getByTestId('attachment-gate-missing')).toBeInTheDocument()
+    first.unmount()
+
+    const second = renderPanel({ documentStatus: 'Submitted' })
+    expect(second.getByTestId('attachment-gate-missing')).toBeInTheDocument()
+    second.unmount()
+  })
 })

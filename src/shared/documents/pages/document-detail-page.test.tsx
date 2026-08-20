@@ -177,7 +177,9 @@ describe('DocumentDetailPage', () => {
     expect(screen.getByText('عبوة')).toBeInTheDocument()
 
     expect(screen.getByText('signed-receiving.pdf')).toBeInTheDocument()
-    expect(screen.getByText('النسخة الأصلية الموقعة مرفوعة')).toBeInTheDocument()
+    expect(screen.getByTestId('attachment-gate-moot')).toHaveTextContent(
+      'النسخة الموقعة غير مطلوبة بعد الآن',
+    )
 
     expect(screen.getByRole('button', { name: 'العودة إلى سندات الاستلام' })).toHaveAttribute(
       'href',
