@@ -27,3 +27,8 @@ coverage
 *.sln
 *.sw?
 
+# Local QA evidence (screenshots captured by browser QA agents)
+qa-artifacts/
+qa-evidence/
+qa-shots/
+

@@ -403,6 +403,7 @@ export function DocumentDetailBody({
             documentType: document.documentType,
             policy,
             capability: EMPTY_CAPABILITY_EVALUATIONS,
+            documentStatus: document.documentStatus,
           }),
     [document, policy],
   )
@@ -533,6 +534,7 @@ export function DocumentDetailBody({
           isUploading={attachmentMutationProps?.isUploading ?? false}
           uploadError={attachmentMutationProps?.uploadError ?? null}
           policy={attachmentPolicy}
+          documentStatus={document.documentStatus}
           readOnly={attachmentsReadOnly}
         />
       </ContentCard>

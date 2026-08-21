@@ -137,6 +137,13 @@ function AsyncSelect<T>({
   // Set when the user selects an option so the label re-search that follows
   // (Base UI fills the input with the label) does not pop the panel open again.
   const selectionDismissedRef = useRef(false)
+  // True while the user is still typing a query that has not been re-published
+  // yet. The panel closes per keystroke (typing closes the panel), and jsdom
+  // completes the close transition instantly, so the close-completion's
+  // input-to-label sync would wipe the typed text mid-search. The sync is
+  // skipped only then; real dismissals (Escape, outside-press, selection) run
+  // it and clear the query as intended.
+  const retypingRef = useRef(false)
 
   useEffect(() => {
     loadOptionsRef.current = loadOptions
@@ -219,6 +226,7 @@ function AsyncSelect<T>({
           return
         }
         setResult({ query, options: loaded.slice(0, maxResults), status: 'success' })
+        retypingRef.current = false
         if (!openRef.current && !selectionDismissedRef.current) {
           openRef.current = true
           setOpen(true)
@@ -230,6 +238,7 @@ function AsyncSelect<T>({
           return
         }
         setResult({ query, options: [], status: 'error' })
+        retypingRef.current = false
         if (!openRef.current && !selectionDismissedRef.current) {
           openRef.current = true
           setOpen(true)
@@ -251,11 +260,24 @@ function AsyncSelect<T>({
       setOpen(false)
       return
     }
+    // Programmatic clears (Base UI's internal `Event('base-ui')` fallback event)
+    // are the input-to-selected-label sync that runs when a popup close
+    // completes. jsdom completes the close transition instantly after opening,
+    // so a typing-close (panel closes per keystroke) would wipe the query
+    // mid-search; browsers only reach the sync after a real close. While the
+    // user is still typing (`retypingRef`) the text must survive — the create
+    // row commits it. Real dismissals (Escape, outside-press) and real user
+    // clears (deleting the text, which carries a genuine native event) pass
+    // through and clear as intended.
+    if (next === '' && eventDetails.event?.type === 'base-ui' && retypingRef.current) {
+      return
+    }
     setInputText(next)
     selectionDismissedRef.current = false
     // Typing closes the panel while a new query loads; the loader publish
     // re-opens it. If fresh results already exist for this exact query, keep
     // (or re-open) the panel immediately — no new load is in flight.
+    retypingRef.current = true
     const nextMatches =
       result != null && result.query === next.trim() && result.status === 'success'
     if (nextMatches) {
@@ -352,7 +374,12 @@ function AsyncSelect<T>({
                   <button
                     type="button"
                     data-slot="async-select-create"
-                    onClick={() => onCreate(trimmedQuery)}
+                    onClick={() => {
+                      onCreate(trimmedQuery)
+                      openRef.current = false
+                      setOpen(false)
+                      onOpenChangeProp?.(false)
+                    }}
                     className="relative flex w-full min-w-0 cursor-default items-center gap-2 rounded-sm px-3 py-2 text-start text-base text-muted-foreground outline-none transition-colors select-none hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                   >
                     <IconPlus aria-hidden className="size-4 shrink-0 text-mountain-teal" />

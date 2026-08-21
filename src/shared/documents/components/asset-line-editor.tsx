@@ -32,11 +32,25 @@ import type { CapabilityOperation, Material } from '@/shared/types/generated/eia
 // The editor is a component file by contract; its schema and draft mapper live
 // in ../schemas/document-lines.schemas.ts (e12-t05).
 
+/**
+ * Form shape the editor reads: the `lines` group a dedicated asset-capture
+ * page carries, plus the `assetLines` group mixed-document pages compose so
+ * quantity and asset editors coexist in one form.
+ */
+type AssetLineFieldValues = AssetLinesContainer & { assetLines: AssetLineValues[] }
+type AssetLineFieldName = keyof AssetLineFieldValues & string
+
 export interface AssetLineEditorProps {
   /** Only document types that register new asset records (Receiving | Opening). */
   documentType: AssetLineDocumentType
   warehouseId: string | undefined
   disabled?: boolean
+  /**
+   * Form-group name the editor's FieldArray reads. Pages that compose the
+   * quantity and asset editors side by side pass a distinct group (e.g.
+   * `assetLines`) so the two `lines`-shaped containers coexist in one form.
+   */
+  namePrefix?: AssetLineFieldName
 }
 
 /** Inbound opening balances share the Receiving capability operation. */
@@ -88,6 +102,7 @@ function MaterialSelectorControl({
 interface AssetUnitCardProps {
   disabled: boolean
   lineIndex: number
+  namePrefix: AssetLineFieldName
   unitIndex: number
   onRemove: () => void
 }
@@ -99,9 +114,15 @@ interface AssetUnitCardProps {
  * remove-unit action. Every control is a FormField with Arabic labels and
  * inline errors; ltr text inputs for the identifiers.
  */
-function AssetUnitCard({ disabled, lineIndex, unitIndex, onRemove }: AssetUnitCardProps) {
-  const { control } = useFormContext<AssetLinesContainer>()
-  const basePath = `lines.${lineIndex}.assetInputs.${unitIndex}` as const
+function AssetUnitCard({
+  disabled,
+  lineIndex,
+  namePrefix,
+  unitIndex,
+  onRemove,
+}: AssetUnitCardProps) {
+  const { control } = useFormContext<AssetLineFieldValues>()
+  const basePath = `${namePrefix}.${lineIndex}.assetInputs.${unitIndex}` as const
   return (
     <fieldset
       data-slot="asset-unit-card"
@@ -212,6 +233,7 @@ interface AssetLineRowProps {
   disabled: boolean
   index: number
   loadMaterials: OptionLoader<Material>
+  namePrefix: AssetLineFieldName
   onRemove: () => void
   operation: CapabilityOperation
   scopeReady: boolean
@@ -230,14 +252,17 @@ function AssetLineRow({
   disabled,
   index,
   loadMaterials,
+  namePrefix,
   onRemove,
   operation,
   scopeReady,
   validates,
 }: AssetLineRowProps) {
   const { control, getValues, setValue, setError, clearErrors } =
-    useFormContext<AssetLinesContainer>()
-  const line = (useWatch({ control, name: `lines.${index}` }) ?? {}) as Partial<AssetLineValues>
+    useFormContext<AssetLineFieldValues>()
+  const line = (useWatch({ control, name: `${namePrefix}.${index}` }) ??
+    {}) as Partial<AssetLineValues>
+  const linePath = `${namePrefix}.${index}` as const
 
   const assetInputs = line.assetInputs ?? []
   const quantity = line.quantity ?? assetInputs.length
@@ -256,35 +281,35 @@ function AssetLineRow({
       !isAssetMaterial(payload)
     ) {
       onMaterialIdChange('')
-      setError(`lines.${index}.materialId`, {
+      setError(`${linePath}.materialId`, {
         type: 'manual',
         message: 'يجب اختيار مادة من نوع أصل لهذا البند.',
       })
       return
     }
-    clearErrors(`lines.${index}.materialId`)
+    clearErrors(`${linePath}.materialId`)
     onMaterialIdChange(nextValue ?? '')
-    setValue(`lines.${index}.materialNameAr`, payload?.nameAr ?? '')
-    setValue(`lines.${index}.materialDomainId`, payload?.domain.id ?? '')
-    setValue(`lines.${index}.baseUnitId`, payload?.baseUnit.id ?? '')
-    setValue(`lines.${index}.baseUnitNameAr`, payload?.baseUnit.displayName ?? '')
+    setValue(`${linePath}.materialNameAr`, payload?.nameAr ?? '')
+    setValue(`${linePath}.materialDomainId`, payload?.domain.id ?? '')
+    setValue(`${linePath}.baseUnitId`, payload?.baseUnit.id ?? '')
+    setValue(`${linePath}.baseUnitNameAr`, payload?.baseUnit.displayName ?? '')
     if (payload !== undefined) {
-      setValue(`lines.${index}.assetInputs`, [createEmptyAssetInput()])
-      setValue(`lines.${index}.quantity`, 1)
+      setValue(`${linePath}.assetInputs`, [createEmptyAssetInput()])
+      setValue(`${linePath}.quantity`, 1)
     }
   }
 
   const addUnit = () => {
-    const current = getValues(`lines.${index}.assetInputs`) ?? []
-    setValue(`lines.${index}.assetInputs`, [...current, createEmptyAssetInput()])
-    setValue(`lines.${index}.quantity`, current.length + 1)
+    const current = getValues(`${linePath}.assetInputs`) ?? []
+    setValue(`${linePath}.assetInputs`, [...current, createEmptyAssetInput()])
+    setValue(`${linePath}.quantity`, current.length + 1)
   }
 
   const removeUnit = (unitIndex: number) => {
-    const current = getValues(`lines.${index}.assetInputs`) ?? []
+    const current = getValues(`${linePath}.assetInputs`) ?? []
     const remaining = current.filter((_unit, itemIndex) => itemIndex !== unitIndex)
-    setValue(`lines.${index}.assetInputs`, remaining)
-    setValue(`lines.${index}.quantity`, remaining.length)
+    setValue(`${linePath}.assetInputs`, remaining)
+    setValue(`${linePath}.quantity`, remaining.length)
   }
 
   return (
@@ -296,7 +321,7 @@ function AssetLineRow({
       <legend className="px-1 text-sm font-medium text-foreground">بند الأصول {index + 1}</legend>
       <FormField
         control={control}
-        name={`lines.${index}.materialId`}
+        name={`${linePath}.materialId`}
         render={({ field: materialField }) => (
           <FormItem>
             <FormLabel>المادة (أصل)</FormLabel>
@@ -331,6 +356,7 @@ function AssetLineRow({
             <AssetUnitCard
               key={`${unitIndex}-${line.lineId ?? 'new'}`}
               lineIndex={index}
+              namePrefix={namePrefix}
               unitIndex={unitIndex}
               disabled={disabled}
               onRemove={() => removeUnit(unitIndex)}
@@ -385,25 +411,38 @@ function AssetLineRow({
  * read-only — asset lines are base-unit counted and never offer unit
  * conversion (`unitId`/`conversionId` stay absent).
  *
- * RHF contract: the editor reads the page's form context through the `lines`
- * name prefix, mirroring {@link AssetLinesContainer}; pages compose
- * `assetLinesSchema` into their resolver, pass `documentType` and the header
- * `warehouseId` for capability hints, and flatten the lines through
- * `toAssetLineInputs` into `buildDraftRequest`. The server allocates a
- * missing institutional asset number at POST, so drafts accept rows with
- * empty asset numbers.
+ * RHF contract: the editor reads the page's form context through the
+ * `namePrefix` group (default `lines`), mirroring {@link AssetLinesContainer};
+ * pages compose `assetLinesSchema` into their resolver, pass `documentType`
+ * and the header `warehouseId` for capability hints, and flatten the lines
+ * through `toAssetLineInputs` into `buildDraftRequest`. Mixed-document pages
+ * (quantity + asset lines in one form) pass `namePrefix="assetLines"` so the
+ * two `lines`-shaped containers coexist. The server allocates a missing
+ * institutional asset number at POST, so drafts accept rows with empty asset
+ * numbers.
  */
 export function AssetLineEditor({
   documentType,
   warehouseId,
   disabled = false,
+  namePrefix = 'lines',
 }: AssetLineEditorProps) {
-  const { control, formState } = useFormContext<AssetLinesContainer>()
-  const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
+  const { control, formState } = useFormContext<AssetLineFieldValues>()
+  const { fields, append, remove } = useFieldArray<AssetLineFieldValues, AssetLineFieldName>({
+    control,
+    name: namePrefix,
+  })
   const materialSelector = useScopedMaterialSelector(true)
   const { loadOptions: loadAllOptions, scopeReady } = materialSelector
   const capabilityValidation = useWarehouseCapabilityValidation(warehouseId)
   const operation = capabilityOperationFor(documentType)
+  const linesErrorMessage = (
+    formState.errors as Record<
+      string,
+      { root?: { message?: string }; message?: string } | undefined
+    >
+  )[namePrefix]
+  const linesError = linesErrorMessage?.root?.message ?? linesErrorMessage?.message
 
   const loadAssetMaterials = useMemo<OptionLoader<Material>>(
     () => async (query) => {
@@ -428,6 +467,7 @@ export function AssetLineEditor({
             index={index}
             disabled={disabled}
             loadMaterials={loadAssetMaterials}
+            namePrefix={namePrefix}
             onRemove={() => remove(index)}
             operation={operation}
             scopeReady={scopeReady}
@@ -435,9 +475,9 @@ export function AssetLineEditor({
           />
         ))
       )}
-      {(formState.errors.lines?.root?.message ?? formState.errors.lines?.message) ? (
+      {linesError !== undefined ? (
         <p role="alert" className="text-sm text-destructive">
-          {formState.errors.lines?.root?.message ?? formState.errors.lines?.message}
+          {linesError}
         </p>
       ) : null}
       <Button

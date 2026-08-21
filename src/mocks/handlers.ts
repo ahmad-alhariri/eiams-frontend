@@ -14,6 +14,8 @@ import {
 } from '@/test/msw/factories'
 import {
   applyDocumentAction,
+  applyDraftToDocument,
+  buildDraftDocument,
   createIdempotencyMemo,
   idempotencyMismatchProblem,
   WAREHOUSE_DOCUMENT_STATUSES,
@@ -23,6 +25,7 @@ import { readRequestForm } from '@/test/msw/multipart-parser'
 import type {
   AttachmentType,
   DocumentActionType,
+  DocumentType,
   EmployeeUpsertRequest,
   ExternalPartyUpsertRequest,
   LifecycleActorSnapshot,
@@ -43,6 +46,7 @@ import type {
   VersionOnlyDocumentActionRequest,
   WarehouseCapabilityUpsertRequest,
   WarehouseDocument,
+  WarehouseDocumentDraftRequest,
   WarehouseMaterialSetting,
   WarehouseMaterialSettingUpsertRequest,
   WarehouseUpsertRequest,
@@ -252,6 +256,41 @@ function documentActor(): LifecycleActorSnapshot {
     userId: session.user.userId,
     displayName: session.user.displayName,
     roleNameAr: session.activeRoles[0]?.nameAr ?? null,
+  }
+}
+
+const DOCUMENT_REFERENCE_PREFIX: Readonly<Record<DocumentType, string>> = {
+  Adjustment: 'ADJ',
+  Issue: 'ISS',
+  Opening: 'OPN',
+  Receiving: 'RCV',
+  Return: 'RTN',
+  Transfer: 'TRF',
+}
+
+function nextSystemReferenceNumber(documentType: DocumentType, year: number): string {
+  const db = getDb()
+  const sequence =
+    db.warehouseDocuments.filter(
+      (document) => document.documentType === documentType && document.paperDocumentYear === year,
+    ).length + 1
+  return `EIAMS-${DOCUMENT_REFERENCE_PREFIX[documentType]}-${year}-${String(sequence).padStart(4, '0')}`
+}
+
+function draftLookups() {
+  const db = getDb()
+  return {
+    materialOf: (materialId: string) =>
+      db.materials.find((material) => material.materialId === materialId),
+    unitOf: (unitId: string | undefined) => {
+      if (unitId === undefined) {
+        return undefined
+      }
+      const conversion = db.unitConversions.find((item) => item.conversionId === unitId)
+      return conversion?.fromUnit ?? createNamedReference({ id: unitId })
+    },
+    warehouseOf: (warehouseId: string) =>
+      db.warehouses.find((warehouse) => warehouse.warehouseId === warehouseId),
   }
 }
 
@@ -1047,6 +1086,25 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     },
   ),
 
+  // --- Receiving: supplier suggestions --------------------------------------
+  http.get(`${environment.apiBaseUrl}/receiving/suppliers`, async ({ request }) => {
+    await delay(120)
+    const search = new URL(request.url).searchParams.get('search') ?? ''
+    const distinct = [
+      ...new Set(
+        getDb().warehouseDocuments.flatMap((document) =>
+          document.receivingInfo === undefined ? [] : [document.receivingInfo.supplierRef],
+        ),
+      ),
+    ]
+    const normalized = search.trim().toLocaleLowerCase('ar')
+    const matches =
+      normalized.length === 0
+        ? distinct
+        : distinct.filter((supplier) => supplier.toLocaleLowerCase('ar').includes(normalized))
+    return HttpResponse.json(matches.slice(0, 10))
+  }),
+
   // --- Warehouse documents (shared document engine) -------------------------
   http.get(`${DOCUMENT_PREFIX}`, async ({ request }) => {
     await delay(150)
@@ -1059,6 +1117,38 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       }),
     )
     return pagedResponse(filtered, raw)
+  }),
+  http.post(`${DOCUMENT_PREFIX}`, async ({ request }) => {
+    await delay(120)
+    const body = (await request.json()) as WarehouseDocumentDraftRequest
+    const db = getDb()
+    const document = buildDraftDocument(body, {
+      documentId: nextFixtureUuid(),
+      systemReferenceNumber: nextSystemReferenceNumber(body.documentType, body.paperDocumentYear),
+      occurredBy: documentActor(),
+      lookups: draftLookups(),
+    })
+    db.warehouseDocuments.push(document)
+    db.documentLifecycleEvents[document.documentId] = deriveLifecycleEvents(document)
+    return HttpResponse.json(document, { status: 201 })
+  }),
+  http.put(`${DOCUMENT_PREFIX}/:documentId`, async ({ params, request }) => {
+    await delay(120)
+    const db = getDb()
+    const index = db.warehouseDocuments.findIndex(
+      (item) => item.documentId === params['documentId'],
+    )
+    if (index === -1) {
+      return notFound()
+    }
+    const current = db.warehouseDocuments[index]!
+    const body = (await request.json()) as WarehouseDocumentDraftRequest
+    if (body.rowVersion !== current.rowVersion) {
+      return HttpResponse.json(versionConflictProblem(current), { status: 409 })
+    }
+    const updated = applyDraftToDocument(current, body, draftLookups())
+    db.warehouseDocuments[index] = updated
+    return HttpResponse.json(updated)
   }),
   http.get(`${DOCUMENT_PREFIX}/:documentId`, async ({ params }) => {
     const document = getDb().warehouseDocuments.find(

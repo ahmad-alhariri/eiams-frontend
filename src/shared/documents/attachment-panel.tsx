@@ -1,5 +1,6 @@
 import {
   IconAlertTriangle,
+  IconBan,
   IconCheck,
   IconFileText,
   IconRotate,
@@ -8,6 +9,7 @@ import {
 } from '@tabler/icons-react'
 import { useId } from 'react'
 
+import { SIGNED_GATE_MOOT_STATUSES } from '@/shared/documents/document-policy-gates'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { DROPZONE_MAX_SIZE_BYTES, FileDropzone } from '@/shared/feedback/file-dropzone'
 import { useConfirm } from '@/shared/hooks/use-confirm'
@@ -16,6 +18,7 @@ import { Button } from '@/shared/ui/button'
 import type {
   AttachmentType,
   DocumentAttachment,
+  DocumentStatus,
   PolicyBlocker,
 } from '@/shared/types/generated/eiams-v1'
 import { cn } from '@/shared/utils/class-names'
@@ -52,6 +55,9 @@ export type AttachmentPanelProps = {
   uploadError?: string | null
   /** DocumentPolicy slice for the signed-original gate row (display only). */
   policy?: AttachmentPanelPolicy | null
+  /** Current document status; when posting is no longer possible the gate
+   *  row reports the requirement as moot instead of pending (46f2 family). */
+  documentStatus?: DocumentStatus
   /** Hides every mutation control (outside the Draft mutable window). */
   readOnly?: boolean
   /** Transient busy state: controls stay visible but disabled. */
@@ -66,14 +72,30 @@ const DEFAULT_UPLOAD_ERROR = 'تعذر رفع الملف — حاول مرة أ�
 function GateStatusRow({
   policy,
   hasSignedOriginal,
+  documentStatus,
 }: {
   policy: AttachmentPanelPolicy | null | undefined
   hasSignedOriginal: boolean
+  documentStatus: DocumentStatus | undefined
 }) {
   const satisfied = policy ? policy.signedOriginalSatisfied : hasSignedOriginal
   const signedBlocker = policy?.blockers?.find((blocker) =>
     blocker.code.startsWith('signed_original'),
   )
+
+  if (documentStatus !== undefined && SIGNED_GATE_MOOT_STATUSES.has(documentStatus)) {
+    return (
+      <Badge
+        data-slot="attachment-gate-moot"
+        data-testid="attachment-gate-moot"
+        variant="outline"
+        className="gap-1.5"
+      >
+        <IconBan aria-hidden />
+        النسخة الموقعة غير مطلوبة بعد الآن
+      </Badge>
+    )
+  }
 
   if (satisfied) {
     return (
@@ -328,6 +350,7 @@ function AttachmentPanel({
   isUploading,
   uploadError,
   policy,
+  documentStatus,
   readOnly = false,
   disabled = false,
   supportingMaxFiles = 5,
@@ -386,7 +409,11 @@ function AttachmentPanel({
       data-testid="attachment-panel"
       className={cn('flex flex-col gap-6', className)}
     >
-      <GateStatusRow policy={policy} hasSignedOriginal={hasSignedOriginal} />
+      <GateStatusRow
+        policy={policy}
+        hasSignedOriginal={hasSignedOriginal}
+        documentStatus={documentStatus}
+      />
 
       <AttachmentSection
         titleId={signedTitleId}

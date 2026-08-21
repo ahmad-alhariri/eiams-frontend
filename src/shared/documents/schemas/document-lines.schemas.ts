@@ -103,7 +103,7 @@ export interface DocumentLinesContainer {
 }
 
 /** Empty rows carry no material yet; active rows never repeat one material id. */
-function linesHaveUniqueMaterials(lines: readonly { materialId: string }[]): boolean {
+export function linesHaveUniqueMaterials(lines: readonly { materialId: string }[]): boolean {
   const seen = new Set<string>()
   for (const line of lines) {
     if (line.materialId === '') {

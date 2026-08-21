@@ -341,4 +341,95 @@ describe('mock API handlers', () => {
     expect(detail.rowVersion).toBe(nextRowVersion + 1)
     expect(detail.policy.signedOriginalSatisfied).toBe(false)
   })
+
+  it('creates a receiving draft with a sequenced system reference and serves it on detail', async () => {
+    const warehouseId = getDb().warehouses[0]!.warehouseId
+    const { data: created } = await apiClient.post('/warehouse-documents', {
+      documentType: 'Receiving',
+      lines: [
+        {
+          materialId: getDb().materials[0]!.materialId,
+          quantity: 10,
+        },
+      ],
+      paperDocumentNumber: '2024/120',
+      paperDocumentYear: 2024,
+      receivingInfo: { receivingType: 'Supplier', supplierRef: 'مورد جديد' },
+      rowVersion: 0,
+      warehouseId,
+    })
+
+    expect(created).toMatchObject({
+      documentStatus: 'Draft',
+      documentType: 'Receiving',
+      paperDocumentNumber: '2024/120',
+      paperDocumentYear: 2024,
+      receivingInfo: { receivingType: 'Supplier', supplierRef: 'مورد جديد' },
+      rowVersion: 1,
+    })
+    expect(created.systemReferenceNumber).toBe('EIAMS-RCV-2024-0004')
+    expect(created.lines).toHaveLength(1)
+    expect(created.policy.documentStatus).toBe('Draft')
+
+    const { data: detail } = await apiClient.get(`/warehouse-documents/${created.documentId}`)
+    expect(detail.systemReferenceNumber).toBe('EIAMS-RCV-2024-0004')
+
+    const { data: history } = await apiClient.get(
+      `/warehouse-documents/${created.documentId}/history`,
+    )
+    expect(history.events[0]).toMatchObject({ eventType: 'Created', toStatus: 'Draft' })
+  })
+
+  it('updates a draft header and petals, bumping rowVersion; a stale version answers 409', async () => {
+    const draft = getDb().warehouseDocuments[0]!
+    const { data: updated } = await apiClient.put(`/warehouse-documents/${draft.documentId}`, {
+      documentType: 'Receiving',
+      lines: draft.lines.map((line) => ({
+        materialId: line.material.materialId,
+        quantity: line.quantity,
+      })),
+      paperDocumentNumber: '2024/101',
+      paperDocumentYear: 2024,
+      receivingInfo: {
+        receivingType: 'Return',
+        supplierRef: 'مورد محدث',
+        supplierInvoiceRef: 'INV-9',
+      },
+      rowVersion: draft.rowVersion,
+      warehouseId: draft.warehouse.id,
+    })
+    expect(updated.rowVersion).toBe(draft.rowVersion + 1)
+    expect(updated.policy.rowVersion).toBe(draft.rowVersion + 1)
+    expect(updated.receivingInfo).toEqual({
+      receivingType: 'Return',
+      supplierRef: 'مورد محدث',
+      supplierInvoiceRef: 'INV-9',
+    })
+    expect(updated.documentStatus).toBe('Draft')
+
+    const stale = await apiClient
+      .put(`/warehouse-documents/${draft.documentId}`, {
+        documentType: 'Receiving',
+        lines: [],
+        paperDocumentNumber: '2024/101',
+        paperDocumentYear: 2024,
+        rowVersion: draft.rowVersion,
+        warehouseId: draft.warehouse.id,
+      })
+      .catch((error: unknown) => error)
+    expect(stale).toHaveProperty('response.status', 409)
+    expect(stale).toHaveProperty('response.data.code', 'document.version_conflict')
+  })
+
+  it('suggests distinct supplier references from seeded receiving documents', async () => {
+    const { data: suppliers } = await apiClient.get<string[]>('/receiving/suppliers', {
+      params: { search: 'EXT-SUP' },
+    })
+    expect(suppliers).toEqual(['EXT-SUP-001'])
+
+    const { data: empty } = await apiClient.get<string[]>('/receiving/suppliers', {
+      params: { search: 'لا وجود' },
+    })
+    expect(empty).toEqual([])
+  })
 })

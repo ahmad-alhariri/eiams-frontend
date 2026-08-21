@@ -131,6 +131,26 @@ describe('signedOriginalGate', () => {
       messageAr: 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.',
     })
   })
+
+  it('passes for posted/reversed/cancelled documents even when the policy is unsatisfied', () => {
+    for (const status of ['Posted', 'Reversed', 'Cancelled'] as const) {
+      expect(signedOriginalGate(policy({ signedOriginalSatisfied: false }), status)).toEqual({
+        gate: 'signedOriginal',
+        status: 'pass',
+        messageAr: null,
+      })
+    }
+  })
+
+  it('still blocks pre-post statuses when the policy is unsatisfied', () => {
+    for (const status of ['Draft', 'Submitted', 'Rejected'] as const) {
+      expect(signedOriginalGate(policy({ signedOriginalSatisfied: false }), status)).toEqual({
+        gate: 'signedOriginal',
+        status: 'blocked',
+        messageAr: 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.',
+      })
+    }
+  })
 })
 
 describe('evaluateCapabilityGate', () => {
@@ -242,6 +262,17 @@ describe('evaluateDocumentPreflight', () => {
       input({ policy: policy({ signedOriginalSatisfied: true, blockers: [blocker] }) }),
     )
     expect(preflight.blockers).toEqual([blocker])
+  })
+
+  it('does not block a posted document on a stale unsatisfied signed-original policy', () => {
+    const preflight = evaluateDocumentPreflight(
+      input({
+        policy: policy({ signedOriginalSatisfied: false }),
+        documentStatus: 'Posted',
+      }),
+    )
+    expect(preflight.status).not.toBe('blocked')
+    expect(preflight.gates.find((gate) => gate.gate === 'signedOriginal')?.status).toBe('pass')
   })
 
   it('passes SoftFreeze advisories through untouched without ever blocking', () => {

@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createPage, createWarehouse, createWarehouseDocument } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
+import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -22,10 +24,33 @@ const API_BASE_URL = '/api/v1'
 
 const DOCUMENT_ROUTES = ['/documents/receiving', '/documents/opening', '/documents/return'] as const
 
-function createWrapper(initialPath: string) {
+function sessionWith(permissionCodes: readonly string[]): SessionResponse {
+  return {
+    user: {
+      userId: '10000000-0000-4000-8000-000000000001',
+      username: 'document.manager',
+      displayName: 'مدير المستندات',
+      status: 'Active',
+      rowVersion: 1,
+    },
+    permissionCodes: [...permissionCodes],
+    availableScopes: [
+      {
+        scopeType: 'Enterprise',
+        scopeId: null,
+        displayName: 'الهيئة العامة للرقابة والتفتيش',
+      },
+    ],
+    scopeState: 'Selected',
+    activeRoles: [],
+  }
+}
+
+function createWrapper(initialPath: string, permissionCodes: readonly string[] = []) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
+  client.setQueryData(authSessionQueryKey, sessionWith(permissionCodes))
 
   return function QueryWrapper() {
     return (
@@ -37,6 +62,10 @@ function createWrapper(initialPath: string) {
             ))}
             <Route path="/documents/issue" element={<DocumentListPage />} />
             <Route path="/documents/transfer" element={<DocumentListPage />} />
+            <Route
+              path="/documents/receiving/new"
+              element={<span role="status">نموذج استلام جديد</span>}
+            />
             <Route
               path="/documents/:documentType/:documentId"
               element={<span role="status">تفاصيل السند</span>}
@@ -202,5 +231,39 @@ describe('DocumentListPage', () => {
 
     await user.click(await screen.findByRole('link', { name: document.systemReferenceNumber }))
     expect(await screen.findByRole('status')).toHaveTextContent('تفاصيل السند')
+  })
+
+  it('offers the create action to a user with document.create and navigates to the new-document route', async () => {
+    const user = userEvent.setup()
+
+    server.use(
+      http.get(`${API_BASE_URL}/warehouse-documents`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
+    )
+
+    render(<DocumentListPage />, {
+      wrapper: createWrapper('/documents/receiving', ['document.view', 'document.create']),
+    })
+
+    await screen.findByRole('heading', { level: 1, name: 'سندات الاستلام' })
+    const createButton = screen.getByRole('button', { name: 'سند استلام جديد' })
+    expect(createButton).toHaveAttribute('href', '/documents/receiving/new')
+
+    await user.click(createButton)
+    expect(await screen.findByRole('status')).toHaveTextContent('نموذج استلام جديد')
+  })
+
+  it('hides the create action from a user without document.create', async () => {
+    server.use(
+      http.get(`${API_BASE_URL}/warehouse-documents`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
+    )
+
+    render(<DocumentListPage />, {
+      wrapper: createWrapper('/documents/receiving', ['document.view']),
+    })
+
+    await screen.findByRole('heading', { level: 1, name: 'سندات الاستلام' })
+    expect(screen.queryByRole('button', { name: 'سند استلام جديد' })).not.toBeInTheDocument()
   })
 })

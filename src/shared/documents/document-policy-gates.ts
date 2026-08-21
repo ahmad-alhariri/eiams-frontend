@@ -3,6 +3,7 @@ import type {
   DocumentActionType,
   DocumentLine,
   DocumentPolicy,
+  DocumentStatus,
   DocumentType,
   OperationalAdvisory,
   PolicyBlocker,
@@ -170,13 +171,29 @@ const SIGNED_BLOCKER_SUFFIXES: readonly string[] = [
 const SIGNED_GATE_PENDING = 'بانتظار تقييم سياسة الخادم للنسخة الموقعة...'
 const SIGNED_GATE_DEFAULT_BLOCKED = 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.'
 
+/** Statuses where posting is no longer possible: the gate is moot there. */
+export const SIGNED_GATE_MOOT_STATUSES: ReadonlySet<DocumentStatus> = new Set([
+  'Posted',
+  'Reversed',
+  'Cancelled',
+])
+
 function isSignedOriginalBlocker(code: string): boolean {
   // Accepts both the canonical machine codes and the `document.*`-prefixed
   // vocabulary the dev mock API serves.
   return SIGNED_BLOCKER_SUFFIXES.some((suffix) => code === suffix || code.endsWith(`.${suffix}`))
 }
 
-export function signedOriginalGate(policy: DocumentPolicy | null): PreflightGate {
+export function signedOriginalGate(
+  policy: DocumentPolicy | null,
+  documentStatus?: DocumentStatus,
+): PreflightGate {
+  // Once the document moved past posting (posted/reversed/cancelled) the
+  // missing-original alert is stale: the requirement only constrains the
+  // pre-post workflow, so the gate reports pass regardless of the policy.
+  if (documentStatus !== undefined && SIGNED_GATE_MOOT_STATUSES.has(documentStatus)) {
+    return { gate: 'signedOriginal', status: 'pass', messageAr: null }
+  }
   if (policy === null) {
     return { gate: 'signedOriginal', status: 'unknown', messageAr: SIGNED_GATE_PENDING }
   }
@@ -245,6 +262,12 @@ export interface DocumentPreflightInput {
   documentType: DocumentType
   policy: DocumentPolicy | null
   capability: readonly CapabilityEvaluation[]
+  /**
+   * Optional current document status: the signed-original gate turns `pass`
+   * for statuses where posting is no longer possible (Posted/Reversed/
+   * Cancelled) so stale alerts never surface after the transition.
+   */
+  documentStatus?: DocumentStatus
 }
 
 /**
@@ -257,7 +280,7 @@ export interface DocumentPreflightInput {
 export function evaluateDocumentPreflight(input: DocumentPreflightInput): DocumentPreflight {
   const gates: readonly PreflightGate[] = [
     evaluateBalanceGate(input.lines, input.documentType),
-    signedOriginalGate(input.policy),
+    signedOriginalGate(input.policy, input.documentStatus),
     evaluateCapabilityGate(
       input.lines,
       input.capability,
