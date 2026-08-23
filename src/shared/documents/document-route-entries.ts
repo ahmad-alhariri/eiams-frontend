@@ -33,3 +33,12 @@ export const OPENING_DOCUMENT_LIST_ENTRY: DocumentRouteEntry = {
   createLabelAr: 'سند رصيد افتتاحي جديد',
   documentType: 'Opening',
 }
+
+/** Issue list entry — owned by the issue module seam (e16-t02). */
+export const ISSUE_DOCUMENT_LIST_ENTRY: DocumentRouteEntry = {
+  routeKey: 'documentIssue',
+  detailRouteKey: 'documentIssueDetail',
+  createRouteKey: 'documentIssueNew',
+  createLabelAr: 'سند إصدار جديد',
+  documentType: 'Issue',
+}
