@@ -336,11 +336,14 @@ async function serveStdio(port) {
   // Parent kills this process when the tool call completes.
 }
 
+function truncate(text, max = 24000) {
+  return text.length <= max ? text : `${text.slice(0, max)}\n…[truncated ${text.length - max} chars]`
+}
+
 function printContent(content, max = 24000) {
   for (const part of content) {
     if (part.type === 'text') {
-      const text = part.text
-      console.log(text.length <= max ? text : `${text.slice(0, max)}\n…[truncated ${text.length - max} chars]`)
+      console.log(truncate(part.text, max))
     } else if (part.type === 'image') {
       console.log('[inline image omitted]')
     } else {
@@ -444,6 +447,60 @@ async function main() {
       printContent(await callToolOnce(port, 'hover', { uid: args.uid }))
       break
     }
+    case 'click-text': {
+      // One-shot MCP servers cannot carry take_snapshot uids across CLI
+      // invocations, so text-targeted clicking is provided natively: find the
+      // first clickable element whose trimmed innerText contains <text> and
+      // dispatch a real bubbling click (SPA routers respond to it).
+      const text = positional[1]
+      if (!text) throw new Error('click-text requires target text')
+      const fn = `() => {
+        const wanted = ${JSON.stringify(text)}
+        const candidates = [...document.querySelectorAll('a, button, [role=button]')]
+        const el = candidates.find((c) => (c.innerText ?? '').trim().includes(wanted))
+        if (!el) return 'NOT FOUND'
+        el.scrollIntoView({ block: 'center' })
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+        return 'clicked: ' + (el.innerText ?? '').trim().slice(0, 60)
+      }`
+      printContent(await callToolOnce(port, 'evaluate_script', { function: fn }))
+      break
+    }
+    case 'fill-input': {
+      // React-controlled inputs ignore direct value assignment; use the native
+      // value setter plus an input event so RHF state updates. Target by
+      // associated <label> text (--label), input name attr (--name), or
+      // placeholder (--placeholder).
+      const value = String(args.value ?? '')
+      const byLabel = args.label ? JSON.stringify(String(args.label)) : null
+      const byName = args.name ? JSON.stringify(String(args.name)) : null
+      const byPlaceholder = args.placeholder ? JSON.stringify(String(args.placeholder)) : null
+      if (!byLabel && !byName && !byPlaceholder) {
+        throw new Error('fill-input requires one of --label/--name/--placeholder plus --value')
+      }
+      const fn = `() => {
+        let control = null
+        ${byLabel ? `const labels = [...document.querySelectorAll('label')].filter((l) => (l.textContent ?? '').trim().includes(${byLabel}))
+        for (const label of labels) {
+          const forId = label.getAttribute('for')
+          control = (forId && document.getElementById(forId)) || label.querySelector('input, textarea') || (label.closest('[data-slot=form-item]')?.querySelector('input, textarea') ?? null)
+          if (control) break
+        }` : ''}
+        if (!control && ${byName ?? 'null'}) control = document.querySelector(\`input[name="\${${byName}}"], textarea[name="\${${byName}}"]\`)
+        if (!control && ${byPlaceholder ?? 'null'}) control = document.querySelector(\`input[placeholder*="\${${byPlaceholder}}"], textarea[placeholder*="\${${byPlaceholder}}"]\`)
+        if (!control) return 'CONTROL NOT FOUND'
+        control.scrollIntoView({ block: 'center' })
+        control.focus()
+        const proto = control.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set
+        setter?.call(control, ${JSON.stringify(value)})
+        control.dispatchEvent(new Event('input', { bubbles: true }))
+        control.dispatchEvent(new Event('change', { bubbles: true }))
+        return 'filled: ' + (control.name || control.id || 'control')
+      }`
+      printContent(await callToolOnce(port, 'evaluate_script', { function: fn }))
+      break
+    }
     case 'wait-for': {
       const text = positional[1] ?? ''
       if (!text) throw new Error('wait-for requires text')
@@ -475,12 +532,22 @@ async function main() {
       break
     }
     case 'requests': {
-      printContent(
-        await callToolOnce(port, 'list_network_requests', {
-          ...(args.filter ? { urlSubstring: String(args.filter) } : {}),
-        }),
-        16000,
-      )
+      // chrome-devtools-mcp 1.7.0 rejects urlSubstring; filter client-side.
+      const content = await callToolOnce(port, 'list_network_requests', {})
+      const filter = args.filter ? String(args.filter) : null
+      for (const part of content) {
+        if (part.type !== 'text') continue
+        const lines = part.text.split('\n')
+        const filtered = filter
+          ? [
+              lines[0],
+              ...lines.filter((line, index) => index > 0 && line.includes(filter)),
+            ]
+          : lines
+        console.log(
+          truncate(filtered.join('\n'), 16000),
+        )
+      }
       break
     }
     case 'resize': {
