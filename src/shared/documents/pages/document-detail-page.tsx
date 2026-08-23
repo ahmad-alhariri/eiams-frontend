@@ -12,6 +12,7 @@ import {
 import { AttachmentPanel, type AttachmentPanelProps } from '@/shared/documents/attachment-panel'
 import { DocumentConflictDialog } from '@/shared/documents/document-conflict-dialog'
 import { documentReadOnlyReasonAr, isDocumentMutable } from '@/shared/documents/document-read-only'
+import { OPENING_TYPE_LABELS } from '@/shared/documents/schemas/document-lines.schemas'
 import {
   evaluateDocumentPreflight,
   toPreflightLineShapes,
@@ -157,7 +158,7 @@ const NOOP_UPLOAD: (files: File[], attachmentType: AttachmentType) => void = () 
 const NOOP_REMOVE: (attachment: DocumentAttachment) => void = () => undefined
 const NOOP_CANCEL_PENDING: (file: File) => void = () => undefined
 
-const LINES_TABLE_COLUMN_COUNT = 7
+const BASE_LINES_TABLE_COLUMN_COUNT = 7
 
 /**
  * Read-only documents never carry edit-form `materialDomainId` snapshots, so
@@ -224,7 +225,13 @@ function PreflightSummary({ preflight }: { preflight: DocumentPreflight | null }
 }
 
 /** Read-only rendering of the server-owned `document.lines` collection. */
-function DocumentLinesTable({ lines }: { lines: readonly DocumentLine[] }) {
+function DocumentLinesTable({
+  documentType,
+  lines,
+}: {
+  documentType: WarehouseDocument['documentType']
+  lines: readonly DocumentLine[]
+}) {
   if (lines.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
@@ -259,11 +266,20 @@ function DocumentLinesTable({ lines }: { lines: readonly DocumentLine[] }) {
             <th scope="col" className="px-3 py-2 text-start font-medium">
               الرصيد المتاح
             </th>
+            {documentType === 'Opening' ? (
+              <th scope="col" className="px-3 py-2 text-start font-medium">
+                نوع الافتتاحية
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
           {lines.map((line) => (
-            <DocumentLineRow key={line.lineId} line={line} />
+            <DocumentLineRow
+              key={line.lineId}
+              line={line}
+              showOpeningType={documentType === 'Opening'}
+            />
           ))}
         </tbody>
       </table>
@@ -271,7 +287,13 @@ function DocumentLinesTable({ lines }: { lines: readonly DocumentLine[] }) {
   )
 }
 
-function DocumentLineRow({ line }: { line: DocumentLine }) {
+function DocumentLineRow({
+  line,
+  showOpeningType,
+}: {
+  line: DocumentLine
+  showOpeningType: boolean
+}) {
   const assetInputs = line.assetInputs ?? []
   return (
     <>
@@ -300,10 +322,18 @@ function DocumentLineRow({ line }: { line: DocumentLine }) {
             ? '—'
             : formatNumber(line.availableBalance)}
         </td>
+        {showOpeningType ? (
+          <td className="px-3 py-2 text-foreground">
+            {line.openingType === undefined ? '—' : OPENING_TYPE_LABELS[line.openingType]}
+          </td>
+        ) : null}
       </tr>
       {line.lineType === 'Asset' ? (
         <tr data-slot="asset-line-entries" className="border-b border-border last:border-b-0">
-          <td colSpan={LINES_TABLE_COLUMN_COUNT} className="bg-muted/30 px-4 py-2">
+          <td
+            colSpan={BASE_LINES_TABLE_COLUMN_COUNT + (showOpeningType ? 1 : 0)}
+            className="bg-muted/30 px-4 py-2"
+          >
             <p className="text-xs font-semibold text-foreground">
               الأصول المرتبطة — العدد: {toArabicDigits(assetInputs.length)}
             </p>
@@ -518,7 +548,9 @@ export function DocumentDetailBody({
         title="بنود السند"
         description="بنود المستند كما سُجلت عند إنشائه — قراءة فقط من بيانات الخادم."
       >
-        {linesSlot ?? <DocumentLinesTable lines={document.lines} />}
+        {linesSlot ?? (
+          <DocumentLinesTable documentType={document.documentType} lines={document.lines} />
+        )}
       </ContentCard>
 
       <ContentCard

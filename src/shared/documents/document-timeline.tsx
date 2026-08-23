@@ -1,5 +1,7 @@
 import { IconFileText } from '@tabler/icons-react'
+import { Link } from 'react-router'
 
+import { ROUTE_PATHS } from '@/config/routes'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import type {
   DocumentLifecycleEvent,
@@ -43,6 +45,18 @@ const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
 const DEFAULT_TITLE = 'سجل الحالة'
 const EMPTY_MESSAGE = 'لا توجد أحداث بعد'
 
+type WarehouseDocumentRouteType = Exclude<DocumentType, 'Adjustment'>
+
+const DOCUMENT_DETAIL_PATH_FOR_TYPE: Readonly<
+  Record<WarehouseDocumentRouteType, (documentId: string) => string>
+> = {
+  Receiving: (documentId) => ROUTE_PATHS.documentReceivingDetail.replace(':documentId', documentId),
+  Issue: (documentId) => ROUTE_PATHS.documentIssueDetail.replace(':documentId', documentId),
+  Transfer: (documentId) => ROUTE_PATHS.documentTransferDetail.replace(':documentId', documentId),
+  Opening: (documentId) => ROUTE_PATHS.documentOpeningDetail.replace(':documentId', documentId),
+  Return: (documentId) => ROUTE_PATHS.documentReturnDetail.replace(':documentId', documentId),
+}
+
 export type DocumentTimelineProps = {
   /** Immutable lifecycle events from the server, oldest- or newest-first; rendering is chronological either way. */
   events: readonly DocumentLifecycleEvent[]
@@ -60,16 +74,44 @@ function isNewestFirst(events: readonly DocumentLifecycleEvent[]) {
 }
 
 function RelatedDocumentChip({ reference }: { reference: LifecycleDocumentReference }) {
-  return (
-    <span className="inline-flex w-fit items-center gap-1.5 rounded-4xl border border-antique-sand bg-muted/50 px-3 py-1 text-xs text-foreground">
+  const documentTypeLabel = DOCUMENT_TYPE_LABEL[reference.documentType] ?? reference.documentType
+  const content = (
+    <>
       <IconFileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="font-medium">
-        {DOCUMENT_TYPE_LABEL[reference.documentType] ?? reference.documentType}
-      </span>
+      <span className="font-medium">{documentTypeLabel}</span>
       <span dir="ltr" className="font-english text-muted-foreground">
         {reference.systemReferenceNumber}
       </span>
-    </span>
+    </>
+  )
+
+  const detailPath =
+    reference.documentType === 'Adjustment'
+      ? reference.adjustmentId
+        ? ROUTE_PATHS.adjustmentDetail.replace(':adjustmentId', reference.adjustmentId)
+        : undefined
+      : DOCUMENT_DETAIL_PATH_FOR_TYPE[reference.documentType](reference.documentId)
+
+  if (detailPath === undefined) {
+    return (
+      <span
+        role="note"
+        aria-label={`سند ${documentTypeLabel} مرتبط: ${reference.systemReferenceNumber}`}
+        className="inline-flex w-fit items-center gap-1.5 rounded-4xl border border-antique-sand bg-muted/50 px-3 py-1 text-xs text-foreground"
+      >
+        {content}
+      </span>
+    )
+  }
+
+  return (
+    <Link
+      to={detailPath}
+      aria-label={`فتح تفاصيل سند ${documentTypeLabel}: ${reference.systemReferenceNumber}`}
+      className="inline-flex w-fit items-center gap-1.5 rounded-4xl border border-antique-sand bg-muted/50 px-3 py-1 text-xs text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      {content}
+    </Link>
   )
 }
 

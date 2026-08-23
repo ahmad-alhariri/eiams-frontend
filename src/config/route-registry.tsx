@@ -52,8 +52,14 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   ),
   warehouses: lazy(() => import('@/modules/warehouse/pages/warehouses-list-page')),
   warehouseDetail: lazy(() => import('@/modules/warehouse/pages/warehouse-detail-page')),
-  inventoryBalances: routePlaceholderPage,
-  inventoryMovements: routePlaceholderPage,
+  inventoryBalances: lazy(() => import('@/modules/inventory/pages/inventory-balances-page')),
+  inventoryBalanceDetail: lazy(
+    () => import('@/modules/inventory/pages/inventory-balance-detail-page'),
+  ),
+  inventoryMovements: lazy(() => import('@/modules/inventory/pages/stock-movements-page')),
+  inventoryMovementDetail: lazy(
+    () => import('@/modules/inventory/pages/stock-movement-detail-page'),
+  ),
   documentReceiving: lazy(() => import('@/modules/receiving/pages/receiving-documents-list-page')),
   documentReceivingNew: lazy(
     () => import('@/modules/receiving/pages/receiving-document-form-page'),
@@ -67,8 +73,8 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   documentTransfer: lazy(() => import('@/shared/documents/pages/document-list-page')),
   documentTransferNew: routePlaceholderPage,
   documentTransferDetail: lazy(() => import('@/shared/documents/pages/document-detail-page')),
-  documentOpening: lazy(() => import('@/shared/documents/pages/document-list-page')),
-  documentOpeningNew: routePlaceholderPage,
+  documentOpening: lazy(() => import('@/modules/opening/pages/opening-documents-list-page')),
+  documentOpeningNew: lazy(() => import('@/modules/opening/pages/opening-document-form-page')),
   documentOpeningDetail: lazy(() => import('@/shared/documents/pages/document-detail-page')),
   documentReturn: lazy(() => import('@/shared/documents/pages/document-list-page')),
   documentReturnNew: routePlaceholderPage,

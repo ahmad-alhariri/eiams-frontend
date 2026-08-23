@@ -110,6 +110,7 @@ finding. Backend ratification remains a production-integration gate.
 | D-RBAC-01 | `docs/route-permission-scope-matrix.md` | Defines the canonical v1 `resource.verb` permission vocabulary, the route-to-permission guard matrix, scope derivation via the active scope, and the reference seed roles (SYSTEM_ADMIN, DATA_MANAGER, WH_MGR, WH_KEEPER, AUDITOR). | `e01-t07`, `e05-t02`, `e06-t05`, `e06-t06`, `e07-t01`, `e07-t03`, `e12-t12`, `e22-t06`, `e24` |
 | D-MAT-01 | `docs/material-classification-and-custody-decision.md` | Defines the material-kind/tracking/accountability matrix, separates asset number from serial number, and records the required Durable-custody subject/partial-return contract. | `eiams-frontend-bt60`, `e10-t09`, `e01-t02`, `e19-t01`â€“`e19-t09` |
 | D-UOM-01 | `docs/material-unit-conversion-contract-decision.md` | Defines a Material-owned base unit, direct per-material alternate-unit factors, immutable line snapshots, and archive/replace change control for used conversions. The API surface is provisional until backend/API-owner ratification. | `eiams-frontend-vded`, `e10-t11`, `e01-t02` |
+| D-INV-READ-01 | `docs/inventory-read-contract-decision.md` | Defines typed deterministic server sorting, `balanceId` detail identity with scope-concealing 404 behavior, and a server-computed low-stock projection/filter using `quantity <= minQuantity`. | `e14.1`, `e14.2`, `eiams-frontend-otay`, `e14-t01`–`e14-t07`, `e01.7` |
 
 ## Implementation guardrails for downstream work
 

@@ -2,8 +2,8 @@
     "openapi":  "3.0.3",
     "info":  {
                  "title":  "EIAMS API",
-                 "version":  "1.0.0-provisional.6",
-                 "description":  "Provisional design-first API contract derived from the EIAMS PRD 2.0, Schema v5, canonical BDM, and approved decisions including D-AUTH-01, D-LIFE-01, D-MAT-01, and D-UOM-01. Material-unit conversion factors use exact DECIMAL(18,6) JSON strings. Importable into Apidog for mocking and frontend generation. Backend ratification is required before production integration.",
+                 "version":  "1.0.0-provisional.8",
+                 "description":  "Provisional design-first API contract derived from the EIAMS PRD 2.0, Schema v5, canonical BDM, and approved decisions including D-AUTH-01, D-LIFE-01, D-MAT-01, D-UOM-01, and D-INV-READ-01. Material-unit conversion factors use exact DECIMAL(18,6) JSON strings. Importable into Apidog for mocking and frontend generation. Backend ratification is required before production integration.",
                  "contact":  {
                                  "name":  "EIAMS Architecture and Contract Decisions"
                              },
@@ -1937,6 +1937,20 @@
                                                                                  "schema":  {
                                                                                                 "$ref":  "#/components/schemas/Uuid"
                                                                                             }
+                                                                             },
+                                                                             {
+                                                                                 "name":  "lowStockState",
+                                                                                 "in":  "query",
+                                                                                 "description":  "Server-computed low-stock state applied before sorting and pagination.",
+                                                                                 "schema":  {
+                                                                                                "$ref":  "#/components/schemas/InventoryLowStockState"
+                                                                                            }
+                                                                             },
+                                                                             {
+                                                                                 "$ref":  "#/components/parameters/InventoryBalanceSortBy"
+                                                                             },
+                                                                             {
+                                                                                 "$ref":  "#/components/parameters/SortDirectionAscending"
                                                                              }
                                                                          ],
                                                           "responses":  {
@@ -1952,11 +1966,62 @@
                                                                                     },
                                                                             "401":  {
                                                                                         "$ref":  "#/components/responses/Unauthorized"
+                                                                                    },
+                                                                            "403":  {
+                                                                                        "$ref":  "#/components/responses/Forbidden"
+                                                                                    },
+                                                                            "400":  {
+                                                                                        "$ref":  "#/components/responses/BadRequest"
                                                                                     }
                                                                         },
-                                                          "summary":  "List Inventory Balances"
+                                                          "summary":  "List Inventory Balances",
+                                                          "description":  "Effective scope and filters are applied before deterministic server sorting and pagination. Default order: warehouse display name ascending, material display name ascending, balanceId ascending."
                                                       }
                                           },
+                  "/inventory/balances/{balanceId}":  {
+                                                           "get":  {
+                                                                       "tags":  [
+                                                                                    "Inventory"
+                                                                                ],
+                                                                       "operationId":  "getInventoryBalance",
+                                                                       "parameters":  [
+                                                                                          {
+                                                                                              "name":  "balanceId",
+                                                                                              "in":  "path",
+                                                                                              "required":  true,
+                                                                                              "schema":  {
+                                                                                                             "$ref":  "#/components/schemas/Uuid"
+                                                                                                         }
+                                                                                          }
+                                                                                      ],
+                                                                       "responses":  {
+                                                                                         "200":  {
+                                                                                                     "description":  "Scope-authorized inventory balance detail",
+                                                                                                     "content":  {
+                                                                                                                     "application/json":  {
+                                                                                                                                              "schema":  {
+                                                                                                                                                             "$ref":  "#/components/schemas/InventoryBalance"
+                                                                                                                                                         }
+                                                                                                                                          }
+                                                                                                                 }
+                                                                                                 },
+                                                                                         "400":  {
+                                                                                                     "$ref":  "#/components/responses/BadRequest"
+                                                                                                 },
+                                                                                         "401":  {
+                                                                                                     "$ref":  "#/components/responses/Unauthorized"
+                                                                                                 },
+                                                                                         "403":  {
+                                                                                                     "$ref":  "#/components/responses/Forbidden"
+                                                                                                 },
+                                                                                         "404":  {
+                                                                                                     "$ref":  "#/components/responses/NotFound"
+                                                                                                 }
+                                                                                     },
+                                                                       "summary":  "Get Inventory Balance",
+                                                                       "description":  "Returns 404 for both an unknown balance and a balance outside the effective session scope. No client-authored scope parameter is accepted."
+                                                                   }
+                                                       },
                   "/inventory/movements":  {
                                                "get":  {
                                                            "tags":  [
@@ -1999,6 +2064,12 @@
                                                                               },
                                                                               {
                                                                                   "$ref":  "#/components/parameters/DateTo"
+                                                                              },
+                                                                              {
+                                                                                  "$ref":  "#/components/parameters/StockMovementSortBy"
+                                                                              },
+                                                                              {
+                                                                                  "$ref":  "#/components/parameters/SortDirectionDescending"
                                                                               }
                                                                           ],
                                                            "responses":  {
@@ -2014,9 +2085,16 @@
                                                                                      },
                                                                              "401":  {
                                                                                          "$ref":  "#/components/responses/Unauthorized"
+                                                                                     },
+                                                                             "403":  {
+                                                                                         "$ref":  "#/components/responses/Forbidden"
+                                                                                     },
+                                                                             "400":  {
+                                                                                         "$ref":  "#/components/responses/BadRequest"
                                                                                      }
                                                                          },
-                                                           "summary":  "List Stock Movements"
+                                                           "summary":  "List Stock Movements",
+                                                           "description":  "Effective scope and filters are applied before deterministic server sorting and pagination. Default order: postedAt descending, movementId descending."
                                                        }
                                            },
                   "/inventory/movements/{movementId}":  {
@@ -4513,6 +4591,56 @@
                                                                                  "$ref":  "#/components/schemas/Uuid"
                                                                              }
                                                               },
+                                          "InventoryBalanceSortBy":  {
+                                                                         "name":  "sortBy",
+                                                                         "in":  "query",
+                                                                         "schema":  {
+                                                                                        "allOf":  [
+                                                                                                      {
+                                                                                                          "$ref":  "#/components/schemas/InventoryBalanceSortField"
+                                                                                                      }
+                                                                                                  ],
+                                                                                        "default":  "WarehouseDisplayName"
+                                                                                    },
+                                                                         "description":  "Primary balance sort field. Stable warehouse/material/balanceId tie-breakers are server-owned."
+                                                                     },
+                                          "StockMovementSortBy":  {
+                                                                     "name":  "sortBy",
+                                                                     "in":  "query",
+                                                                     "schema":  {
+                                                                                    "allOf":  [
+                                                                                                  {
+                                                                                                      "$ref":  "#/components/schemas/StockMovementSortField"
+                                                                                                  }
+                                                                                              ],
+                                                                                    "default":  "PostedAt"
+                                                                                },
+                                                                     "description":  "Primary movement sort field. Stable postedAt/movementId tie-breakers are server-owned."
+                                                                 },
+                                          "SortDirectionAscending":  {
+                                                                           "name":  "sortDirection",
+                                                                           "in":  "query",
+                                                                           "schema":  {
+                                                                                          "allOf":  [
+                                                                                                        {
+                                                                                                            "$ref":  "#/components/schemas/SortDirection"
+                                                                                                        }
+                                                                                                    ],
+                                                                                          "default":  "Ascending"
+                                                                                      }
+                                                                       },
+                                          "SortDirectionDescending":  {
+                                                                            "name":  "sortDirection",
+                                                                            "in":  "query",
+                                                                            "schema":  {
+                                                                                           "allOf":  [
+                                                                                                         {
+                                                                                                             "$ref":  "#/components/schemas/SortDirection"
+                                                                                                         }
+                                                                                                     ],
+                                                                                           "default":  "Descending"
+                                                                                       }
+                                                                        },
                                           "IdempotencyKey":  {
                                                                  "name":  "Idempotency-Key",
                                                                  "in":  "header",
@@ -4777,6 +4905,62 @@
                                                                          "Inactive"
                                                                      ]
                                                         },
+                                       "SortDirection":  {
+                                                             "type":  "string",
+                                                             "enum":  [
+                                                                          "Ascending",
+                                                                          "Descending"
+                                                                      ]
+                                                         },
+                                       "InventoryBalanceSortField":  {
+                                                                         "type":  "string",
+                                                                         "enum":  [
+                                                                                      "WarehouseDisplayName",
+                                                                                      "MaterialDisplayName",
+                                                                                      "Quantity",
+                                                                                      "LastUpdated"
+                                                                                  ]
+                                                                     },
+                                       "StockMovementSortField":  {
+                                                                     "type":  "string",
+                                                                     "enum":  [
+                                                                                  "PostedAt",
+                                                                                  "WarehouseDisplayName",
+                                                                                  "MaterialDisplayName",
+                                                                                  "MovementType",
+                                                                                  "QuantityDelta"
+                                                                              ]
+                                                                 },
+                                       "InventoryLowStockState":  {
+                                                                     "type":  "string",
+                                                                     "enum":  [
+                                                                                  "Low",
+                                                                                  "Sufficient",
+                                                                                  "NotConfigured",
+                                                                                  "Disabled"
+                                                                              ],
+                                                                     "description":  "Server-computed low-stock state using the active warehouse material setting minQuantity."
+                                                                 },
+                                       "InventoryLowStockProjection":  {
+                                                                          "type":  "object",
+                                                                          "required":  [
+                                                                                           "state",
+                                                                                           "thresholdQuantity"
+                                                                                       ],
+                                                                          "properties":  {
+                                                                                             "state":  {
+                                                                                                           "$ref":  "#/components/schemas/InventoryLowStockState"
+                                                                                                       },
+                                                                                             "thresholdQuantity":  {
+                                                                                                                       "type":  "number",
+                                                                                                                       "format":  "double",
+                                                                                                                       "minimum":  0,
+                                                                                                                       "nullable":  true,
+                                                                                                                       "description":  "Active minQuantity used for comparison; null when alerting is unconfigured or disabled."
+                                                                                                                   }
+                                                                                         },
+                                                                          "description":  "Low when quantity is less than or equal to an active non-null minQuantity; Sufficient when greater; NotConfigured for missing/null settings; Disabled for inactive settings."
+                                                                      },
                                        "UserAccountStatus":  {
                                                                  "type":  "string",
                                                                  "enum":  [
@@ -6665,7 +6849,8 @@
                                                                                  "material",
                                                                                  "quantity",
                                                                                  "lastUpdated",
-                                                                                 "rowVersion"
+                                                                                 "rowVersion",
+                                                                                 "lowStock"
                                                                              ],
                                                                 "properties":  {
                                                                                    "balanceId":  {
@@ -6688,6 +6873,9 @@
                                                                                    "rowVersion":  {
                                                                                                       "type":  "integer",
                                                                                                       "format":  "int64"
+                                                                                                  },
+                                                                                   "lowStock":  {
+                                                                                                    "$ref":  "#/components/schemas/InventoryLowStockProjection"
                                                                                                   }
                                                                                }
                                                             },
@@ -9078,6 +9266,14 @@
                                                                                              "documentId":  {
                                                                                                                 "$ref":  "#/components/schemas/Uuid"
                                                                                                             },
+                                                                                             "adjustmentId":  {
+                                                                                                                  "allOf":  [
+                                                                                                                                {
+                                                                                                                                    "$ref":  "#/components/schemas/Uuid"
+                                                                                                                                }
+                                                                                                                            ],
+                                                                                                                  "description":  "Authoritative InventoryAdjustment route identity. Present when documentType is Adjustment; absent for WarehouseDocument routes."
+                                                                                                              },
                                                                                              "systemReferenceNumber":  {
                                                                                                                            "type":  "string"
                                                                                                                        },

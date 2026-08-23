@@ -242,6 +242,7 @@ describe('QuantityLineEditor', () => {
 
   it('surfaces a blocked warehouse capability as an Arabic hint per row', async () => {
     const user = userEvent.setup()
+    const onCapabilityGateChange = vi.fn()
     const warehouseId = fixtureUuid(30)
     const capability = createWarehouseCapability({
       warehouseId,
@@ -260,7 +261,15 @@ describe('QuantityLineEditor', () => {
     )
     useCatalogHandlers()
     const { host } = createTestHost()
-    render(host(() => <QuantityLineEditor documentType="Receiving" warehouseId={warehouseId} />))
+    render(
+      host(() => (
+        <QuantityLineEditor
+          documentType="Receiving"
+          warehouseId={warehouseId}
+          onCapabilityGateChange={onCapabilityGateChange}
+        />
+      )),
+    )
     await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
     await selectMaterial('قماش قطني')
 
@@ -269,13 +278,26 @@ describe('QuantityLineEditor', () => {
         'المستودع لا يمتلك قدرة "استلام" لمجال "المستلزمات المنزلية".',
       ),
     )
+    expect(onCapabilityGateChange).toHaveBeenLastCalledWith({
+      status: 'blocked',
+      messageAr: 'المستودع لا يمتلك قدرة "استلام" لمجال "المستلزمات المنزلية".',
+    })
   })
 
   it('shows the unknown-capability hint when no warehouse is picked yet', async () => {
     const user = userEvent.setup()
+    const onCapabilityGateChange = vi.fn()
     useCatalogHandlers()
     const { host } = createTestHost()
-    render(host(() => <QuantityLineEditor documentType="Receiving" warehouseId={undefined} />))
+    render(
+      host(() => (
+        <QuantityLineEditor
+          documentType="Receiving"
+          warehouseId={undefined}
+          onCapabilityGateChange={onCapabilityGateChange}
+        />
+      )),
+    )
     await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
     await selectMaterial('قماش قطني')
 
@@ -284,6 +306,10 @@ describe('QuantityLineEditor', () => {
         screen.getByText('التحقق من قدرة المستودع يتطلب اختيار المستودع ضمن قسم رأس السند.'),
       ).toBeInTheDocument(),
     )
+    expect(onCapabilityGateChange).toHaveBeenLastCalledWith({
+      status: 'unverified',
+      messageAr: 'يتعذر حفظ المسودة قبل التحقق من قدرة المستودع لكل مادة مختارة.',
+    })
   })
 
   it('validates untouched rows and duplicate materials in Arabic', async () => {

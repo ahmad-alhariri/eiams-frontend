@@ -16,7 +16,11 @@ import type {
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
 import { Toaster } from '@/shared/ui/toaster'
-import { createLifecycleEvent, createWarehouseDocument } from '@/test/msw/factories'
+import {
+  createDocumentPolicy,
+  createLifecycleEvent,
+  createWarehouseDocument,
+} from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { applyDocumentAction } from '@/test/msw/warehouse-document-handlers'
 
@@ -105,7 +109,17 @@ interface MutableJourney {
 function useMutableJourney(delayMs = 0): MutableJourney {
   const journey: MutableJourney = {
     documents: [
-      createWarehouseDocument({ documentId: DOCUMENT_ID, documentStatus: 'Draft', rowVersion: 1 }),
+      createWarehouseDocument({
+        documentId: DOCUMENT_ID,
+        documentStatus: 'Draft',
+        rowVersion: 1,
+        policy: createDocumentPolicy({
+          documentId: DOCUMENT_ID,
+          documentStatus: 'Draft',
+          rowVersion: 1,
+          signedOriginalSatisfied: true,
+        }),
+      }),
     ],
     events: [
       createLifecycleEvent({

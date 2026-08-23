@@ -24,3 +24,12 @@ export const RECEIVING_DOCUMENT_LIST_ENTRY: DocumentRouteEntry = {
   createLabelAr: 'سند استلام جديد',
   documentType: 'Receiving',
 }
+
+/** Opening-balance list entry — owned by the opening module seam (e15-t01). */
+export const OPENING_DOCUMENT_LIST_ENTRY: DocumentRouteEntry = {
+  routeKey: 'documentOpening',
+  detailRouteKey: 'documentOpeningDetail',
+  createRouteKey: 'documentOpeningNew',
+  createLabelAr: 'سند رصيد افتتاحي جديد',
+  documentType: 'Opening',
+}

@@ -285,6 +285,43 @@ describe('AssetLineEditor', () => {
     )
   })
 
+  it('reports a blocked aggregate capability gate so parent forms can prevent persistence', async () => {
+    const user = userEvent.setup()
+    const warehouseId = fixtureUuid(31)
+    const capability = createWarehouseCapability({
+      warehouseId,
+      domain: { id: IT_DOMAIN_ID, displayName: 'تقنية المعلومات', code: 'IT', status: 'Active' },
+      operations: ['Issue'],
+    })
+    const onCapabilityGateChange = vi.fn()
+    server.use(
+      http.get(`${API_BASE_URL}/warehouses/${warehouseId}/capabilities`, () =>
+        HttpResponse.json([capability]),
+      ),
+    )
+    useCatalogHandlers()
+    const { host } = createTestHost()
+    render(
+      host(() => (
+        <AssetLineEditor
+          documentType="Opening"
+          warehouseId={warehouseId}
+          onCapabilityGateChange={onCapabilityGateChange}
+        />
+      )),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'إضافة بند أصل' }))
+    await selectMaterial('طابعة ليزر')
+
+    await waitFor(() =>
+      expect(onCapabilityGateChange).toHaveBeenLastCalledWith({
+        status: 'blocked',
+        messageAr: 'المستودع لا يمتلك قدرة "استلام" لمجال "تقنية المعلومات".',
+      }),
+    )
+  })
+
   it('shows the unknown-capability hint when no warehouse is picked yet', async () => {
     const user = userEvent.setup()
     useCatalogHandlers()

@@ -1,5 +1,5 @@
 import { IconPlus, IconTrash } from '@tabler/icons-react'
-import type { ReactNode } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
 
 import { useMaterialUnitConversionsQuery } from '@/modules/catalog/hooks/use-catalog-queries'
@@ -45,7 +45,19 @@ export interface QuantityLineEditorProps {
   warehouseId: string | undefined
   disabled?: boolean
   features?: QuantityLineFeatures
+  /**
+   * Optional aggregate of selected-line capability checks. Pages that must
+   * block persistence can consume this without reimplementing the warehouse
+   * capability lookup or the Opening → Receiving operation mapping.
+   */
+  onCapabilityGateChange?: (gate: QuantityLineCapabilityGate) => void
 }
+
+/** Aggregate capability state for the currently selected quantity-line materials. */
+export type QuantityLineCapabilityGate =
+  | { status: 'ready' }
+  | { status: 'blocked'; messageAr: string }
+  | { status: 'unverified'; messageAr: string }
 
 const BASE_UNIT_VALUE = 'base'
 
@@ -54,6 +66,34 @@ function capabilityOperationFor(
   documentType: Exclude<DocumentType, 'Adjustment'>,
 ): CapabilityOperation {
   return documentType === 'Opening' ? 'Receiving' : documentType
+}
+
+function capabilityGateForLines(
+  lines: readonly Partial<QuantityLineValues>[],
+  operation: CapabilityOperation,
+  validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation,
+): QuantityLineCapabilityGate {
+  let hasUnverifiedLine = false
+
+  for (const line of lines) {
+    if ((line.materialId ?? '') === '') {
+      continue
+    }
+    const capability = validates(line.materialDomainId, operation)
+    if (capability.status === 'blocked') {
+      return capability
+    }
+    if (capability.status === 'unknown') {
+      hasUnverifiedLine = true
+    }
+  }
+
+  return hasUnverifiedLine
+    ? {
+        status: 'unverified',
+        messageAr: 'يتعذر حفظ المسودة قبل التحقق من قدرة المستودع لكل مادة مختارة.',
+      }
+    : { status: 'ready' }
 }
 
 interface MaterialSelectorControlProps {
@@ -406,12 +446,22 @@ export function QuantityLineEditor({
   warehouseId,
   disabled = false,
   features = QUANTITY_LINE_FEATURES_BY_TYPE[documentType],
+  onCapabilityGateChange,
 }: QuantityLineEditorProps) {
   const { control, formState } = useFormContext<DocumentLinesContainer>()
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
   const materialSelector = useScopedMaterialSelector()
   const capabilityValidation = useWarehouseCapabilityValidation(warehouseId)
   const operation = capabilityOperationFor(documentType)
+  const lines = useWatch({ control, name: 'lines' })
+  const capabilityGate = useMemo(
+    () => capabilityGateForLines(lines ?? [], operation, capabilityValidation.validates),
+    [lines, operation, capabilityValidation.validates],
+  )
+
+  useEffect(() => {
+    onCapabilityGateChange?.(capabilityGate)
+  }, [capabilityGate, onCapabilityGateChange])
 
   return (
     <div data-slot="quantity-line-editor" className="flex flex-col gap-3">

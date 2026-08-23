@@ -98,4 +98,15 @@ describe('Route constants (D-RBAC-01)', () => {
     expect(ROUTE_METADATA.countNew.permissions).toEqual(['count.view', 'count.plan'])
     expect(ROUTE_METADATA.counts.permissions).toEqual(['count.view'])
   })
+
+  it('guards inventory read routes with inventory.view only', () => {
+    expect(ROUTE_METADATA.inventoryBalances.permissions).toEqual(['inventory.view'])
+    expect(ROUTE_METADATA.inventoryBalanceDetail.permissions).toEqual(['inventory.view'])
+    expect(ROUTE_METADATA.inventoryBalanceDetail.parent).toBe('inventoryBalances')
+    expect(ROUTE_PATHS.inventoryBalanceDetail).toBe('/inventory/balances/:balanceId')
+    expect(ROUTE_METADATA.inventoryMovements.permissions).toEqual(['inventory.view'])
+    expect(ROUTE_METADATA.inventoryMovementDetail.permissions).toEqual(['inventory.view'])
+    expect(ROUTE_METADATA.inventoryMovementDetail.parent).toBe('inventoryMovements')
+    expect(ROUTE_PATHS.inventoryMovementDetail).toBe('/inventory/movements/:movementId')
+  })
 })

@@ -14,6 +14,7 @@ import {
   createProblemDetails,
   createScopeContext,
   createSession,
+  createStockMovement,
   createWarehouse,
   createWarehouseDocument,
   createWarehouseDocumentLine,
@@ -57,9 +58,17 @@ describe('contract-derived MSW factories', () => {
     const balance = createInventoryBalance({
       material: { id: material.materialId, displayName: material.nameAr },
     })
+    const movement = createStockMovement({ material: balance.material })
     const problem = createProblemDetails({ status: 409, code: 'conflict.version' })
 
     expect(balance.material.id).toBe(material.materialId)
+    expect(balance.lowStock).toEqual({ state: 'Sufficient', thresholdQuantity: 5 })
+    expect(movement).toMatchObject({
+      documentReference: 'EIAMS-RCV-2026-0001',
+      material: balance.material,
+      movementType: 'Receipt',
+      quantityDelta: 5,
+    })
     expect(material.requiresAssetNumber).toBe(true)
     expect(problem).toMatchObject({ status: 409, code: 'conflict.version' })
   })
@@ -149,7 +158,15 @@ describe('document-engine MSW factories', () => {
     const submittedEnabled = submitted.actions
       .filter((availability) => availability.presentation === 'Enabled')
       .map((availability) => availability.action)
-    expect(submittedEnabled).toEqual(['Post', 'Reject', 'Cancel'])
+    expect(submittedEnabled).toEqual(['Reject', 'Cancel'])
+    expect(submitted.actions.find((availability) => availability.action === 'Post')).toMatchObject({
+      allowed: false,
+      presentation: 'Disabled',
+      reasonCode: 'document.signed_original_missing',
+    })
+    expect(submitted.blockers).toContainEqual(
+      expect.objectContaining({ code: 'document.signed_original_missing' }),
+    )
     expect(
       submitted.actions.find((availability) => availability.action === 'Submit')?.allowed,
     ).toBe(false)

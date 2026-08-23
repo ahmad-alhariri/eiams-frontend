@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   useDocumentDetailQuery,
+  useDocumentHistoryQuery,
   useDocumentPolicyQuery,
 } from '@/shared/documents/use-document-queries'
 
@@ -19,7 +20,7 @@ export interface DocumentConflictRecovery {
   conflict: {
     /** True while a lifecycle mutation has 409'd and the user has not resolved it. */
     active: boolean
-    /** True while `recover()` is refetching detail + policy. */
+    /** True while `recover()` is refetching detail + history + policy. */
     isRefreshing: boolean
   }
   /**
@@ -28,9 +29,9 @@ export interface DocumentConflictRecovery {
    */
   reportConflict: () => void
   /**
-   * Refetches the fresh detail + policy through the shared queries (the page
+   * Refetches the fresh detail + lifecycle history + policy through the shared queries (the page
    * observes the same keys, so the cache update lands in both) and clears the
-   * conflict flag once both settle. Returns when refreshed. Never rejects:
+   * conflict flag once all settle. Returns when refreshed. Never rejects:
    * a failed refetch still closes the dialog and keeps the stale view — the
    * mutation's Arabic error toast already told the user what happened.
    */
@@ -47,8 +48,8 @@ export interface DocumentConflictRecovery {
  * Conflict-recovery coordinator for the shared document detail page (e12-t13).
  *
  * Owns ONLY the recovery UI state and the composed refetch; the page owns
- * mutation execution. The hook reuses `useDocumentDetailQuery` +
- * `useDocumentPolicyQuery` with the page's exact keys and enabled flag, so
+ * mutation execution. The hook reuses the detail, history, and policy queries
+ * with the page's exact keys and enabled flag, so
  * TanStack dedupes to one network fetch per key while this hook and the page
  * share the refetched cache. Latest values are tracked in refs so the exposed
  * callbacks stay stable across renders.
@@ -59,6 +60,7 @@ export function useDocumentConflictRecovery(
 ): DocumentConflictRecovery {
   const queryOptions = options.enabled === undefined ? {} : { enabled: options.enabled }
   const detailQuery = useDocumentDetailQuery(documentId, queryOptions)
+  const historyQuery = useDocumentHistoryQuery(documentId, queryOptions)
   const policyQuery = useDocumentPolicyQuery(documentId, queryOptions)
 
   const [active, setActive] = useState(false)
@@ -73,7 +75,8 @@ export function useDocumentConflictRecovery(
 
   const refetchRef = useRef<(() => Promise<unknown>) | undefined>(undefined)
   useEffect(() => {
-    refetchRef.current = () => Promise.all([detailQuery.refetch(), policyQuery.refetch()])
+    refetchRef.current = () =>
+      Promise.all([detailQuery.refetch(), historyQuery.refetch(), policyQuery.refetch()])
   })
 
   const reportConflict = useCallback(() => {

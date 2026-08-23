@@ -1,5 +1,5 @@
 import { IconPlus, IconTrash } from '@tabler/icons-react'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
 
 import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
@@ -51,11 +51,51 @@ export interface AssetLineEditorProps {
    * `assetLines`) so the two `lines`-shaped containers coexist in one form.
    */
   namePrefix?: AssetLineFieldName
+  /**
+   * Optional aggregate of selected-asset capability checks. Pages that must
+   * block persistence can consume this without reconstructing the shared
+   * warehouse capability lookup or the Opening → Receiving operation mapping.
+   */
+  onCapabilityGateChange?: (gate: AssetLineCapabilityGate) => void
 }
+
+/** Aggregate capability state for the currently selected asset-line materials. */
+export type AssetLineCapabilityGate =
+  | { status: 'ready' }
+  | { status: 'blocked'; messageAr: string }
+  | { status: 'unverified'; messageAr: string }
 
 /** Inbound opening balances share the Receiving capability operation. */
 function capabilityOperationFor(documentType: AssetLineDocumentType): CapabilityOperation {
   return documentType === 'Opening' ? 'Receiving' : documentType
+}
+
+function capabilityGateForLines(
+  lines: readonly Partial<AssetLineValues>[],
+  operation: CapabilityOperation,
+  validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation,
+): AssetLineCapabilityGate {
+  let hasUnverifiedLine = false
+
+  for (const line of lines) {
+    if ((line.materialId ?? '') === '') {
+      continue
+    }
+    const capability = validates(line.materialDomainId, operation)
+    if (capability.status === 'blocked') {
+      return capability
+    }
+    if (capability.status === 'unknown') {
+      hasUnverifiedLine = true
+    }
+  }
+
+  return hasUnverifiedLine
+    ? {
+        status: 'unverified',
+        messageAr: 'يتعذر حفظ المسودة قبل التحقق من قدرة المستودع لكل مادة مختارة.',
+      }
+    : { status: 'ready' }
 }
 
 interface MaterialSelectorControlProps {
@@ -426,6 +466,7 @@ export function AssetLineEditor({
   warehouseId,
   disabled = false,
   namePrefix = 'lines',
+  onCapabilityGateChange,
 }: AssetLineEditorProps) {
   const { control, formState } = useFormContext<AssetLineFieldValues>()
   const { fields, append, remove } = useFieldArray<AssetLineFieldValues, AssetLineFieldName>({
@@ -436,6 +477,11 @@ export function AssetLineEditor({
   const { loadOptions: loadAllOptions, scopeReady } = materialSelector
   const capabilityValidation = useWarehouseCapabilityValidation(warehouseId)
   const operation = capabilityOperationFor(documentType)
+  const lines = useWatch({ control, name: namePrefix })
+  const capabilityGate = useMemo(
+    () => capabilityGateForLines(lines ?? [], operation, capabilityValidation.validates),
+    [lines, operation, capabilityValidation.validates],
+  )
   const linesErrorMessage = (
     formState.errors as Record<
       string,
@@ -453,6 +499,10 @@ export function AssetLineEditor({
     },
     [loadAllOptions],
   )
+
+  useEffect(() => {
+    onCapabilityGateChange?.(capabilityGate)
+  }, [capabilityGate, onCapabilityGateChange])
 
   return (
     <div data-slot="asset-line-editor" className="flex flex-col gap-3">

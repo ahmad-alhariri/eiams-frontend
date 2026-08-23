@@ -16,12 +16,15 @@ import {
   createWarehouseDocument,
   createWarehouseDocumentLine,
   createWarehouseMaterialSetting,
+  createInventoryBalance,
+  createStockMovement,
   deriveLifecycleEvents,
   fixtureUuid,
 } from '@/test/msw/factories'
 import type {
   DocumentLifecycleEvent,
   Employee,
+  InventoryBalance,
   ExternalParty,
   Material,
   MaterialCategory,
@@ -30,6 +33,7 @@ import type {
   MaterialUnitConversion,
   OrganizationalUnit,
   Site,
+  StockMovement,
   UnitOfMeasure,
   Warehouse,
   WarehouseCapability,
@@ -59,6 +63,12 @@ export interface MockDatabase {
   warehouses: Warehouse[]
   warehouseCapabilities: WarehouseCapability[]
   warehouseMaterialSettings: WarehouseMaterialSetting[]
+  /**
+   * Static, contract-shaped read projections for development UI verification.
+   * They are not derived from document mutations or material settings.
+   */
+  inventoryBalances: InventoryBalance[]
+  stockMovements: StockMovement[]
   warehouseDocuments: WarehouseDocument[]
   documentLifecycleEvents: Record<string, DocumentLifecycleEvent[]>
 }
@@ -425,6 +435,110 @@ function buildSeed(): MockDatabase {
     issueRejected: 'EIAMS-ISS-2024-0002',
   }
 
+  // These are explicit server-read projections for the dev worker only. Do
+  // not calculate low-stock state here and do not replay document effects into
+  // balances or the immutable ledger.
+  const inventoryBalances: InventoryBalance[] = [
+    createInventoryBalance({
+      balanceId: fixtureUuid(200),
+      warehouse: centralRef,
+      material: { id: computersMaterial.materialId, displayName: computersMaterial.nameAr },
+      quantity: 0,
+      lastUpdated: '2026-08-21T08:00:00.000Z',
+      lowStock: { state: 'Low', thresholdQuantity: 0 },
+    }),
+    createInventoryBalance({
+      balanceId: fixtureUuid(201),
+      warehouse: centralRef,
+      material: { id: tonerMaterial.materialId, displayName: tonerMaterial.nameAr },
+      quantity: 2,
+      lastUpdated: '2026-08-20T08:00:00.000Z',
+      lowStock: { state: 'Low', thresholdQuantity: 2 },
+    }),
+    createInventoryBalance({
+      balanceId: fixtureUuid(202),
+      warehouse: branchRef,
+      material: { id: printerMaterial.materialId, displayName: printerMaterial.nameAr },
+      quantity: 7,
+      lastUpdated: '2026-08-19T08:00:00.000Z',
+      lowStock: { state: 'Sufficient', thresholdQuantity: 5 },
+    }),
+    createInventoryBalance({
+      balanceId: fixtureUuid(203),
+      warehouse: centralRef,
+      material: { id: paperMaterial.materialId, displayName: paperMaterial.nameAr },
+      quantity: 12,
+      lastUpdated: '2026-08-18T08:00:00.000Z',
+      lowStock: { state: 'NotConfigured', thresholdQuantity: null },
+    }),
+    createInventoryBalance({
+      balanceId: fixtureUuid(204),
+      warehouse: branchRef,
+      material: { id: paperMaterial.materialId, displayName: paperMaterial.nameAr },
+      quantity: 4,
+      lastUpdated: '2026-08-17T08:00:00.000Z',
+      lowStock: { state: 'Disabled', thresholdQuantity: null },
+    }),
+  ]
+
+  const stockMovements: StockMovement[] = [
+    createStockMovement({
+      movementId: fixtureUuid(220),
+      warehouse: centralRef,
+      material: { id: computersMaterial.materialId, displayName: computersMaterial.nameAr },
+      documentId: fixtureUuid(150),
+      documentLineId: fixtureUuid(160),
+      documentReference: systemReferences.receiving,
+      movementType: 'Receipt',
+      quantityDelta: 10,
+      postedAt: '2026-08-21T10:00:00.000Z',
+    }),
+    createStockMovement({
+      movementId: fixtureUuid(221),
+      warehouse: centralRef,
+      material: { id: tonerMaterial.materialId, displayName: tonerMaterial.nameAr },
+      documentId: fixtureUuid(151),
+      documentLineId: fixtureUuid(161),
+      documentReference: systemReferences.issueSubmitted,
+      movementType: 'Issue',
+      quantityDelta: -2,
+      postedAt: '2026-08-20T10:00:00.000Z',
+    }),
+    createStockMovement({
+      movementId: fixtureUuid(222),
+      warehouse: centralRef,
+      material: { id: paperMaterial.materialId, displayName: paperMaterial.nameAr },
+      documentId: fixtureUuid(152),
+      documentLineId: fixtureUuid(163),
+      documentReference: systemReferences.transferPosted,
+      movementType: 'TransferOut',
+      quantityDelta: -5,
+      postedAt: '2026-08-19T10:00:00.000Z',
+    }),
+    createStockMovement({
+      movementId: fixtureUuid(223),
+      warehouse: branchRef,
+      material: { id: paperMaterial.materialId, displayName: paperMaterial.nameAr },
+      documentId: fixtureUuid(152),
+      documentLineId: fixtureUuid(163),
+      documentReference: systemReferences.transferPosted,
+      movementType: 'TransferIn',
+      quantityDelta: 5,
+      postedAt: '2026-08-19T10:00:00.000Z',
+    }),
+    createStockMovement({
+      movementId: fixtureUuid(224),
+      warehouse: centralRef,
+      material: { id: printerMaterial.materialId, displayName: printerMaterial.nameAr },
+      documentId: fixtureUuid(153),
+      documentLineId: fixtureUuid(164),
+      documentReference: undefined,
+      movementType: 'AdjustmentOut',
+      quantityDelta: -1,
+      postedAt: '2026-08-18T10:00:00.000Z',
+    }),
+  ]
+
   const documents: WarehouseDocument[] = [
     createWarehouseDocument({
       documentId: fixtureUuid(150),
@@ -725,6 +839,8 @@ function buildSeed(): MockDatabase {
         status: 'Active',
       }),
     ],
+    inventoryBalances,
+    stockMovements,
     warehouseDocuments: documents,
     documentLifecycleEvents,
   }

@@ -53,12 +53,46 @@ export interface ReceivingPetalFormProps {
   disabled?: boolean
 }
 
+interface ReceivingTypeSelectorControlProps {
+  value: string
+  onValueChange: (value: string | null) => void
+}
+
+/**
+ * Supplier selector control props...
+ */
 interface SupplierSelectorControlProps {
   loadOptions: OptionLoader<string>
   scopeReady: boolean
   disabled: boolean
   value: string
   onValueChange: (value: string) => void
+}
+
+/**
+ * Select control for receiving type with proper id propagation for a11y.
+ * Uses useFormField() to get the FormItem's generated id, ensuring the
+ * FormLabel's htmlFor matches the Select's internal input id.
+ */
+function ReceivingTypeSelectorControl({ value, onValueChange }: ReceivingTypeSelectorControlProps) {
+  const { formItemId } = useFormField()
+  return (
+    <Select value={value} onValueChange={(nextValue) => onValueChange(nextValue ?? '')}>
+      <SelectTrigger id={formItemId} aria-label="نوع الاستلام">
+        <SelectValue placeholder="اختر نوع الاستلام...">
+          {RECEIVING_TYPE_LABELS_AR[value as (typeof RECEIVING_TYPES)[number]] ??
+            'اختر نوع الاستلام...'}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {RECEIVING_TYPES.map((type) => (
+          <SelectItem key={type} value={type}>
+            {RECEIVING_TYPE_LABELS_AR[type]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
 }
 
 /**
@@ -128,21 +162,7 @@ export function ReceivingPetalForm({ disabled = false }: ReceivingPetalFormProps
           render={({ field }) => (
             <FormItem>
               <FormLabel>نوع الاستلام</FormLabel>
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger aria-label="نوع الاستلام">
-                  <SelectValue placeholder="اختر نوع الاستلام...">
-                    {RECEIVING_TYPE_LABELS_AR[field.value as (typeof RECEIVING_TYPES)[number]] ??
-                      'اختر نوع الاستلام...'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {RECEIVING_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {RECEIVING_TYPE_LABELS_AR[type]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ReceivingTypeSelectorControl value={field.value} onValueChange={field.onChange} />
               <FormMessage />
             </FormItem>
           )}

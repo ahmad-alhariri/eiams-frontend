@@ -34,7 +34,7 @@ describe('OpenAPI generation configuration', () => {
     expect(provenance.contractId).toBe('eiams-v1')
     expect(provenance.snapshotPath).toBe('contracts/openapi/eiams-v1.openapi.json')
     expect(provenance.sha256).toMatch(/^[a-f0-9]{64}$/)
-    expect(provenance.coverage).toEqual({ paths: 80, operations: 116, schemas: 156 })
+    expect(provenance.coverage).toEqual({ paths: 81, operations: 117, schemas: 161 })
 
     expect(generationConfigRaw).toContain("contractId: 'eiams-v1'")
     expect(generationConfigRaw).toContain("snapshotPath: 'contracts/openapi/eiams-v1.openapi.json'")

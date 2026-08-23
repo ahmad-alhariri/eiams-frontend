@@ -87,6 +87,12 @@ balances, and asset transfer are not v1 domain concepts.
   compensating, traceable operations rather than editing historical rows.
 - `InventoryBalance.quantity` is a backend-maintained cache of signed movement
   effects. The frontend renders it as authoritative only after server refresh.
+- D-INV-READ-01 defines inventory read projections: lists are deterministically
+  sorted by typed server parameters, balance detail is identified by
+  `balanceId`, and low-stock state is computed from the active warehouse
+  material setting in the same server read snapshot. Low means
+  `quantity <= minQuantity`; this projection never becomes a mutable balance
+  column.
 - Posting requires the relevant warehouse capability, authorization/scope,
   lifecycle state, optimistic concurrency, and a valid signed-original gate.
   Attachment-verification mechanics remain D-DOC work, not a browser rule.
@@ -222,6 +228,7 @@ stop at the relevant Beads decision instead of guessing in these areas:
 | Document context not modeled by the sources, including Return-to-original-Issue traceability | D-OAS-02 provisionally pins `originalIssueDocumentId` and its read-only reference; backend ratification may change it only through a versioned contract update. |
 | Durable custody backend implementation and partial-return ratification | D-MAT-01 is published in provisional OpenAPI as `MaterialQuantity` and `TrackedUnit`; backend/API-owner ratification is required before production custody implementation. |
 | Material-unit conversion endpoint, payload, row-version, and posting-snapshot ratification | D-UOM-01 defines the accepted policy. The provisional API must publish the generated conversion surface and backend/API-owner ratification is required before production integration. |
+| Inventory sorting, balance detail identity, and low-stock projection backend ratification | D-INV-READ-01 defines the accepted provisional read contract. Backend/API-owner ratification remains required before production integration. |
 
 ## Required source and OpenAPI alignment
 

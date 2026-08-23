@@ -922,8 +922,31 @@ export type paths = {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** List Inventory Balances */
+        /**
+         * List Inventory Balances
+         * @description Effective scope and filters are applied before deterministic server sorting and pagination. Default order: warehouse display name ascending, material display name ascending, balanceId ascending.
+         */
         readonly get: operations["listInventoryBalances"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/inventory/balances/{balanceId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Get Inventory Balance
+         * @description Returns 404 for both an unknown balance and a balance outside the effective session scope. No client-authored scope parameter is accepted.
+         */
+        readonly get: operations["getInventoryBalance"];
         readonly put?: never;
         readonly post?: never;
         readonly delete?: never;
@@ -939,7 +962,10 @@ export type paths = {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** List Stock Movements */
+        /**
+         * List Stock Movements
+         * @description Effective scope and filters are applied before deterministic server sorting and pagination. Default order: postedAt descending, movementId descending.
+         */
         readonly get: operations["listStockMovements"];
         readonly put?: never;
         readonly post?: never;
@@ -1931,6 +1957,7 @@ export type components = {
             readonly balanceId: components["schemas"]["Uuid"];
             /** Format: date-time */
             readonly lastUpdated: string;
+            readonly lowStock: components["schemas"]["InventoryLowStockProjection"];
             readonly material: components["schemas"]["NamedReference"];
             /** Format: double */
             readonly quantity: number;
@@ -1942,6 +1969,8 @@ export type components = {
             readonly items: readonly components["schemas"]["InventoryBalance"][];
             readonly meta: components["schemas"]["PageMeta"];
         };
+        /** @enum {string} */
+        readonly InventoryBalanceSortField: "WarehouseDisplayName" | "MaterialDisplayName" | "Quantity" | "LastUpdated";
         readonly InventoryCount: {
             /** Format: date-time */
             readonly closedAt?: string | null;
@@ -2008,6 +2037,20 @@ export type components = {
         readonly InventoryCountStatus: "Planned" | "InProgress" | "Completed" | "Closed";
         /** @enum {string} */
         readonly InventoryCountType: "Full" | "Partial" | "SpotCheck" | "AssetVerification";
+        /** @description Low when quantity is less than or equal to an active non-null minQuantity; Sufficient when greater; NotConfigured for missing/null settings; Disabled for inactive settings. */
+        readonly InventoryLowStockProjection: {
+            readonly state: components["schemas"]["InventoryLowStockState"];
+            /**
+             * Format: double
+             * @description Active minQuantity used for comparison; null when alerting is unconfigured or disabled.
+             */
+            readonly thresholdQuantity: number | null;
+        };
+        /**
+         * @description Server-computed low-stock state using the active warehouse material setting minQuantity.
+         * @enum {string}
+         */
+        readonly InventoryLowStockState: "Low" | "Sufficient" | "NotConfigured" | "Disabled";
         readonly IssueTo: {
             readonly issueReason: string;
             readonly recipientDisplayName: string;
@@ -2036,6 +2079,8 @@ export type components = {
             readonly policy: components["schemas"]["DocumentPolicy"];
         };
         readonly LifecycleDocumentReference: {
+            /** @description Authoritative InventoryAdjustment route identity. Present when documentType is Adjustment; absent for WarehouseDocument routes. */
+            readonly adjustmentId?: components["schemas"]["Uuid"];
             readonly documentId: components["schemas"]["Uuid"];
             readonly documentType: components["schemas"]["DocumentType"];
             readonly status: components["schemas"]["DocumentStatus"];
@@ -2412,6 +2457,8 @@ export type components = {
             readonly rowVersion: number;
             readonly status: components["schemas"]["RecordStatus"];
         };
+        /** @enum {string} */
+        readonly SortDirection: "Ascending" | "Descending";
         readonly StockMovement: {
             readonly documentId: components["schemas"]["Uuid"];
             readonly documentLineId: components["schemas"]["Uuid"];
@@ -2430,6 +2477,8 @@ export type components = {
             readonly items: readonly components["schemas"]["StockMovement"][];
             readonly meta: components["schemas"]["PageMeta"];
         };
+        /** @enum {string} */
+        readonly StockMovementSortField: "PostedAt" | "WarehouseDisplayName" | "MaterialDisplayName" | "MovementType" | "QuantityDelta";
         /** @enum {string} */
         readonly StockMovementType: "Receipt" | "Issue" | "TransferIn" | "TransferOut" | "AdjustmentIn" | "AdjustmentOut" | "Opening";
         /** @description A durable operational item tracked individually by serial number. It is not a fixed asset, has no asset number, and can be the subject of custody. This snapshot exposes tracked units through document-line and custody payloads; it deliberately does not add an unratified generic list, lookup, or lifecycle endpoint. */
@@ -2789,6 +2838,8 @@ export type components = {
         readonly ExternalPartyId: components["schemas"]["Uuid"];
         /** @description Unique UUID for retry-safe action execution. */
         readonly IdempotencyKey: string;
+        /** @description Primary balance sort field. Stable warehouse/material/balanceId tie-breakers are server-owned. */
+        readonly InventoryBalanceSortBy: components["schemas"]["InventoryBalanceSortField"];
         readonly MaterialId: components["schemas"]["Uuid"];
         readonly PageIndex: number;
         readonly PageSize: number;
@@ -2796,7 +2847,11 @@ export type components = {
         readonly SearchRequired: string;
         readonly SiteFilter: components["schemas"]["Uuid"];
         readonly SiteId: components["schemas"]["Uuid"];
+        readonly SortDirectionAscending: components["schemas"]["SortDirection"];
+        readonly SortDirectionDescending: components["schemas"]["SortDirection"];
         readonly Status: components["schemas"]["RecordStatus"];
+        /** @description Primary movement sort field. Stable postedAt/movementId tie-breakers are server-owned. */
+        readonly StockMovementSortBy: components["schemas"]["StockMovementSortField"];
         readonly UserId: components["schemas"]["Uuid"];
         readonly WarehouseFilter: components["schemas"]["Uuid"];
         readonly WarehouseId: components["schemas"]["Uuid"];
@@ -2887,6 +2942,7 @@ export type InventoryAdjustmentDraftRequest = components['schemas']['InventoryAd
 export type InventoryAdjustmentPage = components['schemas']['InventoryAdjustmentPage'];
 export type InventoryBalance = components['schemas']['InventoryBalance'];
 export type InventoryBalancePage = components['schemas']['InventoryBalancePage'];
+export type InventoryBalanceSortField = components['schemas']['InventoryBalanceSortField'];
 export type InventoryCount = components['schemas']['InventoryCount'];
 export type InventoryCountLine = components['schemas']['InventoryCountLine'];
 export type InventoryCountLinePage = components['schemas']['InventoryCountLinePage'];
@@ -2896,6 +2952,8 @@ export type InventoryCountScope = components['schemas']['InventoryCountScope'];
 export type InventoryCountScopeType = components['schemas']['InventoryCountScopeType'];
 export type InventoryCountStatus = components['schemas']['InventoryCountStatus'];
 export type InventoryCountType = components['schemas']['InventoryCountType'];
+export type InventoryLowStockProjection = components['schemas']['InventoryLowStockProjection'];
+export type InventoryLowStockState = components['schemas']['InventoryLowStockState'];
 export type IssueTo = components['schemas']['IssueTo'];
 export type KpiValue = components['schemas']['KpiValue'];
 export type LifecycleActorSnapshot = components['schemas']['LifecycleActorSnapshot'];
@@ -2949,8 +3007,10 @@ export type SetActiveScopeRequest = components['schemas']['SetActiveScopeRequest
 export type Site = components['schemas']['Site'];
 export type SitePage = components['schemas']['SitePage'];
 export type SiteUpsertRequest = components['schemas']['SiteUpsertRequest'];
+export type SortDirection = components['schemas']['SortDirection'];
 export type StockMovement = components['schemas']['StockMovement'];
 export type StockMovementPage = components['schemas']['StockMovementPage'];
+export type StockMovementSortField = components['schemas']['StockMovementSortField'];
 export type StockMovementType = components['schemas']['StockMovementType'];
 export type TrackedUnit = components['schemas']['TrackedUnit'];
 export type TrackedUnitCustody = components['schemas']['TrackedUnitCustody'];
@@ -3001,6 +3061,7 @@ export type ParameterDateTo = components['parameters']['DateTo'];
 export type ParameterDocumentId = components['parameters']['DocumentId'];
 export type ParameterExternalPartyId = components['parameters']['ExternalPartyId'];
 export type ParameterIdempotencyKey = components['parameters']['IdempotencyKey'];
+export type ParameterInventoryBalanceSortBy = components['parameters']['InventoryBalanceSortBy'];
 export type ParameterMaterialId = components['parameters']['MaterialId'];
 export type ParameterPageIndex = components['parameters']['PageIndex'];
 export type ParameterPageSize = components['parameters']['PageSize'];
@@ -3008,7 +3069,10 @@ export type ParameterSearch = components['parameters']['Search'];
 export type ParameterSearchRequired = components['parameters']['SearchRequired'];
 export type ParameterSiteFilter = components['parameters']['SiteFilter'];
 export type ParameterSiteId = components['parameters']['SiteId'];
+export type ParameterSortDirectionAscending = components['parameters']['SortDirectionAscending'];
+export type ParameterSortDirectionDescending = components['parameters']['SortDirectionDescending'];
 export type ParameterStatus = components['parameters']['Status'];
+export type ParameterStockMovementSortBy = components['parameters']['StockMovementSortBy'];
 export type ParameterUserId = components['parameters']['UserId'];
 export type ParameterWarehouseFilter = components['parameters']['WarehouseFilter'];
 export type ParameterWarehouseId = components['parameters']['WarehouseId'];
@@ -4951,10 +5015,15 @@ export interface operations {
     readonly listInventoryBalances: {
         readonly parameters: {
             readonly query?: {
+                /** @description Server-computed low-stock state applied before sorting and pagination. */
+                readonly lowStockState?: components["schemas"]["InventoryLowStockState"];
                 readonly materialId?: components["schemas"]["Uuid"];
                 readonly pageIndex?: components["parameters"]["PageIndex"];
                 readonly pageSize?: components["parameters"]["PageSize"];
                 readonly search?: components["parameters"]["Search"];
+                /** @description Primary balance sort field. Stable warehouse/material/balanceId tie-breakers are server-owned. */
+                readonly sortBy?: components["parameters"]["InventoryBalanceSortBy"];
+                readonly sortDirection?: components["parameters"]["SortDirectionAscending"];
                 readonly warehouseId?: components["parameters"]["WarehouseFilter"];
             };
             readonly header?: never;
@@ -4972,7 +5041,35 @@ export interface operations {
                     readonly "application/json": components["schemas"]["InventoryBalancePage"];
                 };
             };
+            readonly 400: components["responses"]["BadRequest"];
             readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+        };
+    };
+    readonly getInventoryBalance: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly balanceId: components["schemas"]["Uuid"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Scope-authorized inventory balance detail */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["InventoryBalance"];
+                };
+            };
+            readonly 400: components["responses"]["BadRequest"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
         };
     };
     readonly listStockMovements: {
@@ -4985,6 +5082,9 @@ export interface operations {
                 readonly movementType?: components["schemas"]["StockMovementType"];
                 readonly pageIndex?: components["parameters"]["PageIndex"];
                 readonly pageSize?: components["parameters"]["PageSize"];
+                /** @description Primary movement sort field. Stable postedAt/movementId tie-breakers are server-owned. */
+                readonly sortBy?: components["parameters"]["StockMovementSortBy"];
+                readonly sortDirection?: components["parameters"]["SortDirectionDescending"];
                 readonly warehouseId?: components["parameters"]["WarehouseFilter"];
             };
             readonly header?: never;
@@ -5002,7 +5102,9 @@ export interface operations {
                     readonly "application/json": components["schemas"]["StockMovementPage"];
                 };
             };
+            readonly 400: components["responses"]["BadRequest"];
             readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
         };
     };
     readonly getStockMovement: {

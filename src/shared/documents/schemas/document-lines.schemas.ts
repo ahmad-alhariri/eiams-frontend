@@ -214,7 +214,7 @@ export const assetInputSchema = z.object({
   /** Optional in draft (VARCHAR(100) per ERD); server-allocated on posting. */
   assetNumber: z.string().trim().max(100, 'يجب ألا يتجاوز رقم الأصل 100 محرفاً.').optional(),
   /** Optional manufacturer identifier; never a substitute for the asset number. */
-  serialNumber: z.string().trim().max(100, 'يجب ألا يتجاوز الرقم التسلسلي 100 محرفاً.').optional(),
+  serialNumber: z.string().trim().max(200, 'يجب ألا يتجاوز الرقم التسلسلي 200 محرفاً.').optional(),
   acquisitionDate: optionalDateField('تاريخ حصول غير صالح؛ استخدم صيغة YYYY-MM-DD.'),
   warrantyExpiry: optionalDateField('تاريخ انتهاء ضمان غير صالح؛ استخدم صيغة YYYY-MM-DD.'),
 })

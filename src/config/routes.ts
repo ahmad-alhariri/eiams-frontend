@@ -36,7 +36,9 @@ export const ROUTE_PATHS = {
   warehouseDetail: '/warehouses/:warehouseId',
   /** Inventory. */
   inventoryBalances: '/inventory/balances',
+  inventoryBalanceDetail: '/inventory/balances/:balanceId',
   inventoryMovements: '/inventory/movements',
+  inventoryMovementDetail: '/inventory/movements/:movementId',
   /** Documents (spine + petals). */
   documentReceiving: '/documents/receiving',
   documentReceivingNew: '/documents/receiving/new',
@@ -229,11 +231,23 @@ export const ROUTE_METADATA: RouteMetaMap = {
     permissions: ['inventory.view'],
     parent: 'dashboard',
   },
+  inventoryBalanceDetail: {
+    labelAr: 'تفاصيل الرصيد',
+    group: 'inventory',
+    permissions: ['inventory.view'],
+    parent: 'inventoryBalances',
+  },
   inventoryMovements: {
     labelAr: 'حركات المخزون',
     group: 'inventory',
-    permissions: ['inventory.view', 'document.view'],
+    permissions: ['inventory.view'],
     parent: 'inventoryBalances',
+  },
+  inventoryMovementDetail: {
+    labelAr: 'تفاصيل حركة المخزون',
+    group: 'inventory',
+    permissions: ['inventory.view'],
+    parent: 'inventoryMovements',
   },
 
   documentReceiving: {

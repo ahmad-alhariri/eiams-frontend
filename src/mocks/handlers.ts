@@ -6,6 +6,7 @@ import { createDevSession } from '@/shared/services/dev-session'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import {
   createDocumentAttachment,
+  createLifecycleEvent,
   createMaterialUnitConversion,
   createNamedReference,
   createPolicyBlocker,
@@ -30,6 +31,9 @@ import type {
   ExternalPartyUpsertRequest,
   LifecycleActorSnapshot,
   LifecycleConflictProblemDetails,
+  InventoryBalance,
+  InventoryBalanceSortField,
+  InventoryLowStockState,
   Material,
   MaterialCategoryUpsertRequest,
   MaterialFamilyUpsertRequest,
@@ -42,6 +46,10 @@ import type {
   ReasonedDocumentActionRequest,
   SetActiveScopeRequest,
   SiteUpsertRequest,
+  SortDirection,
+  StockMovement,
+  StockMovementSortField,
+  StockMovementType,
   UnitOfMeasureUpsertRequest,
   VersionOnlyDocumentActionRequest,
   WarehouseCapabilityUpsertRequest,
@@ -78,6 +86,14 @@ type ListParams = {
   documentStatus?: string | undefined
   documentType?: string | undefined
   warehouseId?: string | undefined
+  materialId?: string | undefined
+  lowStockState?: string | undefined
+  movementType?: string | undefined
+  documentId?: string | undefined
+  dateFrom?: string | undefined
+  dateTo?: string | undefined
+  sortBy?: string | undefined
+  sortDirection?: string | undefined
 }
 
 function toListParams(url: URL): ListParams {
@@ -102,6 +118,14 @@ function toListParams(url: URL): ListParams {
     'documentStatus',
     'documentType',
     'warehouseId',
+    'materialId',
+    'lowStockState',
+    'movementType',
+    'documentId',
+    'dateFrom',
+    'dateTo',
+    'sortBy',
+    'sortDirection',
   ] as const) {
     const value = url.searchParams.get(key)
     if (value !== null) {
@@ -190,6 +214,17 @@ function attachmentDeleteForbiddenProblem(): ProblemDetails {
       403,
     ),
     titleAr: 'لا تملك الصلاحية اللازمة لتنفيذ هذا الإجراء.',
+  }
+}
+
+function attachmentUploadForbiddenProblem(): ProblemDetails {
+  return {
+    ...problemBase(
+      'signed_original_immutable',
+      'لا يمكن رفع المرفقات بعد مغادرة المستند حالة المسودة.',
+      403,
+    ),
+    titleAr: 'المرفقات للقراءة فقط في حالة المستند الحالية.',
   }
 }
 
@@ -397,6 +432,160 @@ function includedIn<T extends string>(
     return undefined
   }
   return (allowed as readonly string[]).includes(value) ? (value as T) : undefined
+}
+
+const ARABIC_COLLATOR = new Intl.Collator('ar-SY', { sensitivity: 'base', usage: 'sort' })
+const INVENTORY_PREFIX = `${environment.apiBaseUrl}/inventory`
+const BALANCE_SORT_FIELDS = [
+  'WarehouseDisplayName',
+  'MaterialDisplayName',
+  'Quantity',
+  'LastUpdated',
+] as const satisfies readonly InventoryBalanceSortField[]
+const MOVEMENT_SORT_FIELDS = [
+  'PostedAt',
+  'WarehouseDisplayName',
+  'MaterialDisplayName',
+  'MovementType',
+  'QuantityDelta',
+] as const satisfies readonly StockMovementSortField[]
+const LOW_STOCK_STATES = [
+  'Low',
+  'Sufficient',
+  'NotConfigured',
+  'Disabled',
+] as const satisfies readonly InventoryLowStockState[]
+const MOVEMENT_TYPES = [
+  'Receipt',
+  'Issue',
+  'TransferIn',
+  'TransferOut',
+  'AdjustmentIn',
+  'AdjustmentOut',
+  'Opening',
+] as const satisfies readonly StockMovementType[]
+
+function isOneOf<T extends string>(value: string | undefined, values: readonly T[]): value is T {
+  return value !== undefined && (values as readonly string[]).includes(value)
+}
+
+function isSortDirection(value: string | undefined): value is SortDirection {
+  return value === 'Ascending' || value === 'Descending'
+}
+
+function inventoryQueryProblem(parameter: string): HttpResponse<ProblemDetails> {
+  return HttpResponse.json(
+    problemBase(
+      'inventory.invalid_query',
+      `قيمة عامل التصفية أو الترتيب «${parameter}» غير صالحة.`,
+      400,
+    ),
+    { status: 400 },
+  )
+}
+
+function compareText(left: string, right: string): number {
+  return ARABIC_COLLATOR.compare(left, right)
+}
+
+function compareUuid(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function compareNumber(left: number, right: number): number {
+  return left - right
+}
+
+function withDirection(result: number, direction: SortDirection): number {
+  return direction === 'Ascending' ? result : -result
+}
+
+function balanceFieldComparison(
+  left: InventoryBalance,
+  right: InventoryBalance,
+  field: InventoryBalanceSortField,
+): number {
+  switch (field) {
+    case 'WarehouseDisplayName':
+      return compareText(left.warehouse.displayName, right.warehouse.displayName)
+    case 'MaterialDisplayName':
+      return compareText(left.material.displayName, right.material.displayName)
+    case 'Quantity':
+      return compareNumber(left.quantity, right.quantity)
+    case 'LastUpdated':
+      return compareText(left.lastUpdated, right.lastUpdated)
+  }
+}
+
+function movementFieldComparison(
+  left: StockMovement,
+  right: StockMovement,
+  field: StockMovementSortField,
+): number {
+  switch (field) {
+    case 'PostedAt':
+      return compareText(left.postedAt, right.postedAt)
+    case 'WarehouseDisplayName':
+      return compareText(left.warehouse.displayName, right.warehouse.displayName)
+    case 'MaterialDisplayName':
+      return compareText(left.material.displayName, right.material.displayName)
+    case 'MovementType':
+      return compareText(left.movementType, right.movementType)
+    case 'QuantityDelta':
+      return compareNumber(left.quantityDelta, right.quantityDelta)
+  }
+}
+
+/**
+ * Dev-only ordering mirrors D-INV-READ-01 so Browser QA exercises a complete
+ * read surface. It remains fixture ordering, not evidence of backend sorting.
+ */
+function sortBalances(
+  balances: readonly InventoryBalance[],
+  sortBy: InventoryBalanceSortField,
+  sortDirection: SortDirection,
+): InventoryBalance[] {
+  const fields = [
+    sortBy,
+    ...(['WarehouseDisplayName', 'MaterialDisplayName'] as const).filter(
+      (field) => field !== sortBy,
+    ),
+  ]
+  return [...balances].sort((left, right) => {
+    for (const field of fields) {
+      const comparison = balanceFieldComparison(left, right, field)
+      if (comparison !== 0) {
+        return withDirection(comparison, field === sortBy ? sortDirection : 'Ascending')
+      }
+    }
+    return compareUuid(left.balanceId, right.balanceId)
+  })
+}
+
+function sortMovements(
+  movements: readonly StockMovement[],
+  sortBy: StockMovementSortField,
+  sortDirection: SortDirection,
+): StockMovement[] {
+  const secondaryFields = MOVEMENT_SORT_FIELDS.filter(
+    (field) => field === 'PostedAt' && field !== sortBy,
+  )
+  return [...movements].sort((left, right) => {
+    const primary = movementFieldComparison(left, right, sortBy)
+    if (primary !== 0) {
+      return withDirection(primary, sortDirection)
+    }
+    for (const field of secondaryFields) {
+      const comparison = movementFieldComparison(left, right, field)
+      if (comparison !== 0) {
+        return withDirection(comparison, 'Descending')
+      }
+    }
+    return withDirection(
+      compareUuid(left.movementId, right.movementId),
+      sortBy === 'PostedAt' ? sortDirection : 'Descending',
+    )
+  })
 }
 
 export const mockApiHandlers: readonly HttpHandler[] = [
@@ -1086,6 +1275,84 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     },
   ),
 
+  // --- Inventory (development read projections only) -----------------------
+  // These endpoints intentionally do not simulate effective scope, RBAC,
+  // document posting, balance calculation, or ledger generation. Those remain
+  // backend-authoritative; this worker merely makes the contracted read UI
+  // observable during local Browser QA.
+  http.get(`${INVENTORY_PREFIX}/balances`, ({ request }) => {
+    const params = toListParams(new URL(request.url))
+    if (params.sortBy !== undefined && !isOneOf(params.sortBy, BALANCE_SORT_FIELDS)) {
+      return inventoryQueryProblem('sortBy')
+    }
+    if (params.sortDirection !== undefined && !isSortDirection(params.sortDirection)) {
+      return inventoryQueryProblem('sortDirection')
+    }
+    if (params.lowStockState !== undefined && !isOneOf(params.lowStockState, LOW_STOCK_STATES)) {
+      return inventoryQueryProblem('lowStockState')
+    }
+
+    const sortBy = isOneOf(params.sortBy, BALANCE_SORT_FIELDS)
+      ? params.sortBy
+      : 'WarehouseDisplayName'
+    const sortDirection = isSortDirection(params.sortDirection) ? params.sortDirection : 'Ascending'
+    const lowStockState = isOneOf(params.lowStockState, LOW_STOCK_STATES)
+      ? params.lowStockState
+      : undefined
+    const filtered = getDb().inventoryBalances.filter(
+      (balance) =>
+        (params.warehouseId === undefined || balance.warehouse.id === params.warehouseId) &&
+        (params.materialId === undefined || balance.material.id === params.materialId) &&
+        (lowStockState === undefined || balance.lowStock.state === lowStockState) &&
+        matchesSearch(
+          balance,
+          params.search,
+          (item) => `${item.warehouse.displayName} ${item.material.displayName}`,
+        ),
+    )
+
+    return pagedResponse(sortBalances(filtered, sortBy, sortDirection), params)
+  }),
+  http.get(`${INVENTORY_PREFIX}/balances/:balanceId`, ({ params }) => {
+    const balance = getDb().inventoryBalances.find((item) => item.balanceId === params['balanceId'])
+    return balance === undefined ? notFound() : HttpResponse.json(balance)
+  }),
+  http.get(`${INVENTORY_PREFIX}/movements`, ({ request }) => {
+    const params = toListParams(new URL(request.url))
+    if (params.sortBy !== undefined && !isOneOf(params.sortBy, MOVEMENT_SORT_FIELDS)) {
+      return inventoryQueryProblem('sortBy')
+    }
+    if (params.sortDirection !== undefined && !isSortDirection(params.sortDirection)) {
+      return inventoryQueryProblem('sortDirection')
+    }
+    if (params.movementType !== undefined && !isOneOf(params.movementType, MOVEMENT_TYPES)) {
+      return inventoryQueryProblem('movementType')
+    }
+
+    const sortBy = isOneOf(params.sortBy, MOVEMENT_SORT_FIELDS) ? params.sortBy : 'PostedAt'
+    const sortDirection = isSortDirection(params.sortDirection)
+      ? params.sortDirection
+      : 'Descending'
+    const movementType = isOneOf(params.movementType, MOVEMENT_TYPES)
+      ? params.movementType
+      : undefined
+    const filtered = getDb().stockMovements.filter(
+      (movement) =>
+        (params.warehouseId === undefined || movement.warehouse.id === params.warehouseId) &&
+        (params.materialId === undefined || movement.material.id === params.materialId) &&
+        (params.documentId === undefined || movement.documentId === params.documentId) &&
+        (movementType === undefined || movement.movementType === movementType) &&
+        (params.dateFrom === undefined || movement.postedAt >= params.dateFrom) &&
+        (params.dateTo === undefined || movement.postedAt <= params.dateTo),
+    )
+
+    return pagedResponse(sortMovements(filtered, sortBy, sortDirection), params)
+  }),
+  http.get(`${INVENTORY_PREFIX}/movements/:movementId`, ({ params }) => {
+    const movement = getDb().stockMovements.find((item) => item.movementId === params['movementId'])
+    return movement === undefined ? notFound() : HttpResponse.json(movement)
+  }),
+
   // --- Receiving: supplier suggestions --------------------------------------
   http.get(`${environment.apiBaseUrl}/receiving/suppliers`, async ({ request }) => {
     await delay(120)
@@ -1122,14 +1389,24 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     await delay(120)
     const body = (await request.json()) as WarehouseDocumentDraftRequest
     const db = getDb()
+    const actor = documentActor()
     const document = buildDraftDocument(body, {
       documentId: nextFixtureUuid(),
       systemReferenceNumber: nextSystemReferenceNumber(body.documentType, body.paperDocumentYear),
-      occurredBy: documentActor(),
+      occurredBy: actor,
       lookups: draftLookups(),
     })
     db.warehouseDocuments.push(document)
-    db.documentLifecycleEvents[document.documentId] = deriveLifecycleEvents(document)
+    db.documentLifecycleEvents[document.documentId] = [
+      createLifecycleEvent({
+        documentId: document.documentId,
+        documentRowVersion: document.rowVersion,
+        eventType: 'Created',
+        occurredAt: document.createdAt,
+        occurredBy: actor,
+        toStatus: 'Draft',
+      }),
+    ]
     return HttpResponse.json(document, { status: 201 })
   }),
   http.put(`${DOCUMENT_PREFIX}/:documentId`, async ({ params, request }) => {
@@ -1209,6 +1486,9 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       return notFound()
     }
     const document = db.warehouseDocuments[index]!
+    if (document.documentStatus !== 'Draft') {
+      return HttpResponse.json(attachmentUploadForbiddenProblem(), { status: 403 })
+    }
     const form = await readRequestForm(request)
     const file = form.get('file')
     const attachmentType = form.get('attachmentType')
