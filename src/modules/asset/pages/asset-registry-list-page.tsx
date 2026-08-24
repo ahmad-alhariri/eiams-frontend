@@ -8,6 +8,7 @@ import {
   ASSET_DERIVED_STATUS_LABELS_AR,
 } from '@/modules/asset/asset-status-labels'
 import type { ListAssetsQuery } from '@/modules/asset/types/asset.types'
+import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import type { Asset, AssetDerivedStatus } from '@/shared/types/generated/eiams-v1'
 import { StatusBadge } from '@/shared/feedback/status-badge'
@@ -16,6 +17,7 @@ import { PageHeader } from '@/shared/layout/page-header'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
+import { AsyncSelect } from '@/shared/ui/async-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { pageRows } from '@/shared/utils/table-data'
 
@@ -50,12 +52,14 @@ export default function AssetRegistryListPage() {
   )
 
   const handleWarehouseFilterChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      setWarehouseId(event.target.value === '' ? undefined : event.target.value)
+    (value: string | null) => {
+      setWarehouseId(value ?? undefined)
       setPage(1)
     },
     [setPage],
   )
+
+  const warehouseSelector = useScopedWarehouseSelector()
 
   const filters = useMemo<ListAssetsQuery>(
     () => ({
@@ -145,15 +149,14 @@ export default function AssetRegistryListPage() {
               </Select>
             </div>
             <div className="flex min-w-44 flex-col gap-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="warehouse-filter">
-                معرّف المستودع
-              </label>
-              <input
-                id="warehouse-filter"
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                placeholder="معرّف المستودع (اختياري)"
-                value={warehouseId ?? ''}
-                onChange={handleWarehouseFilterChange}
+              <span className="text-sm font-medium text-foreground">المستودع</span>
+              <AsyncSelect
+                value={warehouseId ?? null}
+                onValueChange={handleWarehouseFilterChange}
+                loadOptions={warehouseSelector.loadOptions}
+                disabled={!warehouseSelector.scopeReady}
+                placeholder="تصفية حسب المستودع..."
+                inputProps={{ 'aria-label': 'تصفية حسب المستودع' }}
               />
             </div>
           </div>
