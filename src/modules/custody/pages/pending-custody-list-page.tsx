@@ -2,34 +2,19 @@ import { useCallback, useMemo, useState } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { Link } from 'react-router'
 
-import {
-  useAssignCustodyMutation,
-  useCustodiesQuery,
-} from '@/modules/custody/hooks/use-custody-queries'
-import type {
-  CustodyMutationRequest,
-  ListCustodiesQuery,
-} from '@/modules/custody/types/custody.types'
+import { useCustodiesQuery } from '@/modules/custody/hooks/use-custody-queries'
+import { AssignCustodyDialog } from '@/modules/custody/components/assign-custody-dialog'
+import type { ListCustodiesQuery } from '@/modules/custody/types/custody.types'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { CounterpartSelect } from '@/modules/organization/components/counterpart-select'
 import type { AssetCustody } from '@/shared/types/generated/eiams-v1'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { dataTableFeatures } from '@/shared/ui/data-table'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/shared/ui/dialog'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Button } from '@/shared/ui/button'
-import { createIdempotencyKey } from '@/shared/services/mutation-safety'
 
 /**
  * Pending-assignment rows are always Asset-subject custody rows (PRD §12.8);
@@ -185,93 +170,8 @@ export default function PendingCustodyListPage() {
       </ContentCard>
 
       {assigningRow !== null ? (
-        <AssignmentDialog custody={assigningRow} onClose={() => setAssigningRow(null)} />
+        <AssignCustodyDialog custody={assigningRow} onClose={() => setAssigningRow(null)} />
       ) : null}
     </div>
-  )
-}
-
-interface AssignmentDialogProps {
-  custody: AssetCustody
-  onClose: () => void
-}
-
-/**
- * The t03 assignment flow in its dialog form (PRD §12.8 step 2): picks an
- * active Employee via the shared counterpart lookup and posts the idempotent
- * assign mutation. Server semantics close the operational row.
- */
-function AssignmentDialog({ custody, onClose }: AssignmentDialogProps) {
-  const [holderReference, setHolderReference] = useState<{
-    id: string
-    displayName: string
-  } | null>(null)
-  const assignMutation = useAssignCustodyMutation()
-  const canSubmit = holderReference !== null && !assignMutation.isPending
-
-  const handleAssign = () => {
-    if (holderReference === null) return
-    const request: CustodyMutationRequest = {
-      subjectType: 'Asset',
-      assetId: custody.assetId,
-      custodyKind: 'Personal',
-      effectiveAt: new Date().toISOString(),
-      holderId: holderReference.id,
-      holderType: 'Employee',
-      issueDocumentId: custody.issueDocumentId,
-      reason: `تكليف شخصي إلى ${holderReference.displayName}`,
-      rowVersion: custody.rowVersion,
-    }
-    assignMutation.mutate(
-      { request, idempotencyKey: createIdempotencyKey() },
-      { onSuccess: onClose },
-    )
-  }
-
-  return (
-    <Dialog open onOpenChange={(next) => (!next ? onClose() : undefined)}>
-      <DialogContent dir="rtl">
-        <DialogHeader>
-          <DialogTitle>تكليف حفظ شخصي</DialogTitle>
-          <DialogDescription>
-            سيُنشأ سطر حفظ شخصياً للموظف المحدد على الأصل{' '}
-            <span dir="ltr" className="font-mono">
-              {custody.assetNumber}
-            </span>{' '}
-            ويُغلق السطر التشغيلي الحالي.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-2 py-2">
-          <span className="text-sm font-medium text-foreground">الموظف المكلف</span>
-          <CounterpartSelect
-            type="Employee"
-            onValueChange={(reference, counterpart) =>
-              setHolderReference(
-                reference === null
-                  ? null
-                  : {
-                      id: reference.id,
-                      displayName: counterpart?.displayName ?? '',
-                    },
-              )
-            }
-            inputProps={{ 'aria-label': 'الموظف المكلف' }}
-          />
-          {assignMutation.error !== null ? (
-            <p role="alert" className="text-sm text-destructive">
-              تعذّر إتمام التكليف. تحقق من البيانات وحاول مرة أخرى.
-            </p>
-          ) : null}
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
-            إلغاء
-          </Button>
-          <Button type="button" disabled={!canSubmit} onClick={handleAssign}>
-            {assignMutation.isPending ? 'جارٍ التكليف...' : 'تأكيد التكليف'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }
