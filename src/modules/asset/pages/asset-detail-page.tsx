@@ -1,6 +1,7 @@
 import { useParams } from 'react-router'
 
 import { AcquisitionProvenancePanel } from '@/modules/asset/components/acquisition-provenance-panel'
+import { AssetMovementLedger } from '@/modules/asset/components/asset-movement-ledger'
 import {
   useAssetCustodyTimelineQuery,
   useAssetQuery,
@@ -69,6 +70,13 @@ export default function AssetDetailPage() {
           <AcquisitionProvenancePanel asset={asset} />
 
           <CustodySection assetId={asset.assetId} />
+
+          <ContentCard
+            title="سجل حركات الأصل"
+            description="السجل غير القابل للتعديل لكل أحداث هذا الأصل: استلام، صرف، إرجاع، استبعاد."
+          >
+            <AssetMovementLedger assetId={asset.assetId} />
+          </ContentCard>
         </>
       ) : null}
     </div>
