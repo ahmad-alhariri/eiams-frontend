@@ -1231,7 +1231,12 @@ export const mockApiHandlers: readonly HttpHandler[] = [
         : []
     return HttpResponse.json({
       items,
-      meta: { pageIndex: 0, pageSize: 20, totalItems: items.length, totalPages: items.length > 0 ? 1 : 0 },
+      meta: {
+        pageIndex: 0,
+        pageSize: 20,
+        totalItems: items.length,
+        totalPages: items.length > 0 ? 1 : 0,
+      },
     })
   }),
   http.get(`${AUTH_PREFIX}/external-parties/:externalPartyId`, async ({ params }) => {
