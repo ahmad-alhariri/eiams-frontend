@@ -66,6 +66,7 @@ export const ROUTE_PATHS = {
   /** Assets & custody. */
   assets: '/assets',
   assetDetail: '/assets/:assetId',
+  assetCustodyHistory: '/assets/:assetId/custody',
   custodyPending: '/custody/pending',
   custodyActive: '/custody/active',
   custodyDetail: '/custody/:custodyId',
@@ -392,6 +393,12 @@ export const ROUTE_METADATA: RouteMetaMap = {
     group: 'assets-custody',
     permissions: ['asset.view'],
     parent: 'assets',
+  },
+  assetCustodyHistory: {
+    labelAr: 'سجل عهدة الأصل',
+    group: 'assets-custody',
+    permissions: ['asset.view'],
+    parent: 'assetDetail',
   },
   custodyPending: {
     labelAr: 'الأصول بانتظار التكليف',
