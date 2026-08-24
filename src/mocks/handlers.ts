@@ -281,6 +281,13 @@ function reEvaluateAttachmentPolicy(
 
 const CATALOG_PREFIX = `${environment.apiBaseUrl}/catalog`
 const AUTH_PREFIX = environment.apiBaseUrl
+
+/** Deterministic per-asset custody id so detail views re-resolve their row. */
+function deterministicCustodyId(asset: { readonly assetNumber: string }): string {
+  const digits = asset.assetNumber.replace(/\D/g, '').padStart(12, '0').slice(-12)
+  return `00000000-0000-4000-8000-${digits}`
+}
+
 const DOCUMENT_PREFIX = `${environment.apiBaseUrl}/warehouse-documents`
 
 const DOCUMENT_ACTION_IDEMPOTENCY = createIdempotencyMemo()
@@ -1123,6 +1130,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
   // Filters mirror the contract's listAssets operation: materialId,
   // warehouseId (single id), derivedStatus, and free-text search over the
   // asset number + serial + material name.
+
   // --- Custody registry (e19-t01): unified list over the fixture graph ------
   // Filters mirror the contract's listCustodies operation: status,
   // holderType, custodyKind, and free-text search over holder + asset number.
@@ -1140,7 +1148,10 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       .map((asset) => ({
         assetId: asset.assetId,
         assetNumber: asset.assetNumber,
-        custodyId: nextFixtureUuid(),
+        // Deterministic per-asset custody id: the custody detail view
+        // re-fetches this list and must resolve the same row it navigated
+        // from, so the id cannot be regenerated per request.
+        custodyId: deterministicCustodyId(asset),
         custodyKind: 'Operational' as const,
         fromTs: '2026-08-01T08:00:00.000Z',
         holder: {
@@ -1215,12 +1226,12 @@ export const mockApiHandlers: readonly HttpHandler[] = [
         {
           assetId: asset.assetId,
           assetNumber: asset.assetNumber,
-          custodyId: nextFixtureUuid(),
+          custodyId: deterministicCustodyId(asset),
           custodyKind: 'Operational',
           fromTs: '2026-08-01T08:00:00.000Z',
           holder: {
             displayName: 'مديرية النقل والحراسة',
-            id: nextFixtureUuid(),
+            id: deterministicCustodyId(asset),
             secondaryLabelAr: null,
             status: 'Active' as const,
             type: 'OrganizationalUnit' as const,
