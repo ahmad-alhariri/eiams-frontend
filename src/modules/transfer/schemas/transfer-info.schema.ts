@@ -66,3 +66,24 @@ export function toTransferInfo(
     transferReason: values.transferReason.trim(),
   }
 }
+
+/**
+ * The petal group of the transfer document form (header + lines + petal).
+ * `destinationWarehouseName` rides alongside the petal as a selection-time
+ * sibling (e16-t01 pattern): the mock persists the petal verbatim, so the
+ * chosen warehouse's display name must be captured when picked.
+ */
+export interface TransferPetalContainer {
+  petal: {
+    transferInfo: z.infer<typeof transferInfoSchema>
+    destinationWarehouseName: string
+  }
+}
+
+/** Flattens the page's petal group into the contract `TransferInfo`. */
+export function buildTransferPetal(values: TransferPetalContainer['petal']): TransferInfo {
+  return toTransferInfo(
+    values.transferInfo,
+    values.destinationWarehouseName === '' ? undefined : values.destinationWarehouseName,
+  )
+}
