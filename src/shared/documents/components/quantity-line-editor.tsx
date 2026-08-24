@@ -507,9 +507,7 @@ export function QuantityLineEditor({
             operation={operation}
             scopeReady={materialSelector.scopeReady}
             validates={capabilityValidation.validates}
-            {...(balanceForLine === undefined
-              ? {}
-              : { balance: balanceForLine(index) })}
+            {...(balanceForLine === undefined ? {} : { balance: balanceForLine(index) })}
           />
         ))
       )}

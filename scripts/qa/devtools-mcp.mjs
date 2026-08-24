@@ -82,7 +82,9 @@ function findChromeExecutable() {
   const candidates = [
     'C:/Program Files/Google/Chrome/Application/chrome.exe',
     'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-    process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}/Google/Chrome/Application/chrome.exe` : null,
+    process.env.LOCALAPPDATA
+      ? `${process.env.LOCALAPPDATA}/Google/Chrome/Application/chrome.exe`
+      : null,
   ].filter(Boolean)
   for (const candidate of candidates) {
     try {
@@ -112,7 +114,9 @@ async function waitForEndpoint(port, timeoutMs = 30000) {
     await new Promise((resolve) => setTimeout(resolve, 400))
     lastError = new Error('endpoint not ready yet')
   }
-  throw new Error(`Chrome DevTools endpoint did not become ready on port ${port}: ${lastError.message}`)
+  throw new Error(
+    `Chrome DevTools endpoint did not become ready on port ${port}: ${lastError.message}`,
+  )
 }
 
 async function ensureBrowser(args) {
@@ -144,7 +148,9 @@ async function ensureBrowser(args) {
     'about:blank',
   ]
   if (!executablePath) {
-    throw new Error('Chrome executable not found; pass one via CHROME_PATH or install Google Chrome.')
+    throw new Error(
+      'Chrome executable not found; pass one via CHROME_PATH or install Google Chrome.',
+    )
   }
 
   const child = spawn(executablePath, chromeArgs, { detached: true, stdio: 'ignore' })
@@ -170,7 +176,10 @@ function callToolOnce(port, toolName, toolArgs, timeoutMs = 120000) {
     const pending = new Map()
     let nextId = 1
 
-    const timer = setTimeout(() => finish(new Error(`MCP tool "${toolName}" timed out after ${timeoutMs}ms`)), timeoutMs)
+    const timer = setTimeout(
+      () => finish(new Error(`MCP tool "${toolName}" timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    )
 
     function finish(error, content) {
       if (settled) return
@@ -245,7 +254,11 @@ function callToolOnce(port, toolName, toolArgs, timeoutMs = 120000) {
     child.on('exit', (code) => {
       if (!settled) {
         const stderrText = stderrTail.join('\n')
-        finish(new Error(`MCP server exited early (code ${code}).${stderrText ? `\nstderr:\n${stderrText.slice(-2000)}` : ''}`))
+        finish(
+          new Error(
+            `MCP server exited early (code ${code}).${stderrText ? `\nstderr:\n${stderrText.slice(-2000)}` : ''}`,
+          ),
+        )
       }
     })
 
@@ -260,9 +273,7 @@ function callToolOnce(port, toolName, toolArgs, timeoutMs = 120000) {
 
       const result = await request('tools/call', { name: toolName, arguments: toolArgs })
       if (result?.isError) {
-        const text = (result.content ?? [])
-          .map((part) => part.text ?? '')
-          .join('\n')
+        const text = (result.content ?? []).map((part) => part.text ?? '').join('\n')
         finish(new Error(`Tool "${toolName}" failed:\n${text}`))
         return
       }
@@ -274,11 +285,15 @@ function callToolOnce(port, toolName, toolArgs, timeoutMs = 120000) {
 
 async function readRecordedPort() {
   if (!existsSync(PORT_FILE)) {
-    throw new Error('No Chrome endpoint recorded. Run first: node scripts/qa/devtools-mcp.mjs ensure-browser')
+    throw new Error(
+      'No Chrome endpoint recorded. Run first: node scripts/qa/devtools-mcp.mjs ensure-browser',
+    )
   }
   const state = JSON.parse(readFileSync(PORT_FILE, 'utf8'))
   if (!state.port || !(await isEndpointAlive(state.port))) {
-    throw new Error('Recorded Chrome endpoint is dead. Re-run: node scripts/qa/devtools-mcp.mjs ensure-browser')
+    throw new Error(
+      'Recorded Chrome endpoint is dead. Re-run: node scripts/qa/devtools-mcp.mjs ensure-browser',
+    )
   }
   return state.port
 }
@@ -291,7 +306,16 @@ async function loadStdioTransport() {
   try {
     const pkgDir = path.dirname(nodeRequire.resolve('chrome-devtools-mcp/package.json'))
     candidates.push(
-      path.join(pkgDir, 'node_modules', '@modelcontextprotocol', 'sdk', 'dist', 'esm', 'server', 'stdio.js'),
+      path.join(
+        pkgDir,
+        'node_modules',
+        '@modelcontextprotocol',
+        'sdk',
+        'dist',
+        'esm',
+        'server',
+        'stdio.js',
+      ),
     )
     const pnpmRoot = path.join(repoRoot, 'node_modules', '.pnpm')
     if (existsSync(pnpmRoot)) {
@@ -299,7 +323,17 @@ async function loadStdioTransport() {
       for (const entry of readdirSync(pnpmRoot)) {
         if (entry.startsWith('@modelcontextprotocol+sdk@')) {
           candidates.push(
-            path.join(pnpmRoot, entry, 'node_modules', '@modelcontextprotocol', 'sdk', 'dist', 'esm', 'server', 'stdio.js'),
+            path.join(
+              pnpmRoot,
+              entry,
+              'node_modules',
+              '@modelcontextprotocol',
+              'sdk',
+              'dist',
+              'esm',
+              'server',
+              'stdio.js',
+            ),
           )
         }
       }
@@ -337,7 +371,9 @@ async function serveStdio(port) {
 }
 
 function truncate(text, max = 24000) {
-  return text.length <= max ? text : `${text.slice(0, max)}\n…[truncated ${text.length - max} chars]`
+  return text.length <= max
+    ? text
+    : `${text.slice(0, max)}\n…[truncated ${text.length - max} chars]`
 }
 
 function printContent(content, max = 24000) {
@@ -373,7 +409,7 @@ async function main() {
         '  snapshot',
         '  screenshot <name> [--full] [--uid <uid>]',
         '  click --uid <uid> | fill --uid <uid> --value <text> | hover --uid <uid>',
-        "  form --json '<{\"uid\":\"value\",...}>'",
+        '  form --json \'<{"uid":"value",...}>\'',
         '  press --key Enter',
         '  wait-for "<text>" [--timeout-ms 10000]',
         '  eval "<js arrow function>"',
@@ -419,7 +455,10 @@ async function main() {
       const finalPath = path.join(ART_DIR, `${name}.png`)
       copyFileSync(stagedPath, finalPath)
       console.log(`saved: ${finalPath}`)
-      printContent(content.filter((part) => part.type === 'text'), 2000)
+      printContent(
+        content.filter((part) => part.type === 'text'),
+        2000,
+      )
       break
     }
     case 'click': {
@@ -429,7 +468,9 @@ async function main() {
     }
     case 'fill': {
       if (!args.uid) throw new Error('fill requires --uid')
-      printContent(await callToolOnce(port, 'fill', { uid: args.uid, value: String(args.value ?? '') }))
+      printContent(
+        await callToolOnce(port, 'fill', { uid: args.uid, value: String(args.value ?? '') }),
+      )
       break
     }
     case 'form': {
@@ -480,12 +521,16 @@ async function main() {
       }
       const fn = `() => {
         let control = null
-        ${byLabel ? `const labels = [...document.querySelectorAll('label')].filter((l) => (l.textContent ?? '').trim().includes(${byLabel}))
+        ${
+          byLabel
+            ? `const labels = [...document.querySelectorAll('label')].filter((l) => (l.textContent ?? '').trim().includes(${byLabel}))
         for (const label of labels) {
           const forId = label.getAttribute('for')
           control = (forId && document.getElementById(forId)) || label.querySelector('input, textarea') || (label.closest('[data-slot=form-item]')?.querySelector('input, textarea') ?? null)
           if (control) break
-        }` : ''}
+        }`
+            : ''
+        }
         if (!control && ${byName ?? 'null'}) control = document.querySelector(\`input[name="\${${byName}}"], textarea[name="\${${byName}}"]\`)
         if (!control && ${byPlaceholder ?? 'null'}) control = document.querySelector(\`input[placeholder*="\${${byPlaceholder}}"], textarea[placeholder*="\${${byPlaceholder}}"]\`)
         if (!control) return 'CONTROL NOT FOUND'
@@ -539,19 +584,19 @@ async function main() {
         if (part.type !== 'text') continue
         const lines = part.text.split('\n')
         const filtered = filter
-          ? [
-              lines[0],
-              ...lines.filter((line, index) => index > 0 && line.includes(filter)),
-            ]
+          ? [lines[0], ...lines.filter((line, index) => index > 0 && line.includes(filter))]
           : lines
-        console.log(
-          truncate(filtered.join('\n'), 16000),
-        )
+        console.log(truncate(filtered.join('\n'), 16000))
       }
       break
     }
     case 'resize': {
-      printContent(await callToolOnce(port, 'resize_page', { width: Number(args.width ?? 1440), height: Number(args.height ?? 900) }))
+      printContent(
+        await callToolOnce(port, 'resize_page', {
+          width: Number(args.width ?? 1440),
+          height: Number(args.height ?? 900),
+        }),
+      )
       break
     }
     case 'pages': {

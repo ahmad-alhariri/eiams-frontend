@@ -47,11 +47,7 @@ describe('IssueDocumentFormPage', () => {
 
     // With an empty material selection there is nothing to over-draw, so the
     // submit stays enabled and no balance alert renders.
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeEnabled(),
-    )
-    expect(
-      document.querySelector('[role=alert][class*="text-destructive"]'),
-    ).toBeNull()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeEnabled())
+    expect(document.querySelector('[role=alert][class*="text-destructive"]')).toBeNull()
   })
 })

@@ -1,9 +1,6 @@
 import type { AxiosInstance } from 'axios'
 
-import type {
-  ListAssetMovementsQuery,
-  ListAssetsQuery,
-} from '@/modules/asset/types/asset.types'
+import type { ListAssetMovementsQuery, ListAssetsQuery } from '@/modules/asset/types/asset.types'
 import { apiClient } from '@/shared/services/api.client'
 import type {
   Asset,

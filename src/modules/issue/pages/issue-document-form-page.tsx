@@ -150,12 +150,7 @@ export default function IssueDocumentFormPage() {
         subtitle="أنشئ سند صرف جديدًا: بيانات المستند الورقي، الجهة المستلمة وسبب الصرف، ثم بنود المواد مع التحقق من الرصيد المتاح."
       />
       <FormProvider {...form}>
-        <form
-          data-slot="issue-document-form"
-          onSubmit={onSubmit}
-          noValidate
-          className="grid gap-5"
-        >
+        <form data-slot="issue-document-form" onSubmit={onSubmit} noValidate className="grid gap-5">
           <DocumentHeaderSection
             documentType="Issue"
             petalSlot={
@@ -176,9 +171,7 @@ export default function IssueDocumentFormPage() {
               documentType="Issue"
               warehouseId={headerWarehouseId || undefined}
               disabled={isSubmitting}
-              balanceForLine={(index) =>
-                balanceByMaterialId.get(materialIds[index] ?? '')
-              }
+              balanceForLine={(index) => balanceByMaterialId.get(materialIds[index] ?? '')}
             />
           </section>
           {overBalanceMessageAr !== null ? (

@@ -79,7 +79,11 @@ function RecipientTypeSelectorControl({
 }: RecipientTypeSelectorControlProps) {
   const { formItemId } = useFormField()
   return (
-    <Select value={value} onValueChange={(nextValue) => onValueChange(nextValue ?? '')} disabled={disabled}>
+    <Select
+      value={value}
+      onValueChange={(nextValue) => onValueChange(nextValue ?? '')}
+      disabled={disabled}
+    >
       <SelectTrigger id={formItemId} aria-label="نوع الجهة المستلمة">
         <SelectValue placeholder="اختر نوع الجهة...">
           {ISSUE_RECIPIENT_TYPE_LABELS_AR[value as (typeof ISSUE_RECIPIENT_TYPES)[number]] ??
@@ -160,11 +164,9 @@ export function IssueRecipientSection({ disabled = false }: IssueRecipientSectio
                     form.setValue('petal.issueTo.recipientId', reference?.id ?? '', {
                       shouldValidate: true,
                     })
-                    form.setValue(
-                      'petal.issueToDisplayName',
-                      option?.displayName ?? '',
-                      { shouldValidate: false },
-                    )
+                    form.setValue('petal.issueToDisplayName', option?.displayName ?? '', {
+                      shouldValidate: false,
+                    })
                   }}
                 />
                 <FormMessage />

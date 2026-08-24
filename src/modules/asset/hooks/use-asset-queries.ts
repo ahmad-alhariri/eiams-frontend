@@ -2,10 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { assetService } from '@/modules/asset/services/asset.service'
-import type {
-  ListAssetMovementsQuery,
-  ListAssetsQuery,
-} from '@/modules/asset/types/asset.types'
+import type { ListAssetMovementsQuery, ListAssetsQuery } from '@/modules/asset/types/asset.types'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 

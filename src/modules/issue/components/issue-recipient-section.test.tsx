@@ -132,7 +132,9 @@ describe('IssueRecipientSection', () => {
     expect(submitted?.petal.issueToDisplayName).toBe('أحمد محمد')
     expect(submitted?.petal.issueTo.issueReason).toBe('تجهيز مكتب إدارة التقنية')
     // The page maps out with the captured sibling name.
-    expect(toIssueInfo(submitted!.petal.issueTo, submitted!.petal.issueToDisplayName)).toMatchObject({
+    expect(
+      toIssueInfo(submitted!.petal.issueTo, submitted!.petal.issueToDisplayName),
+    ).toMatchObject({
       recipientDisplayName: 'أحمد محمد',
     })
   })

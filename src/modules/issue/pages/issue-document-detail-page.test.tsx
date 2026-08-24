@@ -67,9 +67,7 @@ describe('IssueDocumentDetailPage', () => {
 
     renderPage()
 
-    await waitFor(() =>
-      expect(screen.getByText('مديرية المعلوماتية')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText('مديرية المعلوماتية')).toBeInTheDocument())
     // Petal rows: type label + display name + reason.
     expect(screen.getByText('وحدة تنظيمية')).toBeInTheDocument()
     expect(screen.getByText('تجهيز مديرية المعلوماتية')).toBeInTheDocument()

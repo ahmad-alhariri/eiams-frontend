@@ -6,11 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
 import type { InventoryBalance } from '@/shared/types/generated/eiams-v1'
-import {
-  createInventoryBalance,
-  createPage,
-  fixtureUuid,
-} from '@/test/msw/factories'
+import { createInventoryBalance, createPage, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 import { useIssueLineBalances } from './use-issue-line-balances'
@@ -100,10 +96,9 @@ describe('useIssueLineBalances', () => {
       http.get(`${API_BASE_URL}/inventory/balances`, () => HttpResponse.json(createPage([]))),
     )
 
-    const { result } = renderHook(
-      () => useIssueLineBalances(WAREHOUSE_ID, [fixtureUuid(99)]),
-      { wrapper: createWrapper() },
-    )
+    const { result } = renderHook(() => useIssueLineBalances(WAREHOUSE_ID, [fixtureUuid(99)]), {
+      wrapper: createWrapper(),
+    })
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect([...result.current.balanceByMaterialId.values()][0]).toBeNull()
@@ -116,10 +111,9 @@ describe('useIssueLineBalances', () => {
       }),
     )
 
-    const { result } = renderHook(
-      () => useIssueLineBalances(WAREHOUSE_KEY(), ['', '']),
-      { wrapper: createWrapper() },
-    )
+    const { result } = renderHook(() => useIssueLineBalances(WAREHOUSE_KEY(), ['', '']), {
+      wrapper: createWrapper(),
+    })
     expect(result.current.balanceByMaterialId.size).toBe(0)
     expect(result.current.isLoading).toBe(false)
   })
@@ -131,10 +125,9 @@ describe('useIssueLineBalances', () => {
       }),
     )
 
-    const { result } = renderHook(
-      () => useIssueLineBalances(undefined, [fixtureUuid(99)]),
-      { wrapper: createWrapper() },
-    )
+    const { result } = renderHook(() => useIssueLineBalances(undefined, [fixtureUuid(99)]), {
+      wrapper: createWrapper(),
+    })
     expect(result.current.balanceByMaterialId.size).toBe(0)
     expect(result.current.isLoading).toBe(false)
   })
@@ -147,10 +140,9 @@ describe('useIssueLineBalances', () => {
       }),
     )
 
-    const { result } = renderHook(
-      () => useIssueLineBalances(WAREHOUSE_ID, [fixtureUuid(99)]),
-      { wrapper: createWrapper() },
-    )
+    const { result } = renderHook(() => useIssueLineBalances(WAREHOUSE_ID, [fixtureUuid(99)]), {
+      wrapper: createWrapper(),
+    })
     expect(result.current.balanceByMaterialId.size).toBe(0)
     expect(result.current.isLoading).toBe(false)
   })

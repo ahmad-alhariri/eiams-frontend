@@ -16,12 +16,7 @@ import type { IssueTo } from '@/shared/types/generated/eiams-v1'
  */
 
 /** Contract `CounterpartType` values an issue recipient may take. */
-export const ISSUE_RECIPIENT_TYPES = [
-  'Employee',
-  'OrganizationalUnit',
-  'Site',
-  'External',
-] as const
+export const ISSUE_RECIPIENT_TYPES = ['Employee', 'OrganizationalUnit', 'Site', 'External'] as const
 
 export type IssueRecipientType = (typeof ISSUE_RECIPIENT_TYPES)[number]
 
