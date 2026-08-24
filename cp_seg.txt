@@ -1,0 +1,33 @@
+تفاصيل العهدة[0m
+            [36m</h1>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"_r_g_"[39m
+        [33mclass[39m=[32m"flex min-h-64 flex-col items-center justify-center rounded-xl border border-destructive/40 bg-popover p-8 text-center shadow-card"[39m
+        [33mdata-slot[39m=[32m"error-state"[39m
+        [33mrole[39m=[32m"alert"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33maria-hidden[39m=[32m"true"[39m
+          [33mclass[39m=[32m"mb-4 flex size-24 items-center justify-center rounded-full bg-destructive/10 text-destructive"[39m
+          [33mdata-slot[39m=[32m"error-state-icon"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33mclass[39m=[32m"tabler-icon tabler-icon-alert-triangle size-12"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M12 9v4"[39m
+            [36m/>[39m
+            [36m<path[39m
+             

@@ -4,9 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
-import {
-  assignCustodySchema,
-} from '@/modules/custody/schemas/assign-custody.schema'
+import { assignCustodySchema } from '@/modules/custody/schemas/assign-custody.schema'
 import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { createQueryClient } from '@/shared/services/query.client'
@@ -135,7 +133,7 @@ describe('AssignCustodyDialog (e19-t03)', () => {
     await user.click(screen.getByRole('button', { name: 'تأكيد التكليف' }))
 
     await waitFor(() => expect(postedBody).toBeDefined())
-    expect(String(postedBody?.["reason"])).toContain('طلب الإدارة')
+    expect(String(postedBody?.['reason'])).toContain('طلب الإدارة')
   })
 
   it('rejects reasons longer than 300 characters', () => {
