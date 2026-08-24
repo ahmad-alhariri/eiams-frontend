@@ -80,6 +80,16 @@ export interface TransferPetalContainer {
   }
 }
 
+/** The petal group of the transfer document form (header + lines + petal). */
+export const transferPetalFormSchema = z.object({
+  petal: z.object({
+    transferInfo: transferInfoSchema,
+    destinationWarehouseName: z.string(),
+  }),
+})
+
+export type TransferPetalFormValues = z.infer<typeof transferPetalFormSchema>
+
 /** Flattens the page's petal group into the contract `TransferInfo`. */
 export function buildTransferPetal(values: TransferPetalContainer['petal']): TransferInfo {
   return toTransferInfo(

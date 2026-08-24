@@ -58,7 +58,7 @@ export interface TransferDestinationSectionProps {
    * The form's source warehouse id (`header.warehouseId`). Excluded from the
    * destination options.
    */
-  sourceWarehouseId?: string
+  sourceWarehouseId: string | undefined
   /** Disables every editable control; the controls stay registered. */
   disabled?: boolean
 }
