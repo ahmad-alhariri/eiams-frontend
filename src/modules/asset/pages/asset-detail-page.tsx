@@ -31,14 +31,10 @@ export default function AssetDetailPage() {
       <PageHeader
         title={ROUTE_METADATA.assetDetail.labelAr}
         subtitle={
-          asset === undefined
-            ? undefined
-            : `${asset.assetNumber} — ${asset.material.displayName}`
+          asset === undefined ? undefined : `${asset.assetNumber} — ${asset.material.displayName}`
         }
         toolbar={
-          asset === undefined ? null : (
-            <StatusBadge entity="asset" status={asset.derivedStatus} />
-          )
+          asset === undefined ? null : <StatusBadge entity="asset" status={asset.derivedStatus} />
         }
       />
 

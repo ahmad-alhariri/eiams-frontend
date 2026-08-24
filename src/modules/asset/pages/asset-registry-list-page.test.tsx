@@ -84,9 +84,7 @@ describe('AssetRegistryListPage (e18-t02)', () => {
     render(<AssetRegistryListPage />, { wrapper: createWrapper() })
 
     const link = await screen.findByRole('link', { name: /AST-2024-C01/ })
-    expect(link.getAttribute('href')).toBe(
-      `/assets/${fixtureUuid(230)}`,
-    )
+    expect(link.getAttribute('href')).toBe(`/assets/${fixtureUuid(230)}`)
   })
 
   it('passes the selected derived status as a list filter and resets paging', async () => {

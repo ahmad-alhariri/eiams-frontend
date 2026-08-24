@@ -30,9 +30,7 @@ export function AcquisitionProvenancePanel({ asset }: AcquisitionProvenancePanel
       {hasProvenance ? (
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="border-b border-border pb-4 sm:border-b-0 sm:col-span-2 lg:col-span-3">
-            <dt className="text-sm font-medium text-muted-foreground">
-              بند الاستلام المرجعي
-            </dt>
+            <dt className="text-sm font-medium text-muted-foreground">بند الاستلام المرجعي</dt>
             <dd className="mt-1.5 text-base font-medium text-foreground" dir="ltr">
               {asset.receiptLineId === undefined ? (
                 '—'
@@ -55,9 +53,7 @@ export function AcquisitionProvenancePanel({ asset }: AcquisitionProvenancePanel
           </div>
         </dl>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          لا توجد بيانات اقتناء مسجّلة لهذا الأصل.
-        </p>
+        <p className="text-sm text-muted-foreground">لا توجد بيانات اقتناء مسجّلة لهذا الأصل.</p>
       )}
     </ContentCard>
   )

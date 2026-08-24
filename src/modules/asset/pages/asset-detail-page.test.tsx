@@ -5,7 +5,11 @@ import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createAssetCustody, createAsset as createAssetFixture, fixtureUuid } from '@/test/msw/factories'
+import {
+  createAssetCustody,
+  createAsset as createAssetFixture,
+  fixtureUuid,
+} from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { createQueryClient } from '@/shared/services/query.client'
 
@@ -105,14 +109,10 @@ describe('AssetDetailPage (e18-t03)', () => {
           }),
         ),
       ),
-      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () =>
-        HttpResponse.json([]),
-      ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () => HttpResponse.json([])),
     )
     renderPage()
 
-    expect(
-      await screen.findByText('لا توجد عهدة مسجّلة لهذا الأصل.'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('لا توجد عهدة مسجّلة لهذا الأصل.')).toBeInTheDocument()
   })
 })

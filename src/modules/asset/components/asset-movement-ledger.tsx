@@ -6,17 +6,10 @@ import { DataTableServer } from '@/shared/ui/data-table-server'
 import { pageRows } from '@/shared/utils/table-data'
 import type { AssetMovement } from '@/shared/types/generated/eiams-v1'
 import { useAssetMovementsQuery } from '@/modules/asset/hooks/use-asset-queries'
+import { ASSET_MOVEMENT_TYPE_LABELS_AR } from '@/modules/asset/asset-movement-labels'
 
 export interface AssetMovementLedgerProps {
   assetId: string
-}
-
-/** Arabic labels for the immutable asset movement event types (D-RAE-01). */
-export const ASSET_MOVEMENT_TYPE_LABELS_AR: Readonly<Record<AssetMovement['eventType'], string>> = {
-  Received: 'استلام',
-  Issued: 'صرف',
-  Returned: 'إرجاع',
-  Disposed: 'استبعاد',
 }
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, AssetMovement>()
@@ -38,14 +31,14 @@ export function AssetMovementLedger({ assetId }: AssetMovementLedgerProps) {
           header: 'نوع الحدث',
           cell: ({ getValue }) => ASSET_MOVEMENT_TYPE_LABELS_AR[getValue()],
         }),
-        columnHelper.accessor(
-          (movement) => movement.fromWarehouse?.displayName ?? '—',
-          { id: 'fromWarehouse', header: 'من مستودع' },
-        ),
-        columnHelper.accessor(
-          (movement) => movement.toWarehouse?.displayName ?? '—',
-          { id: 'toWarehouse', header: 'إلى مستودع' },
-        ),
+        columnHelper.accessor((movement) => movement.fromWarehouse?.displayName ?? '—', {
+          id: 'fromWarehouse',
+          header: 'من مستودع',
+        }),
+        columnHelper.accessor((movement) => movement.toWarehouse?.displayName ?? '—', {
+          id: 'toWarehouse',
+          header: 'إلى مستودع',
+        }),
         columnHelper.accessor((movement) => movement.occurredBy.displayName, {
           id: 'occurredBy',
           header: 'بواسطة',
