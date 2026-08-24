@@ -1060,6 +1060,64 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     )
     return pagedResponse(filtered, params)
   }),
+
+  // --- Organization: polymorphic counterpart lookups (D-POST-01) ------------
+  // Active, scope-aware options for Issue/Custody recipient and holder
+  // choices. Derived from the fixture graph: employees, organizational units,
+  // sites, and external parties are all active counterparts.
+  http.get(`${AUTH_PREFIX}/counterparts`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const type = url.searchParams.get('type')
+    const search = (url.searchParams.get('search') ?? '').trim()
+    const db = getDb()
+    const pool: Array<{
+      id: string
+      displayName: string
+      secondaryLabelAr: string | null
+      type: 'Employee' | 'OrganizationalUnit' | 'Site' | 'External'
+    }> = [
+      ...db.employees.map((employee) => ({
+        id: employee.employeeId,
+        displayName: employee.fullNameAr,
+        secondaryLabelAr: employee.jobTitleAr ?? null,
+        type: 'Employee' as const,
+      })),
+      ...db.organizationalUnits.map((unit) => ({
+        id: unit.orgUnitId,
+        displayName: unit.nameAr,
+        secondaryLabelAr: unit.code,
+        type: 'OrganizationalUnit' as const,
+      })),
+      ...db.sites.map((site) => ({
+        id: site.siteId,
+        displayName: site.nameAr,
+        secondaryLabelAr: site.code,
+        type: 'Site' as const,
+      })),
+      ...db.externalParties.map((party) => ({
+        id: party.externalPartyId,
+        displayName: party.nameAr,
+        secondaryLabelAr: party.code ?? null,
+        type: 'External' as const,
+      })),
+    ]
+    const filtered = pool.filter(
+      (counterpart) =>
+        (type === null || counterpart.type === type) &&
+        (search === '' || counterpart.displayName.includes(search)),
+    )
+    return HttpResponse.json({
+      items: filtered.map((counterpart) => ({
+        displayName: counterpart.displayName,
+        id: counterpart.id,
+        secondaryLabelAr: counterpart.secondaryLabelAr,
+        status: 'Active' as const,
+        type: counterpart.type,
+      })),
+      meta: { page: 0, pageSize: 10, total: filtered.length },
+    })
+  }),
   http.get(`${AUTH_PREFIX}/external-parties/:externalPartyId`, async ({ params }) => {
     const party = getDb().externalParties.find(
       (item) => item.externalPartyId === params['externalPartyId'],
