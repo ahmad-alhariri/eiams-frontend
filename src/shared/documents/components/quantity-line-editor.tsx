@@ -63,6 +63,13 @@ export interface QuantityLineEditorProps {
    * renders the per-line hint and exposes the values for gate evaluation.
    */
   balanceForLine?: (index: number) => number | null | undefined
+  /**
+   * Optional per-line extra content slot rendered under the line fields
+   * (e16-t05). Lets a page inject document-specific line UI — e.g. the Issue
+   * existing-asset multi-select — without the shared editor learning about
+   * that document type. Return `null` to render nothing for a line.
+   */
+  assetSlotForLine?: (index: number) => ReactNode
 }
 
 /** Aggregate capability state for the currently selected quantity-line materials. */
@@ -200,6 +207,8 @@ interface QuantityLineRowProps {
   validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation
   /** Known balance for this line's material; undefined while loading/unknown. */
   balance?: number | null | undefined
+  /** Page-supplied extra content for this line (D-IAR-01 asset selector slot). */
+  assetSlot?: ReactNode
 }
 
 /**
@@ -219,6 +228,7 @@ function QuantityLineRow({
   scopeReady,
   validates,
   balance,
+  assetSlot,
 }: QuantityLineRowProps) {
   const { control, getValues, setValue } = useFormContext<DocumentLinesContainer>()
   const line = (useWatch({ control, name: `lines.${index}` }) ?? {}) as Partial<QuantityLineValues>
@@ -250,7 +260,14 @@ function QuantityLineRow({
                   materialField.onChange(nextValue ?? '')
                   setValue(`lines.${index}.materialNameAr`, payload?.nameAr ?? '')
                   setValue(`lines.${index}.materialDomainId`, payload?.domain.id ?? '')
+                  setValue(
+                    `lines.${index}.materialKind`,
+                    payload?.materialKind as string | undefined,
+                  )
                   setValue(`lines.${index}.baseUnitNameAr`, payload?.baseUnit.displayName ?? '')
+                  // D-IAR-01: a material change invalidates a previously
+                  // selected asset set (they belong to the old material).
+                  setValue(`lines.${index}.assetIds`, [])
                   setValue(`lines.${index}.unitId`, undefined)
                   setValue(`lines.${index}.conversionId`, null)
                   setValue(`lines.${index}.baseQuantity`, undefined)
@@ -434,6 +451,7 @@ function QuantityLineRow({
           {balanceHintAr(balance, line.quantity)}
         </p>
       ) : null}
+      {assetSlot ?? null}
       <Button
         type="button"
         variant="ghost"
@@ -473,6 +491,7 @@ export function QuantityLineEditor({
   features = QUANTITY_LINE_FEATURES_BY_TYPE[documentType],
   onCapabilityGateChange,
   balanceForLine,
+  assetSlotForLine,
 }: QuantityLineEditorProps) {
   const { control, formState } = useFormContext<DocumentLinesContainer>()
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
@@ -508,6 +527,7 @@ export function QuantityLineEditor({
             scopeReady={materialSelector.scopeReady}
             validates={capabilityValidation.validates}
             {...(balanceForLine === undefined ? {} : { balance: balanceForLine(index) })}
+            {...(assetSlotForLine === undefined ? {} : { assetSlot: assetSlotForLine(index) })}
           />
         ))
       )}

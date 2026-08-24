@@ -1,4 +1,5 @@
 import {
+  createAsset,
   createDocumentAttachment,
   createDocumentPolicy,
   createEmployee,
@@ -22,6 +23,7 @@ import {
   fixtureUuid,
 } from '@/test/msw/factories'
 import type {
+  Asset,
   DocumentLifecycleEvent,
   Employee,
   InventoryBalance,
@@ -69,6 +71,8 @@ export interface MockDatabase {
    */
   inventoryBalances: InventoryBalance[]
   stockMovements: StockMovement[]
+  /** D-AST-02 registry rows backing GET /assets (t05 issued-asset selector). */
+  assets: Asset[]
   warehouseDocuments: WarehouseDocument[]
   documentLifecycleEvents: Record<string, DocumentLifecycleEvent[]>
 }
@@ -539,6 +543,42 @@ function buildSeed(): MockDatabase {
     }),
   ]
 
+  // D-AST-02 registry: InStock asset units at المستودع المركزي backing the
+  // t05 issued-asset selector (GET /assets?status=InStock&materialId=…).
+  const computersAssetIds = [fixtureUuid(230), fixtureUuid(231), fixtureUuid(232)]
+  const printersAssetIds = [fixtureUuid(233), fixtureUuid(234)]
+  const assets: Asset[] = [
+    ...computersAssetIds.map((assetId, index) =>
+      createAsset({
+        assetId,
+        assetNumber: `AST-2024-C0${index + 1}`,
+        serialNumber: `SN-PC-2024-${String(index + 1).padStart(4, '0')}`,
+        derivedStatus: 'InStock',
+        material: { id: computersMaterial.materialId, displayName: computersMaterial.nameAr },
+        currentWarehouse: centralRef,
+      }),
+    ),
+    ...printersAssetIds.map((assetId, index) =>
+      createAsset({
+        assetId,
+        assetNumber: `AST-2024-P0${index + 1}`,
+        serialNumber: `SN-PRT-2024-${String(index + 1).padStart(4, '0')}`,
+        derivedStatus: 'InStock',
+        material: { id: printerMaterial.materialId, displayName: printerMaterial.nameAr },
+        currentWarehouse: centralRef,
+      }),
+    ),
+    // One issued unit at the branch warehouse — exercises the status/warehouse filters.
+    createAsset({
+      assetId: fixtureUuid(235),
+      assetNumber: 'AST-2023-C099',
+      serialNumber: 'SN-PC-2023-0099',
+      derivedStatus: 'Issued',
+      material: { id: computersMaterial.materialId, displayName: computersMaterial.nameAr },
+      currentWarehouse: branchRef,
+    }),
+  ]
+
   const documents: WarehouseDocument[] = [
     createWarehouseDocument({
       documentId: fixtureUuid(150),
@@ -841,6 +881,7 @@ function buildSeed(): MockDatabase {
     ],
     inventoryBalances,
     stockMovements,
+    assets,
     warehouseDocuments: documents,
     documentLifecycleEvents,
   }

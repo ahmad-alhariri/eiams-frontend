@@ -40,7 +40,8 @@ function parameterRefs(operation: Operation) {
 
 describe('D-INV-READ-01 inventory read contract', () => {
   it('pins typed stable sorting for balances and movements', () => {
-    expect(contract.info.version).toBe('1.0.0-provisional.8')
+    // D-IAR-01 bumped the provisional snapshot to .9; D-INV-READ-01 semantics unchanged.
+    expect(contract.info.version).toBe('1.0.0-provisional.9')
     expect(contract.components.schemas['InventoryBalanceSortField']?.enum).toEqual([
       'WarehouseDisplayName',
       'MaterialDisplayName',

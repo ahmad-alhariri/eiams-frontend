@@ -1789,6 +1789,8 @@ export type components = {
             readonly conversionId: string | null;
             /** Format: date */
             readonly expiryDate?: string | null;
+            /** @description Projected on Issue Asset-kind lines: ids of the specific existing assets this line issued (resolved from the draft's assetIds and frozen on posting). Null/absent for non-Issue or non-Asset lines. */
+            readonly issuedAssetIds?: readonly components["schemas"]["Uuid"][];
             readonly lineId: components["schemas"]["Uuid"];
             /** @enum {string} */
             readonly lineType: "Normal" | "Asset";
@@ -1803,6 +1805,8 @@ export type components = {
             readonly unitPrice?: number | null;
         };
         readonly DocumentLineInput: {
+            /** @description Allowed only for Issue lines whose material is Asset-kind. References existing assets to issue: every id must resolve to an Asset that is currently InStock and belongs to the line's material in the source warehouse, and the count must equal the line quantity. Mutually exclusive with assetInputs. */
+            readonly assetIds?: readonly components["schemas"]["Uuid"][];
             /** @description Allowed only for Asset material lines. The server creates one Asset per input and requires an institutional asset number after posting. */
             readonly assetInputs?: readonly components["schemas"]["AssetInput"][];
             /**

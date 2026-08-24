@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router'
 import { z } from 'zod'
 
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
+import { IssueLineAssetSelector } from '@/modules/issue/components/issue-line-asset-selector'
 import {
   IssueRecipientSection,
   issuePetalFormSchema,
@@ -120,7 +121,24 @@ export default function IssueDocumentFormPage() {
     return null
   }, [balanceByMaterialId, materialIds, quantities])
 
-  const saveDisabled = isSubmitting || balancesLoading || overBalanceMessageAr !== null
+  /** D-IAR-01: Asset-kind lines must select exactly `quantity` existing assets. */
+  const assetCountMismatchMessageAr = useMemo(() => {
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index]
+      if (line?.materialKind !== 'Asset') continue
+      const selected = line.assetIds ?? []
+      if (selected.length !== (line.quantity ?? 0)) {
+        return `البند ${index + 1}: يجب أن يساوي عدد الأصول المحددة الكمية المطلوبة.`
+      }
+    }
+    return null
+  }, [lines])
+
+  const saveDisabled =
+    isSubmitting ||
+    balancesLoading ||
+    overBalanceMessageAr !== null ||
+    assetCountMismatchMessageAr !== null
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -172,11 +190,22 @@ export default function IssueDocumentFormPage() {
               warehouseId={headerWarehouseId || undefined}
               disabled={isSubmitting}
               balanceForLine={(index) => balanceByMaterialId.get(materialIds[index] ?? '')}
+              assetSlotForLine={(index) => (
+                <IssueLineAssetSelector
+                  index={index}
+                  warehouseId={headerWarehouseId || undefined}
+                />
+              )}
             />
           </section>
           {overBalanceMessageAr !== null ? (
             <p role="alert" className="text-sm text-destructive">
               {overBalanceMessageAr}
+            </p>
+          ) : null}
+          {assetCountMismatchMessageAr !== null && !balancesLoading ? (
+            <p role="alert" className="text-sm text-destructive">
+              {assetCountMismatchMessageAr}
             </p>
           ) : null}
           {balancesLoading ? (

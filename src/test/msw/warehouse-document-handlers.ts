@@ -823,6 +823,9 @@ function mapDraftLine(
   const unit = lookups.unitOf(input.unitId) ?? material.baseUnit
   return {
     ...(input.assetInputs === undefined ? {} : { assetInputs: input.assetInputs }),
+    // D-IAR-01: Issue lines reference existing assets by id; the draft keeps
+    // them verbatim and posting freezes the resolved set (mock parity).
+    ...(input.assetIds === undefined ? {} : { assetIds: input.assetIds }),
     availableBalance: null,
     baseQuantity: input.baseQuantity ?? input.quantity,
     batchNumber: input.batchNumber ?? null,

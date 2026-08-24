@@ -1118,6 +1118,36 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       meta: { page: 0, pageSize: 10, total: filtered.length },
     })
   }),
+
+  // --- Asset registry: issued-asset selector source (D-IAR-01 / e16-t05) ----
+  // Filters mirror the contract's listAssets operation: materialId,
+  // warehouseId (single id), derivedStatus, and free-text search over the
+  // asset number + serial + material name.
+  http.get(`${AUTH_PREFIX}/assets`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const materialId = url.searchParams.get('materialId')
+    const warehouseId = url.searchParams.get('warehouseId')
+    const status = url.searchParams.get('status')
+    const search = (url.searchParams.get('search') ?? '').trim()
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '50') || 50
+    const filtered = getDb().assets.filter(
+      (asset) =>
+        (materialId === null || asset.material.id === materialId) &&
+        (warehouseId === null || asset.currentWarehouse?.id === warehouseId) &&
+        (status === null || asset.derivedStatus === status) &&
+        (search === '' ||
+          `${asset.assetNumber} ${asset.serialNumber ?? ''} ${asset.material.displayName}`.includes(
+            search,
+          )),
+    )
+    const pageItems = filtered.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
+    return HttpResponse.json({
+      items: pageItems,
+      meta: { page: pageIndex, pageSize, total: filtered.length },
+    })
+  }),
   http.get(`${AUTH_PREFIX}/external-parties/:externalPartyId`, async ({ params }) => {
     const party = getDb().externalParties.find(
       (item) => item.externalPartyId === params['externalPartyId'],

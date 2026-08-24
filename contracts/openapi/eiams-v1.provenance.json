@@ -1,12 +1,12 @@
 {
   "contractId": "eiams-v1",
-  "contractVersion": "1.0.0-provisional.8",
+  "contractVersion": "1.0.0-provisional.9",
   "openapiVersion": "3.0.3",
   "status": "ArchitectureOwnedProvisional",
   "publishedAt": "2026-08-09T09:53:07+03:00",
-  "revisedAt": "2026-08-21T18:53:00+03:00",
+  "revisedAt": "2026-08-24T00:00:00+03:00",
   "snapshotPath": "contracts/openapi/eiams-v1.openapi.json",
-  "sha256": "b4c1c4c3f2a28e3417e5524bf5bf7ec2b740d4ba385f517b38f47befb6d5cab7",
+  "sha256": "3c8b65ed6d8c2da8382657b8bf4b8e7d7f291ca270aa4e3d824d4be57fc64070",
   "source": {
     "kind": "DesignFirstFromApprovedRepositorySources",
     "apidogExport": false,
@@ -86,11 +86,15 @@
       "path": "Beads eiams-frontend-vded",
       "decisionId": "D-UOM-01",
       "version": "owner-approved 2026-08-14"
+    },
+    {
+      "path": "docs/issue-line-existing-asset-reference-contract-decision.md",
+      "decisionId": "D-IAR-01"
     }
   ],
   "validation": {
     "redoclyCli": "passed with zero warnings",
-    "openapiTypescript": "regenerated from provisional.8 after typed inventory sorting, balance detail, and the low-stock read projection were ratified by D-INV-READ-01",
+    "openapiTypescript": "regenerated from provisional.9 after D-IAR-01 ratified issue-line existing-asset references (assetIds input + issuedAssetIds read projection)",
     "referenceAudit": "passed; zero missing schema references and zero duplicate operationIds"
   },
   "ratification": {

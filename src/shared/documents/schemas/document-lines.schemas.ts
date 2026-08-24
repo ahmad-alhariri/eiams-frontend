@@ -63,12 +63,24 @@ export const quantityLineSchema = z.object({
   /** Server-side line identity, present when editing an existing draft. */
   lineId: z.uuid().optional(),
   materialId: z.uuid('يجب اختيار مادة صالحة.'),
-  /** Display snapshots captured at material selection (never sent). */
+  /**
+   * Display snapshots captured at material selection (never sent).
+   * `materialKind` drives the D-IAR-01 existing-asset selector on Issue
+   * Asset-kind lines.
+   */
   materialNameAr: z.string().trim().min(1, 'يجب اختيار مادة صالحة.'),
   materialDomainId: z.string().optional(),
   baseUnitId: z.string().optional(),
   baseUnitNameAr: z.string().optional(),
+  /** 'Asset' when the selected material's kind is Asset (snapshot only). */
+  materialKind: z.string().optional(),
   quantity: z.coerce.number('يجب إدخال كمية صحيحة.').gt(0, 'يجب أن تكون الكمية أكبر من صفر.'),
+  /**
+   * D-IAR-01: ids of the specific existing assets this Issue line moves.
+   * Validated against quantity by the page-level gate; mapped to
+   * `DocumentLineInput.assetIds` on submission for Asset-kind lines only.
+   */
+  assetIds: z.array(z.uuid()).optional(),
   /** Omitted or empty = the material base unit. */
   unitId: z.string().optional(),
   /** Selected alternative unit conversion; null/empty = the base unit. */
@@ -171,6 +183,10 @@ export function toDocumentLineInputs(lines: readonly QuantityLineValues[]): Docu
     ...(line.lineId !== undefined ? { lineId: line.lineId } : {}),
     materialId: line.materialId,
     quantity: line.quantity,
+    // D-IAR-01: existing-asset references travel only on Asset-kind lines.
+    ...(line.materialKind === 'Asset' && line.assetIds !== undefined && line.assetIds.length > 0
+      ? { assetIds: line.assetIds }
+      : {}),
     ...(line.unitId !== undefined && line.unitId !== '' ? { unitId: line.unitId } : {}),
     ...(line.conversionId !== null &&
     line.conversionId !== undefined &&
