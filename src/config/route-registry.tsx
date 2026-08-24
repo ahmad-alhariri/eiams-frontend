@@ -68,7 +68,7 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
     () => import('@/modules/receiving/pages/receiving-document-detail-page'),
   ),
   documentIssue: lazy(() => import('@/modules/issue/pages/issue-documents-list-page')),
-  documentIssueNew: routePlaceholderPage,
+  documentIssueNew: lazy(() => import('@/modules/issue/pages/issue-document-form-page')),
   documentIssueDetail: lazy(() => import('@/shared/documents/pages/document-detail-page')),
   documentTransfer: lazy(() => import('@/shared/documents/pages/document-list-page')),
   documentTransferNew: routePlaceholderPage,
