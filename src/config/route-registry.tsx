@@ -87,7 +87,7 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   countDetail: routePlaceholderPage,
   assets: lazy(() => import('@/modules/asset/pages/asset-registry-list-page')),
   assetDetail: lazy(() => import('@/modules/asset/pages/asset-detail-page')),
-  custodyPending: routePlaceholderPage,
+  custodyPending: lazy(() => import('@/modules/custody/pages/pending-custody-list-page')),
   audit: routePlaceholderPage,
   reports: routePlaceholderPage,
   adminUsers: routePlaceholderPage,
