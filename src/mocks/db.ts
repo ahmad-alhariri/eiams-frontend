@@ -556,6 +556,7 @@ function buildSeed(): MockDatabase {
         derivedStatus: 'InStock',
         material: { id: computersMaterial.materialId, displayName: computersMaterial.nameAr },
         currentWarehouse: centralRef,
+        acquisitionDate: `2024-0${index + 1}-15`,
       }),
     ),
     ...printersAssetIds.map((assetId, index) =>
@@ -566,6 +567,7 @@ function buildSeed(): MockDatabase {
         derivedStatus: 'InStock',
         material: { id: printerMaterial.materialId, displayName: printerMaterial.nameAr },
         currentWarehouse: centralRef,
+        acquisitionDate: `2024-0${index + 1}-20`,
       }),
     ),
     // One issued unit at the branch warehouse — exercises the status/warehouse filters.
@@ -576,6 +578,7 @@ function buildSeed(): MockDatabase {
       derivedStatus: 'Issued',
       material: { id: computersMaterial.materialId, displayName: computersMaterial.nameAr },
       currentWarehouse: branchRef,
+      acquisitionDate: '2023-11-05',
     }),
   ]
 
