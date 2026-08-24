@@ -1,5 +1,7 @@
 import type {
   ActionAvailability,
+  Asset,
+  AssetCustody,
   AuthTokenResponse,
   DocumentActionResult,
   DocumentActionType,
@@ -421,6 +423,51 @@ export function createInventoryBalance(
         state: 'Sufficient',
         thresholdQuantity: 5,
       },
+    },
+    overrides,
+  )
+}
+
+/** Asset registry read model with server-derived status (e18-t01). */
+export function createAsset(overrides: FixtureOverrides<Asset> = {}): Asset {
+  return withOverrides(
+    {
+      assetId: fixtureUuid(50),
+      assetNumber: 'AST-2026-0001',
+      serialNumber: 'SN-889900',
+      derivedStatus: 'InStock',
+      material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
+      currentWarehouse: createNamedReference({
+        id: fixtureUuid(30),
+        displayName: 'المستودع المركزي',
+      }),
+      rowVersion: 1,
+    },
+    overrides,
+  )
+}
+
+/** One custody timeline row (active or historical) for an asset. */
+export function createAssetCustody(overrides: FixtureOverrides<AssetCustody> = {}): AssetCustody {
+  return withOverrides(
+    {
+      assetId: fixtureUuid(50),
+      assetNumber: 'AST-2026-0001',
+      custodyId: fixtureUuid(51),
+      custodyKind: 'Operational',
+      fromTs: FIXTURE_TIMESTAMP,
+      holder: {
+        displayName: 'مديرية المعلوماتية',
+        id: fixtureUuid(20),
+        secondaryLabelAr: null,
+        status: 'Active',
+        type: 'OrganizationalUnit',
+      },
+      issueDocumentId: fixtureUuid(151),
+      rowVersion: 1,
+      status: 'Active',
+      subjectType: 'Asset',
+      toTs: null,
     },
     overrides,
   )
