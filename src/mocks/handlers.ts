@@ -1123,6 +1123,54 @@ export const mockApiHandlers: readonly HttpHandler[] = [
   // Filters mirror the contract's listAssets operation: materialId,
   // warehouseId (single id), derivedStatus, and free-text search over the
   // asset number + serial + material name.
+  // --- Custody registry (e19-t01): unified list over the fixture graph ------
+  // Filters mirror the contract's listCustodies operation: status,
+  // holderType, custodyKind, and free-text search over holder + asset number.
+  http.get(`${AUTH_PREFIX}/custodies`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const custodyKind = url.searchParams.get('custodyKind')
+    const search = (url.searchParams.get('search') ?? '').trim()
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
+    const db = getDb()
+    const rows = db.assets
+      .filter((asset) => asset.derivedStatus === 'Issued')
+      .map((asset) => ({
+        assetId: asset.assetId,
+        assetNumber: asset.assetNumber,
+        custodyId: nextFixtureUuid(),
+        custodyKind: 'Operational' as const,
+        fromTs: '2026-08-01T08:00:00.000Z',
+        holder: {
+          displayName: 'مديرية النقل والحراسة',
+          id: nextFixtureUuid(),
+          secondaryLabelAr: null,
+          status: 'Active' as const,
+          type: 'OrganizationalUnit' as const,
+        },
+        issueDocumentId: nextFixtureUuid(),
+        rowVersion: 1,
+        status: 'Active' as const,
+      }))
+      .filter(
+        (row) =>
+          (status === null || row.status === status) &&
+          (custodyKind === null || row.custodyKind === custodyKind) &&
+          (search === '' || `${row.holder.displayName} ${row.assetNumber}`.includes(search)),
+      )
+    const pageItems = rows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
+    return HttpResponse.json({
+      items: pageItems,
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: rows.length,
+        totalPages: Math.ceil(rows.length / pageSize),
+      },
+    })
+  }),
   http.get(`${AUTH_PREFIX}/assets`, async ({ request }) => {
     await delay(120)
     const url = new URL(request.url)
