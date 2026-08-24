@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { formatNumber } from '@/shared/utils/format'
 import type {
   AssetInput,
   DocumentLineInput,
@@ -125,6 +126,35 @@ export const documentLinesSchema = z
   })
 
 export type DocumentLinesValues = z.infer<typeof documentLinesSchema>
+
+/** True when a known balance cannot cover the requested line quantity (e16-t04). */
+export function overBalance(
+  balance: number | null | undefined,
+  quantity: number | undefined,
+): boolean {
+  // undefined = lookup loading/unknown → never blocks; a null balance row
+  // means the warehouse holds nothing, which DOES block any positive request.
+  if (balance === undefined) return false
+  const requested = typeof quantity === 'number' ? quantity : 0
+  return requested > (balance === null ? 0 : balance)
+}
+
+/**
+ * Arabic per-line balance hint (e16-t04). `undefined` (lookup loading or no
+ * material yet) renders nothing; a known balance states the available stock;
+ * an over-balance request is phrased as the blocking problem it will become.
+ */
+export function balanceHintAr(
+  balance: number | null | undefined,
+  quantity: number | undefined,
+): string | null {
+  if (balance === undefined) return null
+  const available = balance === null ? 0 : balance
+  if (!overBalance(balance, quantity)) {
+    return `الرصيد المتاح في المستودع: ${formatNumber(available)}`
+  }
+  return `الكمية المطلوبة تتجاوز الرصيد المتاح (${formatNumber(available)}).`
+}
 
 /** quantity × factor, the D-UOM-01 draft preview shown to the keeper. */
 export function deriveBaseQuantity(quantity: number, factor: string): number {

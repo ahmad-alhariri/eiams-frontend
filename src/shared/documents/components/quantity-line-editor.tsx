@@ -9,8 +9,10 @@ import {
   type CapabilityValidation,
 } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import {
+  balanceHintAr,
   deriveBaseQuantity,
   OPENING_TYPE_LABELS,
+  overBalance,
   QUANTITY_LINE_FEATURES_BY_TYPE,
   createEmptyQuantityLine,
   type DocumentLinesContainer,
@@ -28,6 +30,7 @@ import {
 import type { OptionLoader } from '@/shared/selectors/selector-adapter'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
+import { cn } from '@/shared/utils/class-names'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import type {
@@ -51,6 +54,15 @@ export interface QuantityLineEditorProps {
    * capability lookup or the Opening → Receiving operation mapping.
    */
   onCapabilityGateChange?: (gate: QuantityLineCapabilityGate) => void
+  /**
+   * Optional live-balance lookup for outbound documents (e16-t04). Given a
+   * line index return the current available quantity for that line's material
+   * in the source warehouse — `undefined` while unknown/loading, `null` when
+   * the server holds no balance row. The editor stays transport-agnostic:
+   * pages own the balance queries (module boundary), the shared layer only
+   * renders the per-line hint and exposes the values for gate evaluation.
+   */
+  balanceForLine?: (index: number) => number | null | undefined
 }
 
 /** Aggregate capability state for the currently selected quantity-line materials. */
@@ -186,6 +198,8 @@ interface QuantityLineRowProps {
   operation: CapabilityOperation
   scopeReady: boolean
   validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation
+  /** Known balance for this line's material; undefined while loading/unknown. */
+  balance?: number | null | undefined
 }
 
 /**
@@ -204,6 +218,7 @@ function QuantityLineRow({
   operation,
   scopeReady,
   validates,
+  balance,
 }: QuantityLineRowProps) {
   const { control, getValues, setValue } = useFormContext<DocumentLinesContainer>()
   const line = (useWatch({ control, name: `lines.${index}` }) ?? {}) as Partial<QuantityLineValues>
@@ -409,6 +424,16 @@ function QuantityLineRow({
           التحقق من قدرة المستودع يتطلب اختيار المستودع ضمن قسم رأس السند.
         </p>
       ) : null}
+      {balanceHintAr(balance, line.quantity) !== null ? (
+        <p
+          className={cn(
+            'text-sm',
+            overBalance(balance, line.quantity) ? 'text-destructive' : 'text-muted-foreground',
+          )}
+        >
+          {balanceHintAr(balance, line.quantity)}
+        </p>
+      ) : null}
       <Button
         type="button"
         variant="ghost"
@@ -447,6 +472,7 @@ export function QuantityLineEditor({
   disabled = false,
   features = QUANTITY_LINE_FEATURES_BY_TYPE[documentType],
   onCapabilityGateChange,
+  balanceForLine,
 }: QuantityLineEditorProps) {
   const { control, formState } = useFormContext<DocumentLinesContainer>()
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
@@ -481,6 +507,9 @@ export function QuantityLineEditor({
             operation={operation}
             scopeReady={materialSelector.scopeReady}
             validates={capabilityValidation.validates}
+            {...(balanceForLine === undefined
+              ? {}
+              : { balance: balanceForLine(index) })}
           />
         ))
       )}
