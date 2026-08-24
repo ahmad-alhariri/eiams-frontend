@@ -77,7 +77,7 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   documentOpeningNew: lazy(() => import('@/modules/opening/pages/opening-document-form-page')),
   documentOpeningDetail: lazy(() => import('@/shared/documents/pages/document-detail-page')),
   documentReturn: lazy(() => import('@/shared/documents/pages/document-list-page')),
-  documentReturnNew: routePlaceholderPage,
+  documentReturnNew: lazy(() => import('@/modules/custody/pages/return-document-form-page')),
   documentReturnDetail: lazy(() => import('@/shared/documents/pages/document-detail-page')),
   adjustments: routePlaceholderPage,
   adjustmentNew: routePlaceholderPage,
