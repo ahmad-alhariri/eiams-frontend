@@ -860,7 +860,7 @@ function buildSeed(): MockDatabase {
         capabilityId: fixtureUuid(130),
         warehouseId: centralWarehouse.warehouseId,
         domain: { id: itDomain.domainId, displayName: itDomain.nameAr },
-        operations: ['Receiving', 'Issue', 'Transfer'],
+        operations: ['Receiving', 'Issue', 'Transfer', 'Return'],
         rowVersion: 1,
       }),
       createWarehouseCapability({
