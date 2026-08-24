@@ -1,5 +1,6 @@
 import { useParams } from 'react-router'
 
+import { AcquisitionProvenancePanel } from '@/modules/asset/components/acquisition-provenance-panel'
 import {
   useAssetCustodyTimelineQuery,
   useAssetQuery,
@@ -64,6 +65,8 @@ export default function AssetDetailPage() {
           >
             <SpineFields asset={asset} />
           </ContentCard>
+
+          <AcquisitionProvenancePanel asset={asset} />
 
           <CustodySection assetId={asset.assetId} />
         </>
