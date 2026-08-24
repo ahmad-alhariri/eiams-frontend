@@ -1148,6 +1148,92 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       meta: { page: pageIndex, pageSize, total: filtered.length },
     })
   }),
+  // --- Asset detail reads (D-AST-02 / e18-t03..t05) -------------------------
+  http.get(`${AUTH_PREFIX}/assets/:assetId`, async ({ params }) => {
+    await delay(100)
+    const asset = getDb().assets.find((item) => item.assetId === params['assetId'])
+    return asset === undefined ? notFound() : HttpResponse.json(asset)
+  }),
+  http.get(`${AUTH_PREFIX}/assets/:assetId/custody`, async ({ params }) => {
+    await delay(100)
+    const asset = getDb().assets.find((item) => item.assetId === params['assetId'])
+    if (asset === undefined) {
+      return notFound()
+    }
+    // Only assets that have been issued/custodied carry timeline entries; the
+    // C099 fixture models one operational custody row at the branch site.
+    if (asset.derivedStatus === 'Issued') {
+      return HttpResponse.json([
+        {
+          assetId: asset.assetId,
+          assetNumber: asset.assetNumber,
+          custodyId: nextFixtureUuid(),
+          custodyKind: 'Operational',
+          fromTs: '2026-08-01T08:00:00.000Z',
+          holder: {
+            displayName: 'مديرية النقل والحراسة',
+            id: nextFixtureUuid(),
+            secondaryLabelAr: null,
+            status: 'Active' as const,
+            type: 'OrganizationalUnit' as const,
+          },
+          issueDocumentId: nextFixtureUuid(),
+          rowVersion: 1,
+          status: 'Active',
+        },
+      ])
+    }
+    return HttpResponse.json([])
+  }),
+  http.get(`${AUTH_PREFIX}/assets/:assetId/movements`, async ({ params }) => {
+    await delay(100)
+    const asset = getDb().assets.find((item) => item.assetId === params['assetId'])
+    if (asset === undefined) {
+      return notFound()
+    }
+    const items =
+      asset.derivedStatus === 'Issued'
+        ? [
+            {
+              assetId: asset.assetId,
+              documentId: nextFixtureUuid(),
+              documentLineId: nextFixtureUuid(),
+              documentReference: 'EIAMS-ISS-2025-0007',
+              eventType: 'Received' as const,
+              movementId: nextFixtureUuid(),
+              occurredAt: '2024-06-15T09:00:00.000Z',
+              occurredBy: { displayName: 'مريم الحلبي', id: nextFixtureUuid() },
+              toWarehouse: {
+                displayName: 'المستودع المركزي',
+                id: nextFixtureUuid(),
+              },
+            },
+            {
+              assetId: asset.assetId,
+              custodyId: nextFixtureUuid(),
+              documentId: nextFixtureUuid(),
+              documentLineId: nextFixtureUuid(),
+              documentReference: 'EIAMS-ISS-2026-0012',
+              eventType: 'Issued' as const,
+              fromWarehouse: {
+                displayName: 'المستودع المركزي',
+                id: nextFixtureUuid(),
+              },
+              movementId: nextFixtureUuid(),
+              occurredAt: '2026-08-01T10:00:00.000Z',
+              occurredBy: { displayName: 'مدير النظام', id: nextFixtureUuid() },
+              toWarehouse: {
+                displayName: 'مستودع الفرع الشمالي',
+                id: nextFixtureUuid(),
+              },
+            },
+          ]
+        : []
+    return HttpResponse.json({
+      items,
+      meta: { pageIndex: 0, pageSize: 20, totalItems: items.length, totalPages: items.length > 0 ? 1 : 0 },
+    })
+  }),
   http.get(`${AUTH_PREFIX}/external-parties/:externalPartyId`, async ({ params }) => {
     const party = getDb().externalParties.find(
       (item) => item.externalPartyId === params['externalPartyId'],
