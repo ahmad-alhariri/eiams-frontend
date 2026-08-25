@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router'
 import { z } from 'zod'
 
 import { usePlanCountMutation } from '@/modules/inventory-count/hooks/use-count-queries'
+import { ActiveCountWarning } from '@/modules/inventory-count/components/active-count-warning'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import type { InventoryCountScopeType, InventoryCountType } from '@/shared/types/generated/eiams-v1'
@@ -165,6 +166,7 @@ export default function CountPlanningFormPage() {
                     {methods.formState.errors.warehouseId.message}
                   </p>
                 ) : null}
+                <ActiveCountWarning warehouseId={methods.watch('warehouseId')} />
               </div>
             )}
           />
