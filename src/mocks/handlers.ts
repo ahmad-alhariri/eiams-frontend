@@ -1851,7 +1851,6 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     })
   }),
   http.post(`${AUTH_PREFIX}/auth/logout`, () => new HttpResponse<never>(null, { status: 204 })),
-  // --- Inventory counts (e20-t01): session lifecycle + line entry ------------
   http.get(`${AUTH_PREFIX}/inventory-counts`, async ({ request }) => {
     await delay(120)
     const url = new URL(request.url)
