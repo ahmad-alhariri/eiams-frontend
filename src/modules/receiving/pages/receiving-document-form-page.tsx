@@ -95,7 +95,6 @@ export default function ReceivingDocumentFormPage() {
   const form = useForm<ReceivingDocumentFormValues>({
     resolver: zodResolver(receivingDocumentFormSchema) as Resolver<ReceivingDocumentFormValues>,
     defaultValues: DEFAULT_VALUES,
-    mode: 'onChange',
   })
   const isSubmitting = form.formState.isSubmitting
   const submitErrorMessage =
