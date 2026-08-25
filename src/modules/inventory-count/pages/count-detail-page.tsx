@@ -16,6 +16,7 @@ import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
+import { CountQuantityWorkspace } from '@/modules/inventory-count/components/count-quantity-workspace'
 
 /**
  * Count detail page (e20-t04 scope/snapshot preview + e20-t05 start action).
@@ -116,9 +117,7 @@ export default function CountDetailPage() {
 
         {count.status !== 'Planned' ? (
           <ContentCard title="بنود الجرد">
-            <p className="text-sm text-muted-foreground">
-              مساحة إدخال الكميات وبناء الفروقات تأتي في المرحلة التالية من الوحدة (e20-t06/t07).
-            </p>
+            <CountQuantityWorkspace countId={count.countId} countRowVersion={count.rowVersion} />
           </ContentCard>
         ) : null}
       </div>
