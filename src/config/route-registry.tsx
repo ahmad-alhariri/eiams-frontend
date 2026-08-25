@@ -84,7 +84,7 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   adjustments: routePlaceholderPage,
   adjustmentNew: routePlaceholderPage,
   adjustmentDetail: routePlaceholderPage,
-  counts: routePlaceholderPage,
+  counts: lazy(() => import('@/modules/inventory-count/pages/inventory-count-list-page')),
   countNew: routePlaceholderPage,
   countDetail: routePlaceholderPage,
   assets: lazy(() => import('@/modules/asset/pages/asset-registry-list-page')),
