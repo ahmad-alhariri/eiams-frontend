@@ -50,6 +50,10 @@ function renderReview(opts: {
   onComplete: () => void
   isCompleting?: boolean
   completeError?: string | null
+  canClose?: boolean
+  onClose?: () => void
+  isClosing?: boolean
+  closeError?: string | null
 }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(authSessionQueryKey, sessionWith(['count.view', ...opts.permissions]))
@@ -58,9 +62,13 @@ function renderReview(opts: {
       <CountVarianceReview
         countId={COUNT_ID}
         canComplete={opts.canComplete}
+        canClose={opts.canClose ?? false}
         onComplete={opts.onComplete}
+        onClose={opts.onClose ?? vi.fn()}
         isCompleting={opts.isCompleting ?? false}
+        isClosing={opts.isClosing ?? false}
         completeError={opts.completeError ?? null}
+        closeError={opts.closeError ?? null}
       />
     </QueryClientProvider>,
   )
@@ -121,5 +129,34 @@ describe('CountVarianceReview (e20-t07)', () => {
 
     await screen.findByText('حاسوب مكتبي')
     expect(screen.queryByRole('button', { name: 'إكمال الجلسة' })).toBeNull()
+  }, 20000)
+
+  it('shows the close action on Completed status with count.close permission', async () => {
+    useHandlers([matchingLine, varianceWithReason])
+    const onClose = vi.fn()
+    renderReview({
+      permissions: ['count.complete', 'count.close'],
+      canComplete: false,
+      canClose: true,
+      onComplete: vi.fn(),
+      onClose,
+    })
+
+    await screen.findByText('حاسوب مكتبي')
+    expect(screen.getByRole('button', { name: 'إغلاق الجلسة' })).toBeInTheDocument()
+  }, 20000)
+
+  it('hides the close action when not on Completed status', async () => {
+    useHandlers([matchingLine, varianceWithReason])
+    renderReview({
+      permissions: ['count.close'],
+      canComplete: true,
+      canClose: false,
+      onComplete: vi.fn(),
+      onClose: vi.fn(),
+    })
+
+    await screen.findByText('حاسوب مكتبي')
+    expect(screen.queryByRole('button', { name: 'إغلاق الجلسة' })).toBeNull()
   }, 20000)
 })

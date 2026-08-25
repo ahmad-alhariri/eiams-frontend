@@ -7,6 +7,7 @@ import {
 } from '@/modules/inventory-count/types/inventory-count.types'
 import {
   useCompleteCountMutation,
+  useCloseCountMutation,
   useInventoryCountQuery,
   useStartCountMutation,
 } from '@/modules/inventory-count/hooks/use-count-queries'
@@ -31,6 +32,7 @@ export default function CountDetailPage() {
   const countQuery = useInventoryCountQuery(countId)
   const startMutation = useStartCountMutation(countId ?? '')
   const completeMutation = useCompleteCountMutation(countId ?? '')
+  const closeMutation = useCloseCountMutation(countId ?? '')
   const { confirm: openConfirm, element: confirmDialog } = useConfirm()
   const count = countQuery.data
 
@@ -74,10 +76,22 @@ export default function CountDetailPage() {
     }
   }
 
+  const handleClose = async () => {
+    const confirmed = await openConfirm({
+      title: 'إغلاق الجلسة',
+      message: 'سيُغلق الجرد نهائياً ولا يمكن تعديله بعد الإغلاق. هل تريد المتابعة؟',
+      confirmLabel: 'إغلاق',
+    })
+    if (confirmed.confirmed) {
+      closeMutation.mutate(count.rowVersion)
+    }
+  }
+
   const isActive = count.status === 'InProgress'
   const isReviewable =
     count.status === 'InProgress' || count.status === 'Completed' || count.status === 'Closed'
   const canComplete = count.status === 'InProgress'
+  const canClose = count.status === 'Completed'
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -145,12 +159,20 @@ export default function CountDetailPage() {
             <CountVarianceReview
               countId={count.countId}
               canComplete={canComplete}
+              canClose={canClose}
               onComplete={() => void handleComplete()}
+              onClose={() => void handleClose()}
               isCompleting={completeMutation.isPending}
+              isClosing={closeMutation.isPending}
               completeError={
                 completeMutation.error === null
                   ? null
                   : 'تعذّر إكمال الجلسة. تحقق من تسجيل أسباب الفروقات أو حدّث الصفحة.'
+              }
+              closeError={
+                closeMutation.error === null
+                  ? null
+                  : 'تعذّر إغلاق الجلسة. حدّث الصفحة وحاول مجدداً.'
               }
             />
           </ContentCard>

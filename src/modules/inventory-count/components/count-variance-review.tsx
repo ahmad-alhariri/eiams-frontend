@@ -22,15 +22,23 @@ interface VarianceRow {
 export function CountVarianceReview({
   countId,
   canComplete,
+  canClose,
   onComplete,
+  onClose,
   isCompleting,
+  isClosing,
   completeError,
+  closeError,
 }: {
   countId: string
   canComplete: boolean
+  canClose: boolean
   onComplete: () => void
+  onClose: () => void
   isCompleting: boolean
+  isClosing: boolean
   completeError?: string | null
+  closeError?: string | null
 }) {
   const can = usePermission()
   const linesQuery = useCountLinesQuery(countId, { pageIndex: 0, pageSize: 200 })
@@ -147,6 +155,24 @@ export function CountVarianceReview({
           {completeError ? (
             <p role="alert" className="text-sm text-destructive">
               {completeError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {can.has('count.close') && canClose ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isClosing}
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground disabled:opacity-50"
+          >
+            {isClosing ? 'جارٍ الإغلاق...' : 'إغلاق الجلسة'}
+          </button>
+          {closeError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {closeError}
             </p>
           ) : null}
         </div>
