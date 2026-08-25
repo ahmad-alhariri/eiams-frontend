@@ -1,6 +1,14 @@
 import { delay, http, HttpResponse, type HttpHandler } from 'msw'
 
 import { environment } from '@/config/env'
+import {
+  applyCountLineUpdates,
+  findInventoryCount,
+  getInventoryCountLines,
+  getInventoryCounts,
+  planInventoryCount,
+  transitionInventoryCount,
+} from '@/mocks/inventory-count-state'
 import { getDb, nextFixtureUuid } from '@/mocks/db'
 import { createDevSession } from '@/shared/services/dev-session'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
@@ -24,6 +32,8 @@ import {
 } from '@/test/msw/warehouse-document-handlers'
 import { readRequestForm } from '@/test/msw/multipart-parser'
 import type {
+  UpdateCountLinesRequest,
+  InventoryCount,
   AttachmentType,
   DocumentActionType,
   DocumentType,
@@ -280,6 +290,16 @@ function reEvaluateAttachmentPolicy(
 }
 
 const CATALOG_PREFIX = `${environment.apiBaseUrl}/catalog`
+function extractCountIdFromLinesRequest(pathname: string): string {
+  const match = pathname.match(/inventory-counts\/([^/]+)\/lines$/)
+  return match === null ? '' : (match[1] ?? '')
+}
+
+function extractCountIdFromLifecyclePath(pathname: string): string {
+  const match = pathname.match(/inventory-counts\/([^/]+)\/(start|complete|close)$/)
+  return match === null ? '' : (match[1] ?? '')
+}
+
 const AUTH_PREFIX = environment.apiBaseUrl
 
 /** Deterministic per-asset custody id so detail views re-resolve their row. */
@@ -1831,4 +1851,145 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     })
   }),
   http.post(`${AUTH_PREFIX}/auth/logout`, () => new HttpResponse<never>(null, { status: 204 })),
+  // --- Inventory counts (e20-t01): session lifecycle + line entry ------------
+  http.get(`${AUTH_PREFIX}/inventory-counts`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
+    let rows = [...getInventoryCounts()]
+    if (status !== null && status !== '') {
+      rows = rows.filter((count) => count.status === status)
+    }
+    if (warehouseId !== null && warehouseId !== '') {
+      rows = rows.filter((count) => count.warehouse.id === warehouseId)
+    }
+    return HttpResponse.json({
+      items: rows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: rows.length,
+        totalPages: Math.max(Math.ceil(rows.length / pageSize), 1),
+      },
+    })
+  }),
+  http.post(`${AUTH_PREFIX}/inventory-counts`, async ({ request }) => {
+    await delay(150)
+    const body = (await request.json()) as {
+      warehouseId: string
+      countType: InventoryCount['countType']
+      scope: InventoryCount['scope']
+      freezePolicy: InventoryCount['freezePolicy']
+      notes?: string | null
+    }
+    // PRD §12.6 business rule: one InProgress session per warehouse.
+    const hasActiveSession = getInventoryCounts().some(
+      (count) => count.warehouse.id === body.warehouseId && count.status === 'InProgress',
+    )
+    if (hasActiveSession && body.countType !== 'SpotCheck') {
+      return HttpResponse.json(
+        {
+          code: 'Conflict',
+          messageAr: 'توجد جلسة جرد جارية لهذا المستودع؛ لا يمكن بدء جلسة أخرى قبل إكمالها.',
+        },
+        { status: 409 },
+      )
+    }
+    return HttpResponse.json(planInventoryCount(body), { status: 201 })
+  }),
+  http.get(`${AUTH_PREFIX}/inventory-counts/:countId`, async ({ params }) => {
+    await delay(100)
+    const count = findInventoryCount(String(params['countId']))
+    if (count === undefined) return notFound()
+    return HttpResponse.json(count)
+  }),
+  http.post(`${AUTH_PREFIX}/inventory-counts/:countId/start`, async ({ params, request }) => {
+    await delay(120)
+    const body = (await request.json()) as { rowVersion?: number; reason?: string | null }
+    const countId = String(params['countId'])
+    const current = findInventoryCount(countId)
+    if (current === undefined) return notFound()
+    if (body.rowVersion !== undefined && body.rowVersion !== current.rowVersion) {
+      return HttpResponse.json(
+        { code: 'Conflict', messageAr: 'تعديل متزامن: حدِّث الصفحة وأعد المحاولة.' },
+        { status: 409 },
+      )
+    }
+    if (!transitionInventoryCount(countId, 'start')) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'لا يمكن بدء هذه الجلسة في حالتها الحالية.' },
+        { status: 422 },
+      )
+    }
+    return HttpResponse.json(findInventoryCount(countId))
+  }),
+  http.get(`${AUTH_PREFIX}/inventory-counts/:countId/lines`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    // The count id rides in the path of the registered handler; derive it from the referrer-free
+    // URL pattern MSW resolved. listLines is keyed by countId in the page, so read it from query.
+    const countId = url.searchParams.get('countId') ?? extractCountIdFromLinesRequest(url.pathname)
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '50') || 50
+    const search = (url.searchParams.get('search') ?? '').trim()
+    let rows = [...getInventoryCountLines(countId)]
+    if (search !== '') {
+      rows = rows.filter((line) => line.material.displayName.includes(search))
+    }
+    return HttpResponse.json({
+      items: rows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: rows.length,
+        totalPages: Math.max(Math.ceil(rows.length / pageSize), 1),
+      },
+    })
+  }),
+  http.put(`${AUTH_PREFIX}/inventory-counts/:countId/lines`, async ({ request }) => {
+    await delay(150)
+    const body = (await request.json()) as UpdateCountLinesRequest
+    const countId = extractCountIdFromLinesRequest(new URL(request.url).pathname)
+    const ok = applyCountLineUpdates(countId, body)
+    if (!ok) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'لا يمكن تعديل بنود هذه الجلسة في حالتها الحالية.' },
+        { status: 422 },
+      )
+    }
+    return HttpResponse.json({ items: getInventoryCountLines(countId) })
+  }),
+  http.post(`${AUTH_PREFIX}/inventory-counts/:countId/complete`, async ({ request }) => {
+    await delay(120)
+    const body = (await request.json()) as { rowVersion?: number; reason?: string | null }
+    const countId = extractCountIdFromLifecyclePath(new URL(request.url).pathname)
+    const current = findInventoryCount(countId)
+    if (current === undefined) return notFound()
+    if (!transitionInventoryCount(countId, 'complete')) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'لا يمكن إكمال هذه الجلسة في حالتها الحالية.' },
+        { status: 422 },
+      )
+    }
+    void body
+    return HttpResponse.json(findInventoryCount(countId))
+  }),
+  http.post(`${AUTH_PREFIX}/inventory-counts/:countId/close`, async ({ request }) => {
+    await delay(120)
+    const body = (await request.json()) as { rowVersion?: number; reason?: string | null }
+    const countId = extractCountIdFromLifecyclePath(new URL(request.url).pathname)
+    const current = findInventoryCount(countId)
+    if (current === undefined) return notFound()
+    if (!transitionInventoryCount(countId, 'close')) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'لا يمكن إغلاق هذه الجلسة في حالتها الحالية.' },
+        { status: 422 },
+      )
+    }
+    void body
+    return HttpResponse.json(findInventoryCount(countId))
+  }),
 ]

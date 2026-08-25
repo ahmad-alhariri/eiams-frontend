@@ -22,6 +22,7 @@ import {
   deriveLifecycleEvents,
   fixtureUuid,
 } from '@/test/msw/factories'
+import { seedInventoryCounts } from '@/mocks/inventory-count-state'
 import type {
   Asset,
   DocumentLifecycleEvent,
@@ -442,14 +443,16 @@ function buildSeed(): MockDatabase {
   // These are explicit server-read projections for the dev worker only. Do
   // not calculate low-stock state here and do not replay document effects into
   // balances or the immutable ledger.
+  seedInventoryCounts(centralWarehouse.warehouseId)
+
   const inventoryBalances: InventoryBalance[] = [
     createInventoryBalance({
       balanceId: fixtureUuid(200),
       warehouse: centralRef,
       material: { id: computersMaterial.materialId, displayName: computersMaterial.nameAr },
-      quantity: 25,
+      quantity: 0,
       lastUpdated: '2026-08-21T08:00:00.000Z',
-      lowStock: { state: 'Sufficient', thresholdQuantity: 5 },
+      lowStock: { state: 'Low', thresholdQuantity: 0 },
     }),
     createInventoryBalance({
       balanceId: fixtureUuid(201),
