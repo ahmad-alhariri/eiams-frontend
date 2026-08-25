@@ -88,6 +88,9 @@ export function CountQuantityWorkspace({
       }
     }
     return { varianceCount: variance, totalVariance: totalDiff, countedCount: counted }
+    // draftFor reads only `drafts` state and line props; adding its per-render
+    // function identity would re-run this memo on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, drafts])
 
   const dirtyLines = items

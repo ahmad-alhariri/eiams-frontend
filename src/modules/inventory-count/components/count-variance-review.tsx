@@ -43,7 +43,10 @@ export function CountVarianceReview({
 }) {
   const can = usePermission()
   const linesQuery = useCountLinesQuery(countId, { pageIndex: 0, pageSize: 200 })
-  const items = (linesQuery.data?.items ?? []) as readonly InventoryCountLine[]
+  const items = useMemo(
+    () => (linesQuery.data?.items ?? []) as readonly InventoryCountLine[],
+    [linesQuery.data],
+  )
 
   const { matching, variance, missingReason } = useMemo(() => {
     const rows: VarianceRow[] = items.map((line) => {
