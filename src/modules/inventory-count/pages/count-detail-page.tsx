@@ -6,9 +6,12 @@ import {
   INVENTORY_COUNT_TYPE_LABELS_AR,
 } from '@/modules/inventory-count/types/inventory-count.types'
 import {
+  useCompleteCountMutation,
   useInventoryCountQuery,
   useStartCountMutation,
 } from '@/modules/inventory-count/hooks/use-count-queries'
+import { CountQuantityWorkspace } from '@/modules/inventory-count/components/count-quantity-workspace'
+import { CountVarianceReview } from '@/modules/inventory-count/components/count-variance-review'
 import { useConfirm } from '@/shared/hooks/use-confirm'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
@@ -16,18 +19,18 @@ import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
-import { CountQuantityWorkspace } from '@/modules/inventory-count/components/count-quantity-workspace'
 
 /**
- * Count detail page (e20-t04 scope/snapshot preview + e20-t05 start action).
- * Shows the session spine (type, scope with server summary, freeze policy,
- * lifecycle timestamps) and — while still `Planned` — the start action that
- * triggers the server-side balance snapshot (`start` → InProgress).
+ * Count detail page (e20-t04 scope/snapshot preview + e20-t05 start action +
+ * e20-t06 quantity workspace + e20-t07 variance review & complete gate).
+ * Shows the session spine and the phase-appropriate workspace: planned →
+ * start; in-progress → quantity entry; completed/closed → variance review.
  */
 export default function CountDetailPage() {
   const { countId } = useParams<{ countId: string }>()
   const countQuery = useInventoryCountQuery(countId)
   const startMutation = useStartCountMutation(countId ?? '')
+  const completeMutation = useCompleteCountMutation(countId ?? '')
   const { confirm: openConfirm, element: confirmDialog } = useConfirm()
   const count = countQuery.data
 
@@ -59,6 +62,22 @@ export default function CountDetailPage() {
       startMutation.mutate(count.rowVersion)
     }
   }
+
+  const handleComplete = async () => {
+    const confirmed = await openConfirm({
+      title: 'إكمال الجلسة',
+      message: 'سيُحسب عدد البنود ذات الفرق ويُقفل الجرد. تأكد من إدخال سبب لكل فرق قبل الإكمال.',
+      confirmLabel: 'إكمال',
+    })
+    if (confirmed.confirmed) {
+      completeMutation.mutate(count.rowVersion)
+    }
+  }
+
+  const isActive = count.status === 'InProgress'
+  const isReviewable =
+    count.status === 'InProgress' || count.status === 'Completed' || count.status === 'Closed'
+  const canComplete = count.status === 'InProgress'
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -115,9 +134,25 @@ export default function CountDetailPage() {
           </ContentCard>
         ) : null}
 
-        {count.status !== 'Planned' ? (
+        {isActive ? (
           <ContentCard title="بنود الجرد">
             <CountQuantityWorkspace countId={count.countId} countRowVersion={count.rowVersion} />
+          </ContentCard>
+        ) : null}
+
+        {isReviewable ? (
+          <ContentCard title="مراجعة الفروقات">
+            <CountVarianceReview
+              countId={count.countId}
+              canComplete={canComplete}
+              onComplete={() => void handleComplete()}
+              isCompleting={completeMutation.isPending}
+              completeError={
+                completeMutation.error === null
+                  ? null
+                  : 'تعذّر إكمال الجلسة. تحقق من تسجيل أسباب الفروقات أو حدّث الصفحة.'
+              }
+            />
           </ContentCard>
         ) : null}
       </div>
