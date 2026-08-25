@@ -447,9 +447,9 @@ function buildSeed(): MockDatabase {
       balanceId: fixtureUuid(200),
       warehouse: centralRef,
       material: { id: computersMaterial.materialId, displayName: computersMaterial.nameAr },
-      quantity: 0,
+      quantity: 25,
       lastUpdated: '2026-08-21T08:00:00.000Z',
-      lowStock: { state: 'Low', thresholdQuantity: 0 },
+      lowStock: { state: 'Sufficient', thresholdQuantity: 5 },
     }),
     createInventoryBalance({
       balanceId: fixtureUuid(201),
