@@ -142,4 +142,54 @@ describe('CountQuantityWorkspace (e20-t06)', () => {
     expect(first.countLineId).toBe('L1')
     expect(first.actualQuantity).toBe(23)
   }, 30000)
+
+  it('renders asset lines with presence toggle and asset number (e20-t10)', async () => {
+    server.use(
+      http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              countLineId: 'A1',
+              assetId: 'aa000000-0000-4000-8000-0000000000aa',
+              assetNumber: 'AST-1001',
+              material: { id: 'm9', displayName: 'حاسوب محمول' },
+              snapshotQuantity: 1,
+              actualQuantity: null,
+              difference: 0,
+              rowVersion: 1,
+            },
+          ],
+          meta: { pageIndex: 0, pageSize: 50, totalItems: 1, totalPages: 1 },
+        }),
+      ),
+      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, async ({ request }) => {
+        savedBody = (await request.json()) as SavedBody
+        return HttpResponse.json({
+          items: [],
+          meta: { pageIndex: 0, pageSize: 50, totalItems: 0, totalPages: 1 },
+        })
+      }),
+    )
+    renderWorkspace()
+
+    expect(await screen.findByText('حاسوب محمول')).toBeInTheDocument()
+    expect(screen.getByText(/أصل مسلسل/)).toBeInTheDocument()
+    expect(screen.getByText(/AST-1001/)).toBeInTheDocument()
+    // No numeric quantity input for an asset line — presence toggle instead.
+    expect(screen.queryByLabelText('الكمية الفعلية لـ حاسوب محمول')).toBeNull()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'تأكيد فقدان حاسوب محمول' }))
+    await user.click(screen.getByRole('button', { name: 'حفظ (1)' }))
+
+    await waitFor(
+      () => {
+        expect(savedBody).toBeDefined()
+      },
+      { timeout: 8000 },
+    )
+    const first = savedBody?.lines?.[0] as { countLineId: string; actualQuantity: number }
+    expect(first.countLineId).toBe('A1')
+    expect(first.actualQuantity).toBe(0)
+  }, 30000)
 })

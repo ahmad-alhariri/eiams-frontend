@@ -10,6 +10,13 @@ import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
+import { isAssetCountLine } from '@/modules/inventory-count/types/inventory-count.types'
+
+/** An asset line carries an `assetId` (and `assetNumber`) — a serialized asset
+ * verified as present (1) or missing (0), rather than a bulk quantity. */
+function isAssetLine(line: InventoryCountLine): boolean {
+  return isAssetCountLine(line)
+}
 
 interface LineDraft {
   actualQuantity: string
@@ -151,27 +158,71 @@ export function CountQuantityWorkspace({
           <tbody>
             {items.map((line) => {
               const draft = draftFor(line)
+              const assetLine = isAssetLine(line)
               const entered =
                 draft.actualQuantity.trim() === '' ? null : Number(draft.actualQuantity)
               const diff = entered === null ? null : entered - line.snapshotQuantity
               const hasVariance = diff !== null && diff !== 0
               return (
                 <tr key={line.countLineId} className="border-t border-border">
-                  <td className="px-3 py-2">{line.material.displayName}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col gap-0.5">
+                      <span>{line.material.displayName}</span>
+                      {assetLine ? (
+                        <span className="inline-flex w-fit items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                          أصل مسلسل
+                          {line.assetNumber !== undefined && line.assetNumber !== null
+                            ? ` · ${line.assetNumber}`
+                            : ''}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
                   <td className="px-3 py-2 ltr">{line.snapshotQuantity}</td>
                   <td className="px-3 py-2">
-                    <Input
-                      type="number"
-                      min={0}
-                      inputMode="numeric"
-                      aria-label={`الكمية الفعلية لـ ${line.material.displayName}`}
-                      value={draft.actualQuantity}
-                      disabled={!canEnter || updateMutation.isPending}
-                      onChange={(event) =>
-                        setDraft(line.countLineId, { actualQuantity: event.target.value })
-                      }
-                      className="w-32"
-                    />
+                    {assetLine ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          aria-label={`تأكيد وجود ${line.material.displayName}`}
+                          disabled={!canEnter || updateMutation.isPending}
+                          onClick={() => setDraft(line.countLineId, { actualQuantity: '1' })}
+                          className={`rounded border px-2 py-1 text-xs ${
+                            entered === 1
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-border text-foreground'
+                          }`}
+                        >
+                          موجود
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`تأكيد فقدان ${line.material.displayName}`}
+                          disabled={!canEnter || updateMutation.isPending}
+                          onClick={() => setDraft(line.countLineId, { actualQuantity: '0' })}
+                          className={`rounded border px-2 py-1 text-xs ${
+                            entered === 0
+                              ? 'border-destructive bg-destructive text-destructive-foreground'
+                              : 'border-border text-foreground'
+                          }`}
+                        >
+                          مفقود
+                        </button>
+                      </div>
+                    ) : (
+                      <Input
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        aria-label={`الكمية الفعلية لـ ${line.material.displayName}`}
+                        value={draft.actualQuantity}
+                        disabled={!canEnter || updateMutation.isPending}
+                        onChange={(event) =>
+                          setDraft(line.countLineId, { actualQuantity: event.target.value })
+                        }
+                        className="w-32"
+                      />
+                    )}
                   </td>
                   <td className={`px-3 py-2 ltr ${hasVariance ? 'text-destructive' : ''}`}>
                     {diff === null ? '—' : diff}

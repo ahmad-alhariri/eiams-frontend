@@ -43,3 +43,13 @@ export const INVENTORY_COUNT_SCOPE_LABELS_AR = {
   ByCategory: 'حسب الصنف',
   ByMaterial: 'حسب المادة',
 } as const
+
+/**
+ * An inventory-count line counts a serialized asset (rather than a bulk
+ * quantity) when the contract supplies an `assetId`. For asset lines the
+ * operator verifies presence (1) or loss (0), and the asset's `assetNumber`
+ * is surfaced in the UI. Derived directly from `InventoryCountLine`.
+ */
+export function isAssetCountLine(line: { assetId?: string | null }): boolean {
+  return line.assetId !== undefined && line.assetId !== null
+}

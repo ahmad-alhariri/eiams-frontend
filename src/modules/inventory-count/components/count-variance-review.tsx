@@ -5,6 +5,7 @@ import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
+import { isAssetCountLine } from '@/modules/inventory-count/types/inventory-count.types'
 
 interface VarianceRow {
   line: InventoryCountLine
@@ -100,7 +101,17 @@ export function CountVarianceReview({
                 key={row.line.countLineId}
                 className="flex items-center justify-between px-3 py-2 text-sm"
               >
-                <span>{row.line.material.displayName}</span>
+                <span className="flex items-center gap-2">
+                  {row.line.material.displayName}
+                  {isAssetCountLine(row.line) ? (
+                    <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                      أصل مسلسل
+                      {row.line.assetNumber !== undefined && row.line.assetNumber !== null
+                        ? ` · ${row.line.assetNumber}`
+                        : ''}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="ltr text-muted-foreground">
                   {row.line.snapshotQuantity} → {row.line.actualQuantity ?? '—'}
                 </span>
@@ -119,7 +130,17 @@ export function CountVarianceReview({
             {variance.map((row) => (
               <li key={row.line.countLineId} className="grid gap-1 px-3 py-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span>{row.line.material.displayName}</span>
+                  <span className="flex items-center gap-2">
+                    {row.line.material.displayName}
+                    {isAssetCountLine(row.line) ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                        أصل مسلسل
+                        {row.line.assetNumber !== undefined && row.line.assetNumber !== null
+                          ? ` · ${row.line.assetNumber}`
+                          : ''}
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="ltr text-destructive">
                     {row.line.snapshotQuantity} → {row.line.actualQuantity ?? '—'} (
                     {row.difference > 0 ? '+' : ''}

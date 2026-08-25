@@ -98,6 +98,16 @@ const varianceWithoutReason = {
   difference: 3,
   reason: null,
 }
+const assetLineMissing = {
+  countLineId: 'A1',
+  assetId: 'aa000000-0000-4000-8000-0000000000aa',
+  assetNumber: 'AST-1001',
+  material: { id: 'm9', displayName: 'حاسوب محمول' },
+  snapshotQuantity: 1,
+  actualQuantity: 0,
+  difference: -1,
+  reason: 'مفقود أثناء النقل',
+}
 
 describe('CountVarianceReview (e20-t07)', () => {
   it('splits matching vs variance lines and shows reasons', async () => {
@@ -144,6 +154,16 @@ describe('CountVarianceReview (e20-t07)', () => {
 
     await screen.findByText('حاسوب مكتبي')
     expect(screen.getByRole('button', { name: 'إغلاق الجلسة' })).toBeInTheDocument()
+  }, 20000)
+
+  it('surfaces asset lines with serial badge and asset number (e20-t10)', async () => {
+    useHandlers([assetLineMissing])
+    renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn() })
+
+    expect(await screen.findByText('حاسوب محمول')).toBeInTheDocument()
+    expect(screen.getByText(/أصل مسلسل/)).toBeInTheDocument()
+    expect(screen.getByText(/AST-1001/)).toBeInTheDocument()
+    expect(screen.getByText(/مفقود أثناء النقل/)).toBeInTheDocument()
   }, 20000)
 
   it('hides the close action when not on Completed status', async () => {
