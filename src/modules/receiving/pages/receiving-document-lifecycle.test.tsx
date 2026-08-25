@@ -31,7 +31,7 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 const API_BASE_URL = '/api/v1'
 const DOCUMENT_ID = fixtureUuid(200)
 const DETAIL_PATH = ROUTE_PATHS.documentReceivingDetail.replace(':documentId', DOCUMENT_ID)
-const SIGNED_ORIGINAL_ALERT = 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.'
+const SIGNED_ORIGINAL_ALERT = 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.'
 
 const ALL_DOCUMENT_CODES = [
   'document.view',
@@ -99,12 +99,21 @@ function createWrapper(permissionCodes: readonly string[] = ALL_DOCUMENT_CODES) 
 
 /**
  * Serves the mutable store record for detail/policy/history so every refetch
- * after a lifecycle action reflects the transitioned document. The policy is
- * re-evaluated per current status with `signedOriginalSatisfied` pinned to
- * `false` for every status — the client gate must be the only thing keeping
- * the alert off a posted document (eiams-frontend-46f2).
+ * after a lifecycle action reflects the transitioned document. Tests choose
+ * whether the server-authoritative signed-original gate is satisfied so a
+ * success journey cannot bypass D-ATT-01.
  */
-function useMutableDocumentHandlers(store: WarehouseDocument[]) {
+function useMutableDocumentHandlers(store: WarehouseDocument[], signedOriginalSatisfied = false) {
+  const current = store[0]!
+  store[0] = {
+    ...current,
+    policy: createDocumentPolicy({
+      documentId: current.documentId,
+      documentStatus: current.documentStatus,
+      rowVersion: current.rowVersion,
+      signedOriginalSatisfied,
+    }),
+  }
   server.use(
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
       HttpResponse.json(store[0]),
@@ -125,7 +134,7 @@ function useMutableDocumentHandlers(store: WarehouseDocument[]) {
           documentId: DOCUMENT_ID,
           documentStatus: document.documentStatus,
           rowVersion: document.rowVersion,
-          signedOriginalSatisfied: false,
+          signedOriginalSatisfied,
         }),
       )
     }),
@@ -173,17 +182,24 @@ describe('receiving lifecycle and policy gates (e13-t07)', () => {
 
     render(<ReceivingDocumentDetailPage />, { wrapper: createWrapper(KEEPER_DOCUMENT_CODES) })
 
-    await screen.findByText('بانتظار الترحيل')
+    expect((await screen.findAllByText('بانتظار الترحيل')).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'ترحيل' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'رفض' })).not.toBeInTheDocument()
     expect(screen.getByText(SIGNED_ORIGINAL_ALERT)).toBeInTheDocument()
   })
 
-  it('shows Post and Reject to a manager session on the same submitted document', async () => {
+  it('shows the unsigned Post blocker and enabled Reject to a manager session', async () => {
+    const submittedPolicy = createDocumentPolicy({
+      documentId: DOCUMENT_ID,
+      documentStatus: 'Submitted',
+      rowVersion: 2,
+      signedOriginalSatisfied: false,
+    })
     const document = createWarehouseDocument({
       documentId: DOCUMENT_ID,
       documentStatus: 'Submitted',
       rowVersion: 2,
+      policy: submittedPolicy,
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
@@ -198,40 +214,33 @@ describe('receiving lifecycle and policy gates (e13-t07)', () => {
         }),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(
-          createDocumentPolicy({
-            documentId: DOCUMENT_ID,
-            documentStatus: 'Submitted',
-            rowVersion: 2,
-            signedOriginalSatisfied: false,
-          }),
-        ),
+        HttpResponse.json(document.policy),
       ),
     )
 
     render(<ReceivingDocumentDetailPage />, { wrapper: createWrapper(ALL_DOCUMENT_CODES) })
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'ترحيل' })).toBeEnabled())
+    expect(await screen.findByRole('button', { name: 'ترحيل' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'رفض' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'إرسال للترحيل' })).toBeDisabled()
   })
 
   it('walks Draft → Submit → Post → Reverse with policy-driven states and no stale signed-original alert', async () => {
     const store: WarehouseDocument[] = [createWarehouseDocument({ documentId: DOCUMENT_ID })]
-    useMutableDocumentHandlers(store)
+    useMutableDocumentHandlers(store, true)
     const user = userEvent.setup()
 
     render(<ReceivingDocumentDetailPage />, { wrapper: createWrapper(ALL_DOCUMENT_CODES) })
 
     await screen.findByRole('button', { name: 'إرسال للترحيل' })
-    expect(screen.getByText(SIGNED_ORIGINAL_ALERT)).toBeInTheDocument()
+    expect(screen.queryByText(SIGNED_ORIGINAL_ALERT)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'ترحيل' })).toBeDisabled()
 
     await user.click(screen.getByRole('button', { name: 'إرسال للترحيل' }))
     await screen.findByText('تم إرسال السند للترحيل بنجاح')
     await waitFor(() => expect(screen.getByRole('button', { name: 'ترحيل' })).toBeEnabled())
     expect(store[0]).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
-    expect(screen.getByText(SIGNED_ORIGINAL_ALERT)).toBeInTheDocument()
+    expect(screen.queryByText(SIGNED_ORIGINAL_ALERT)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'ترحيل' }))
     await screen.findByText('تم ترحيل السند بنجاح')
@@ -287,6 +296,5 @@ describe('receiving lifecycle and policy gates (e13-t07)', () => {
       screen.queryByText('عرض للقراءة فقط — المستند مرفوض — استخدم «مراجعة» لإعادة فتح التعديل'),
     ).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'إرسال للترحيل' })).toBeEnabled()
-    expect(screen.getByText(SIGNED_ORIGINAL_ALERT)).toBeInTheDocument()
   })
 })
