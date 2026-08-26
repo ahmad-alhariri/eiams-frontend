@@ -50,6 +50,12 @@ export interface AsyncSelectProps<T> {
   /** Standard attributes forwarded to the inner combobox input (id, aria-*, ...). */
   inputProps?: ComponentPropsWithoutRef<'input'>
   className?: string
+  /**
+   * Pre-resolved option for an externally-seeded `value` (deep links, locked
+   * launches): shown immediately without a search round-trip, instead of
+   * falling back to the raw value as label. Ignored once the user searches.
+   */
+  initialOption?: AsyncSelectOption<T> | null
 }
 
 const defaultCreateLabel = (query: string) => `إضافة جديد: ${query}`
@@ -121,9 +127,10 @@ function AsyncSelect<T>({
   onOpenChange: onOpenChangeProp,
   inputProps,
   className,
+  initialOption = null,
 }: AsyncSelectProps<T>) {
-  const [inputText, setInputText] = useState(value ?? '')
-  const [selectedOption, setSelectedOption] = useState<AsyncSelectOption<T> | null>(null)
+  const [inputText, setInputText] = useState(initialOption?.label ?? value ?? '')
+  const [selectedOption, setSelectedOption] = useState<AsyncSelectOption<T> | null>(initialOption)
   const [result, setResult] = useState<{
     query: string
     options: AsyncSelectOption<T>[]

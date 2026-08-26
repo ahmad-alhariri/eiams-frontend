@@ -80,10 +80,15 @@ export function seedInventoryCounts(centralWarehouseId: string): void {
     snapshotQuantity: number,
     actualQuantity: number | null,
   ): InventoryCountLine {
+    // Material ids must be contract UUIDs: the adjustment draft form (e21-t05)
+    // seeds CountVariance lines from these ids and validates them as UUIDs
+    // (D-ADJ-01). A synthetic `${countId}-mat-${index}` string fails that
+    // validation, so derive a stable per-line UUID instead.
+    const materialId = `00000000-0000-4000-8000-${String(nextId * 100 + index).padStart(12, '0')}`
     return {
       countLineId: `${countId}-line-${index}`,
       difference: (actualQuantity ?? snapshotQuantity) - snapshotQuantity,
-      material: { id: `${countId}-mat-${index}`, displayName: materialNameAr },
+      material: { id: materialId, displayName: materialNameAr },
       rowVersion: 1,
       snapshotQuantity,
       ...(actualQuantity === null ? {} : { actualQuantity }),

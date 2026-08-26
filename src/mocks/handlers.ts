@@ -41,6 +41,8 @@ import type {
   ExternalPartyUpsertRequest,
   LifecycleActorSnapshot,
   LifecycleConflictProblemDetails,
+  InventoryAdjustment,
+  InventoryAdjustmentDraftRequest,
   InventoryBalance,
   InventoryBalanceSortField,
   InventoryLowStockState,
@@ -1872,6 +1874,436 @@ export const mockApiHandlers: readonly HttpHandler[] = [
         pageSize,
         totalItems: rows.length,
         totalPages: Math.max(Math.ceil(rows.length / pageSize), 1),
+      },
+    })
+  }),
+  // --- Adjustments (D-ADJ-01): manager-owned exception with its own endpoint
+  // family. List only for now — detail/post/reverse/disposal handlers arrive
+  // with their UI tasks (t04–t08).
+  http.get(`${AUTH_PREFIX}/adjustments`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const purpose = url.searchParams.get('purpose')
+    const status = url.searchParams.get('status')
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
+
+    const warehouse = createNamedReference({
+      id: '823e4567-e89b-42d3-a456-426614174008',
+      displayName: 'المستودع المركزي',
+    })
+    const createdBy = createNamedReference({
+      id: '923e4567-e89b-42d3-a456-426614174009',
+      displayName: 'مدير المستودع',
+    })
+
+    // Session-persistent store: drafts created through POST /adjustments
+    // survive SPA navigation (the in-memory mock DB resets only on a full
+    // page reload — expected dev-mock behavior).
+    const created = getDb().createdAdjustments
+    const rows: InventoryAdjustment[] = [
+      ...created,
+      {
+        adjustmentId: '423e4567-e89b-42d3-a456-426614174004',
+        countReference: null,
+        createdAt: '2026-08-25T08:00:00.000Z',
+        createdBy,
+        documentId: '523e4567-e89b-42d3-a456-426614174005',
+        documentReference: 'EIAMS-ADJ-2026-0001',
+        lines: [
+          {
+            adjustmentLineId: '623e4567-e89b-42d3-a456-426614174006',
+            material: createNamedReference({
+              id: '723e4567-e89b-42d3-a456-426614174007',
+              displayName: 'حاسوب مكتبي',
+            }),
+            quantityDelta: -2,
+            reason: 'تسوية عجز إدخال',
+          },
+        ],
+        policy: {
+          actions: [
+            {
+              action: 'Edit',
+              allowed: true,
+              confirmationRequired: false,
+              presentation: 'Enabled',
+              reasonAr: null,
+              reasonCode: null,
+              reasonRequired: false,
+            },
+            {
+              action: 'Post',
+              allowed: false,
+              confirmationRequired: true,
+              presentation: 'Disabled',
+              reasonAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+              reasonCode: 'SignedOriginalRequired',
+              reasonRequired: false,
+            },
+          ],
+          advisories: [],
+          blockers: [
+            createPolicyBlocker({
+              code: 'SignedOriginalRequired',
+              messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+            }),
+          ],
+          documentId: '523e4567-e89b-42d3-a456-426614174005',
+          documentStatus: 'Draft',
+          evaluatedAt: '2026-08-25T08:05:00.000Z',
+          policyKind: 'Adjustment',
+          rowVersion: 2,
+          signedOriginalSatisfied: false,
+        },
+        postedAt: null,
+        purpose: 'DirectCorrection',
+        reason: 'تسوية عجز إدخال بعد جرد المستودع المركزي',
+        rowVersion: 2,
+        status: 'Draft',
+        warehouse,
+      },
+      {
+        adjustmentId: '463e4567-e89b-42d3-a456-426614174046',
+        countReference: 'EIAMS-CNT-2026-0007',
+        createdAt: '2026-08-24T10:00:00.000Z',
+        createdBy,
+        documentId: '563e4567-e89b-42d3-a456-426614174047',
+        documentReference: 'EIAMS-ADJ-2026-0002',
+        lines: [
+          {
+            adjustmentLineId: '663e4567-e89b-42d3-a456-426614174048',
+            material: createNamedReference({
+              id: '763e4567-e89b-42d3-a456-426614174049',
+              displayName: 'ورق تصوير A4',
+            }),
+            quantityDelta: 3,
+            reason: 'زيادة مرصودة بعد الجرد',
+          },
+        ],
+        policy: {
+          actions: [
+            {
+              action: 'Reverse',
+              allowed: true,
+              confirmationRequired: true,
+              presentation: 'Enabled',
+              reasonAr: null,
+              reasonCode: null,
+              reasonRequired: true,
+            },
+          ],
+          advisories: [],
+          blockers: [],
+          documentId: '563e4567-e89b-42d3-a456-426614174047',
+          documentStatus: 'Posted',
+          evaluatedAt: '2026-08-24T11:00:00.000Z',
+          policyKind: 'Adjustment',
+          rowVersion: 3,
+          signedOriginalSatisfied: true,
+        },
+        postedAt: '2026-08-24T11:00:00.000Z',
+        purpose: 'CountVariance',
+        reason: 'فروقات جلسة الجرد الشهري — زيادة ورق التصوير',
+        rowVersion: 3,
+        status: 'Posted',
+        warehouse,
+      },
+      {
+        adjustmentId: '473e4567-e89b-42d3-a456-426614174049',
+        countReference: null,
+        createdAt: '2026-08-23T12:00:00.000Z',
+        createdBy,
+        documentId: '573e4567-e89b-42d3-a456-426614174050',
+        documentReference: 'EIAMS-ADJ-2026-0003',
+        lines: [
+          {
+            adjustmentLineId: '673e4567-e89b-42d3-a456-426614174051',
+            assetId: 'a73e4567-e89b-42d3-a456-426614174052',
+            assetNumber: 'EIAMS-AST-2026-0042',
+            material: createNamedReference({
+              id: '773e4567-e89b-42d3-a456-426614174053',
+              displayName: 'طابعة ليزر',
+            }),
+            quantityDelta: -1,
+            reason: 'إعدام أصل تالف بموجب محضر لجنة الفحص',
+          },
+        ],
+        policy: {
+          actions: [],
+          advisories: [],
+          blockers: [],
+          documentId: '573e4567-e89b-42d3-a456-426614174050',
+          documentStatus: 'Posted',
+          evaluatedAt: '2026-08-23T13:00:00.000Z',
+          policyKind: 'Disposal',
+          rowVersion: 2,
+          signedOriginalSatisfied: true,
+        },
+        postedAt: '2026-08-23T13:00:00.000Z',
+        purpose: 'Disposal',
+        reason: 'إعدام طابعة ليزر تالفة نهائيًا',
+        rowVersion: 2,
+        status: 'Posted',
+        warehouse,
+      },
+    ]
+
+    let filtered = rows
+    if (purpose !== null && purpose !== '') {
+      filtered = filtered.filter((row) => row.purpose === purpose)
+    }
+    if (status !== null && status !== '') {
+      filtered = filtered.filter((row) => row.status === status)
+    }
+    if (warehouseId !== null && warehouseId !== '') {
+      filtered = filtered.filter((row) => row.warehouse.id === warehouseId)
+    }
+    return HttpResponse.json({
+      items: filtered.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: filtered.length,
+        totalPages: Math.max(Math.ceil(filtered.length / pageSize), 1),
+      },
+    })
+  }),
+  // POST /adjustments — creates a Draft adjustment (D-ADJ-01 manager-only)
+  // and persists it for the SPA session so the list page reflects it.
+  http.post(`${AUTH_PREFIX}/adjustments`, async ({ request }) => {
+    await delay(150)
+    const body = (await request.json()) as InventoryAdjustmentDraftRequest
+
+    const warehouse = createNamedReference({
+      id: body.warehouseId,
+      displayName: 'المستودع المركزي',
+    })
+    const createdBy = createNamedReference({
+      id: '923e4567-e89b-42d3-a456-426614174009',
+      displayName: 'مدير المستودع',
+    })
+    const adjustmentId = nextFixtureUuid()
+    const documentId = nextFixtureUuid()
+    const now = new Date().toISOString()
+
+    if (body.purpose === 'CountVariance' && !body.countId) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'تسوية فروقات الجرد يجب أن ترتبط بجلسة جرد.' },
+        { status: 422 },
+      )
+    }
+
+    const adjustment: InventoryAdjustment = {
+      adjustmentId,
+      countReference: body.countId ? `EIAMS-CNT-LINKED` : null,
+      createdAt: now,
+      createdBy,
+      documentId,
+      documentReference: `EIAMS-ADJ-DRAFT-${String(getDb().createdAdjustments.length + 1).padStart(4, '0')}`,
+      lines: body.lines.map((line, index) => ({
+        adjustmentLineId: line.adjustmentLineId ?? nextFixtureUuid(),
+        material: createNamedReference({
+          id: line.materialId,
+          displayName: `مادة البند ${index + 1}`,
+        }),
+        quantityDelta: line.quantityDelta,
+        reason: line.reason,
+      })),
+      policy: {
+        actions: [
+          {
+            action: 'Post',
+            allowed: false,
+            confirmationRequired: true,
+            presentation: 'Disabled',
+            reasonAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+            reasonCode: 'SignedOriginalRequired',
+            reasonRequired: false,
+          },
+        ],
+        advisories: [],
+        blockers: [
+          createPolicyBlocker({
+            code: 'SignedOriginalRequired',
+            messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+          }),
+        ],
+        documentId,
+        documentStatus: 'Draft',
+        evaluatedAt: now,
+        policyKind: 'Adjustment',
+        rowVersion: 0,
+        signedOriginalSatisfied: false,
+      },
+      postedAt: null,
+      purpose: body.purpose,
+      reason: body.reason,
+      rowVersion: 0,
+      status: 'Draft',
+      warehouse,
+    }
+    getDb().createdAdjustments.push(adjustment)
+    return HttpResponse.json(adjustment, { status: 201 })
+  }),
+  // GET /adjustments/disposal-eligible-assets — authoritative eligible-asset
+  // lookup (D-ADJ-01): non-disposed assets, optionally scoped by warehouse.
+  http.get(`${AUTH_PREFIX}/adjustments/disposal-eligible-assets`, async ({ request }) => {
+    await delay(100)
+    const url = new URL(request.url)
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
+    const assets = getDb().assets.filter(
+      (asset) =>
+        asset.derivedStatus !== 'Disposed' &&
+        (warehouseId === null || warehouseId === '' || asset.currentWarehouse?.id === warehouseId),
+    )
+    return HttpResponse.json({
+      items: assets.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: assets.length,
+        totalPages: Math.max(Math.ceil(assets.length / pageSize), 1),
+      },
+    })
+  }),
+  // GET /adjustments/{id} — detail projection from the session store or the
+  http.get(`${AUTH_PREFIX}/adjustments/:adjustmentId`, async ({ params }) => {
+    await delay(100)
+    const id = String(params['adjustmentId'])
+    const created = getDb().createdAdjustments.find((row) => row.adjustmentId === id)
+    if (created !== undefined) return HttpResponse.json(created)
+    return notFound()
+  }),
+  // POST /adjustments/{id}/post — manager-owned posting gate (D-ADJ-01):
+  // requires Idempotency-Key; Draft only; SignedOriginal prerequisite.
+  http.post(`${AUTH_PREFIX}/adjustments/:adjustmentId/post`, async ({ request, params }) => {
+    await delay(200)
+    if (!request.headers.get('Idempotency-Key')) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'مفتاح تكرار الطلب مطلوب.' },
+        { status: 422 },
+      )
+    }
+    const id = String(params['adjustmentId'])
+    const store = getDb().createdAdjustments
+    const rowIndex = store.findIndex((entry) => entry.adjustmentId === id)
+    if (rowIndex === -1) return notFound()
+    const row = store[rowIndex]!
+    if (row.status !== 'Draft') {
+      return HttpResponse.json(
+        { code: 'LifecycleConflict', messageAr: 'لا يمكن ترحيل سند في هذه الحالة.' },
+        { status: 409 },
+      )
+    }
+    if (!row.policy.signedOriginalSatisfied) {
+      return HttpResponse.json(
+        {
+          code: 'SignedOriginalRequired',
+          messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+        },
+        { status: 422 },
+      )
+    }
+    // Generated read models are deeply readonly — replace the stored row.
+    const posted: InventoryAdjustment = {
+      ...row,
+      status: 'Posted',
+      postedAt: new Date().toISOString(),
+      rowVersion: row.rowVersion + 1,
+    }
+    store[rowIndex] = posted
+    return HttpResponse.json({
+      adjustment: posted,
+      assetMovements: [],
+      lifecycleEvent: {
+        documentId: row.documentId,
+        documentRowVersion: row.rowVersion,
+        eventId: nextFixtureUuid(),
+        eventType: 'Posted',
+        occurredAt: new Date().toISOString(),
+        occurredBy: {
+          displayName: 'مدير المستودع',
+          userId: '923e4567-e89b-42d3-a456-426614174009',
+        },
+      },
+      stockMovements: [],
+    })
+  }),
+  // POST /adjustments/{id}/reverse — compensating document for Posted
+  // ordinary adjustments. Disposal is rejected outright (terminal).
+  http.post(`${AUTH_PREFIX}/adjustments/:adjustmentId/reverse`, async ({ request, params }) => {
+    await delay(200)
+    if (!request.headers.get('Idempotency-Key')) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'مفتاح تكرار الطلب مطلوب.' },
+        { status: 422 },
+      )
+    }
+    const body = (await request.json()) as { reason?: string; rowVersion?: number }
+    if ((body.reason ?? '').trim() === '') {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'سبب العكس مطلوب.' },
+        { status: 422 },
+      )
+    }
+    const id = String(params['adjustmentId'])
+    const store = getDb().createdAdjustments
+    const originalIndex = store.findIndex((entry) => entry.adjustmentId === id)
+    if (originalIndex === -1) return notFound()
+    const original = store[originalIndex]!
+    if (original.purpose === 'Disposal') {
+      return HttpResponse.json(
+        { code: 'LifecycleConflict', messageAr: 'سند الإعدام نهائي ولا يمكن عكسه.' },
+        { status: 409 },
+      )
+    }
+    if (original.status !== 'Posted') {
+      return HttpResponse.json(
+        { code: 'LifecycleConflict', messageAr: 'لا يمكن عكس سند في هذه الحالة.' },
+        { status: 409 },
+      )
+    }
+    // Generated read models are deeply readonly — replace the stored row.
+    const reversedOriginal: InventoryAdjustment = {
+      ...original,
+      status: 'Reversed',
+      rowVersion: original.rowVersion + 1,
+    }
+    store[originalIndex] = reversedOriginal
+    const compensating: InventoryAdjustment = {
+      ...structuredClone(reversedOriginal),
+      adjustmentId: nextFixtureUuid(),
+      documentId: nextFixtureUuid(),
+      documentReference: `EIAMS-ADJ-REV-${String(store.length + 1).padStart(4, '0')}`,
+      reason: `عكس: ${body.reason}`,
+      status: 'Posted',
+      postedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      // Compensating lines mirror the original with flipped sign.
+      lines: original.lines.map((line) => ({
+        ...line,
+        adjustmentLineId: nextFixtureUuid(),
+        quantityDelta: -line.quantityDelta,
+      })),
+    }
+    store.push(compensating)
+    return HttpResponse.json({
+      originalAdjustment: reversedOriginal,
+      compensatingAdjustment: compensating,
+      lifecycleEvent: {
+        documentId: original.documentId,
+        documentRowVersion: original.rowVersion,
+        eventId: nextFixtureUuid(),
+        eventType: 'Reversed',
+        occurredAt: new Date().toISOString(),
+        occurredBy: {
+          displayName: 'مدير المستودع',
+          userId: '923e4567-e89b-42d3-a456-426614174009',
+        },
       },
     })
   }),
