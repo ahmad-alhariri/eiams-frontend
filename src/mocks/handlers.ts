@@ -41,6 +41,7 @@ import type {
   ExternalPartyUpsertRequest,
   LifecycleActorSnapshot,
   LifecycleConflictProblemDetails,
+  InventoryAdjustment,
   InventoryBalance,
   InventoryBalanceSortField,
   InventoryLowStockState,
@@ -1872,6 +1873,194 @@ export const mockApiHandlers: readonly HttpHandler[] = [
         pageSize,
         totalItems: rows.length,
         totalPages: Math.max(Math.ceil(rows.length / pageSize), 1),
+      },
+    })
+  }),
+  // --- Adjustments (D-ADJ-01): manager-owned exception with its own endpoint
+  // family. List only for now — detail/post/reverse/disposal handlers arrive
+  // with their UI tasks (t04–t08).
+  http.get(`${AUTH_PREFIX}/adjustments`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const purpose = url.searchParams.get('purpose')
+    const status = url.searchParams.get('status')
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
+
+    const warehouse = createNamedReference({
+      id: '823e4567-e89b-42d3-a456-426614174008',
+      displayName: 'المستودع المركزي',
+    })
+    const createdBy = createNamedReference({
+      id: '923e4567-e89b-42d3-a456-426614174009',
+      displayName: 'مدير المستودع',
+    })
+
+    const rows: InventoryAdjustment[] = [
+      {
+        adjustmentId: '423e4567-e89b-42d3-a456-426614174004',
+        countReference: null,
+        createdAt: '2026-08-25T08:00:00.000Z',
+        createdBy,
+        documentId: '523e4567-e89b-42d3-a456-426614174005',
+        documentReference: 'EIAMS-ADJ-2026-0001',
+        lines: [
+          {
+            adjustmentLineId: '623e4567-e89b-42d3-a456-426614174006',
+            material: createNamedReference({
+              id: '723e4567-e89b-42d3-a456-426614174007',
+              displayName: 'حاسوب مكتبي',
+            }),
+            quantityDelta: -2,
+            reason: 'تسوية عجز إدخال',
+          },
+        ],
+        policy: {
+          actions: [
+            {
+              action: 'Edit',
+              allowed: true,
+              confirmationRequired: false,
+              presentation: 'Enabled',
+              reasonAr: null,
+              reasonCode: null,
+              reasonRequired: false,
+            },
+            {
+              action: 'Post',
+              allowed: false,
+              confirmationRequired: true,
+              presentation: 'Disabled',
+              reasonAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+              reasonCode: 'SignedOriginalRequired',
+              reasonRequired: false,
+            },
+          ],
+          advisories: [],
+          blockers: [
+            createPolicyBlocker({
+              code: 'SignedOriginalRequired',
+              messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+            }),
+          ],
+          documentId: '523e4567-e89b-42d3-a456-426614174005',
+          documentStatus: 'Draft',
+          evaluatedAt: '2026-08-25T08:05:00.000Z',
+          policyKind: 'Adjustment',
+          rowVersion: 2,
+          signedOriginalSatisfied: false,
+        },
+        postedAt: null,
+        purpose: 'DirectCorrection',
+        reason: 'تسوية عجز إدخال بعد جرد المستودع المركزي',
+        rowVersion: 2,
+        status: 'Draft',
+        warehouse,
+      },
+      {
+        adjustmentId: '463e4567-e89b-42d3-a456-426614174046',
+        countReference: 'EIAMS-CNT-2026-0007',
+        createdAt: '2026-08-24T10:00:00.000Z',
+        createdBy,
+        documentId: '563e4567-e89b-42d3-a456-426614174047',
+        documentReference: 'EIAMS-ADJ-2026-0002',
+        lines: [
+          {
+            adjustmentLineId: '663e4567-e89b-42d3-a456-426614174048',
+            material: createNamedReference({
+              id: '763e4567-e89b-42d3-a456-426614174049',
+              displayName: 'ورق تصوير A4',
+            }),
+            quantityDelta: 3,
+            reason: 'زيادة مرصودة بعد الجرد',
+          },
+        ],
+        policy: {
+          actions: [
+            {
+              action: 'Reverse',
+              allowed: true,
+              confirmationRequired: true,
+              presentation: 'Enabled',
+              reasonAr: null,
+              reasonCode: null,
+              reasonRequired: true,
+            },
+          ],
+          advisories: [],
+          blockers: [],
+          documentId: '563e4567-e89b-42d3-a456-426614174047',
+          documentStatus: 'Posted',
+          evaluatedAt: '2026-08-24T11:00:00.000Z',
+          policyKind: 'Adjustment',
+          rowVersion: 3,
+          signedOriginalSatisfied: true,
+        },
+        postedAt: '2026-08-24T11:00:00.000Z',
+        purpose: 'CountVariance',
+        reason: 'فروقات جلسة الجرد الشهري — زيادة ورق التصوير',
+        rowVersion: 3,
+        status: 'Posted',
+        warehouse,
+      },
+      {
+        adjustmentId: '473e4567-e89b-42d3-a456-426614174049',
+        countReference: null,
+        createdAt: '2026-08-23T12:00:00.000Z',
+        createdBy,
+        documentId: '573e4567-e89b-42d3-a456-426614174050',
+        documentReference: 'EIAMS-ADJ-2026-0003',
+        lines: [
+          {
+            adjustmentLineId: '673e4567-e89b-42d3-a456-426614174051',
+            assetId: 'a73e4567-e89b-42d3-a456-426614174052',
+            assetNumber: 'EIAMS-AST-2026-0042',
+            material: createNamedReference({
+              id: '773e4567-e89b-42d3-a456-426614174053',
+              displayName: 'طابعة ليزر',
+            }),
+            quantityDelta: -1,
+            reason: 'إعدام أصل تالف بموجب محضر لجنة الفحص',
+          },
+        ],
+        policy: {
+          actions: [],
+          advisories: [],
+          blockers: [],
+          documentId: '573e4567-e89b-42d3-a456-426614174050',
+          documentStatus: 'Posted',
+          evaluatedAt: '2026-08-23T13:00:00.000Z',
+          policyKind: 'Disposal',
+          rowVersion: 2,
+          signedOriginalSatisfied: true,
+        },
+        postedAt: '2026-08-23T13:00:00.000Z',
+        purpose: 'Disposal',
+        reason: 'إعدام طابعة ليزر تالفة نهائيًا',
+        rowVersion: 2,
+        status: 'Posted',
+        warehouse,
+      },
+    ]
+
+    let filtered = rows
+    if (purpose !== null && purpose !== '') {
+      filtered = filtered.filter((row) => row.purpose === purpose)
+    }
+    if (status !== null && status !== '') {
+      filtered = filtered.filter((row) => row.status === status)
+    }
+    if (warehouseId !== null && warehouseId !== '') {
+      filtered = filtered.filter((row) => row.warehouse.id === warehouseId)
+    }
+    return HttpResponse.json({
+      items: filtered.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: filtered.length,
+        totalPages: Math.max(Math.ceil(filtered.length / pageSize), 1),
       },
     })
   }),
