@@ -2147,6 +2147,144 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     getDb().createdAdjustments.push(adjustment)
     return HttpResponse.json(adjustment, { status: 201 })
   }),
+  // GET /adjustments/{id} — detail projection from the session store or the
+  // static fixtures (t06/t07 seam).
+  http.get(`${AUTH_PREFIX}/adjustments/:adjustmentId`, async ({ params }) => {
+    await delay(100)
+    const id = String(params['adjustmentId'])
+    const created = getDb().createdAdjustments.find((row) => row.adjustmentId === id)
+    if (created !== undefined) return HttpResponse.json(created)
+    return notFound()
+  }),
+  // POST /adjustments/{id}/post — manager-owned posting gate (D-ADJ-01):
+  // requires Idempotency-Key; Draft only; SignedOriginal prerequisite.
+  http.post(`${AUTH_PREFIX}/adjustments/:adjustmentId/post`, async ({ request, params }) => {
+    await delay(200)
+    if (!request.headers.get('Idempotency-Key')) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'مفتاح تكرار الطلب مطلوب.' },
+        { status: 422 },
+      )
+    }
+    const id = String(params['adjustmentId'])
+    const store = getDb().createdAdjustments
+    const rowIndex = store.findIndex((entry) => entry.adjustmentId === id)
+    if (rowIndex === -1) return notFound()
+    const row = store[rowIndex]!
+    if (row.status !== 'Draft') {
+      return HttpResponse.json(
+        { code: 'LifecycleConflict', messageAr: 'لا يمكن ترحيل سند في هذه الحالة.' },
+        { status: 409 },
+      )
+    }
+    if (!row.policy.signedOriginalSatisfied) {
+      return HttpResponse.json(
+        {
+          code: 'SignedOriginalRequired',
+          messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+        },
+        { status: 422 },
+      )
+    }
+    // Generated read models are deeply readonly — replace the stored row.
+    const posted: InventoryAdjustment = {
+      ...row,
+      status: 'Posted',
+      postedAt: new Date().toISOString(),
+      rowVersion: row.rowVersion + 1,
+    }
+    store[rowIndex] = posted
+    return HttpResponse.json({
+      adjustment: posted,
+      assetMovements: [],
+      lifecycleEvent: {
+        documentId: row.documentId,
+        documentRowVersion: row.rowVersion,
+        eventId: nextFixtureUuid(),
+        eventType: 'Posted',
+        occurredAt: new Date().toISOString(),
+        occurredBy: {
+          displayName: 'مدير المستودع',
+          userId: '923e4567-e89b-42d3-a456-426614174009',
+        },
+      },
+      stockMovements: [],
+    })
+  }),
+  // POST /adjustments/{id}/reverse — compensating document for Posted
+  // ordinary adjustments. Disposal is rejected outright (terminal).
+  http.post(`${AUTH_PREFIX}/adjustments/:adjustmentId/reverse`, async ({ request, params }) => {
+    await delay(200)
+    if (!request.headers.get('Idempotency-Key')) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'مفتاح تكرار الطلب مطلوب.' },
+        { status: 422 },
+      )
+    }
+    const body = (await request.json()) as { reason?: string; rowVersion?: number }
+    if ((body.reason ?? '').trim() === '') {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'سبب العكس مطلوب.' },
+        { status: 422 },
+      )
+    }
+    const id = String(params['adjustmentId'])
+    const store = getDb().createdAdjustments
+    const originalIndex = store.findIndex((entry) => entry.adjustmentId === id)
+    if (originalIndex === -1) return notFound()
+    const original = store[originalIndex]!
+    if (original.purpose === 'Disposal') {
+      return HttpResponse.json(
+        { code: 'LifecycleConflict', messageAr: 'سند الإعدام نهائي ولا يمكن عكسه.' },
+        { status: 409 },
+      )
+    }
+    if (original.status !== 'Posted') {
+      return HttpResponse.json(
+        { code: 'LifecycleConflict', messageAr: 'لا يمكن عكس سند في هذه الحالة.' },
+        { status: 409 },
+      )
+    }
+    // Generated read models are deeply readonly — replace the stored row.
+    const reversedOriginal: InventoryAdjustment = {
+      ...original,
+      status: 'Reversed',
+      rowVersion: original.rowVersion + 1,
+    }
+    store[originalIndex] = reversedOriginal
+    const compensating: InventoryAdjustment = {
+      ...structuredClone(reversedOriginal),
+      adjustmentId: nextFixtureUuid(),
+      documentId: nextFixtureUuid(),
+      documentReference: `EIAMS-ADJ-REV-${String(store.length + 1).padStart(4, '0')}`,
+      reason: `عكس: ${body.reason}`,
+      status: 'Posted',
+      postedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      // Compensating lines mirror the original with flipped sign.
+      lines: original.lines.map((line) => ({
+        ...line,
+        adjustmentLineId: nextFixtureUuid(),
+        quantityDelta: -line.quantityDelta,
+      })),
+    }
+    store.push(compensating)
+    return HttpResponse.json({
+      originalAdjustment: reversedOriginal,
+      compensatingAdjustment: compensating,
+      lifecycleEvent: {
+        documentId: original.documentId,
+        documentRowVersion: original.rowVersion,
+        eventId: nextFixtureUuid(),
+        eventType: 'Reversed',
+        occurredAt: new Date().toISOString(),
+        occurredBy: {
+          displayName: 'مدير المستودع',
+          userId: '923e4567-e89b-42d3-a456-426614174009',
+        },
+      },
+    })
+  }),
   http.post(`${AUTH_PREFIX}/inventory-counts`, async ({ request }) => {
     await delay(150)
     const body = (await request.json()) as {
