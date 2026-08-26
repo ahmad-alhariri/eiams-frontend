@@ -13,6 +13,7 @@ import {
 } from '@/modules/inventory-count/hooks/use-count-queries'
 import { CountQuantityWorkspace } from '@/modules/inventory-count/components/count-quantity-workspace'
 import { CountVarianceReview } from '@/modules/inventory-count/components/count-variance-review'
+import { CountToAdjustmentLaunch } from '@/modules/inventory-count/components/count-to-adjustment-launch'
 import { useConfirm } from '@/shared/hooks/use-confirm'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
@@ -177,6 +178,8 @@ export default function CountDetailPage() {
             />
           </ContentCard>
         ) : null}
+
+        {isReviewable ? <CountToAdjustmentLaunch count={count} /> : null}
       </div>
       {confirmDialog}
     </div>
