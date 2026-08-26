@@ -41,6 +41,12 @@ export const adjustmentLineSchema = z.object({
   materialId: z.uuid('يجب اختيار مادة صالحة.'),
   /** Selection-time display snapshot (never sent). */
   materialNameAr: z.string().trim().min(1, 'يجب اختيار مادة صالحة.'),
+  /**
+   * D-ADJ-01: an asset reference rides ONLY on a server-provided asset count
+   * line (CountVariance). Free-text asset identities are never accepted, so
+   * this stays untouched by DirectCorrection rows.
+   */
+  assetId: z.uuid().optional(),
   /** Signed stock difference: positive = increase, negative = decrease; never zero. */
   quantityDelta: z.coerce
     .number('يجب إدخال فرق كمية صحيح.')
@@ -103,6 +109,9 @@ export function toAdjustmentDraftRequest(
       materialId: line.materialId,
       quantityDelta: line.quantityDelta,
       reason: line.reason,
+      // D-ADJ-01: passthrough of a server-provided asset count-line reference
+      // only; the form never lets users type one.
+      ...(line.assetId === undefined ? {} : { assetId: line.assetId }),
     })),
     rowVersion: 0,
   }

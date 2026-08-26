@@ -8,7 +8,44 @@ import { describe, expect, it, vi } from 'vitest'
 import AdjustmentDraftFormPage from './adjustment-draft-form-page'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
-import type { InventoryAdjustment, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type {
+  InventoryAdjustment,
+  InventoryCountLinePage,
+  SessionResponse,
+} from '@/shared/types/generated/eiams-v1'
+
+const COUNT_ID = '223e4567-e89b-42d3-a456-426614174002'
+
+/** Serves the count-lines query the page now runs before seeding variance rows. */
+function useCountLinesHandler() {
+  server.use(
+    http.get(`*/api/v1/inventory-counts/${COUNT_ID}/lines`, () =>
+      HttpResponse.json<InventoryCountLinePage>({
+        items: [
+          {
+            countLineId: 'a23e4567-e89b-42d3-a456-426614174001',
+            difference: -2,
+            material: { id: MATERIAL_ID, displayName: 'حاسوب مكتبي' },
+            reason: null,
+            rowVersion: 1,
+            snapshotQuantity: 25,
+            actualQuantity: 23,
+          },
+          {
+            countLineId: 'b23e4567-e89b-42d3-a456-426614174002',
+            difference: 0,
+            material: { id: '743e4567-e89b-42d3-a456-426614174008', displayName: 'ورق تصوير A4' },
+            reason: null,
+            rowVersion: 1,
+            snapshotQuantity: 10,
+            actualQuantity: 10,
+          },
+        ],
+        meta: { pageIndex: 0, pageSize: 200, totalItems: 2, totalPages: 1 },
+      }),
+    ),
+  )
+}
 
 vi.mock('@/modules/warehouse/hooks/use-scoped-warehouse-selector', () => ({
   useScopedWarehouseSelector: () => ({
@@ -176,6 +213,7 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
   })
 
   it('locks purpose and warehouse when launched from a count session', async () => {
+    useCountLinesHandler()
     renderForm(
       '/adjustments/new?countId=223e4567-e89b-42d3-a456-426614174002&purpose=CountVariance',
     )
@@ -185,6 +223,7 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
   })
 
   it('preseeds the locked warehouse from the launch deep-link (QA defect D3)', async () => {
+    useCountLinesHandler()
     renderForm(
       '/adjustments/new?countId=223e4567-e89b-42d3-a456-426614174002&purpose=CountVariance&warehouseId=823e4567-e89b-42d3-a456-426614174008',
     )
@@ -195,6 +234,21 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
     const trigger = screen.getByRole('combobox', { name: 'مستودع التسوية' })
     expect(trigger).toBeDisabled()
     expect((trigger as HTMLInputElement).value).toBe('823e4567-e89b-42d3-a456-426614174008')
+  })
+
+  it('seeds locked variance rows from the count session lines (QA defect D4)', async () => {
+    useCountLinesHandler()
+    renderForm(
+      '/adjustments/new?countId=223e4567-e89b-42d3-a456-426614174002&purpose=CountVariance&warehouseId=823e4567-e89b-42d3-a456-426614174008',
+    )
+
+    await screen.findByText(/هذا السند مرتبط بجلسة الجرد/)
+    // The seeded row renders read-only material + signed delta; only the
+    // reason stays editable — and the form holds the seeded line in its
+    // values, so submission will not fail with "lines: too_small".
+    expect(await screen.findByText('حاسوب مكتبي')).toBeInTheDocument()
+    expect(screen.getByText('-2')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('سبب الفرق')).toHaveLength(1)
   })
 
   it('never offers Disposal in the purpose dropdown (QA defect D1)', async () => {
