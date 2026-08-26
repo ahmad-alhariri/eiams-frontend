@@ -36,7 +36,9 @@ export const ROUTE_PATHS = {
   warehouseDetail: '/warehouses/:warehouseId',
   /** Inventory. */
   inventoryBalances: '/inventory/balances',
+  inventoryBalanceDetail: '/inventory/balances/:balanceId',
   inventoryMovements: '/inventory/movements',
+  inventoryMovementDetail: '/inventory/movements/:movementId',
   /** Documents (spine + petals). */
   documentReceiving: '/documents/receiving',
   documentReceivingNew: '/documents/receiving/new',
@@ -64,7 +66,10 @@ export const ROUTE_PATHS = {
   /** Assets & custody. */
   assets: '/assets',
   assetDetail: '/assets/:assetId',
+  assetCustodyHistory: '/assets/:assetId/custody',
   custodyPending: '/custody/pending',
+  custodyActive: '/custody/active',
+  custodyDetail: '/custody/:custodyId',
   /** Audit & reports. */
   audit: '/audit',
   reports: '/reports',
@@ -229,11 +234,23 @@ export const ROUTE_METADATA: RouteMetaMap = {
     permissions: ['inventory.view'],
     parent: 'dashboard',
   },
+  inventoryBalanceDetail: {
+    labelAr: 'تفاصيل الرصيد',
+    group: 'inventory',
+    permissions: ['inventory.view'],
+    parent: 'inventoryBalances',
+  },
   inventoryMovements: {
     labelAr: 'حركات المخزون',
     group: 'inventory',
-    permissions: ['inventory.view', 'document.view'],
+    permissions: ['inventory.view'],
     parent: 'inventoryBalances',
+  },
+  inventoryMovementDetail: {
+    labelAr: 'تفاصيل حركة المخزون',
+    group: 'inventory',
+    permissions: ['inventory.view'],
+    parent: 'inventoryMovements',
   },
 
   documentReceiving: {
@@ -377,11 +394,29 @@ export const ROUTE_METADATA: RouteMetaMap = {
     permissions: ['asset.view'],
     parent: 'assets',
   },
+  assetCustodyHistory: {
+    labelAr: 'سجل عهدة الأصل',
+    group: 'assets-custody',
+    permissions: ['asset.view'],
+    parent: 'assetDetail',
+  },
   custodyPending: {
     labelAr: 'الأصول بانتظار التكليف',
     group: 'assets-custody',
     permissions: ['asset.view', 'custody.assign'],
     parent: 'assets',
+  },
+  custodyActive: {
+    labelAr: 'العهد النشطة',
+    group: 'assets-custody',
+    permissions: ['asset.view'],
+    parent: 'assets',
+  },
+  custodyDetail: {
+    labelAr: 'تفاصيل العهدة',
+    group: 'assets-custody',
+    permissions: ['asset.view'],
+    parent: 'custodyActive',
   },
 
   audit: {

@@ -1,12 +1,12 @@
 {
   "contractId": "eiams-v1",
-  "contractVersion": "1.0.0-provisional.6",
+  "contractVersion": "1.0.0-provisional.9",
   "openapiVersion": "3.0.3",
   "status": "ArchitectureOwnedProvisional",
   "publishedAt": "2026-08-09T09:53:07+03:00",
-  "revisedAt": "2026-08-14T16:35:18+03:00",
+  "revisedAt": "2026-08-24T00:00:00+03:00",
   "snapshotPath": "contracts/openapi/eiams-v1.openapi.json",
-  "sha256": "8b119a2f06698e4eed145f5189846c147213df18306c6fe28f6a3187c4afd9de",
+  "sha256": "3c8b65ed6d8c2da8382657b8bf4b8e7d7f291ca270aa4e3d824d4be57fc64070",
   "source": {
     "kind": "DesignFirstFromApprovedRepositorySources",
     "apidogExport": false,
@@ -16,9 +16,9 @@
     "statement": "The backend API and authoritative Apidog project were not available when this snapshot was published. This artifact is the provisional design contract for Apidog import, mocks, and frontend generation."
   },
   "coverage": {
-    "paths": 80,
-    "operations": 116,
-    "schemas": 156
+    "paths": 81,
+    "operations": 117,
+    "schemas": 161
   },
   "sourceDocuments": [
     {
@@ -74,6 +74,10 @@
       "decisionId": "D-LIFE-01"
     },
     {
+      "path": "docs/inventory-read-contract-decision.md",
+      "decisionId": "D-INV-READ-01"
+    },
+    {
       "path": "Beads eiams-frontend-bt60",
       "decisionId": "D-MAT-01",
       "version": "owner-approved 2026-08-14"
@@ -82,11 +86,15 @@
       "path": "Beads eiams-frontend-vded",
       "decisionId": "D-UOM-01",
       "version": "owner-approved 2026-08-14"
+    },
+    {
+      "path": "docs/issue-line-existing-asset-reference-contract-decision.md",
+      "decisionId": "D-IAR-01"
     }
   ],
   "validation": {
     "redoclyCli": "passed with zero warnings",
-    "openapiTypescript": "regenerated from provisional.6 after exact DECIMAL(18,6) string transport was applied to material conversion factors and document-line conversion snapshots",
+    "openapiTypescript": "regenerated from provisional.9 after D-IAR-01 ratified issue-line existing-asset references (assetIds input + issuedAssetIds read projection)",
     "referenceAudit": "passed; zero missing schema references and zero duplicate operationIds"
   },
   "ratification": {

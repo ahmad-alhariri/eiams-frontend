@@ -4,11 +4,12 @@ import { environment } from '@/config/env'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import {
   actionRequiresReason,
-  actionsForDocumentStatus,
+  actionsForDocumentPolicy,
   createDocumentPolicy,
   createLifecycleEvent,
   createMaterial,
   createNamedReference,
+  createPolicyBlocker,
   createWarehouse,
   createWarehouseDocument,
   DOCUMENT_TRANSITIONS,
@@ -56,6 +57,18 @@ const DEFAULT_ACTOR: LifecycleActorSnapshot = {
   userId: fixtureUuid(10),
   displayName: 'مستخدم تجريبي',
   roleNameAr: 'أمين المستودع',
+}
+
+const SIGNED_ORIGINAL_MISSING_CODE = 'document.signed_original_missing'
+const SIGNED_ORIGINAL_MISSING_DETAIL_AR = 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.'
+
+function signedOriginalMissingProblem(): ProblemDetails {
+  return problemBase(
+    SIGNED_ORIGINAL_MISSING_CODE,
+    SIGNED_ORIGINAL_MISSING_DETAIL_AR,
+    422,
+    'attachmentType',
+  )
 }
 
 const DOCUMENT_ACTION_ROUTES: ReadonlyArray<readonly [DocumentActionType, string]> = [
@@ -322,10 +335,17 @@ const COMPENSATING_DOCUMENT_TYPES: Readonly<Record<DocumentType, DocumentType>> 
 
 /** Deterministic, unique-per-call document ids for compensating documents. */
 let compensatingDocumentIdSequence = 400
+let compensatingAdjustmentIdSequence = 500
 
 function nextCompensatingDocumentId(): string {
   const sequence = compensatingDocumentIdSequence
   compensatingDocumentIdSequence += 1
+  return fixtureUuid(sequence)
+}
+
+function nextCompensatingAdjustmentId(): string {
+  const sequence = compensatingAdjustmentIdSequence
+  compensatingAdjustmentIdSequence += 1
   return fixtureUuid(sequence)
 }
 
@@ -477,6 +497,9 @@ export function applyDocumentAction(input: DocumentActionInput): DocumentActionO
   if (!transition.from.includes(document.documentStatus)) {
     return { kind: 'conflict', problem: actionNotAllowedProblem(document, action) }
   }
+  if (action === 'Post' && !document.policy.signedOriginalSatisfied) {
+    return { kind: 'validation', problem: signedOriginalMissingProblem() }
+  }
 
   const occurredAt = input.occurredAt ?? new Date().toISOString()
   const occurredBy = input.occurredBy ?? DEFAULT_ACTOR
@@ -495,7 +518,21 @@ export function applyDocumentAction(input: DocumentActionInput): DocumentActionO
     rowVersion: nextRowVersion,
     policy: {
       ...document.policy,
-      actions: actionsForDocumentStatus(transition.to),
+      actions: actionsForDocumentPolicy(transition.to, document.policy.signedOriginalSatisfied),
+      blockers:
+        transition.to === 'Submitted' && !document.policy.signedOriginalSatisfied
+          ? document.policy.blockers.some(
+              (blocker) => blocker.code === SIGNED_ORIGINAL_MISSING_CODE,
+            )
+            ? document.policy.blockers
+            : [
+                ...document.policy.blockers,
+                createPolicyBlocker({
+                  field: 'attachmentType',
+                  messageAr: SIGNED_ORIGINAL_MISSING_DETAIL_AR,
+                }),
+              ]
+          : document.policy.blockers,
       documentStatus: transition.to,
       evaluatedAt: occurredAt,
       rowVersion: nextRowVersion,
@@ -518,6 +555,9 @@ export function applyDocumentAction(input: DocumentActionInput): DocumentActionO
           documentType: compensatingDocument.documentType,
           status: compensatingDocument.documentStatus,
           systemReferenceNumber: compensatingDocument.systemReferenceNumber,
+          ...(compensatingDocument.documentType === 'Adjustment'
+            ? { adjustmentId: nextCompensatingAdjustmentId() }
+            : {}),
         }
   const lifecycleEvent = createLifecycleEvent({
     correlationId: null,
@@ -783,6 +823,9 @@ function mapDraftLine(
   const unit = lookups.unitOf(input.unitId) ?? material.baseUnit
   return {
     ...(input.assetInputs === undefined ? {} : { assetInputs: input.assetInputs }),
+    // D-IAR-01: Issue lines reference existing assets by id; the draft keeps
+    // them verbatim and posting freezes the resolved set (mock parity).
+    ...(input.assetIds === undefined ? {} : { assetIds: input.assetIds }),
     availableBalance: null,
     baseQuantity: input.baseQuantity ?? input.quantity,
     batchNumber: input.batchNumber ?? null,

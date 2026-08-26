@@ -10,6 +10,7 @@ import { Toaster } from '@/shared/ui/toaster'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import {
   createDocumentActionResult,
+  createDocumentPolicy,
   createWarehouseDocument,
   deriveLifecycleEvents,
   fixtureUuid,
@@ -286,6 +287,12 @@ describe('useDocumentLifecycleAction family', () => {
           documentId: DOCUMENT_ID,
           documentStatus: 'Submitted',
           rowVersion: 1,
+          policy: createDocumentPolicy({
+            documentId: DOCUMENT_ID,
+            documentStatus: 'Submitted',
+            rowVersion: 1,
+            signedOriginalSatisfied: true,
+          }),
         }),
       ],
     }

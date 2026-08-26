@@ -1,5 +1,7 @@
 import type {
   ActionAvailability,
+  Asset,
+  AssetCustody,
   AuthTokenResponse,
   DocumentActionResult,
   DocumentActionType,
@@ -28,6 +30,7 @@ import type {
   ScopeContext,
   SessionResponse,
   Site,
+  StockMovement,
   OrganizationalUnit,
   UnitOfMeasure,
   UserSummary,
@@ -416,6 +419,79 @@ export function createInventoryBalance(
       quantity: 10,
       lastUpdated: FIXTURE_TIMESTAMP,
       rowVersion: 1,
+      lowStock: {
+        state: 'Sufficient',
+        thresholdQuantity: 5,
+      },
+    },
+    overrides,
+  )
+}
+
+/** Asset registry read model with server-derived status (e18-t01). */
+export function createAsset(overrides: FixtureOverrides<Asset> = {}): Asset {
+  return withOverrides(
+    {
+      assetId: fixtureUuid(50),
+      assetNumber: 'AST-2026-0001',
+      serialNumber: 'SN-889900',
+      derivedStatus: 'InStock',
+      material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
+      currentWarehouse: createNamedReference({
+        id: fixtureUuid(30),
+        displayName: 'المستودع المركزي',
+      }),
+      rowVersion: 1,
+    },
+    overrides,
+  )
+}
+
+/** One custody timeline row (active or historical) for an asset. */
+export function createAssetCustody(overrides: FixtureOverrides<AssetCustody> = {}): AssetCustody {
+  return withOverrides(
+    {
+      assetId: fixtureUuid(50),
+      assetNumber: 'AST-2026-0001',
+      custodyId: fixtureUuid(51),
+      custodyKind: 'Operational',
+      fromTs: FIXTURE_TIMESTAMP,
+      holder: {
+        displayName: 'مديرية المعلوماتية',
+        id: fixtureUuid(20),
+        secondaryLabelAr: null,
+        status: 'Active',
+        type: 'OrganizationalUnit',
+      },
+      issueDocumentId: fixtureUuid(151),
+      rowVersion: 1,
+      status: 'Active',
+      subjectType: 'Asset',
+      toTs: null,
+    },
+    overrides,
+  )
+}
+
+/**
+ * Immutable inventory-ledger read model. This is deliberately a standalone
+ * projection: it does not derive a balance or mutate a warehouse document.
+ */
+export function createStockMovement(
+  overrides: FixtureOverrides<StockMovement> = {},
+): StockMovement {
+  return withOverrides(
+    {
+      documentId: fixtureUuid(150),
+      documentLineId: fixtureUuid(160),
+      documentReference: 'EIAMS-RCV-2026-0001',
+      material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
+      movementId: fixtureUuid(70),
+      movementType: 'Receipt',
+      postedAt: FIXTURE_TIMESTAMP,
+      postedBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مدير المستودع' }),
+      quantityDelta: 5,
+      warehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
     },
     overrides,
   )
@@ -708,6 +784,26 @@ export function createActionAvailability(
   )
 }
 
+/** D-ATT-01 refinement of the status map for the server-owned signed-original gate. */
+export function actionsForDocumentPolicy(
+  status: DocumentStatus,
+  signedOriginalSatisfied: boolean,
+): ActionAvailability[] {
+  const actions = actionsForDocumentStatus(status)
+  if (status !== 'Submitted' || signedOriginalSatisfied) return actions
+
+  return actions.map((availability) =>
+    availability.action === 'Post'
+      ? createActionAvailability('Post', {
+          allowed: false,
+          presentation: 'Disabled',
+          reasonAr: 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
+          reasonCode: 'document.signed_original_missing',
+        })
+      : availability,
+  )
+}
+
 export function createPolicyBlocker(
   overrides: FixtureOverrides<PolicyBlocker> = {},
 ): PolicyBlocker {
@@ -738,22 +834,26 @@ export function createDocumentPolicy(
   overrides: FixtureOverrides<DocumentPolicy> = {},
 ): DocumentPolicy {
   const documentStatus = overrides.documentStatus ?? 'Draft'
+  const signedOriginalSatisfied = overrides.signedOriginalSatisfied ?? false
   const actions =
     overrides.actions ??
     (overrides.documentStatus === undefined
       ? LENIENT_ACTIONS
-      : actionsForDocumentStatus(documentStatus))
+      : actionsForDocumentPolicy(documentStatus, signedOriginalSatisfied))
+  const blockers =
+    overrides.blockers ??
+    (documentStatus === 'Submitted' && !signedOriginalSatisfied ? [createPolicyBlocker()] : [])
   return withOverrides(
     {
       actions,
       advisories: [],
-      blockers: [],
+      blockers,
       documentId: fixtureUuid(200),
       documentStatus,
       evaluatedAt: FIXTURE_TIMESTAMP,
       policyKind: 'Generic',
       rowVersion: 1,
-      signedOriginalSatisfied: false,
+      signedOriginalSatisfied,
     },
     overrides,
   )
@@ -839,6 +939,11 @@ export function deriveLifecycleEvents(
       eventId: fixtureUuid(203),
       eventType: 'Created',
       occurredAt: document.createdAt,
+      occurredBy: {
+        userId: document.createdBy.id,
+        displayName: document.createdBy.displayName,
+        roleNameAr: null,
+      },
       toStatus: 'Draft',
     }),
   ]

@@ -156,6 +156,12 @@ The action result contains:
 - the appended Reversed lifecycle event; and
 - a `relatedDocument` summary identifying the compensating document.
 
+`relatedDocument.documentId` always identifies the compensating warehouse
+document. When `documentType = Adjustment`, the summary also returns the
+distinct `adjustmentId` required by `/adjustments/{adjustmentId}`. The field is
+absent for document types whose detail routes use `documentId`; clients must
+not derive one identifier from the other.
+
 If compensation fails, the original remains Posted and no lifecycle event is
 appended. The exact domain eligibility of a posted document is expressed by
 policy blockers rather than inferred in the browser. Disposal is never eligible.

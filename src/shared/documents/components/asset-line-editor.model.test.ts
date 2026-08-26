@@ -101,17 +101,24 @@ describe('asset-line capture schema (e12-t05)', () => {
     }
   })
 
-  it('rejects a serial number longer than 100 chars with an Arabic message', () => {
+  it('accepts the 200-character contract boundary for a manufacturer serial number', () => {
+    expect(
+      assetLineSchema.safeParse(validLine({ assetInputs: [{ serialNumber: 'S'.repeat(200) }] }))
+        .success,
+    ).toBe(true)
+  })
+
+  it('rejects a serial number longer than 200 chars with an Arabic message', () => {
     const result = assetLineSchema.safeParse(
-      validLine({ assetInputs: [{ serialNumber: 'S'.repeat(101) }] }),
+      validLine({ assetInputs: [{ serialNumber: 'S'.repeat(201) }] }),
     )
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe('يجب ألا يتجاوز الرقم التسلسلي 100 محرفاً.')
+      expect(result.error.issues[0]?.message).toBe('يجب ألا يتجاوز الرقم التسلسلي 200 محرفاً.')
     }
   })
 
-  it('accepts a 100-char boundary serial number', () => {
+  it('accepts a short manufacturer serial number', () => {
     expect(
       assetLineSchema.safeParse(validLine({ assetInputs: [{ serialNumber: 'S'.repeat(100) }] }))
         .success,

@@ -312,7 +312,10 @@ describe('evaluateActionDecision', () => {
   })
 
   it('enables an enabled action under a permitted session', () => {
-    const evaluated = policy({ documentStatus: 'Submitted' })
+    const evaluated = policy({
+      documentStatus: 'Submitted',
+      signedOriginalSatisfied: true,
+    })
     expect(evaluateActionDecision(evaluated, 'Post', permitted)).toEqual({
       presentation: 'Enabled',
       reasonAr: null,

@@ -14,6 +14,7 @@ import type {
 } from '@/shared/types/generated/eiams-v1'
 import {
   actionRequiresReason,
+  createDocumentPolicy,
   createLifecycleEvent,
   createWarehouseDocument,
   deriveLifecycleEvents,
@@ -23,6 +24,7 @@ import {
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import {
+  applyDocumentAction,
   createWarehouseDocumentActionHandler,
   createWarehouseDocumentHistoryHandler,
 } from '@/test/msw/warehouse-document-handlers'
@@ -84,7 +86,17 @@ function documentInStatus(
   documentStatus: DocumentStatus,
   documentId: string = DOCUMENT_ID,
 ): WarehouseDocument {
-  return createWarehouseDocument({ documentId, documentStatus, rowVersion: 1 })
+  return createWarehouseDocument({
+    documentId,
+    documentStatus,
+    rowVersion: 1,
+    policy: createDocumentPolicy({
+      documentId,
+      documentStatus,
+      rowVersion: 1,
+      signedOriginalSatisfied: true,
+    }),
+  })
 }
 
 function actionUrl(action: DocumentActionType): string {
@@ -167,6 +179,72 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     expect(events[2]?.reason).toBe('سبب الإجراء')
     expect(documents[0]).toMatchObject({ documentStatus: 'Reversed', rowVersion: 4 })
     expect(documents[0]?.policy.documentStatus).toBe('Reversed')
+  })
+
+  it('derives an unsigned Submitted policy with a disabled Post action and blocker', () => {
+    const document = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentStatus: 'Draft',
+      rowVersion: 1,
+      policy: createDocumentPolicy({
+        documentId: DOCUMENT_ID,
+        documentStatus: 'Draft',
+        rowVersion: 1,
+        signedOriginalSatisfied: false,
+      }),
+    })
+
+    const outcome = applyDocumentAction({
+      action: 'Submit',
+      document,
+      rowVersion: 1,
+    })
+    if (outcome.kind !== 'ok') throw new Error(`unexpected ${outcome.kind} outcome`)
+
+    expect(outcome.document.policy.blockers).toContainEqual(
+      expect.objectContaining({ code: 'document.signed_original_missing' }),
+    )
+    expect(
+      outcome.document.policy.actions.find((action) => action.action === 'Post'),
+    ).toMatchObject({
+      allowed: false,
+      presentation: 'Disabled',
+      reasonAr: 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
+    })
+  })
+
+  it('rejects Post with an Arabic 422 and no mutation when SignedOriginal is unsatisfied', async () => {
+    const documents = [
+      createWarehouseDocument({
+        documentId: DOCUMENT_ID,
+        documentStatus: 'Submitted',
+        rowVersion: 2,
+        policy: createDocumentPolicy({
+          documentId: DOCUMENT_ID,
+          documentStatus: 'Submitted',
+          rowVersion: 2,
+          signedOriginalSatisfied: false,
+        }),
+      }),
+    ]
+    server.use(
+      ...createWarehouseDocumentActionHandler({
+        initialDocument: documents[0]!,
+        documentStore: () => documents,
+      }),
+    )
+
+    const failure = await apiClient
+      .post(actionUrl('Post'), { rowVersion: 2 })
+      .catch((caught: unknown) => caught)
+
+    expect(failure).toHaveProperty('response.status', 422)
+    expect(failure).toHaveProperty('response.data.code', 'document.signed_original_missing')
+    expect(failure).toHaveProperty(
+      'response.data.detailAr',
+      'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
+    )
+    expect(documents[0]).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
   })
 
   it('rejects every status/action pair outside the canonical transition table with a 409 envelope and unchanged store', async () => {
@@ -748,6 +826,35 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       documentType: 'Transfer',
       status: 'Posted',
     })
+  })
+
+  it('returns a distinct authoritative adjustmentId for an Adjustment compensation route', async () => {
+    const documents = [
+      createWarehouseDocument({
+        documentId: DOCUMENT_ID,
+        documentStatus: 'Posted',
+        documentType: 'Adjustment',
+      }),
+    ]
+    server.use(
+      ...createWarehouseDocumentActionHandler({
+        initialDocument: documents[0]!,
+        documentStore: () => documents,
+      }),
+    )
+
+    const { data: result } = await apiClient.post<DocumentActionResult>(
+      actionUrl('Reverse'),
+      { reason: 'تصحيح تسوية مخزون', rowVersion: 1 },
+      { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
+    )
+
+    expect(result.relatedDocument).toMatchObject({
+      documentType: 'Adjustment',
+      status: 'Posted',
+    })
+    expect(result.relatedDocument?.adjustmentId).toEqual(expect.any(String))
+    expect(result.relatedDocument?.adjustmentId).not.toBe(result.relatedDocument?.documentId)
   })
 
   it('reverses atomically: a stale-rowVersion Reverse creates no compensating document and leaves the store untouched (D-LIFE-01 §159-161)', async () => {

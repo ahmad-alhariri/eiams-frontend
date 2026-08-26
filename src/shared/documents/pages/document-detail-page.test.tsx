@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -162,7 +162,7 @@ describe('DocumentDetailPage', () => {
     expect(heading).toHaveTextContent('تفاصيل سند الاستلام')
     expect(heading).toHaveTextContent('EIAMS-DOC-2026-0300')
 
-    expect(screen.getByText('مرحّل')).toBeInTheDocument()
+    expect(screen.getAllByText('مرحّل').length).toBeGreaterThan(0)
     expect(screen.getAllByText('إيصال استلام').length).toBeGreaterThan(0)
     expect(screen.getAllByText('الإصدار: 2').length).toBeGreaterThan(0)
     expect(screen.getByText('مدير المستودع')).toBeInTheDocument()
@@ -206,7 +206,7 @@ describe('DocumentDetailPage', () => {
         },
       ],
       policy: {
-        ...createSubmittedPostedPolicy('Submitted'),
+        ...createSubmittedPostedPolicy('Submitted', false),
         signedOriginalSatisfied: false,
       },
     })
@@ -223,9 +223,9 @@ describe('DocumentDetailPage', () => {
 
     const heading = await screen.findByRole('heading', { level: 1, name: /EIAMS-DOC-2024-0001/ })
     expect(heading).toHaveTextContent('تفاصيل سند الاستلام')
-    expect(screen.getByText('بانتظار الترحيل')).toBeInTheDocument()
+    expect(screen.getAllByText('بانتظار الترحيل').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'إرسال للترحيل' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'ترحيل' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'ترحيل' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'رفض' })).toBeEnabled()
 
     // Wait for the wired timeline to resolve so its transient status/spinner
@@ -239,6 +239,241 @@ describe('DocumentDetailPage', () => {
     expect(screen.getByRole('status')).toHaveTextContent('النسخة الأصلية الموقعة مطلوبة للترحيل')
     expect(screen.queryByRole('button', { name: /حذف المرفق/ })).not.toBeInTheDocument()
     expect(screen.getByText('signed-submitted.pdf')).toBeInTheDocument()
+  })
+
+  it('renders Opening line types and asset identifiers from the server detail without an Opening wrapper', async () => {
+    const openingPolicy = createDocumentPolicy({
+      documentId: DOCUMENT_ID,
+      documentStatus: 'Submitted',
+    })
+    const document = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Opening',
+      documentStatus: 'Submitted',
+      lines: [
+        createWarehouseDocumentLine({
+          lineId: fixtureUuid(252),
+          openingType: 'Initial',
+          material: { code: 'OFF-PEN', nameAr: 'أقلام حبر' },
+          quantity: 30,
+        }),
+        createWarehouseDocumentLine({
+          lineId: fixtureUuid(253),
+          lineType: 'Asset',
+          material: {
+            ...createMaterial({
+              materialKind: 'Asset',
+              requiresAssetNumber: true,
+              trackingType: 'Serial',
+            }),
+            code: 'IT-PRT-01',
+            nameAr: 'طابعة ليزر',
+          },
+          openingType: 'Correction',
+          quantity: 1,
+          assetInputs: [{ assetNumber: 'AST-001', serialNumber: 'SN-001' }],
+        }),
+        createWarehouseDocumentLine({
+          lineId: fixtureUuid(254),
+          material: { code: 'OFF-PAPER', nameAr: 'ورق تصوير' },
+          quantity: 5,
+        }),
+      ],
+      policy: {
+        ...openingPolicy,
+        actions: openingPolicy.actions.map((action) =>
+          action.action === 'Post'
+            ? {
+                ...action,
+                presentation: 'Disabled',
+                reasonAr: 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
+              }
+            : action,
+        ),
+        blockers: [createPolicyBlocker()],
+        signedOriginalSatisfied: false,
+      },
+    })
+
+    server.use(
+      ...createWarehouseDocumentDetailHandler(document),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
+      ...createWarehouseDocumentPolicyHandler(document.policy),
+    )
+
+    const { container } = render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/opening/${DOCUMENT_ID}`),
+    })
+
+    expect(await screen.findByText('أقلام حبر')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'نوع الافتتاحية' })).toBeInTheDocument()
+    expect(screen.getByText('افتتاحية أولية')).toBeInTheDocument()
+    expect(screen.getByText('افتتاحية تصحيحية')).toBeInTheDocument()
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+    const assetIdentifiers = container.querySelector(
+      '[data-slot="asset-line-entries"] span[dir="ltr"]',
+    )
+    expect(assetIdentifiers).toHaveTextContent('رقم الأصل: AST-001')
+    expect(assetIdentifiers).toHaveTextContent('الرقم التسلسلي: SN-001')
+    expect(container.querySelector('[data-slot="asset-line-entries"] td')).toHaveAttribute(
+      'colspan',
+      '8',
+    )
+    expect(screen.getByRole('button', { name: 'ترحيل' })).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
+    )
+  })
+
+  it('hides Opening lifecycle actions when the server presents them but the active session lacks authority', async () => {
+    const document = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Opening',
+      documentStatus: 'Posted',
+      policy: createDocumentPolicy({ documentId: DOCUMENT_ID, documentStatus: 'Posted' }),
+    })
+
+    server.use(
+      ...createWarehouseDocumentDetailHandler(document),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
+      ...createWarehouseDocumentPolicyHandler(document.policy),
+    )
+
+    render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/opening/${DOCUMENT_ID}`, ['document.view']),
+    })
+
+    await screen.findByRole('heading', { level: 1, name: /تفاصيل سند الفتح الافتتاحي/ })
+    expect(screen.queryByRole('button', { name: 'عكس' })).not.toBeInTheDocument()
+  })
+
+  it('reverses an Opening document with the exact reason, fresh row version, and reused idempotency key after 409 recovery', async () => {
+    const store = {
+      document: createWarehouseDocument({
+        documentId: DOCUMENT_ID,
+        documentType: 'Opening',
+        documentStatus: 'Posted',
+        rowVersion: 1,
+        policy: createDocumentPolicy({ documentId: DOCUMENT_ID, documentStatus: 'Posted' }),
+      }),
+      events: [] as ReturnType<typeof deriveLifecycleEvents>,
+    }
+    store.events = deriveLifecycleEvents(store.document)
+    const reverseRequests: {
+      body: { reason: string; rowVersion: number }
+      idempotencyKey: string | null
+    }[] = []
+    let relatedDocumentReference: { systemReferenceNumber: string } | undefined
+
+    server.use(
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+        HttpResponse.json(store.document),
+      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
+        HttpResponse.json({
+          documentId: DOCUMENT_ID,
+          currentStatus: store.document.documentStatus,
+          currentRowVersion: store.document.rowVersion,
+          events: store.events,
+        }),
+      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
+        HttpResponse.json(store.document.policy),
+      ),
+      http.post(
+        `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/reverse`,
+        async ({ request }) => {
+          const body = (await request.json()) as { reason: string; rowVersion: number }
+          reverseRequests.push({ body, idempotencyKey: request.headers.get('Idempotency-Key') })
+          const outcome = applyDocumentAction({
+            action: 'Reverse',
+            document: store.document,
+            reason: body.reason,
+            rowVersion: body.rowVersion,
+          })
+          if (outcome.kind === 'conflict') {
+            return HttpResponse.json(outcome.problem, { status: 409 })
+          }
+          if (outcome.kind === 'validation') {
+            return HttpResponse.json(outcome.problem, { status: 422 })
+          }
+          store.document = outcome.document
+          store.events = [...store.events, outcome.result.lifecycleEvent]
+          relatedDocumentReference = outcome.result.relatedDocument
+          return HttpResponse.json(outcome.result)
+        },
+      ),
+    )
+
+    const { container } = render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/opening/${DOCUMENT_ID}`),
+    })
+
+    await screen.findByRole('button', { name: 'عكس' })
+    // Another actor updates the document; the first client mutation remains a
+    // server-rejected conflict and never optimistically changes the UI.
+    store.document = createWarehouseDocument({
+      ...store.document,
+      documentId: DOCUMENT_ID,
+      documentType: 'Opening',
+      documentStatus: 'Posted',
+      rowVersion: 2,
+      policy: createDocumentPolicy({
+        documentId: DOCUMENT_ID,
+        documentStatus: 'Posted',
+        rowVersion: 2,
+      }),
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'عكس' }))
+    const firstConfirm = await screen.findByRole('alertdialog', { name: 'تأكيد الإجراء' })
+    fireEvent.change(within(firstConfirm).getByLabelText('سبب الإجراء'), {
+      target: { value: 'تصحيح رصيد افتتاحي مكرر' },
+    })
+    fireEvent.click(within(firstConfirm).getByRole('button', { name: 'عكس' }))
+
+    await screen.findByRole('alertdialog', { name: 'تعديل متزامن على السند' })
+    expect(reverseRequests).toEqual([
+      {
+        body: { reason: 'تصحيح رصيد افتتاحي مكرر', rowVersion: 1 },
+        idempotencyKey: expect.any(String),
+      },
+    ])
+    expect(store.document.documentStatus).toBe('Posted')
+    expect(screen.getAllByText('مرحّل').length).toBeGreaterThan(0)
+    // The conflict dialog makes the underlying page inert, so inspect the
+    // rendered page subtree rather than its temporarily hidden accessibility tree.
+    expect(within(container).getByText('عكس', { selector: 'button' })).toBeInTheDocument()
+    expect(screen.queryByText('معكوس')).not.toBeInTheDocument()
+    expect(container.querySelector('[data-event-type="Reversed"]')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /فتح تفاصيل سند/ })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'تحميل النسخة الأحدث' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('alertdialog', { name: 'تعديل متزامن على السند' }),
+      ).not.toBeInTheDocument(),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'عكس' }))
+    const retryConfirm = await screen.findByRole('alertdialog', { name: 'تأكيد الإجراء' })
+    fireEvent.change(within(retryConfirm).getByLabelText('سبب الإجراء'), {
+      target: { value: 'تصحيح رصيد افتتاحي مكرر' },
+    })
+    fireEvent.click(within(retryConfirm).getByRole('button', { name: 'عكس' }))
+
+    await waitFor(() => expect(store.document.documentStatus).toBe('Reversed'))
+    expect(reverseRequests).toHaveLength(2)
+    expect(reverseRequests[1]?.body).toEqual({ reason: 'تصحيح رصيد افتتاحي مكرر', rowVersion: 2 })
+    expect(reverseRequests[1]?.idempotencyKey).toBe(reverseRequests[0]?.idempotencyKey)
+    expect(relatedDocumentReference).toBeDefined()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('link', {
+          name: new RegExp(relatedDocumentReference!.systemReferenceNumber),
+        }),
+      ).toBeInTheDocument(),
+    )
   })
 
   it('shows a loading state while the server responds', async () => {
@@ -307,7 +542,7 @@ describe('DocumentDetailPage', () => {
       documentId: DOCUMENT_ID,
       documentStatus: 'Submitted',
       policy: {
-        ...createSubmittedPostedPolicy('Submitted'),
+        ...createSubmittedPostedPolicy('Submitted', false),
         signedOriginalSatisfied: false,
       },
     })
@@ -602,10 +837,14 @@ describe('DocumentDetailPage', () => {
 })
 
 /** Status-appropriate policy derived from the contract factory. */
-function createSubmittedPostedPolicy(status: 'Submitted' | 'Posted') {
+function createSubmittedPostedPolicy(
+  status: 'Submitted' | 'Posted',
+  signedOriginalSatisfied = true,
+) {
   return createDocumentPolicy({
     documentId: DOCUMENT_ID,
     documentStatus: status,
-    blockers: status === 'Submitted' ? [createPolicyBlocker()] : [],
+    blockers: status === 'Submitted' && !signedOriginalSatisfied ? [createPolicyBlocker()] : [],
+    signedOriginalSatisfied,
   })
 }

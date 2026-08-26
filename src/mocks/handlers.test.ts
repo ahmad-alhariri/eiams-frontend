@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { getDb, resetMockDatabase } from '@/mocks/db'
 import { mockApiHandlers } from '@/mocks/handlers'
 import { apiClient } from '@/shared/services/api.client'
-import { fixtureUuid } from '@/test/msw/factories'
+import { createDevSession } from '@/shared/services/dev-session'
+import { createStockMovement, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 /**
@@ -198,6 +199,47 @@ describe('mock API handlers', () => {
     expect(history.events.map((event) => event.eventType)).toContain('Submitted')
   })
 
+  it('rejects Post without a SignedOriginal and leaves the submitted document unchanged', async () => {
+    const draft = getDb().warehouseDocuments[0]!
+    await apiClient.post(`/warehouse-documents/${draft.documentId}/submit`, {
+      rowVersion: draft.rowVersion,
+    })
+
+    const submitted = getDb().warehouseDocuments[0]!
+    const { data: submittedPolicy } = await apiClient.get<{
+      actions: Array<{ action: string; allowed: boolean; presentation: string; reasonAr: string }>
+      blockers: Array<{ code: string }>
+    }>(`/warehouse-documents/${submitted.documentId}/policy`)
+    expect(submittedPolicy.actions.find((action) => action.action === 'Post')).toMatchObject({
+      allowed: false,
+      presentation: 'Disabled',
+      reasonAr: 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
+    })
+    expect(submittedPolicy.blockers).toContainEqual(
+      expect.objectContaining({ code: 'document.signed_original_missing' }),
+    )
+    const { data: historyBefore } = await apiClient.get<{ events: Array<{ eventType: string }> }>(
+      `/warehouse-documents/${submitted.documentId}/history`,
+    )
+    const failure = await apiClient
+      .post(`/warehouse-documents/${submitted.documentId}/post`, {
+        rowVersion: submitted.rowVersion,
+      })
+      .catch((error: unknown) => error)
+
+    expect(failure).toHaveProperty('response.status', 422)
+    expect(failure).toHaveProperty('response.data.code', 'document.signed_original_missing')
+    expect(getDb().warehouseDocuments[0]).toMatchObject({
+      documentStatus: 'Submitted',
+      rowVersion: submitted.rowVersion,
+    })
+    const { data: historyAfter } = await apiClient.get<{ events: Array<{ eventType: string }> }>(
+      `/warehouse-documents/${submitted.documentId}/history`,
+    )
+    expect(historyAfter.events).toEqual(historyBefore.events)
+    expect(historyAfter.events.some((event) => event.eventType === 'Posted')).toBe(false)
+  })
+
   it('replays a same-key submit with the byte-identical original result (D-LIFE-01 §94-97)', async () => {
     const draft = getDb().warehouseDocuments[0]!
     const key = '00000000-0000-4000-8000-00000000a11c'
@@ -318,6 +360,30 @@ describe('mock API handlers', () => {
     expect(detail.attachments).toHaveLength(2)
   })
 
+  it('forbids uploading an attachment after the document leaves Draft', async () => {
+    const draft = getDb().warehouseDocuments[0]!
+    await apiClient.post(`/warehouse-documents/${draft.documentId}/submit`, {
+      rowVersion: draft.rowVersion,
+    })
+    const submitted = getDb().warehouseDocuments[0]!
+    const form = new FormData()
+    form.append('attachmentType', 'SignedOriginal')
+    form.append('rowVersion', String(submitted.rowVersion))
+    form.append('file', new File(['signed'], 'late-signed.pdf', { type: 'application/pdf' }))
+
+    const failure = await apiClient
+      .post(`/warehouse-documents/${submitted.documentId}/attachments`, form)
+      .catch((error: unknown) => error)
+
+    expect(failure).toHaveProperty('response.status', 403)
+    expect(failure).toHaveProperty('response.data.code', 'signed_original_immutable')
+    expect(getDb().warehouseDocuments[0]).toMatchObject({
+      documentStatus: 'Submitted',
+      rowVersion: submitted.rowVersion,
+      attachments: [],
+    })
+  })
+
   it('deletes a draft attachment with the correct rowVersion and serves the removal on detail', async () => {
     const draft = getDb().warehouseDocuments[0]!
     const uploadForm = new FormData()
@@ -377,7 +443,16 @@ describe('mock API handlers', () => {
     const { data: history } = await apiClient.get(
       `/warehouse-documents/${created.documentId}/history`,
     )
-    expect(history.events[0]).toMatchObject({ eventType: 'Created', toStatus: 'Draft' })
+    const session = createDevSession().session
+    expect(history.events[0]).toMatchObject({
+      eventType: 'Created',
+      toStatus: 'Draft',
+      occurredBy: {
+        userId: created.createdBy.id,
+        displayName: created.createdBy.displayName,
+        roleNameAr: session.activeRoles[0]?.nameAr ?? null,
+      },
+    })
   })
 
   it('updates a draft header and petals, bumping rowVersion; a stale version answers 409', async () => {
@@ -431,5 +506,149 @@ describe('mock API handlers', () => {
       params: { search: 'لا وجود' },
     })
     expect(empty).toEqual([])
+  })
+
+  it('serves explicit low-stock projections, filters before pagination, and keeps the balance default order stable', async () => {
+    const db = getDb()
+    const [first, second, third] = db.inventoryBalances
+    if (first === undefined || second === undefined || third === undefined) {
+      throw new Error('Inventory balance seed is incomplete.')
+    }
+    db.inventoryBalances = [
+      {
+        ...first,
+        balanceId: fixtureUuid(263),
+        warehouse: { ...first.warehouse, displayName: 'مستودع الاختبار' },
+        material: { ...first.material, displayName: 'باء' },
+      },
+      {
+        ...second,
+        balanceId: fixtureUuid(262),
+        warehouse: { ...second.warehouse, displayName: 'مستودع الاختبار' },
+        material: { ...second.material, displayName: 'ألف' },
+      },
+      {
+        ...third,
+        balanceId: fixtureUuid(261),
+        warehouse: { ...third.warehouse, displayName: 'مستودع الاختبار' },
+        material: { ...third.material, displayName: 'ألف' },
+      },
+    ]
+
+    const { data: ordered } = await apiClient.get<{ items: Array<{ balanceId: string }> }>(
+      '/inventory/balances?pageIndex=0&pageSize=10',
+    )
+    expect(ordered.items.map((item) => item.balanceId)).toEqual([
+      fixtureUuid(261),
+      fixtureUuid(262),
+      fixtureUuid(263),
+    ])
+
+    resetMockDatabase()
+    const { data: filtered } = await apiClient.get<{
+      items: Array<{ lowStock: { state: string; thresholdQuantity: number | null } }>
+      meta: { totalItems: number; pageSize: number; totalPages: number }
+    }>('/inventory/balances?lowStockState=Low&pageIndex=0&pageSize=1')
+    expect(filtered.meta).toEqual({ pageIndex: 0, totalItems: 2, pageSize: 1, totalPages: 2 })
+    expect(filtered.items).toHaveLength(1)
+    expect(filtered.items[0]?.lowStock.state).toBe('Low')
+
+    const { data: allBalances } = await apiClient.get<{
+      items: Array<{ lowStock: { state: string; thresholdQuantity: number | null } }>
+    }>('/inventory/balances?pageIndex=0&pageSize=10')
+    expect(allBalances.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ lowStock: { state: 'Low', thresholdQuantity: 0 } }),
+        expect.objectContaining({ lowStock: { state: 'Sufficient', thresholdQuantity: 5 } }),
+        expect.objectContaining({ lowStock: { state: 'NotConfigured', thresholdQuantity: null } }),
+        expect.objectContaining({ lowStock: { state: 'Disabled', thresholdQuantity: null } }),
+      ]),
+    )
+  })
+
+  it('applies documented movement ordering before pagination, including the PostedAt ascending UUID tie-break', async () => {
+    const db = getDb()
+    db.stockMovements = [
+      createStockMovement({
+        movementId: fixtureUuid(271),
+        postedAt: '2026-08-20T10:00:00.000Z',
+        warehouse: { id: fixtureUuid(30), displayName: 'المستودع أ' },
+      }),
+      createStockMovement({
+        movementId: fixtureUuid(272),
+        postedAt: '2026-08-21T10:00:00.000Z',
+        warehouse: { id: fixtureUuid(30), displayName: 'المستودع أ' },
+      }),
+      createStockMovement({
+        movementId: fixtureUuid(273),
+        postedAt: '2026-08-21T10:00:00.000Z',
+        warehouse: { id: fixtureUuid(31), displayName: 'المستودع ب' },
+      }),
+    ]
+
+    const { data: defaultOrder } = await apiClient.get<{ items: Array<{ movementId: string }> }>(
+      '/inventory/movements?pageIndex=0&pageSize=10',
+    )
+    expect(defaultOrder.items.map((item) => item.movementId)).toEqual([
+      fixtureUuid(273),
+      fixtureUuid(272),
+      fixtureUuid(271),
+    ])
+
+    const { data: warehouseOrder } = await apiClient.get<{ items: Array<{ movementId: string }> }>(
+      '/inventory/movements?sortBy=WarehouseDisplayName&sortDirection=Ascending&pageIndex=0&pageSize=10',
+    )
+    expect(warehouseOrder.items.map((item) => item.movementId)).toEqual([
+      fixtureUuid(272),
+      fixtureUuid(271),
+      fixtureUuid(273),
+    ])
+
+    const { data: postedAscending } = await apiClient.get<{ items: Array<{ movementId: string }> }>(
+      '/inventory/movements?sortBy=PostedAt&sortDirection=Ascending&pageIndex=0&pageSize=10',
+    )
+    expect(postedAscending.items.map((item) => item.movementId)).toEqual([
+      fixtureUuid(271),
+      fixtureUuid(272),
+      fixtureUuid(273),
+    ])
+  })
+
+  it('serves filtered inventory details read-only, preserving an omitted document reference and 404s', async () => {
+    const db = getDb()
+    const adjustment = db.stockMovements.find((item) => item.movementType === 'AdjustmentOut')
+    const balance = db.inventoryBalances.find((item) => item.lowStock.state === 'Disabled')
+    if (adjustment === undefined || balance === undefined) {
+      throw new Error('Inventory read seed is incomplete.')
+    }
+
+    const { data: movements } = await apiClient.get<{
+      items: Array<{ movementType: string }>
+      meta: { totalItems: number }
+    }>('/inventory/movements?movementType=AdjustmentOut&pageIndex=0&pageSize=1')
+    expect(movements).toMatchObject({
+      items: [{ movementType: 'AdjustmentOut' }],
+      meta: { totalItems: 1 },
+    })
+
+    const { data: movementDetail } = await apiClient.get<{ documentReference?: string }>(
+      `/inventory/movements/${adjustment.movementId}`,
+    )
+    expect(movementDetail.documentReference).toBeUndefined()
+    await expect(
+      apiClient.get('/inventory/movements/00000000-0000-4000-8000-00000000ffff'),
+    ).rejects.toMatchObject({
+      response: { status: 404 },
+    })
+
+    const { data: balanceDetail } = await apiClient.get<{ balanceId: string }>(
+      `/inventory/balances/${balance.balanceId}`,
+    )
+    expect(balanceDetail.balanceId).toBe(balance.balanceId)
+    await expect(
+      apiClient.get('/inventory/balances/00000000-0000-4000-8000-00000000ffff'),
+    ).rejects.toMatchObject({
+      response: { status: 404 },
+    })
   })
 })

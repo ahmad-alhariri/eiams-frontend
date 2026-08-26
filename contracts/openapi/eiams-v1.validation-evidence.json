@@ -1,8 +1,8 @@
 {
   "contractId": "eiams-v1",
-  "contractVersion": "1.0.0-provisional.6",
-  "snapshotSha256": "8b119a2f06698e4eed145f5189846c147213df18306c6fe28f6a3187c4afd9de",
-  "reportedAt": "2026-08-14T15:13:23.194Z",
+  "contractVersion": "1.0.0-provisional.8",
+  "snapshotSha256": "b4c1c4c3f2a28e3417e5524bf5bf7ec2b740d4ba385f517b38f47befb6d5cab7",
+  "reportedAt": "2026-08-21T15:59:53.722Z",
   "tooling": {
     "redoclyCli": "2.46.0",
     "openapiTypescript": "7.13.0"
@@ -10,28 +10,28 @@
   "results": {
     "checksum matches provenance": {
       "status": "pass",
-      "expected": "8b119a2f06698e4eed145f5189846c147213df18306c6fe28f6a3187c4afd9de",
-      "actual": "8b119a2f06698e4eed145f5189846c147213df18306c6fe28f6a3187c4afd9de"
+      "expected": "b4c1c4c3f2a28e3417e5524bf5bf7ec2b740d4ba385f517b38f47befb6d5cab7",
+      "actual": "b4c1c4c3f2a28e3417e5524bf5bf7ec2b740d4ba385f517b38f47befb6d5cab7"
     },
     "reference audit": {
       "status": "pass",
-      "refCount": 960,
+      "refCount": 982,
       "missing": 0
     },
     "duplicate operationIds": {
       "status": "pass",
-      "operationCount": 116,
+      "operationCount": 117,
       "duplicates": 0
     },
     "coverage matches provenance": {
       "status": "pass",
-      "pathCount": 80,
-      "operationCount": 116,
-      "schemaCount": 156,
+      "pathCount": 81,
+      "operationCount": 117,
+      "schemaCount": 161,
       "expected": {
-        "paths": 80,
-        "operations": 116,
-        "schemas": 156
+        "paths": 81,
+        "operations": 117,
+        "schemas": 161
       }
     },
     "redocly lint (zero warnings)": {
@@ -40,8 +40,8 @@
     },
     "deterministic type generation": {
       "status": "pass",
-      "lines": 5802,
-      "byteHash": "d764ca0f4cf0afe8b52c2a62da1d330a8fa1c5c1cc188c227b16f90ed1c50574"
+      "lines": 5895,
+      "byteHash": "77d96f02fdc87e91254ac689a2c667716c5fe6460659acc0d6664685986c93a7"
     }
   },
   "note": "Pre-ratification validation battery. Ratification itself requires the backend/API owner review recorded by Beads eiams-frontend-e01.7."

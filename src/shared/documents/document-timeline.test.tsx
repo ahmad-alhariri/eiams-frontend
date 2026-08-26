@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
 import { DocumentTimeline } from '@/shared/documents/document-timeline'
@@ -108,26 +109,92 @@ describe('DocumentTimeline event rendering', () => {
     )
   })
 
-  it('renders a related document reference chip with Arabic type label and reference number', () => {
+  it.each([
+    ['Receiving', 'استلام', '/documents/receiving/00000000-0000-0000-0000-0000000000c1'],
+    ['Issue', 'صرف', '/documents/issue/00000000-0000-0000-0000-0000000000c1'],
+    ['Transfer', 'تحويل', '/documents/transfer/00000000-0000-0000-0000-0000000000c1'],
+    ['Opening', 'رصيد افتتاحي', '/documents/opening/00000000-0000-0000-0000-0000000000c1'],
+    ['Return', 'إرجاع', '/documents/return/00000000-0000-0000-0000-0000000000c1'],
+  ] as const)(
+    'renders the server-returned %s related-document reference as an accessible detail link',
+    (documentType, labelAr, href) => {
+      render(
+        <MemoryRouter>
+          <DocumentTimeline
+            events={[
+              buildEvent({
+                eventType: 'Reversed',
+                occurredAt: '2026-08-10T09:45:00.000Z',
+                relatedDocument: {
+                  documentId: '00000000-0000-0000-0000-0000000000c1',
+                  documentType,
+                  status: 'Posted',
+                  systemReferenceNumber: 'ISS-2026-000742',
+                },
+              }),
+            ]}
+          />
+        </MemoryRouter>,
+      )
+
+      expect(screen.getByText(labelAr)).toBeInTheDocument()
+      expect(screen.getByText('ISS-2026-000742')).toHaveAttribute('dir', 'ltr')
+      expect(
+        screen.getByRole('link', { name: `فتح تفاصيل سند ${labelAr}: ISS-2026-000742` }),
+      ).toHaveAttribute('href', href)
+    },
+  )
+
+  it('routes an Adjustment reference with its authoritative adjustmentId', () => {
     render(
-      <DocumentTimeline
-        events={[
-          buildEvent({
-            eventType: 'Reversed',
-            occurredAt: '2026-08-10T09:45:00.000Z',
-            relatedDocument: {
-              documentId: '00000000-0000-0000-0000-0000000000c1',
-              documentType: 'Issue',
-              status: 'Posted',
-              systemReferenceNumber: 'ISS-2026-000742',
-            },
-          }),
-        ]}
-      />,
+      <MemoryRouter>
+        <DocumentTimeline
+          events={[
+            buildEvent({
+              eventType: 'Reversed',
+              occurredAt: '2026-08-10T09:45:00.000Z',
+              relatedDocument: {
+                adjustmentId: '00000000-0000-0000-0000-0000000000a9',
+                documentId: '00000000-0000-0000-0000-0000000000c1',
+                documentType: 'Adjustment',
+                status: 'Posted',
+                systemReferenceNumber: 'ADJ-2026-000742',
+              },
+            }),
+          ]}
+        />
+      </MemoryRouter>,
     )
 
-    expect(screen.getByText('صرف')).toBeInTheDocument()
-    expect(screen.getByText('ISS-2026-000742')).toHaveAttribute('dir', 'ltr')
+    expect(
+      screen.getByRole('link', { name: 'فتح تفاصيل سند تسوية: ADJ-2026-000742' }),
+    ).toHaveAttribute('href', '/adjustments/00000000-0000-0000-0000-0000000000a9')
+  })
+
+  it('does not infer an Adjustment route from documentId when adjustmentId is absent', () => {
+    render(
+      <MemoryRouter>
+        <DocumentTimeline
+          events={[
+            buildEvent({
+              eventType: 'Reversed',
+              occurredAt: '2026-08-10T09:45:00.000Z',
+              relatedDocument: {
+                documentId: '00000000-0000-0000-0000-0000000000c1',
+                documentType: 'Adjustment',
+                status: 'Posted',
+                systemReferenceNumber: 'ADJ-2026-000743',
+              },
+            }),
+          ]}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(
+      screen.getByRole('note', { name: 'سند تسوية مرتبط: ADJ-2026-000743' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
 })
 

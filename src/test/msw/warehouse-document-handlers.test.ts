@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { apiClient } from '@/shared/services/api.client'
 import {
   actionRequiresReason,
+  createDocumentPolicy,
   createLifecycleEvent,
   createWarehouseDocument,
   fixtureUuid,
@@ -49,6 +50,12 @@ function documentInStatus(
     documentStatus,
     documentType,
     rowVersion: 1,
+    policy: createDocumentPolicy({
+      documentId,
+      documentStatus,
+      rowVersion: 1,
+      signedOriginalSatisfied: true,
+    }),
     receivingInfo:
       documentType === 'Receiving'
         ? { receivingType: 'Purchase', supplierRef: 'SUP-001', supplierInvoiceRef: null }

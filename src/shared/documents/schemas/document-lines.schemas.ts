@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { formatNumber } from '@/shared/utils/format'
 import type {
   AssetInput,
   DocumentLineInput,
@@ -62,12 +63,24 @@ export const quantityLineSchema = z.object({
   /** Server-side line identity, present when editing an existing draft. */
   lineId: z.uuid().optional(),
   materialId: z.uuid('يجب اختيار مادة صالحة.'),
-  /** Display snapshots captured at material selection (never sent). */
+  /**
+   * Display snapshots captured at material selection (never sent).
+   * `materialKind` drives the D-IAR-01 existing-asset selector on Issue
+   * Asset-kind lines.
+   */
   materialNameAr: z.string().trim().min(1, 'يجب اختيار مادة صالحة.'),
   materialDomainId: z.string().optional(),
   baseUnitId: z.string().optional(),
   baseUnitNameAr: z.string().optional(),
+  /** 'Asset' when the selected material's kind is Asset (snapshot only). */
+  materialKind: z.string().optional(),
   quantity: z.coerce.number('يجب إدخال كمية صحيحة.').gt(0, 'يجب أن تكون الكمية أكبر من صفر.'),
+  /**
+   * D-IAR-01: ids of the specific existing assets this Issue line moves.
+   * Validated against quantity by the page-level gate; mapped to
+   * `DocumentLineInput.assetIds` on submission for Asset-kind lines only.
+   */
+  assetIds: z.array(z.uuid()).optional(),
   /** Omitted or empty = the material base unit. */
   unitId: z.string().optional(),
   /** Selected alternative unit conversion; null/empty = the base unit. */
@@ -126,6 +139,35 @@ export const documentLinesSchema = z
 
 export type DocumentLinesValues = z.infer<typeof documentLinesSchema>
 
+/** True when a known balance cannot cover the requested line quantity (e16-t04). */
+export function overBalance(
+  balance: number | null | undefined,
+  quantity: number | undefined,
+): boolean {
+  // undefined = lookup loading/unknown → never blocks; a null balance row
+  // means the warehouse holds nothing, which DOES block any positive request.
+  if (balance === undefined) return false
+  const requested = typeof quantity === 'number' ? quantity : 0
+  return requested > (balance === null ? 0 : balance)
+}
+
+/**
+ * Arabic per-line balance hint (e16-t04). `undefined` (lookup loading or no
+ * material yet) renders nothing; a known balance states the available stock;
+ * an over-balance request is phrased as the blocking problem it will become.
+ */
+export function balanceHintAr(
+  balance: number | null | undefined,
+  quantity: number | undefined,
+): string | null {
+  if (balance === undefined) return null
+  const available = balance === null ? 0 : balance
+  if (!overBalance(balance, quantity)) {
+    return `الرصيد المتاح في المستودع: ${formatNumber(available)}`
+  }
+  return `الكمية المطلوبة تتجاوز الرصيد المتاح (${formatNumber(available)}).`
+}
+
 /** quantity × factor, the D-UOM-01 draft preview shown to the keeper. */
 export function deriveBaseQuantity(quantity: number, factor: string): number {
   return quantity * Number.parseFloat(factor)
@@ -141,6 +183,10 @@ export function toDocumentLineInputs(lines: readonly QuantityLineValues[]): Docu
     ...(line.lineId !== undefined ? { lineId: line.lineId } : {}),
     materialId: line.materialId,
     quantity: line.quantity,
+    // D-IAR-01: existing-asset references travel only on Asset-kind lines.
+    ...(line.materialKind === 'Asset' && line.assetIds !== undefined && line.assetIds.length > 0
+      ? { assetIds: line.assetIds }
+      : {}),
     ...(line.unitId !== undefined && line.unitId !== '' ? { unitId: line.unitId } : {}),
     ...(line.conversionId !== null &&
     line.conversionId !== undefined &&
@@ -214,7 +260,7 @@ export const assetInputSchema = z.object({
   /** Optional in draft (VARCHAR(100) per ERD); server-allocated on posting. */
   assetNumber: z.string().trim().max(100, 'يجب ألا يتجاوز رقم الأصل 100 محرفاً.').optional(),
   /** Optional manufacturer identifier; never a substitute for the asset number. */
-  serialNumber: z.string().trim().max(100, 'يجب ألا يتجاوز الرقم التسلسلي 100 محرفاً.').optional(),
+  serialNumber: z.string().trim().max(200, 'يجب ألا يتجاوز الرقم التسلسلي 200 محرفاً.').optional(),
   acquisitionDate: optionalDateField('تاريخ حصول غير صالح؛ استخدم صيغة YYYY-MM-DD.'),
   warrantyExpiry: optionalDateField('تاريخ انتهاء ضمان غير صالح؛ استخدم صيغة YYYY-MM-DD.'),
 })

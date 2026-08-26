@@ -1,10 +1,11 @@
-import type { CounterpartOption } from '@/shared/types/generated/eiams-v1'
+import type { ComponentPropsWithoutRef } from 'react'
 
 import { useActiveCounterpartOptions } from '@/modules/organization/hooks/use-counterpart-lookups'
 import type {
   CounterpartReference,
   CounterpartSearchOptions,
 } from '@/modules/organization/types/counterpart-lookup.types'
+import type { CounterpartOption } from '@/shared/types/generated/eiams-v1'
 import { AsyncSelect } from '@/shared/ui/async-select'
 
 export interface CounterpartSelectProps extends CounterpartSearchOptions {
@@ -15,6 +16,12 @@ export interface CounterpartSelectProps extends CounterpartSearchOptions {
   ) => void
   disabled?: boolean
   readOnly?: boolean
+  /**
+   * Standard attributes forwarded to the inner combobox input (id, aria-*)
+   * so RHF/Form-bridge sections can associate labels and describedby hints
+   * without forking this selector.
+   */
+  inputProps?: ComponentPropsWithoutRef<'input'>
 }
 
 /**
@@ -29,6 +36,7 @@ export function CounterpartSelect({
   siteId,
   disabled = false,
   readOnly = false,
+  inputProps,
 }: CounterpartSelectProps) {
   const counterpartSelector = useActiveCounterpartOptions({
     ...(type === undefined ? {} : { type }),
@@ -49,6 +57,7 @@ export function CounterpartSelect({
       }
       disabled={disabled}
       readOnly={readOnly}
+      {...(inputProps === undefined ? {} : { inputProps })}
       placeholder="ابحث عن جهة مستلمة أو حائزة..."
       emptyMessage="لا توجد جهات نشطة مطابقة ضمن نطاقك."
       errorMessage="تعذر البحث عن الجهات المتاحة ضمن نطاقك."

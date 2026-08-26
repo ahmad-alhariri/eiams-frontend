@@ -1,5 +1,5 @@
 import { IconPlus, IconTrash } from '@tabler/icons-react'
-import type { ReactNode } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
 
 import { useMaterialUnitConversionsQuery } from '@/modules/catalog/hooks/use-catalog-queries'
@@ -9,8 +9,10 @@ import {
   type CapabilityValidation,
 } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import {
+  balanceHintAr,
   deriveBaseQuantity,
   OPENING_TYPE_LABELS,
+  overBalance,
   QUANTITY_LINE_FEATURES_BY_TYPE,
   createEmptyQuantityLine,
   type DocumentLinesContainer,
@@ -28,6 +30,7 @@ import {
 import type { OptionLoader } from '@/shared/selectors/selector-adapter'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
+import { cn } from '@/shared/utils/class-names'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import type {
@@ -45,7 +48,35 @@ export interface QuantityLineEditorProps {
   warehouseId: string | undefined
   disabled?: boolean
   features?: QuantityLineFeatures
+  /**
+   * Optional aggregate of selected-line capability checks. Pages that must
+   * block persistence can consume this without reimplementing the warehouse
+   * capability lookup or the Opening → Receiving operation mapping.
+   */
+  onCapabilityGateChange?: (gate: QuantityLineCapabilityGate) => void
+  /**
+   * Optional live-balance lookup for outbound documents (e16-t04). Given a
+   * line index return the current available quantity for that line's material
+   * in the source warehouse — `undefined` while unknown/loading, `null` when
+   * the server holds no balance row. The editor stays transport-agnostic:
+   * pages own the balance queries (module boundary), the shared layer only
+   * renders the per-line hint and exposes the values for gate evaluation.
+   */
+  balanceForLine?: (index: number) => number | null | undefined
+  /**
+   * Optional per-line extra content slot rendered under the line fields
+   * (e16-t05). Lets a page inject document-specific line UI — e.g. the Issue
+   * existing-asset multi-select — without the shared editor learning about
+   * that document type. Return `null` to render nothing for a line.
+   */
+  assetSlotForLine?: (index: number) => ReactNode
 }
+
+/** Aggregate capability state for the currently selected quantity-line materials. */
+export type QuantityLineCapabilityGate =
+  | { status: 'ready' }
+  | { status: 'blocked'; messageAr: string }
+  | { status: 'unverified'; messageAr: string }
 
 const BASE_UNIT_VALUE = 'base'
 
@@ -54,6 +85,34 @@ function capabilityOperationFor(
   documentType: Exclude<DocumentType, 'Adjustment'>,
 ): CapabilityOperation {
   return documentType === 'Opening' ? 'Receiving' : documentType
+}
+
+function capabilityGateForLines(
+  lines: readonly Partial<QuantityLineValues>[],
+  operation: CapabilityOperation,
+  validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation,
+): QuantityLineCapabilityGate {
+  let hasUnverifiedLine = false
+
+  for (const line of lines) {
+    if ((line.materialId ?? '') === '') {
+      continue
+    }
+    const capability = validates(line.materialDomainId, operation)
+    if (capability.status === 'blocked') {
+      return capability
+    }
+    if (capability.status === 'unknown') {
+      hasUnverifiedLine = true
+    }
+  }
+
+  return hasUnverifiedLine
+    ? {
+        status: 'unverified',
+        messageAr: 'يتعذر حفظ المسودة قبل التحقق من قدرة المستودع لكل مادة مختارة.',
+      }
+    : { status: 'ready' }
 }
 
 interface MaterialSelectorControlProps {
@@ -146,6 +205,10 @@ interface QuantityLineRowProps {
   operation: CapabilityOperation
   scopeReady: boolean
   validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation
+  /** Known balance for this line's material; undefined while loading/unknown. */
+  balance?: number | null | undefined
+  /** Page-supplied extra content for this line (D-IAR-01 asset selector slot). */
+  assetSlot?: ReactNode
 }
 
 /**
@@ -164,6 +227,8 @@ function QuantityLineRow({
   operation,
   scopeReady,
   validates,
+  balance,
+  assetSlot,
 }: QuantityLineRowProps) {
   const { control, getValues, setValue } = useFormContext<DocumentLinesContainer>()
   const line = (useWatch({ control, name: `lines.${index}` }) ?? {}) as Partial<QuantityLineValues>
@@ -195,7 +260,14 @@ function QuantityLineRow({
                   materialField.onChange(nextValue ?? '')
                   setValue(`lines.${index}.materialNameAr`, payload?.nameAr ?? '')
                   setValue(`lines.${index}.materialDomainId`, payload?.domain.id ?? '')
+                  setValue(
+                    `lines.${index}.materialKind`,
+                    payload?.materialKind as string | undefined,
+                  )
                   setValue(`lines.${index}.baseUnitNameAr`, payload?.baseUnit.displayName ?? '')
+                  // D-IAR-01: a material change invalidates a previously
+                  // selected asset set (they belong to the old material).
+                  setValue(`lines.${index}.assetIds`, [])
                   setValue(`lines.${index}.unitId`, undefined)
                   setValue(`lines.${index}.conversionId`, null)
                   setValue(`lines.${index}.baseQuantity`, undefined)
@@ -369,6 +441,17 @@ function QuantityLineRow({
           التحقق من قدرة المستودع يتطلب اختيار المستودع ضمن قسم رأس السند.
         </p>
       ) : null}
+      {balanceHintAr(balance, line.quantity) !== null ? (
+        <p
+          className={cn(
+            'text-sm',
+            overBalance(balance, line.quantity) ? 'text-destructive' : 'text-muted-foreground',
+          )}
+        >
+          {balanceHintAr(balance, line.quantity)}
+        </p>
+      ) : null}
+      {assetSlot ?? null}
       <Button
         type="button"
         variant="ghost"
@@ -406,12 +489,24 @@ export function QuantityLineEditor({
   warehouseId,
   disabled = false,
   features = QUANTITY_LINE_FEATURES_BY_TYPE[documentType],
+  onCapabilityGateChange,
+  balanceForLine,
+  assetSlotForLine,
 }: QuantityLineEditorProps) {
   const { control, formState } = useFormContext<DocumentLinesContainer>()
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
   const materialSelector = useScopedMaterialSelector()
   const capabilityValidation = useWarehouseCapabilityValidation(warehouseId)
   const operation = capabilityOperationFor(documentType)
+  const lines = useWatch({ control, name: 'lines' })
+  const capabilityGate = useMemo(
+    () => capabilityGateForLines(lines ?? [], operation, capabilityValidation.validates),
+    [lines, operation, capabilityValidation.validates],
+  )
+
+  useEffect(() => {
+    onCapabilityGateChange?.(capabilityGate)
+  }, [capabilityGate, onCapabilityGateChange])
 
   return (
     <div data-slot="quantity-line-editor" className="flex flex-col gap-3">
@@ -431,6 +526,8 @@ export function QuantityLineEditor({
             operation={operation}
             scopeReady={materialSelector.scopeReady}
             validates={capabilityValidation.validates}
+            {...(balanceForLine === undefined ? {} : { balance: balanceForLine(index) })}
+            {...(assetSlotForLine === undefined ? {} : { assetSlot: assetSlotForLine(index) })}
           />
         ))
       )}

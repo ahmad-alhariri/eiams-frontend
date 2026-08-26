@@ -131,6 +131,7 @@ function AsyncSelect<T>({
   } | null>(null)
   const [open, setOpen] = useState(false)
   const [lastControlledValue, setLastControlledValue] = useState(value ?? null)
+  const [createRowFocused, setCreateRowFocused] = useState(false)
 
   const requestIdRef = useRef(0)
   const loadOptionsRef = useRef(loadOptions)
@@ -338,6 +339,39 @@ function AsyncSelect<T>({
           readOnly={readOnly}
           aria-disabled={disabled || undefined}
           className="h-10 w-full min-w-0 rounded-md border border-input bg-popover px-3 py-2 text-start text-base text-foreground transition-[color,box-shadow,background-color] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-50 read-only:cursor-default read-only:bg-muted/50"
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') {
+              if (createRowFocused) {
+                setCreateRowFocused(false)
+              } else if (
+                visibleOptions.length > 0 &&
+                selectedOption?.value === visibleOptions[visibleOptions.length - 1]?.value
+              ) {
+                setCreateRowFocused(true)
+              }
+            }
+            if (e.key === 'ArrowUp') {
+              if (createRowFocused) {
+                setCreateRowFocused(false)
+              }
+            }
+            if (e.key === 'Enter') {
+              if (createRowFocused && onCreate) {
+                onCreate(trimmedQuery)
+                openRef.current = false
+                setOpen(false)
+                onOpenChangeProp?.(false)
+                setCreateRowFocused(false)
+                e.preventDefault()
+              }
+            }
+            if (e.key === 'Tab') {
+              openRef.current = false
+              setOpen(false)
+              onOpenChangeProp?.(false)
+              setCreateRowFocused(false)
+            }
+          }}
         />
         <Combobox.Portal>
           <Combobox.Positioner sideOffset={4} align="start" className="isolate z-50">
@@ -379,8 +413,31 @@ function AsyncSelect<T>({
                       openRef.current = false
                       setOpen(false)
                       onOpenChangeProp?.(false)
+                      setCreateRowFocused(false)
                     }}
-                    className="relative flex w-full min-w-0 cursor-default items-center gap-2 rounded-sm px-3 py-2 text-start text-base text-muted-foreground outline-none transition-colors select-none hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        onCreate(trimmedQuery)
+                        openRef.current = false
+                        setOpen(false)
+                        onOpenChangeProp?.(false)
+                        setCreateRowFocused(false)
+                        e.preventDefault()
+                      }
+                      if (e.key === 'Tab') {
+                        openRef.current = false
+                        setOpen(false)
+                        onOpenChangeProp?.(false)
+                        setCreateRowFocused(false)
+                      }
+                    }}
+                    tabIndex={open ? 0 : -1}
+                    className={[
+                      'relative flex w-full min-w-0 cursor-default items-center gap-2 rounded-sm px-3 py-2 text-start text-base text-muted-foreground outline-none transition-colors select-none hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+                      createRowFocused && 'bg-muted text-foreground',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
                   >
                     <IconPlus aria-hidden className="size-4 shrink-0 text-mountain-teal" />
                     <span className="truncate">{createLabel(trimmedQuery)}</span>

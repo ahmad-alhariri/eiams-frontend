@@ -1,11 +1,20 @@
 import { delay, http, HttpResponse, type HttpHandler } from 'msw'
 
 import { environment } from '@/config/env'
+import {
+  applyCountLineUpdates,
+  findInventoryCount,
+  getInventoryCountLines,
+  getInventoryCounts,
+  planInventoryCount,
+  transitionInventoryCount,
+} from '@/mocks/inventory-count-state'
 import { getDb, nextFixtureUuid } from '@/mocks/db'
 import { createDevSession } from '@/shared/services/dev-session'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import {
   createDocumentAttachment,
+  createLifecycleEvent,
   createMaterialUnitConversion,
   createNamedReference,
   createPolicyBlocker,
@@ -23,6 +32,8 @@ import {
 } from '@/test/msw/warehouse-document-handlers'
 import { readRequestForm } from '@/test/msw/multipart-parser'
 import type {
+  UpdateCountLinesRequest,
+  InventoryCount,
   AttachmentType,
   DocumentActionType,
   DocumentType,
@@ -30,6 +41,9 @@ import type {
   ExternalPartyUpsertRequest,
   LifecycleActorSnapshot,
   LifecycleConflictProblemDetails,
+  InventoryBalance,
+  InventoryBalanceSortField,
+  InventoryLowStockState,
   Material,
   MaterialCategoryUpsertRequest,
   MaterialFamilyUpsertRequest,
@@ -42,6 +56,10 @@ import type {
   ReasonedDocumentActionRequest,
   SetActiveScopeRequest,
   SiteUpsertRequest,
+  SortDirection,
+  StockMovement,
+  StockMovementSortField,
+  StockMovementType,
   UnitOfMeasureUpsertRequest,
   VersionOnlyDocumentActionRequest,
   WarehouseCapabilityUpsertRequest,
@@ -78,6 +96,14 @@ type ListParams = {
   documentStatus?: string | undefined
   documentType?: string | undefined
   warehouseId?: string | undefined
+  materialId?: string | undefined
+  lowStockState?: string | undefined
+  movementType?: string | undefined
+  documentId?: string | undefined
+  dateFrom?: string | undefined
+  dateTo?: string | undefined
+  sortBy?: string | undefined
+  sortDirection?: string | undefined
 }
 
 function toListParams(url: URL): ListParams {
@@ -102,6 +128,14 @@ function toListParams(url: URL): ListParams {
     'documentStatus',
     'documentType',
     'warehouseId',
+    'materialId',
+    'lowStockState',
+    'movementType',
+    'documentId',
+    'dateFrom',
+    'dateTo',
+    'sortBy',
+    'sortDirection',
   ] as const) {
     const value = url.searchParams.get(key)
     if (value !== null) {
@@ -193,6 +227,17 @@ function attachmentDeleteForbiddenProblem(): ProblemDetails {
   }
 }
 
+function attachmentUploadForbiddenProblem(): ProblemDetails {
+  return {
+    ...problemBase(
+      'signed_original_immutable',
+      'لا يمكن رفع المرفقات بعد مغادرة المستند حالة المسودة.',
+      403,
+    ),
+    titleAr: 'المرفقات للقراءة فقط في حالة المستند الحالية.',
+  }
+}
+
 function attachmentValidationProblem(field: string, messageAr: string): ProblemDetails {
   return problemBase('document.attachment_invalid', messageAr, 422, field)
 }
@@ -245,7 +290,24 @@ function reEvaluateAttachmentPolicy(
 }
 
 const CATALOG_PREFIX = `${environment.apiBaseUrl}/catalog`
+function extractCountIdFromLinesRequest(pathname: string): string {
+  const match = pathname.match(/inventory-counts\/([^/]+)\/lines$/)
+  return match === null ? '' : (match[1] ?? '')
+}
+
+function extractCountIdFromLifecyclePath(pathname: string): string {
+  const match = pathname.match(/inventory-counts\/([^/]+)\/(start|complete|close)$/)
+  return match === null ? '' : (match[1] ?? '')
+}
+
 const AUTH_PREFIX = environment.apiBaseUrl
+
+/** Deterministic per-asset custody id so detail views re-resolve their row. */
+function deterministicCustodyId(asset: { readonly assetNumber: string }): string {
+  const digits = asset.assetNumber.replace(/\D/g, '').padStart(12, '0').slice(-12)
+  return `00000000-0000-4000-8000-${digits}`
+}
+
 const DOCUMENT_PREFIX = `${environment.apiBaseUrl}/warehouse-documents`
 
 const DOCUMENT_ACTION_IDEMPOTENCY = createIdempotencyMemo()
@@ -397,6 +459,160 @@ function includedIn<T extends string>(
     return undefined
   }
   return (allowed as readonly string[]).includes(value) ? (value as T) : undefined
+}
+
+const ARABIC_COLLATOR = new Intl.Collator('ar-SY', { sensitivity: 'base', usage: 'sort' })
+const INVENTORY_PREFIX = `${environment.apiBaseUrl}/inventory`
+const BALANCE_SORT_FIELDS = [
+  'WarehouseDisplayName',
+  'MaterialDisplayName',
+  'Quantity',
+  'LastUpdated',
+] as const satisfies readonly InventoryBalanceSortField[]
+const MOVEMENT_SORT_FIELDS = [
+  'PostedAt',
+  'WarehouseDisplayName',
+  'MaterialDisplayName',
+  'MovementType',
+  'QuantityDelta',
+] as const satisfies readonly StockMovementSortField[]
+const LOW_STOCK_STATES = [
+  'Low',
+  'Sufficient',
+  'NotConfigured',
+  'Disabled',
+] as const satisfies readonly InventoryLowStockState[]
+const MOVEMENT_TYPES = [
+  'Receipt',
+  'Issue',
+  'TransferIn',
+  'TransferOut',
+  'AdjustmentIn',
+  'AdjustmentOut',
+  'Opening',
+] as const satisfies readonly StockMovementType[]
+
+function isOneOf<T extends string>(value: string | undefined, values: readonly T[]): value is T {
+  return value !== undefined && (values as readonly string[]).includes(value)
+}
+
+function isSortDirection(value: string | undefined): value is SortDirection {
+  return value === 'Ascending' || value === 'Descending'
+}
+
+function inventoryQueryProblem(parameter: string): HttpResponse<ProblemDetails> {
+  return HttpResponse.json(
+    problemBase(
+      'inventory.invalid_query',
+      `قيمة عامل التصفية أو الترتيب «${parameter}» غير صالحة.`,
+      400,
+    ),
+    { status: 400 },
+  )
+}
+
+function compareText(left: string, right: string): number {
+  return ARABIC_COLLATOR.compare(left, right)
+}
+
+function compareUuid(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function compareNumber(left: number, right: number): number {
+  return left - right
+}
+
+function withDirection(result: number, direction: SortDirection): number {
+  return direction === 'Ascending' ? result : -result
+}
+
+function balanceFieldComparison(
+  left: InventoryBalance,
+  right: InventoryBalance,
+  field: InventoryBalanceSortField,
+): number {
+  switch (field) {
+    case 'WarehouseDisplayName':
+      return compareText(left.warehouse.displayName, right.warehouse.displayName)
+    case 'MaterialDisplayName':
+      return compareText(left.material.displayName, right.material.displayName)
+    case 'Quantity':
+      return compareNumber(left.quantity, right.quantity)
+    case 'LastUpdated':
+      return compareText(left.lastUpdated, right.lastUpdated)
+  }
+}
+
+function movementFieldComparison(
+  left: StockMovement,
+  right: StockMovement,
+  field: StockMovementSortField,
+): number {
+  switch (field) {
+    case 'PostedAt':
+      return compareText(left.postedAt, right.postedAt)
+    case 'WarehouseDisplayName':
+      return compareText(left.warehouse.displayName, right.warehouse.displayName)
+    case 'MaterialDisplayName':
+      return compareText(left.material.displayName, right.material.displayName)
+    case 'MovementType':
+      return compareText(left.movementType, right.movementType)
+    case 'QuantityDelta':
+      return compareNumber(left.quantityDelta, right.quantityDelta)
+  }
+}
+
+/**
+ * Dev-only ordering mirrors D-INV-READ-01 so Browser QA exercises a complete
+ * read surface. It remains fixture ordering, not evidence of backend sorting.
+ */
+function sortBalances(
+  balances: readonly InventoryBalance[],
+  sortBy: InventoryBalanceSortField,
+  sortDirection: SortDirection,
+): InventoryBalance[] {
+  const fields = [
+    sortBy,
+    ...(['WarehouseDisplayName', 'MaterialDisplayName'] as const).filter(
+      (field) => field !== sortBy,
+    ),
+  ]
+  return [...balances].sort((left, right) => {
+    for (const field of fields) {
+      const comparison = balanceFieldComparison(left, right, field)
+      if (comparison !== 0) {
+        return withDirection(comparison, field === sortBy ? sortDirection : 'Ascending')
+      }
+    }
+    return compareUuid(left.balanceId, right.balanceId)
+  })
+}
+
+function sortMovements(
+  movements: readonly StockMovement[],
+  sortBy: StockMovementSortField,
+  sortDirection: SortDirection,
+): StockMovement[] {
+  const secondaryFields = MOVEMENT_SORT_FIELDS.filter(
+    (field) => field === 'PostedAt' && field !== sortBy,
+  )
+  return [...movements].sort((left, right) => {
+    const primary = movementFieldComparison(left, right, sortBy)
+    if (primary !== 0) {
+      return withDirection(primary, sortDirection)
+    }
+    for (const field of secondaryFields) {
+      const comparison = movementFieldComparison(left, right, field)
+      if (comparison !== 0) {
+        return withDirection(comparison, 'Descending')
+      }
+    }
+    return withDirection(
+      compareUuid(left.movementId, right.movementId),
+      sortBy === 'PostedAt' ? sortDirection : 'Descending',
+    )
+  })
 }
 
 export const mockApiHandlers: readonly HttpHandler[] = [
@@ -871,6 +1087,237 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     )
     return pagedResponse(filtered, params)
   }),
+
+  // --- Organization: polymorphic counterpart lookups (D-POST-01) ------------
+  // Active, scope-aware options for Issue/Custody recipient and holder
+  // choices. Derived from the fixture graph: employees, organizational units,
+  // sites, and external parties are all active counterparts.
+  http.get(`${AUTH_PREFIX}/counterparts`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const type = url.searchParams.get('type')
+    const search = (url.searchParams.get('search') ?? '').trim()
+    const db = getDb()
+    const pool: Array<{
+      id: string
+      displayName: string
+      secondaryLabelAr: string | null
+      type: 'Employee' | 'OrganizationalUnit' | 'Site' | 'External'
+    }> = [
+      ...db.employees.map((employee) => ({
+        id: employee.employeeId,
+        displayName: employee.fullNameAr,
+        secondaryLabelAr: employee.jobTitleAr ?? null,
+        type: 'Employee' as const,
+      })),
+      ...db.organizationalUnits.map((unit) => ({
+        id: unit.orgUnitId,
+        displayName: unit.nameAr,
+        secondaryLabelAr: unit.code,
+        type: 'OrganizationalUnit' as const,
+      })),
+      ...db.sites.map((site) => ({
+        id: site.siteId,
+        displayName: site.nameAr,
+        secondaryLabelAr: site.code,
+        type: 'Site' as const,
+      })),
+      ...db.externalParties.map((party) => ({
+        id: party.externalPartyId,
+        displayName: party.nameAr,
+        secondaryLabelAr: party.code ?? null,
+        type: 'External' as const,
+      })),
+    ]
+    const filtered = pool.filter(
+      (counterpart) =>
+        (type === null || counterpart.type === type) &&
+        (search === '' || counterpart.displayName.includes(search)),
+    )
+    return HttpResponse.json({
+      items: filtered.map((counterpart) => ({
+        displayName: counterpart.displayName,
+        id: counterpart.id,
+        secondaryLabelAr: counterpart.secondaryLabelAr,
+        status: 'Active' as const,
+        type: counterpart.type,
+      })),
+      meta: { page: 0, pageSize: 10, total: filtered.length },
+    })
+  }),
+
+  // --- Asset registry: issued-asset selector source (D-IAR-01 / e16-t05) ----
+  // Filters mirror the contract's listAssets operation: materialId,
+  // warehouseId (single id), derivedStatus, and free-text search over the
+  // asset number + serial + material name.
+
+  // --- Custody registry (e19-t01): unified list over the fixture graph ------
+  // Filters mirror the contract's listCustodies operation: status,
+  // holderType, custodyKind, and free-text search over holder + asset number.
+  http.get(`${AUTH_PREFIX}/custodies`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const custodyKind = url.searchParams.get('custodyKind')
+    const search = (url.searchParams.get('search') ?? '').trim()
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
+    const db = getDb()
+    const rows = db.assets
+      .filter((asset) => asset.derivedStatus === 'Issued')
+      .map((asset) => ({
+        assetId: asset.assetId,
+        assetNumber: asset.assetNumber,
+        // Deterministic per-asset custody id: the custody detail view
+        // re-fetches this list and must resolve the same row it navigated
+        // from, so the id cannot be regenerated per request.
+        custodyId: deterministicCustodyId(asset),
+        custodyKind: 'Operational' as const,
+        fromTs: '2026-08-01T08:00:00.000Z',
+        holder: {
+          displayName: 'مديرية النقل والحراسة',
+          id: nextFixtureUuid(),
+          secondaryLabelAr: null,
+          status: 'Active' as const,
+          type: 'OrganizationalUnit' as const,
+        },
+        issueDocumentId: nextFixtureUuid(),
+        rowVersion: 1,
+        status: 'Active' as const,
+      }))
+      .filter(
+        (row) =>
+          (status === null || row.status === status) &&
+          (custodyKind === null || row.custodyKind === custodyKind) &&
+          (search === '' || `${row.holder.displayName} ${row.assetNumber}`.includes(search)),
+      )
+    const pageItems = rows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
+    return HttpResponse.json({
+      items: pageItems,
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: rows.length,
+        totalPages: Math.ceil(rows.length / pageSize),
+      },
+    })
+  }),
+  http.get(`${AUTH_PREFIX}/assets`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const materialId = url.searchParams.get('materialId')
+    const warehouseId = url.searchParams.get('warehouseId')
+    const status = url.searchParams.get('status')
+    const search = (url.searchParams.get('search') ?? '').trim()
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '50') || 50
+    const filtered = getDb().assets.filter(
+      (asset) =>
+        (materialId === null || asset.material.id === materialId) &&
+        (warehouseId === null || asset.currentWarehouse?.id === warehouseId) &&
+        (status === null || asset.derivedStatus === status) &&
+        (search === '' ||
+          `${asset.assetNumber} ${asset.serialNumber ?? ''} ${asset.material.displayName}`.includes(
+            search,
+          )),
+    )
+    const pageItems = filtered.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
+    return HttpResponse.json({
+      items: pageItems,
+      meta: { page: pageIndex, pageSize, total: filtered.length },
+    })
+  }),
+  // --- Asset detail reads (D-AST-02 / e18-t03..t05) -------------------------
+  http.get(`${AUTH_PREFIX}/assets/:assetId`, async ({ params }) => {
+    await delay(100)
+    const asset = getDb().assets.find((item) => item.assetId === params['assetId'])
+    return asset === undefined ? notFound() : HttpResponse.json(asset)
+  }),
+  http.get(`${AUTH_PREFIX}/assets/:assetId/custody`, async ({ params }) => {
+    await delay(100)
+    const asset = getDb().assets.find((item) => item.assetId === params['assetId'])
+    if (asset === undefined) {
+      return notFound()
+    }
+    // Only assets that have been issued/custodied carry timeline entries; the
+    // C099 fixture models one operational custody row at the branch site.
+    if (asset.derivedStatus === 'Issued') {
+      return HttpResponse.json([
+        {
+          assetId: asset.assetId,
+          assetNumber: asset.assetNumber,
+          custodyId: deterministicCustodyId(asset),
+          custodyKind: 'Operational',
+          fromTs: '2026-08-01T08:00:00.000Z',
+          holder: {
+            displayName: 'مديرية النقل والحراسة',
+            id: deterministicCustodyId(asset),
+            secondaryLabelAr: null,
+            status: 'Active' as const,
+            type: 'OrganizationalUnit' as const,
+          },
+          issueDocumentId: nextFixtureUuid(),
+          rowVersion: 1,
+          status: 'Active',
+        },
+      ])
+    }
+    return HttpResponse.json([])
+  }),
+  http.get(`${AUTH_PREFIX}/assets/:assetId/movements`, async ({ params }) => {
+    await delay(100)
+    const asset = getDb().assets.find((item) => item.assetId === params['assetId'])
+    if (asset === undefined) {
+      return notFound()
+    }
+    const items =
+      asset.derivedStatus === 'Issued'
+        ? [
+            {
+              assetId: asset.assetId,
+              documentId: nextFixtureUuid(),
+              documentLineId: nextFixtureUuid(),
+              documentReference: 'EIAMS-ISS-2025-0007',
+              eventType: 'Received' as const,
+              movementId: nextFixtureUuid(),
+              occurredAt: '2024-06-15T09:00:00.000Z',
+              occurredBy: { displayName: 'مريم الحلبي', id: nextFixtureUuid() },
+              toWarehouse: {
+                displayName: 'المستودع المركزي',
+                id: nextFixtureUuid(),
+              },
+            },
+            {
+              assetId: asset.assetId,
+              custodyId: nextFixtureUuid(),
+              documentId: nextFixtureUuid(),
+              documentLineId: nextFixtureUuid(),
+              documentReference: 'EIAMS-ISS-2026-0012',
+              eventType: 'Issued' as const,
+              fromWarehouse: {
+                displayName: 'المستودع المركزي',
+                id: nextFixtureUuid(),
+              },
+              movementId: nextFixtureUuid(),
+              occurredAt: '2026-08-01T10:00:00.000Z',
+              occurredBy: { displayName: 'مدير النظام', id: nextFixtureUuid() },
+              toWarehouse: {
+                displayName: 'مستودع الفرع الشمالي',
+                id: nextFixtureUuid(),
+              },
+            },
+          ]
+        : []
+    return HttpResponse.json({
+      items,
+      meta: {
+        pageIndex: 0,
+        pageSize: 20,
+        totalItems: items.length,
+        totalPages: items.length > 0 ? 1 : 0,
+      },
+    })
+  }),
   http.get(`${AUTH_PREFIX}/external-parties/:externalPartyId`, async ({ params }) => {
     const party = getDb().externalParties.find(
       (item) => item.externalPartyId === params['externalPartyId'],
@@ -1086,6 +1533,84 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     },
   ),
 
+  // --- Inventory (development read projections only) -----------------------
+  // These endpoints intentionally do not simulate effective scope, RBAC,
+  // document posting, balance calculation, or ledger generation. Those remain
+  // backend-authoritative; this worker merely makes the contracted read UI
+  // observable during local Browser QA.
+  http.get(`${INVENTORY_PREFIX}/balances`, ({ request }) => {
+    const params = toListParams(new URL(request.url))
+    if (params.sortBy !== undefined && !isOneOf(params.sortBy, BALANCE_SORT_FIELDS)) {
+      return inventoryQueryProblem('sortBy')
+    }
+    if (params.sortDirection !== undefined && !isSortDirection(params.sortDirection)) {
+      return inventoryQueryProblem('sortDirection')
+    }
+    if (params.lowStockState !== undefined && !isOneOf(params.lowStockState, LOW_STOCK_STATES)) {
+      return inventoryQueryProblem('lowStockState')
+    }
+
+    const sortBy = isOneOf(params.sortBy, BALANCE_SORT_FIELDS)
+      ? params.sortBy
+      : 'WarehouseDisplayName'
+    const sortDirection = isSortDirection(params.sortDirection) ? params.sortDirection : 'Ascending'
+    const lowStockState = isOneOf(params.lowStockState, LOW_STOCK_STATES)
+      ? params.lowStockState
+      : undefined
+    const filtered = getDb().inventoryBalances.filter(
+      (balance) =>
+        (params.warehouseId === undefined || balance.warehouse.id === params.warehouseId) &&
+        (params.materialId === undefined || balance.material.id === params.materialId) &&
+        (lowStockState === undefined || balance.lowStock.state === lowStockState) &&
+        matchesSearch(
+          balance,
+          params.search,
+          (item) => `${item.warehouse.displayName} ${item.material.displayName}`,
+        ),
+    )
+
+    return pagedResponse(sortBalances(filtered, sortBy, sortDirection), params)
+  }),
+  http.get(`${INVENTORY_PREFIX}/balances/:balanceId`, ({ params }) => {
+    const balance = getDb().inventoryBalances.find((item) => item.balanceId === params['balanceId'])
+    return balance === undefined ? notFound() : HttpResponse.json(balance)
+  }),
+  http.get(`${INVENTORY_PREFIX}/movements`, ({ request }) => {
+    const params = toListParams(new URL(request.url))
+    if (params.sortBy !== undefined && !isOneOf(params.sortBy, MOVEMENT_SORT_FIELDS)) {
+      return inventoryQueryProblem('sortBy')
+    }
+    if (params.sortDirection !== undefined && !isSortDirection(params.sortDirection)) {
+      return inventoryQueryProblem('sortDirection')
+    }
+    if (params.movementType !== undefined && !isOneOf(params.movementType, MOVEMENT_TYPES)) {
+      return inventoryQueryProblem('movementType')
+    }
+
+    const sortBy = isOneOf(params.sortBy, MOVEMENT_SORT_FIELDS) ? params.sortBy : 'PostedAt'
+    const sortDirection = isSortDirection(params.sortDirection)
+      ? params.sortDirection
+      : 'Descending'
+    const movementType = isOneOf(params.movementType, MOVEMENT_TYPES)
+      ? params.movementType
+      : undefined
+    const filtered = getDb().stockMovements.filter(
+      (movement) =>
+        (params.warehouseId === undefined || movement.warehouse.id === params.warehouseId) &&
+        (params.materialId === undefined || movement.material.id === params.materialId) &&
+        (params.documentId === undefined || movement.documentId === params.documentId) &&
+        (movementType === undefined || movement.movementType === movementType) &&
+        (params.dateFrom === undefined || movement.postedAt >= params.dateFrom) &&
+        (params.dateTo === undefined || movement.postedAt <= params.dateTo),
+    )
+
+    return pagedResponse(sortMovements(filtered, sortBy, sortDirection), params)
+  }),
+  http.get(`${INVENTORY_PREFIX}/movements/:movementId`, ({ params }) => {
+    const movement = getDb().stockMovements.find((item) => item.movementId === params['movementId'])
+    return movement === undefined ? notFound() : HttpResponse.json(movement)
+  }),
+
   // --- Receiving: supplier suggestions --------------------------------------
   http.get(`${environment.apiBaseUrl}/receiving/suppliers`, async ({ request }) => {
     await delay(120)
@@ -1122,14 +1647,24 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     await delay(120)
     const body = (await request.json()) as WarehouseDocumentDraftRequest
     const db = getDb()
+    const actor = documentActor()
     const document = buildDraftDocument(body, {
       documentId: nextFixtureUuid(),
       systemReferenceNumber: nextSystemReferenceNumber(body.documentType, body.paperDocumentYear),
-      occurredBy: documentActor(),
+      occurredBy: actor,
       lookups: draftLookups(),
     })
     db.warehouseDocuments.push(document)
-    db.documentLifecycleEvents[document.documentId] = deriveLifecycleEvents(document)
+    db.documentLifecycleEvents[document.documentId] = [
+      createLifecycleEvent({
+        documentId: document.documentId,
+        documentRowVersion: document.rowVersion,
+        eventType: 'Created',
+        occurredAt: document.createdAt,
+        occurredBy: actor,
+        toStatus: 'Draft',
+      }),
+    ]
     return HttpResponse.json(document, { status: 201 })
   }),
   http.put(`${DOCUMENT_PREFIX}/:documentId`, async ({ params, request }) => {
@@ -1209,6 +1744,9 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       return notFound()
     }
     const document = db.warehouseDocuments[index]!
+    if (document.documentStatus !== 'Draft') {
+      return HttpResponse.json(attachmentUploadForbiddenProblem(), { status: 403 })
+    }
     const form = await readRequestForm(request)
     const file = form.get('file')
     const attachmentType = form.get('attachmentType')
@@ -1313,4 +1851,144 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     })
   }),
   http.post(`${AUTH_PREFIX}/auth/logout`, () => new HttpResponse<never>(null, { status: 204 })),
+  http.get(`${AUTH_PREFIX}/inventory-counts`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
+    let rows = [...getInventoryCounts()]
+    if (status !== null && status !== '') {
+      rows = rows.filter((count) => count.status === status)
+    }
+    if (warehouseId !== null && warehouseId !== '') {
+      rows = rows.filter((count) => count.warehouse.id === warehouseId)
+    }
+    return HttpResponse.json({
+      items: rows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: rows.length,
+        totalPages: Math.max(Math.ceil(rows.length / pageSize), 1),
+      },
+    })
+  }),
+  http.post(`${AUTH_PREFIX}/inventory-counts`, async ({ request }) => {
+    await delay(150)
+    const body = (await request.json()) as {
+      warehouseId: string
+      countType: InventoryCount['countType']
+      scope: InventoryCount['scope']
+      freezePolicy: InventoryCount['freezePolicy']
+      notes?: string | null
+    }
+    // PRD §12.6 business rule: one InProgress session per warehouse.
+    const hasActiveSession = getInventoryCounts().some(
+      (count) => count.warehouse.id === body.warehouseId && count.status === 'InProgress',
+    )
+    if (hasActiveSession && body.countType !== 'SpotCheck') {
+      return HttpResponse.json(
+        {
+          code: 'Conflict',
+          messageAr: 'توجد جلسة جرد جارية لهذا المستودع؛ لا يمكن بدء جلسة أخرى قبل إكمالها.',
+        },
+        { status: 409 },
+      )
+    }
+    return HttpResponse.json(planInventoryCount(body), { status: 201 })
+  }),
+  http.get(`${AUTH_PREFIX}/inventory-counts/:countId`, async ({ params }) => {
+    await delay(100)
+    const count = findInventoryCount(String(params['countId']))
+    if (count === undefined) return notFound()
+    return HttpResponse.json(count)
+  }),
+  http.post(`${AUTH_PREFIX}/inventory-counts/:countId/start`, async ({ params, request }) => {
+    await delay(120)
+    const body = (await request.json()) as { rowVersion?: number; reason?: string | null }
+    const countId = String(params['countId'])
+    const current = findInventoryCount(countId)
+    if (current === undefined) return notFound()
+    if (body.rowVersion !== undefined && body.rowVersion !== current.rowVersion) {
+      return HttpResponse.json(
+        { code: 'Conflict', messageAr: 'تعديل متزامن: حدِّث الصفحة وأعد المحاولة.' },
+        { status: 409 },
+      )
+    }
+    if (!transitionInventoryCount(countId, 'start')) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'لا يمكن بدء هذه الجلسة في حالتها الحالية.' },
+        { status: 422 },
+      )
+    }
+    return HttpResponse.json(findInventoryCount(countId))
+  }),
+  http.get(`${AUTH_PREFIX}/inventory-counts/:countId/lines`, async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    // The count id rides in the path of the registered handler; derive it from the referrer-free
+    // URL pattern MSW resolved. listLines is keyed by countId in the page, so read it from query.
+    const countId = url.searchParams.get('countId') ?? extractCountIdFromLinesRequest(url.pathname)
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '50') || 50
+    const search = (url.searchParams.get('search') ?? '').trim()
+    let rows = [...getInventoryCountLines(countId)]
+    if (search !== '') {
+      rows = rows.filter((line) => line.material.displayName.includes(search))
+    }
+    return HttpResponse.json({
+      items: rows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: rows.length,
+        totalPages: Math.max(Math.ceil(rows.length / pageSize), 1),
+      },
+    })
+  }),
+  http.put(`${AUTH_PREFIX}/inventory-counts/:countId/lines`, async ({ request }) => {
+    await delay(150)
+    const body = (await request.json()) as UpdateCountLinesRequest
+    const countId = extractCountIdFromLinesRequest(new URL(request.url).pathname)
+    const ok = applyCountLineUpdates(countId, body)
+    if (!ok) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'لا يمكن تعديل بنود هذه الجلسة في حالتها الحالية.' },
+        { status: 422 },
+      )
+    }
+    return HttpResponse.json({ items: getInventoryCountLines(countId) })
+  }),
+  http.post(`${AUTH_PREFIX}/inventory-counts/:countId/complete`, async ({ request }) => {
+    await delay(120)
+    const body = (await request.json()) as { rowVersion?: number; reason?: string | null }
+    const countId = extractCountIdFromLifecyclePath(new URL(request.url).pathname)
+    const current = findInventoryCount(countId)
+    if (current === undefined) return notFound()
+    if (!transitionInventoryCount(countId, 'complete')) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'لا يمكن إكمال هذه الجلسة في حالتها الحالية.' },
+        { status: 422 },
+      )
+    }
+    void body
+    return HttpResponse.json(findInventoryCount(countId))
+  }),
+  http.post(`${AUTH_PREFIX}/inventory-counts/:countId/close`, async ({ request }) => {
+    await delay(120)
+    const body = (await request.json()) as { rowVersion?: number; reason?: string | null }
+    const countId = extractCountIdFromLifecyclePath(new URL(request.url).pathname)
+    const current = findInventoryCount(countId)
+    if (current === undefined) return notFound()
+    if (!transitionInventoryCount(countId, 'close')) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'لا يمكن إغلاق هذه الجلسة في حالتها الحالية.' },
+        { status: 422 },
+      )
+    }
+    void body
+    return HttpResponse.json(findInventoryCount(countId))
+  }),
 ]
