@@ -27,6 +27,7 @@ import type {
   Asset,
   DocumentLifecycleEvent,
   Employee,
+  InventoryAdjustment,
   InventoryBalance,
   ExternalParty,
   Material,
@@ -76,6 +77,13 @@ export interface MockDatabase {
   assets: Asset[]
   warehouseDocuments: WarehouseDocument[]
   documentLifecycleEvents: Record<string, DocumentLifecycleEvent[]>
+  /**
+   * Adjustments drafted through POST /adjustments during this SPA session
+   * (D-ADJ-01 manager-owned endpoint family). Session-scoped by design: the
+   * seed fixtures below are static read projections, while everything the
+   * user creates must stay visible until the next full page reload.
+   */
+  createdAdjustments: InventoryAdjustment[]
 }
 
 const SEQUENCE = { next: 700 }
@@ -890,6 +898,7 @@ function buildSeed(): MockDatabase {
     assets,
     warehouseDocuments: documents,
     documentLifecycleEvents,
+    createdAdjustments: [],
   }
 }
 

@@ -42,6 +42,7 @@ import type {
   LifecycleActorSnapshot,
   LifecycleConflictProblemDetails,
   InventoryAdjustment,
+  InventoryAdjustmentDraftRequest,
   InventoryBalance,
   InventoryBalanceSortField,
   InventoryLowStockState,
@@ -1897,7 +1898,12 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       displayName: 'مدير المستودع',
     })
 
+    // Session-persistent store: drafts created through POST /adjustments
+    // survive SPA navigation (the in-memory mock DB resets only on a full
+    // page reload — expected dev-mock behavior).
+    const created = getDb().createdAdjustments
     const rows: InventoryAdjustment[] = [
+      ...created,
       {
         adjustmentId: '423e4567-e89b-42d3-a456-426614174004',
         countReference: null,
@@ -2063,6 +2069,83 @@ export const mockApiHandlers: readonly HttpHandler[] = [
         totalPages: Math.max(Math.ceil(filtered.length / pageSize), 1),
       },
     })
+  }),
+  // POST /adjustments — creates a Draft adjustment (D-ADJ-01 manager-only)
+  // and persists it for the SPA session so the list page reflects it.
+  http.post(`${AUTH_PREFIX}/adjustments`, async ({ request }) => {
+    await delay(150)
+    const body = (await request.json()) as InventoryAdjustmentDraftRequest
+
+    const warehouse = createNamedReference({
+      id: body.warehouseId,
+      displayName: 'المستودع المركزي',
+    })
+    const createdBy = createNamedReference({
+      id: '923e4567-e89b-42d3-a456-426614174009',
+      displayName: 'مدير المستودع',
+    })
+    const adjustmentId = nextFixtureUuid()
+    const documentId = nextFixtureUuid()
+    const now = new Date().toISOString()
+
+    if (body.purpose === 'CountVariance' && !body.countId) {
+      return HttpResponse.json(
+        { code: 'ValidationFailed', messageAr: 'تسوية فروقات الجرد يجب أن ترتبط بجلسة جرد.' },
+        { status: 422 },
+      )
+    }
+
+    const adjustment: InventoryAdjustment = {
+      adjustmentId,
+      countReference: body.countId ? `EIAMS-CNT-LINKED` : null,
+      createdAt: now,
+      createdBy,
+      documentId,
+      documentReference: `EIAMS-ADJ-DRAFT-${String(getDb().createdAdjustments.length + 1).padStart(4, '0')}`,
+      lines: body.lines.map((line, index) => ({
+        adjustmentLineId: line.adjustmentLineId ?? nextFixtureUuid(),
+        material: createNamedReference({
+          id: line.materialId,
+          displayName: `مادة البند ${index + 1}`,
+        }),
+        quantityDelta: line.quantityDelta,
+        reason: line.reason,
+      })),
+      policy: {
+        actions: [
+          {
+            action: 'Post',
+            allowed: false,
+            confirmationRequired: true,
+            presentation: 'Disabled',
+            reasonAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+            reasonCode: 'SignedOriginalRequired',
+            reasonRequired: false,
+          },
+        ],
+        advisories: [],
+        blockers: [
+          createPolicyBlocker({
+            code: 'SignedOriginalRequired',
+            messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+          }),
+        ],
+        documentId,
+        documentStatus: 'Draft',
+        evaluatedAt: now,
+        policyKind: 'Adjustment',
+        rowVersion: 0,
+        signedOriginalSatisfied: false,
+      },
+      postedAt: null,
+      purpose: body.purpose,
+      reason: body.reason,
+      rowVersion: 0,
+      status: 'Draft',
+      warehouse,
+    }
+    getDb().createdAdjustments.push(adjustment)
+    return HttpResponse.json(adjustment, { status: 201 })
   }),
   http.post(`${AUTH_PREFIX}/inventory-counts`, async ({ request }) => {
     await delay(150)
