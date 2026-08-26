@@ -16,7 +16,7 @@ import type {
 
 const COUNT_ID = '223e4567-e89b-42d3-a456-426614174002'
 
-/** Serves the count-lines query the page now runs before seeding variance rows. */
+/** Serves the count-lines AND count-detail queries the page runs before seeding. */
 function useCountLinesHandler() {
   server.use(
     http.get(`*/api/v1/inventory-counts/${COUNT_ID}/lines`, () =>
@@ -25,7 +25,7 @@ function useCountLinesHandler() {
           {
             countLineId: 'a23e4567-e89b-42d3-a456-426614174001',
             difference: -2,
-            material: { id: MATERIAL_ID, displayName: 'حاسوب مكتبي' },
+            material: { id: '723e4567-e89b-42d3-a456-426614174007', displayName: 'حاسوب مكتبي' },
             reason: null,
             rowVersion: 1,
             snapshotQuantity: 25,
@@ -42,6 +42,12 @@ function useCountLinesHandler() {
           },
         ],
         meta: { pageIndex: 0, pageSize: 200, totalItems: 2, totalPages: 1 },
+      }),
+    ),
+    http.get(`*/api/v1/inventory-counts/${COUNT_ID}`, () =>
+      HttpResponse.json({
+        countId: COUNT_ID,
+        warehouse: { id: '823e4567-e89b-42d3-a456-426614174008', displayName: 'المستودع المركزي' },
       }),
     ),
   )
@@ -233,7 +239,7 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
     // session's warehouse — otherwise a locked draft can never be saved.
     const trigger = screen.getByRole('combobox', { name: 'مستودع التسوية' })
     expect(trigger).toBeDisabled()
-    expect((trigger as HTMLInputElement).value).toBe('823e4567-e89b-42d3-a456-426614174008')
+    expect((trigger as HTMLInputElement).value).toBe('المستودع المركزي')
   })
 
   it('seeds locked variance rows from the count session lines (QA defect D4)', async () => {

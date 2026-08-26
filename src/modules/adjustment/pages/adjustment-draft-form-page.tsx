@@ -16,7 +16,10 @@ import {
   type AdjustmentLineValues,
 } from '@/modules/adjustment/schemas/adjustment-form.schemas'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { useCountLinesQuery } from '@/modules/inventory-count/hooks/use-count-queries'
+import {
+  useCountLinesQuery,
+  useInventoryCountQuery,
+} from '@/modules/inventory-count/hooks/use-count-queries'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
@@ -69,8 +72,26 @@ export default function AdjustmentDraftFormPage() {
         reason: line.reason ?? '',
       }))
   }, [launchedFromCount, countLinesQuery.data])
+
+  // Launch-warehouse display label resolved from the session itself (the deep
+  // link carries only the id) so the locked control renders المستودع المركزي,
+  // not the raw UUID (QA-flagged UX defect).
+  const countQuery = useInventoryCountQuery(
+    launchedFromCount && lockedPurpose === 'CountVariance' ? launchCountId : null,
+  )
+  const launchWarehouseLabel =
+    launchedFromCount && countQuery.data !== undefined
+      ? countQuery.data.warehouse.displayName
+      : undefined
+
+  // Readiness gates BOTH seeds: the variance rows AND the launch-warehouse
+  // label must be resolved before the form component mounts, so its
+  // defaultValues and the combobox's initial option are complete.
   const seedReady =
-    !launchedFromCount || (lockedPurpose === 'CountVariance' ? varianceSeed !== undefined : true)
+    !launchedFromCount ||
+    (lockedPurpose === 'CountVariance'
+      ? varianceSeed !== undefined && countQuery.data !== undefined
+      : true)
 
   if (!has('document.create')) {
     return (
@@ -104,6 +125,7 @@ export default function AdjustmentDraftFormPage() {
         launchedFromCount={launchedFromCount}
         launchCountId={launchCountId || undefined}
         launchWarehouseId={launchedFromCount ? launchWarehouseId : ''}
+        launchWarehouseLabel={launchWarehouseLabel}
         lockedPurpose={lockedPurpose}
         varianceSeed={lockedPurpose === 'CountVariance' ? varianceSeed : undefined}
       />
@@ -120,12 +142,15 @@ function AdjustmentDraftForm({
   launchedFromCount,
   launchCountId,
   launchWarehouseId,
+  launchWarehouseLabel,
   lockedPurpose,
   varianceSeed,
 }: {
   launchedFromCount: boolean
   launchCountId: string | undefined
   launchWarehouseId: string
+  /** Pre-resolved Arabic label for the locked launch warehouse (or undefined). */
+  launchWarehouseLabel: string | undefined
   lockedPurpose: string | null
   varianceSeed: AdjustmentLineValues[] | undefined
 }) {
@@ -202,6 +227,11 @@ function AdjustmentDraftForm({
                     loadOptions={warehouseSelector.loadOptions}
                     disabled={!warehouseSelector.scopeReady || isSubmitting || launchedFromCount}
                     placeholder="اختر المستودع..."
+                    initialOption={
+                      launchedFromCount && launchWarehouseLabel !== undefined && field.value !== ''
+                        ? { value: field.value, label: launchWarehouseLabel }
+                        : null
+                    }
                     inputProps={{ 'aria-label': 'مستودع التسوية' }}
                   />
                 )}
