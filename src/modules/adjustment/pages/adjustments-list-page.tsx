@@ -155,12 +155,20 @@ export default function AdjustmentsListPage() {
         subtitle="جميع سندات التسوية والإعدام ضمن نطاق العمل الحالي، مع بحث وتصفية تُنفَّذ في الخادم."
         actions={
           has('document.create') ? (
-            <Link
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-              to={ROUTE_PATHS.adjustmentNew}
-            >
-              سند تسوية جديد
-            </Link>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground"
+                to={ROUTE_PATHS.assetDisposalNew}
+              >
+                سند إعدام أصل
+              </Link>
+              <Link
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                to={ROUTE_PATHS.adjustmentNew}
+              >
+                سند تسوية جديد
+              </Link>
+            </div>
           ) : null
         }
         toolbar={

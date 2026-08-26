@@ -83,6 +83,7 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   documentReturnDetail: lazy(() => import('@/modules/custody/pages/return-document-detail-page')),
   adjustments: lazy(() => import('@/modules/adjustment/pages/adjustments-list-page')),
   adjustmentNew: lazy(() => import('@/modules/adjustment/pages/adjustment-draft-form-page')),
+  assetDisposalNew: lazy(() => import('@/modules/adjustment/pages/asset-disposal-form-page')),
   adjustmentDetail: lazy(() => import('@/modules/adjustment/pages/adjustment-detail-page')),
   counts: lazy(() => import('@/modules/inventory-count/pages/inventory-count-list-page')),
   countNew: lazy(() => import('@/modules/inventory-count/pages/count-planning-form-page')),

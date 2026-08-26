@@ -2147,8 +2147,30 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     getDb().createdAdjustments.push(adjustment)
     return HttpResponse.json(adjustment, { status: 201 })
   }),
+  // GET /adjustments/disposal-eligible-assets — authoritative eligible-asset
+  // lookup (D-ADJ-01): non-disposed assets, optionally scoped by warehouse.
+  http.get(`${AUTH_PREFIX}/adjustments/disposal-eligible-assets`, async ({ request }) => {
+    await delay(100)
+    const url = new URL(request.url)
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
+    const assets = getDb().assets.filter(
+      (asset) =>
+        asset.derivedStatus !== 'Disposed' &&
+        (warehouseId === null || warehouseId === '' || asset.currentWarehouse?.id === warehouseId),
+    )
+    return HttpResponse.json({
+      items: assets.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: assets.length,
+        totalPages: Math.max(Math.ceil(assets.length / pageSize), 1),
+      },
+    })
+  }),
   // GET /adjustments/{id} — detail projection from the session store or the
-  // static fixtures (t06/t07 seam).
   http.get(`${AUTH_PREFIX}/adjustments/:adjustmentId`, async ({ params }) => {
     await delay(100)
     const id = String(params['adjustmentId'])

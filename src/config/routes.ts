@@ -58,6 +58,8 @@ export const ROUTE_PATHS = {
   /** Adjustments. */
   adjustments: '/adjustments',
   adjustmentNew: '/adjustments/new',
+  /** Asset disposal flow (D-ADJ-01 terminal single-asset entry point). */
+  assetDisposalNew: '/adjustments/disposal/new',
   adjustmentDetail: '/adjustments/:adjustmentId',
   /** Inventory counts. */
   counts: '/counts',
@@ -352,6 +354,12 @@ export const ROUTE_METADATA: RouteMetaMap = {
   },
   adjustmentNew: {
     labelAr: 'سند تسوية جديد',
+    group: 'adjustments',
+    permissions: ['document.view', 'document.create'],
+    parent: 'adjustments',
+  },
+  assetDisposalNew: {
+    labelAr: 'سند إعدام أصل',
     group: 'adjustments',
     permissions: ['document.view', 'document.create'],
     parent: 'adjustments',
