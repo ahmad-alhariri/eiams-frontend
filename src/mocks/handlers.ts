@@ -56,6 +56,9 @@ import type {
   PageMeta,
   ProblemDetails,
   ReasonedDocumentActionRequest,
+  ReplaceRoleScopesRequest,
+  Role,
+  RoleUpsertRequest,
   SetActiveScopeRequest,
   SiteUpsertRequest,
   SortDirection,
@@ -63,6 +66,9 @@ import type {
   StockMovementSortField,
   StockMovementType,
   UnitOfMeasureUpsertRequest,
+  UserRoleScope,
+  UserSummary,
+  UserUpsertRequest,
   VersionOnlyDocumentActionRequest,
   WarehouseCapabilityUpsertRequest,
   WarehouseDocument,
@@ -104,6 +110,8 @@ type ListParams = {
   documentId?: string | undefined
   dateFrom?: string | undefined
   dateTo?: string | undefined
+  entityType?: string | undefined
+  entityId?: string | undefined
   sortBy?: string | undefined
   sortDirection?: string | undefined
 }
@@ -136,6 +144,8 @@ function toListParams(url: URL): ListParams {
     'documentId',
     'dateFrom',
     'dateTo',
+    'entityType',
+    'entityId',
     'sortBy',
     'sortDirection',
   ] as const) {
@@ -1838,6 +1848,252 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       return new HttpResponse(null, { status: 204 })
     },
   ),
+
+  // --- Administration: role and permission catalogs ------------------------
+  http.get(`${AUTH_PREFIX}/admin/permissions`, async () => {
+    await delay(120)
+    return HttpResponse.json(getDb().permissions)
+  }),
+  http.get(`${AUTH_PREFIX}/admin/roles`, async () => {
+    await delay(120)
+    return HttpResponse.json(getDb().roles)
+  }),
+  http.get(`${AUTH_PREFIX}/admin/roles/:roleId`, async ({ params }) => {
+    await delay(120)
+    const role = getDb().roles.find((item) => item.roleId === String(params['roleId']))
+    return role === undefined ? notFound() : HttpResponse.json(role)
+  }),
+  http.put(`${AUTH_PREFIX}/admin/roles/:roleId`, async ({ params, request }) => {
+    await delay(120)
+    const db = getDb()
+    const roleIndex = db.roles.findIndex((item) => item.roleId === String(params['roleId']))
+    if (roleIndex === -1) return notFound()
+
+    const currentRole = db.roles[roleIndex]!
+    const body = (await request.json()) as RoleUpsertRequest
+    if (body.rowVersion !== currentRole.rowVersion) {
+      return HttpResponse.json(
+        {
+          status: 409,
+          code: 'admin.role_conflict',
+          titleAr: 'تغيرت بيانات الدور. حدّث الصفحة ثم حاول مجدداً.',
+          traceId: 'dev-admin-role-conflict',
+        },
+        { status: 409 },
+      )
+    }
+
+    const catalogCodes = new Set(db.permissions.map((permission) => permission.code))
+    if (body.permissionCodes.some((code) => !catalogCodes.has(code))) {
+      return HttpResponse.json(
+        {
+          status: 422,
+          code: 'validation.failed',
+          titleAr: 'تعذر تنفيذ الطلب. راجع البيانات المدخلة.',
+          traceId: 'dev-admin-role-permissions',
+          fieldErrors: [
+            {
+              field: 'permissionCodes',
+              code: 'unknown_permission',
+              messageAr: 'تتضمن قائمة الصلاحيات رمزاً غير موجود في كتالوج الخادم.',
+            },
+          ],
+        },
+        { status: 422 },
+      )
+    }
+
+    const updatedRole = {
+      ...currentRole,
+      code: body.code,
+      nameAr: body.nameAr,
+      permissionCodes: [...body.permissionCodes],
+      rowVersion: currentRole.rowVersion + 1,
+      status: body.status,
+    }
+    db.roles[roleIndex] = updatedRole
+    return HttpResponse.json(updatedRole)
+  }),
+  // --- Administration: user directory --------------------------------------
+  // Read-only t02 projection. Account mutation and role-scope assignments are
+  // deliberately supplied by their owning administration tasks.
+  http.get(`${AUTH_PREFIX}/admin/users`, async ({ request }) => {
+    await delay(120)
+    const params = toListParams(new URL(request.url))
+    const users = getDb().users.filter((user) =>
+      matchesSearch(user, params.search, (record) => `${record.displayName} ${record.username}`),
+    )
+    return pagedResponse(users, params)
+  }),
+
+  // --- Audit: immutable, read-only header explorer ------------------------
+  // Server-paginated headers only (entries omitted per D-AUD-02). The
+  // provisional schema still ships entries inline, so strip them and let the
+  // contract API boundary re-apply the header projection.
+  http.get(`${AUTH_PREFIX}/audit-logs`, async ({ request }) => {
+    await delay(120)
+    const params = toListParams(new URL(request.url))
+    const db = getDb()
+    const filtered = db.auditLogs.filter(
+      (auditLog) =>
+        (params.entityType === undefined || auditLog.entityType === params.entityType) &&
+        (params.entityId === undefined || auditLog.entityId === params.entityId) &&
+        (params.dateFrom === undefined || auditLog.occurredAt >= params.dateFrom) &&
+        (params.dateTo === undefined || auditLog.occurredAt <= params.dateTo) &&
+        matchesSearch(
+          auditLog,
+          params.search,
+          (record) =>
+            `${record.summaryAr ?? ''} ${record.entityDisplay ?? ''} ${record.occurredBy.displayName}`,
+        ),
+    )
+    const sorted = [...filtered].sort((a, b) => {
+      if (a.occurredAt === b.occurredAt) return a.auditLogId.localeCompare(b.auditLogId)
+      return b.occurredAt.localeCompare(a.occurredAt)
+    })
+    const pageIndex = params.pageIndex ?? 0
+    const pageSize = params.pageSize ?? LIST_DEFAULT_PAGE_SIZE
+    const start = pageIndex * pageSize
+    const items = sorted.slice(start, start + pageSize).map((auditLog) => ({
+      ...auditLog,
+      entries: [],
+    }))
+    return HttpResponse.json({
+      items,
+      meta: pageMeta(sorted.length, pageIndex, pageSize),
+    })
+  }),
+  http.get(`${AUTH_PREFIX}/audit-logs/:auditLogId`, async ({ params }) => {
+    await delay(120)
+    const auditLog = getDb().auditLogs.find(
+      (item) => item.auditLogId === String(params['auditLogId']),
+    )
+    return auditLog === undefined ? notFound() : HttpResponse.json(auditLog)
+  }),
+
+  // --- Administration: user detail, create, update -------------------------
+  http.get(`${AUTH_PREFIX}/admin/users/:userId`, async ({ params }) => {
+    await delay(120)
+    const user = getDb().users.find((item) => item.userId === String(params['userId']))
+    return user === undefined ? notFound() : HttpResponse.json(user)
+  }),
+  http.post(`${AUTH_PREFIX}/admin/users`, async ({ request }) => {
+    await delay(120)
+    const body = (await request.json()) as UserUpsertRequest
+    const user: UserSummary = {
+      userId: nextFixtureUuid(),
+      username: body.username,
+      displayName: body.displayName,
+      status: body.status,
+      ...(body.employeeId === undefined ? {} : { employeeId: body.employeeId }),
+      rowVersion: 1,
+    }
+    getDb().users.push(user)
+    return HttpResponse.json(user, { status: 201 })
+  }),
+  http.put(`${AUTH_PREFIX}/admin/users/:userId`, async ({ params, request }) => {
+    await delay(120)
+    const db = getDb()
+    const index = db.users.findIndex((item) => item.userId === String(params['userId']))
+    if (index === -1) return notFound()
+    const current = db.users[index]!
+    const body = (await request.json()) as UserUpsertRequest
+    if (body.rowVersion !== current.rowVersion) {
+      return HttpResponse.json(
+        {
+          status: 409,
+          code: 'admin.user_conflict',
+          titleAr: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
+          traceId: 'dev-admin-user-conflict',
+        },
+        { status: 409 },
+      )
+    }
+    const updated: UserSummary = {
+      ...current,
+      username: body.username,
+      displayName: body.displayName,
+      status: body.status,
+      ...(body.employeeId === undefined ? {} : { employeeId: body.employeeId }),
+      rowVersion: current.rowVersion + 1,
+    }
+    db.users[index] = updated
+    return HttpResponse.json(updated)
+  }),
+
+  // --- Administration: role create, user role-scope assignment -------------
+  http.post(`${AUTH_PREFIX}/admin/roles`, async ({ request }) => {
+    await delay(120)
+    const db = getDb()
+    const body = (await request.json()) as RoleUpsertRequest
+    const catalogCodes = new Set(db.permissions.map((permission) => permission.code))
+    if (body.permissionCodes.some((code) => !catalogCodes.has(code))) {
+      return HttpResponse.json(
+        {
+          status: 422,
+          code: 'validation.failed',
+          titleAr: 'تعذر تنفيذ الطلب. راجع البيانات المدخلة.',
+          traceId: 'dev-admin-role-permissions',
+          fieldErrors: [
+            {
+              field: 'permissionCodes',
+              code: 'unknown_permission',
+              messageAr: 'تتضمن قائمة الصلاحيات رمزاً غير موجود في كتالوج الخادم.',
+            },
+          ],
+        },
+        { status: 422 },
+      )
+    }
+    const role: Role = {
+      roleId: nextFixtureUuid(),
+      code: body.code,
+      nameAr: body.nameAr,
+      permissionCodes: [...body.permissionCodes],
+      rowVersion: 1,
+      status: body.status,
+    }
+    db.roles.push(role)
+    return HttpResponse.json(role, { status: 201 })
+  }),
+  http.get(`${AUTH_PREFIX}/admin/users/:userId/role-scopes`, async ({ params }) => {
+    await delay(120)
+    const scopes = getDb().userRoleScopes.filter(
+      (item) => item.userId === String(params['userId']),
+    )
+    return HttpResponse.json(scopes)
+  }),
+  http.put(`${AUTH_PREFIX}/admin/users/:userId/role-scopes`, async ({ params, request }) => {
+    await delay(120)
+    const db = getDb()
+    const userId = String(params['userId'])
+    const body = (await request.json()) as ReplaceRoleScopesRequest
+    const roleByCode = new Map(db.roles.map((role) => [role.roleId, role]))
+    const next: UserRoleScope[] = body.assignments.map((assignment) => ({
+      userRoleScopeId: nextFixtureUuid(),
+      userId,
+      role: roleByCode.get(assignment.roleId) ?? {
+        roleId: assignment.roleId,
+        code: '',
+        nameAr: '',
+        permissionCodes: [],
+        rowVersion: 1,
+        status: 'Active',
+      },
+      scope: {
+        scopeType: assignment.scopeType,
+        scopeId: assignment.scopeId,
+        displayName:
+          assignment.scopeType === 'Enterprise'
+            ? 'الهيئة العامة للرقابة والتفتيش'
+            : db.warehouses.find((warehouse) => warehouse.warehouseId === assignment.scopeId)
+                ?.nameAr ?? '',
+      },
+      rowVersion: 1,
+    }))
+    db.userRoleScopes = db.userRoleScopes.filter((item) => item.userId !== userId).concat(next)
+    return HttpResponse.json(next)
+  }),
 
   // --- Auth (dev scope switching) -------------------------------------------
   http.put(`${AUTH_PREFIX}/auth/active-scope`, async ({ request }) => {

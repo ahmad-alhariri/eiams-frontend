@@ -2,6 +2,8 @@ import type {
   ActionAvailability,
   Asset,
   AssetCustody,
+  AuditLog,
+  AuditLogEntry,
   AuthTokenResponse,
   DocumentActionResult,
   DocumentActionType,
@@ -27,6 +29,8 @@ import type {
   PageMeta,
   PolicyBlocker,
   ProblemDetails,
+  Permission,
+  Role,
   ScopeContext,
   SessionResponse,
   Site,
@@ -34,6 +38,7 @@ import type {
   OrganizationalUnit,
   UnitOfMeasure,
   UserSummary,
+  UserRoleScope,
   Warehouse,
   WarehouseCapability,
   WarehouseDocument,
@@ -141,6 +146,50 @@ export function createUserSummary(overrides: FixtureOverrides<UserSummary> = {})
       displayName: 'مستخدم تجريبي',
       status: 'Active',
       rowVersion: 1,
+    },
+    overrides,
+  )
+}
+
+export function createPermission(overrides: FixtureOverrides<Permission> = {}): Permission {
+  return withOverrides(
+    {
+      permissionId: fixtureUuid(13),
+      code: 'admin.user.view',
+      nameAr: 'عرض المستخدمين',
+      descriptionAr: 'عرض دليل حسابات المستخدمين.',
+    },
+    overrides,
+  )
+}
+
+export function createRole(overrides: FixtureOverrides<Role> = {}): Role {
+  return withOverrides(
+    {
+      roleId: fixtureUuid(14),
+      code: 'SYSTEM_ADMIN',
+      nameAr: 'مدير النظام',
+      permissionCodes: ['admin.user.view', 'admin.user.manage'],
+      rowVersion: 1,
+      status: 'Active',
+    },
+    overrides,
+  )
+}
+
+export function createUserRoleScope(
+  overrides: FixtureOverrides<UserRoleScope> = {},
+): UserRoleScope {
+  return withOverrides(
+    {
+      userRoleScopeId: fixtureUuid(15),
+      userId: fixtureUuid(10),
+      role: createRole(),
+      scope: createScopeContext({
+        scopeType: 'Enterprise',
+        scopeId: null,
+        displayName: 'الهيئة العامة للرقابة والتفتيش',
+      }),
     },
     overrides,
   )
@@ -423,6 +472,42 @@ export function createInventoryBalance(
         state: 'Sufficient',
         thresholdQuantity: 5,
       },
+    },
+    overrides,
+  )
+}
+
+/** Immutable, server-redacted audit entry fixture. */
+export function createAuditLogEntry(
+  overrides: FixtureOverrides<AuditLogEntry> = {},
+): AuditLogEntry {
+  return withOverrides(
+    {
+      entryId: fixtureUuid(80),
+      fieldName: 'status',
+      oldValue: 'Draft',
+      newValue: 'Submitted',
+      redacted: false,
+      redactionReasonAr: null,
+    },
+    overrides,
+  )
+}
+
+/** Immutable audit header fixture; list handlers may expose it without entries. */
+export function createAuditLog(overrides: FixtureOverrides<AuditLog> = {}): AuditLog {
+  return withOverrides(
+    {
+      action: 'Update',
+      auditLogId: fixtureUuid(81),
+      entityDisplay: 'سند استلام تجريبي',
+      entityId: fixtureUuid(200),
+      entityType: 'WarehouseDocument',
+      entries: [createAuditLogEntry()],
+      occurredAt: FIXTURE_TIMESTAMP,
+      occurredBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مدقق تجريبي' }),
+      summaryAr: 'تم تحديث السند.',
+      traceId: 'fixture-audit-trace-id',
     },
     overrides,
   )

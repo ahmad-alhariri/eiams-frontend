@@ -508,6 +508,136 @@ describe('mock API handlers', () => {
     expect(empty).toEqual([])
   })
 
+  it('serves contract-shaped administration roles and permissions for the read-only catalog', async () => {
+    const { data: roles } =
+      await apiClient.get<
+        Array<{ code: string; nameAr: string; permissionCodes: string[]; status: string }>
+      >('/admin/roles')
+    const { data: permissions } =
+      await apiClient.get<Array<{ code: string; nameAr: string; descriptionAr: string | null }>>(
+        '/admin/permissions',
+      )
+
+    expect(roles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'SYSTEM_ADMIN',
+          nameAr: 'مدير النظام',
+          status: 'Active',
+        }),
+      ]),
+    )
+    expect(roles.find((role) => role.code === 'SYSTEM_ADMIN')?.permissionCodes).toContain(
+      'admin.role.view',
+    )
+    expect(permissions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'admin.role.view',
+          nameAr: 'عرض الأدوار',
+        }),
+      ]),
+    )
+    expect(permissions.map((permission) => permission.code)).toContain('custody.assign')
+    expect(permissions.map((permission) => permission.code)).not.toContain('custody.view')
+  })
+
+  it('replaces one role permission set with its current row version and rejects unknown catalog codes', async () => {
+    const role = getDb().roles.find((item) => item.code === 'AUDITOR')
+    if (role === undefined) throw new Error('Role seed is incomplete.')
+
+    const update = {
+      code: role.code,
+      nameAr: role.nameAr,
+      permissionCodes: ['audit.view', 'custody.assign'],
+      rowVersion: role.rowVersion,
+      status: role.status,
+    }
+    const { data: updated } = await apiClient.put<typeof update>(
+      `/admin/roles/${role.roleId}`,
+      update,
+    )
+
+    expect(updated).toMatchObject({ permissionCodes: update.permissionCodes, rowVersion: 2 })
+    await expect(
+      apiClient.put(`/admin/roles/${role.roleId}`, {
+        ...update,
+        rowVersion: 2,
+        permissionCodes: ['unknown.code'],
+      }),
+    ).rejects.toMatchObject({ response: { status: 422 } })
+  })
+
+  it('serves the seeded users directory with zero-based pagination and text search', async () => {
+    const { data: secondPage } = await apiClient.get<{
+      items: Array<{ username: string }>
+      meta: { pageIndex: number; pageSize: number; totalItems: number; totalPages: number }
+    }>('/admin/users?pageIndex=1&pageSize=2')
+
+    expect(secondPage.items.map((user) => user.username)).toEqual(['keeper.omar', 'keeper.sara'])
+    expect(secondPage.meta).toEqual({ pageIndex: 1, pageSize: 2, totalItems: 8, totalPages: 4 })
+
+    const { data: searched } = await apiClient.get<{ items: Array<{ username: string }> }>(
+      '/admin/users?search=ADMIN.AHMAD',
+    )
+    expect(searched.items.map((user) => user.username)).toEqual(['admin.ahmad'])
+  })
+
+  it('serves immutable audit headers in fixed reverse chronology with a stable id tie-break', async () => {
+    const db = getDb()
+    const first = db.auditLogs[0]
+    const second = db.auditLogs[1]
+    if (first === undefined || second === undefined) {
+      throw new Error('Audit seed is incomplete.')
+    }
+    db.auditLogs = [
+      { ...first, auditLogId: fixtureUuid(501), occurredAt: '2026-08-26T12:00:00.000Z' },
+      { ...second, auditLogId: fixtureUuid(502), occurredAt: '2026-08-26T12:00:00.000Z' },
+    ]
+
+    const { data: body } = await apiClient.get<{
+      items: Array<{ auditLogId: string; entries: unknown[] }>
+      meta: { pageIndex: number; pageSize: number; totalItems: number; totalPages: number }
+    }>('/audit-logs?pageIndex=0&pageSize=10')
+
+    expect(body.items.map((item) => item.auditLogId)).toEqual([fixtureUuid(502), fixtureUuid(501)])
+    expect(body.items.every((item) => item.entries.length === 0)).toBe(true)
+    expect(body.meta).toEqual({ pageIndex: 0, pageSize: 10, totalItems: 2, totalPages: 1 })
+  })
+
+  it('filters audit headers by the documented entity, date, and visible-text search parameters', async () => {
+    const auditLog = getDb().auditLogs.find((item) => item.entityDisplay === 'سارة منصور')
+    if (auditLog === undefined) {
+      throw new Error('Audit seed is incomplete.')
+    }
+
+    const { data: body } = await apiClient.get<{ items: Array<{ auditLogId: string }> }>(
+      `/audit-logs?entityType=User&entityId=${auditLog.entityId}&search=سارة&dateFrom=2026-08-26T00:00:00.000Z&dateTo=2026-08-26T23:59:59.999Z`,
+    )
+
+    expect(body.items.map((item) => item.auditLogId)).toEqual([auditLog.auditLogId])
+  })
+
+  it('paginates filtered audit headers after applying the fixed chronology', async () => {
+    const { data: body } = await apiClient.get<{
+      items: Array<{ auditLogId: string }>
+      meta: { pageIndex: number; pageSize: number; totalItems: number; totalPages: number }
+    }>('/audit-logs?pageIndex=1&pageSize=2')
+
+    expect(body.items.map((item) => item.auditLogId)).toEqual([fixtureUuid(338), fixtureUuid(337)])
+    expect(body.meta).toEqual({ pageIndex: 1, pageSize: 2, totalItems: 10, totalPages: 5 })
+  })
+
+  it('returns an empty audit page when no visible header text matches', async () => {
+    const { data: body } = await apiClient.get<{
+      items: unknown[]
+      meta: { pageIndex: number; pageSize: number; totalItems: number; totalPages: number }
+    }>('/audit-logs?search=%D9%82%D9%8A%D9%85%D8%A9%20%D8%B3%D8%B1%D9%8A%D8%A9')
+
+    expect(body.items).toEqual([])
+    expect(body.meta).toEqual({ pageIndex: 0, pageSize: 20, totalItems: 0, totalPages: 0 })
+  })
+
   it('serves explicit low-stock projections, filters before pagination, and keeps the balance default order stable', async () => {
     const db = getDb()
     const [first, second, third] = db.inventoryBalances
