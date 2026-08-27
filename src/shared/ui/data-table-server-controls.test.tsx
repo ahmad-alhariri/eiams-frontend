@@ -137,4 +137,16 @@ describe('ServerPaginationControls', () => {
       )
     expect(physicalDirectionClasses).toHaveLength(0)
   })
+
+  it('lets the pagination controls wrap inside a narrow responsive container', () => {
+    const { container } = render(<ControlsHarness totalCount={37} />)
+    const navigation = screen.getByRole('navigation', { name: 'تنقل بين الصفحات' })
+
+    expect(navigation).toHaveClass('min-w-0')
+    expect(container.querySelector('[data-slot="data-table-server-controls"] > div')).toHaveClass(
+      'w-full',
+      'min-w-0',
+      'sm:w-auto',
+    )
+  })
 })

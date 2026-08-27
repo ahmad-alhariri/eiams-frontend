@@ -158,7 +158,7 @@ function DataTableServer<T extends RowData = RowData>({
   const showSearch = searchQuery !== undefined && onSearchChange !== undefined
 
   return (
-    <div data-slot="data-table-server" className={cn('flex flex-col gap-3', className)}>
+    <div data-slot="data-table-server" className={cn('flex min-w-0 flex-col gap-3', className)}>
       {showSearch ? (
         <ServerSearchInput
           searchQuery={searchQuery}

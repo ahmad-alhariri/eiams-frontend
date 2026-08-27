@@ -24,9 +24,11 @@ describe('Lazy route registry', () => {
     expect(getWiredRouteKeys()).toContain('inventoryMovements')
     expect(getWiredRouteKeys()).toContain('inventoryMovementDetail')
     expect(getWiredRouteKeys()).toContain('adminUsers')
+    expect(getWiredRouteKeys()).toContain('adminRoleDetail')
     expect(hasWiredPage('login')).toBe(true)
     expect(hasWiredPage('notFound')).toBe(true)
     expect(hasWiredPage('devGallery')).toBe(true)
+    expect(hasWiredPage('adminRoleDetail')).toBe(true)
   })
 
   it('gives every declared protected module path a lazy placeholder', () => {

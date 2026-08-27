@@ -94,12 +94,12 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   custodyPending: lazy(() => import('@/modules/custody/pages/pending-custody-list-page')),
   custodyActive: lazy(() => import('@/modules/custody/pages/active-custody-list-page')),
   custodyDetail: lazy(() => import('@/modules/custody/pages/custody-detail-page')),
-  audit: routePlaceholderPage,
+  audit: lazy(() => import('@/modules/audit/pages/audit-log-explorer-page')),
   reports: routePlaceholderPage,
-  adminUsers: routePlaceholderPage,
-  adminUserDetail: routePlaceholderPage,
-  adminRoles: routePlaceholderPage,
-  adminRoleDetail: routePlaceholderPage,
+  adminUsers: lazy(() => import('@/modules/admin/pages/users-list-page')),
+  adminUserDetail: lazy(() => import('@/modules/admin/pages/user-detail-page')),
+  adminRoles: lazy(() => import('@/modules/admin/pages/roles-catalog-page')),
+  adminRoleDetail: lazy(() => import('@/modules/admin/pages/role-permissions-page')),
   ...DEV_ONLY_PAGES,
 }
 

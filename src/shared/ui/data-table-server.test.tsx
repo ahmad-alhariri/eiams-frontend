@@ -31,7 +31,7 @@ afterEach(() => {
 
 describe('DataTableServer', () => {
   it('renders Arabic column headers and server rows through DataTable', () => {
-    render(
+    const { container } = render(
       <DataTableServer
         columns={columns}
         data={warehouseRows}
@@ -47,6 +47,7 @@ describe('DataTableServer', () => {
     expect(screen.getByRole('columnheader', { name: 'الاسم' })).toHaveAttribute('scope', 'col')
     expect(screen.getByText('مستودع دمشق')).toBeInTheDocument()
     expect(screen.getByText('مستودع حلب')).toBeInTheDocument()
+    expect(container.querySelector('[data-slot="data-table-server"]')).toHaveClass('min-w-0')
   })
 
   it('omits the search input when the search props are not supplied', () => {
