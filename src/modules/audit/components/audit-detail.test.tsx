@@ -61,16 +61,12 @@ describe('AuditDetail', () => {
     })
 
     server.use(
-      http.get(`${API_BASE_URL}/audit-logs/${AUDIT_LOG_ID}`, () =>
-        HttpResponse.json(auditLog),
-      ),
+      http.get(`${API_BASE_URL}/audit-logs/${AUDIT_LOG_ID}`, () => HttpResponse.json(auditLog)),
     )
 
     render(<AuditLogExplorerPage />, { wrapper: createWrapper() })
 
-    expect(
-      await screen.findByRole('heading', { name: 'تفاصيل سجل التدقيق' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'تفاصيل سجل التدقيق' })).toBeInTheDocument()
     expect(await screen.findByText('سند استلام ٤٢')).toBeInTheDocument()
     expect(screen.getByText('تم تحديث السند.')).toBeInTheDocument()
 
@@ -82,15 +78,14 @@ describe('AuditDetail', () => {
     expect(screen.getAllByText('قيمة محجوبة').length).toBeGreaterThan(0)
     expect(screen.queryByText('CONF-9981')).not.toBeInTheDocument()
     expect(screen.queryByText('CONF-9982')).not.toBeInTheDocument()
-    expect(
-      screen.getByText('قيمة محجوبة لارتباطها بعقد سرّي.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('قيمة محجوبة لارتباطها بعقد سرّي.')).toBeInTheDocument()
   })
 
   it('renders an actionable Arabic error state when the detail request fails', async () => {
     server.use(
-      http.get(`${API_BASE_URL}/audit-logs/${AUDIT_LOG_ID}`, () =>
-        new HttpResponse(null, { status: 500 }),
+      http.get(
+        `${API_BASE_URL}/audit-logs/${AUDIT_LOG_ID}`,
+        () => new HttpResponse(null, { status: 500 }),
       ),
     )
 
@@ -108,18 +103,12 @@ describe('AuditDetail', () => {
       entries: [createAuditLogEntry({ fieldName: 'note', oldValue: 'قديم', newValue: 'جديد' })],
     })
     server.use(
-      http.get(`${API_BASE_URL}/audit-logs/${AUDIT_LOG_ID}`, () =>
-        HttpResponse.json(auditLog),
-      ),
+      http.get(`${API_BASE_URL}/audit-logs/${AUDIT_LOG_ID}`, () => HttpResponse.json(auditLog)),
     )
 
     render(<AuditLogExplorerPage />, { wrapper: createWrapper() })
 
-    expect(
-      await screen.findByRole('heading', { name: 'تفاصيل سجل التدقيق' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'العودة إلى السجل' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'تفاصيل سجل التدقيق' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'العودة إلى السجل' })).toBeInTheDocument()
   })
 })

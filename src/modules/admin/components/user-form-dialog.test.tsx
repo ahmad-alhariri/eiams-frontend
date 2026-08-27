@@ -59,7 +59,11 @@ describe('UserFormDialog', () => {
   })
 
   it('prefills every editable field when editing an existing user', async () => {
-    const existing = createUserSummary({ displayName: 'أحمد محمد', username: 'ahmad.m', status: 'Suspended' })
+    const existing = createUserSummary({
+      displayName: 'أحمد محمد',
+      username: 'ahmad.m',
+      status: 'Suspended',
+    })
     render(
       <div>
         <button type="button" onClick={() => undefined}>

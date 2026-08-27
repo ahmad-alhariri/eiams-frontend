@@ -116,11 +116,7 @@ function UserDetailPage() {
           title="تعذّر تحميل تعيينات المستخدم"
           description="تعذّر جلب أدوار المستخدم من الخادم. تحقق من الاتصال ثم أعد المحاولة."
           action={
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void roleScopesQuery.refetch()}
-            >
+            <Button type="button" variant="outline" onClick={() => void roleScopesQuery.refetch()}>
               إعادة المحاولة
             </Button>
           }
@@ -185,7 +181,8 @@ function UserDetailPage() {
                         value={assignment.scopeType}
                         disabled={!canManage}
                         onValueChange={(value) => {
-                          if (value !== null) updateAssignment(index, { scopeType: value as ScopeType })
+                          if (value !== null)
+                            updateAssignment(index, { scopeType: value as ScopeType })
                         }}
                       >
                         <SelectTrigger>
@@ -207,9 +204,7 @@ function UserDetailPage() {
                       <Input
                         value={assignment.scopeType === 'Enterprise' ? '' : assignment.scopeId}
                         disabled={!canManage || assignment.scopeType === 'Enterprise'}
-                        placeholder={
-                          assignment.scopeType === 'Enterprise' ? 'غير مطلوب' : 'UUID'
-                        }
+                        placeholder={assignment.scopeType === 'Enterprise' ? 'غير مطلوب' : 'UUID'}
                         dir="ltr"
                         aria-label={`معرّف نطاق التعيين ${index + 1}`}
                         onChange={(event) =>

@@ -1948,7 +1948,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
         ),
     )
     const sorted = [...filtered].sort((a, b) => {
-      if (a.occurredAt === b.occurredAt) return a.auditLogId.localeCompare(b.auditLogId)
+      if (a.occurredAt === b.occurredAt) return b.auditLogId.localeCompare(a.auditLogId)
       return b.occurredAt.localeCompare(a.occurredAt)
     })
     const pageIndex = params.pageIndex ?? 0
@@ -2058,9 +2058,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
   }),
   http.get(`${AUTH_PREFIX}/admin/users/:userId/role-scopes`, async ({ params }) => {
     await delay(120)
-    const scopes = getDb().userRoleScopes.filter(
-      (item) => item.userId === String(params['userId']),
-    )
+    const scopes = getDb().userRoleScopes.filter((item) => item.userId === String(params['userId']))
     return HttpResponse.json(scopes)
   }),
   http.put(`${AUTH_PREFIX}/admin/users/:userId/role-scopes`, async ({ params, request }) => {
@@ -2086,8 +2084,8 @@ export const mockApiHandlers: readonly HttpHandler[] = [
         displayName:
           assignment.scopeType === 'Enterprise'
             ? 'الهيئة العامة للرقابة والتفتيش'
-            : db.warehouses.find((warehouse) => warehouse.warehouseId === assignment.scopeId)
-                ?.nameAr ?? '',
+            : (db.warehouses.find((warehouse) => warehouse.warehouseId === assignment.scopeId)
+                ?.nameAr ?? ''),
       },
       rowVersion: 1,
     }))

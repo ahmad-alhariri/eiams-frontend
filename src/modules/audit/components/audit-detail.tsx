@@ -133,13 +133,7 @@ function AuditDetailBody({ auditLog }: { auditLog: AuditLog }) {
  * Reads the auditLogId passed by the explorer; the route itself stays on
  * `/audit` with a query param so the list and detail share one surface.
  */
-export function AuditDetail({
-  auditLogId,
-  onBack,
-}: {
-  auditLogId: string
-  onBack?: () => void
-}) {
+export function AuditDetail({ auditLogId, onBack }: { auditLogId: string; onBack?: () => void }) {
   const auditLogQuery = useAuditLogQuery(auditLogId)
 
   return (

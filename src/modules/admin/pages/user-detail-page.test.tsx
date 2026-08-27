@@ -88,9 +88,7 @@ describe('UserDetailPage', () => {
 
     render(<UserDetailPage />, { wrapper: PageWrapper })
 
-    expect(
-      await screen.findByRole('heading', { name: 'تفاصيل المستخدم' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'تفاصيل المستخدم' })).toBeInTheDocument()
 
     // The seeded Enterprise assignment for ROLE_A is loaded. The role name only
     // renders inside the Radix Select content (mounted on open), so open the
@@ -109,18 +107,14 @@ describe('UserDetailPage', () => {
     const newRoleSelect = combos.at(-2)!
     await user.click(newRoleSelect)
     const roleOptions = await screen.findAllByRole('option')
-    const roleBOption = roleOptions.find((option) =>
-      (option.textContent ?? '').includes('مدقق'),
-    )
+    const roleBOption = roleOptions.find((option) => (option.textContent ?? '').includes('مدقق'))
     expect(roleBOption).toBeDefined()
     await user.click(roleBOption!)
     const scopeSelects = screen.getAllByRole('combobox')
     const newScopeSelect = scopeSelects.at(-1)!
     await user.click(newScopeSelect)
     const scopeOptions = await screen.findAllByRole('option')
-    const siteOption = scopeOptions.find((option) =>
-      (option.textContent ?? '').includes('موقع'),
-    )
+    const siteOption = scopeOptions.find((option) => (option.textContent ?? '').includes('موقع'))
     expect(siteOption).toBeDefined()
     await user.click(siteOption!)
 
@@ -145,8 +139,9 @@ describe('UserDetailPage', () => {
 
   it('renders an actionable Arabic error state when the role-scopes request fails', async () => {
     server.use(
-      http.get(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, () =>
-        new HttpResponse(null, { status: 500 }),
+      http.get(
+        `${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`,
+        () => new HttpResponse(null, { status: 500 }),
       ),
       http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([ROLE_A])),
     )

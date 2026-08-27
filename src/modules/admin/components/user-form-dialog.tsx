@@ -2,10 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 
-import {
-  userSchema,
-  type UserFormValues,
-} from '@/modules/admin/schemas/user.schemas'
+import { userSchema, type UserFormValues } from '@/modules/admin/schemas/user.schemas'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -93,11 +90,7 @@ export function UserFormDialog({
                 <FormItem>
                   <FormLabel>اسم المستخدم</FormLabel>
                   <FormControl>
-                    <Input
-                      {...field}
-                      disabled={isPending}
-                      placeholder="مثال: أحمد محمد"
-                    />
+                    <Input {...field} disabled={isPending} placeholder="مثال: أحمد محمد" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -110,12 +103,7 @@ export function UserFormDialog({
                 <FormItem>
                   <FormLabel>اسم الدخول</FormLabel>
                   <FormControl>
-                    <Input
-                      {...field}
-                      dir="ltr"
-                      disabled={isPending}
-                      placeholder="ahmad.mohammad"
-                    />
+                    <Input {...field} dir="ltr" disabled={isPending} placeholder="ahmad.mohammad" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -134,9 +122,7 @@ export function UserFormDialog({
                   >
                     <FormControl>
                       <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                        <SelectValue>
-                          {field.value === 'Active' ? 'نشط' : 'موقوف'}
-                        </SelectValue>
+                        <SelectValue>{field.value === 'Active' ? 'نشط' : 'موقوف'}</SelectValue>
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -149,10 +135,7 @@ export function UserFormDialog({
               )}
             />
             <DialogFooter>
-              <Button
-                type="submit"
-                loading={isPending}
-              >
+              <Button type="submit" loading={isPending}>
                 {user ? 'حفظ التعديلات' : 'إضافة مستخدم'}
               </Button>
               <Button

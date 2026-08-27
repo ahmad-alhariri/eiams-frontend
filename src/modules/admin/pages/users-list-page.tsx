@@ -8,10 +8,7 @@ import {
   useCreateUserMutation,
   useUpdateUserMutation,
 } from '@/modules/admin/hooks/use-admin-mutations'
-import {
-  toUserRequest,
-  type UserFormValues,
-} from '@/modules/admin/schemas/user.schemas'
+import { toUserRequest, type UserFormValues } from '@/modules/admin/schemas/user.schemas'
 import { useUsersQuery } from '@/modules/admin/hooks/use-admin-queries'
 import type { ListUsersQuery } from '@/modules/admin/types/admin.types'
 import { StatusBadge } from '@/shared/feedback/status-badge'
@@ -158,7 +155,9 @@ function UsersListPage() {
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={isSuspending ? `إيقاف ${user.displayName}` : `تنشيط ${user.displayName}`}
+                        aria-label={
+                          isSuspending ? `إيقاف ${user.displayName}` : `تنشيط ${user.displayName}`
+                        }
                         onClick={() => void handleToggleStatus(user)}
                       >
                         {isSuspending ? <IconBan aria-hidden /> : <IconCircleCheck aria-hidden />}

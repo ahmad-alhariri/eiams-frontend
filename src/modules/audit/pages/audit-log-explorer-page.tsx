@@ -275,14 +275,8 @@ export default function AuditLogExplorerPage() {
   const auditLogId = searchParams.get('auditLogId') ?? undefined
 
   if (auditLogId !== undefined) {
-    return (
-      <AuditDetail
-        auditLogId={auditLogId}
-        onBack={() => navigate(ROUTE_PATHS.audit)}
-      />
-    )
+    return <AuditDetail auditLogId={auditLogId} onBack={() => navigate(ROUTE_PATHS.audit)} />
   }
 
   return <AuditLogExplorerPageImpl />
 }
-

@@ -24,10 +24,7 @@ export type UserFormValues = z.infer<typeof userSchema>
  * `employeeId` and `initialPassword` are intentionally omitted unless the
  * caller supplies them, matching the contract's optional fields.
  */
-export function toUserRequest(
-  values: UserFormValues,
-  user: UserSummary | null,
-): UserUpsertRequest {
+export function toUserRequest(values: UserFormValues, user: UserSummary | null): UserUpsertRequest {
   return {
     displayName: values.displayName.trim(),
     username: values.username.trim(),
