@@ -37,7 +37,7 @@ function ContentCard({
           {action ? <CardAction>{action}</CardAction> : null}
         </CardHeader>
       ) : null}
-      <div className="flex flex-col gap-3">{children}</div>
+      <div className="flex min-w-0 flex-col gap-3">{children}</div>
       {footer ? <CardFooter className="mt-4 border-t px-0 pt-4">{footer}</CardFooter> : null}
     </section>
   )

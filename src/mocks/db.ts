@@ -19,12 +19,19 @@ import {
   createWarehouseMaterialSetting,
   createInventoryBalance,
   createStockMovement,
+  createAuditLog,
+  createAuditLogEntry,
+  createPermission,
+  createRole,
+  createUserSummary,
+  createUserRoleScope,
   deriveLifecycleEvents,
   fixtureUuid,
 } from '@/test/msw/factories'
 import { seedInventoryCounts } from '@/mocks/inventory-count-state'
 import type {
   Asset,
+  AuditLog,
   DocumentLifecycleEvent,
   Employee,
   InventoryAdjustment,
@@ -36,9 +43,13 @@ import type {
   MaterialFamily,
   MaterialUnitConversion,
   OrganizationalUnit,
+  Permission,
+  Role,
   Site,
   StockMovement,
   UnitOfMeasure,
+  UserRoleScope,
+  UserSummary,
   Warehouse,
   WarehouseCapability,
   WarehouseDocument,
@@ -77,6 +88,12 @@ export interface MockDatabase {
   assets: Asset[]
   warehouseDocuments: WarehouseDocument[]
   documentLifecycleEvents: Record<string, DocumentLifecycleEvent[]>
+  /** Administration & audit read/seed collections (e22). */
+  permissions: Permission[]
+  roles: Role[]
+  users: UserSummary[]
+  userRoleScopes: UserRoleScope[]
+  auditLogs: AuditLog[]
   /**
    * Adjustments drafted through POST /adjustments during this SPA session
    * (D-ADJ-01 manager-owned endpoint family). Session-scoped by design: the
@@ -843,6 +860,415 @@ function buildSeed(): MockDatabase {
     documents.map((document) => [document.documentId, deriveLifecycleEvents(document)]),
   )
 
+  // ===== Administration & audit seed collections (e22) =====
+  // Contract-shaped via shared factories so the seed can never drift from the
+  // generated types. Static read projections for dev UI verification.
+  const permissions = [
+    createPermission({
+      code: 'admin.user.view',
+      nameAr: 'عرض المستخدمين',
+      descriptionAr: 'عرض دليل حسابات المستخدمين.',
+    }),
+    createPermission({
+      code: 'admin.user.manage',
+      nameAr: 'إدارة المستخدمين',
+      descriptionAr: 'إنشاء وتعديل حسابات المستخدمين وتغيير حالتها.',
+    }),
+    createPermission({
+      code: 'admin.role.view',
+      nameAr: 'عرض الأدوار',
+      descriptionAr: 'عرض دليل أدوار النظام وصلاحياتها.',
+    }),
+    createPermission({
+      code: 'admin.role.manage',
+      nameAr: 'إدارة الأدوار',
+      descriptionAr: 'إنشاء وتعديل الأدوار وإسناد الصلاحيات إليها.',
+    }),
+    createPermission({
+      code: 'audit.view',
+      nameAr: 'عرض سجل التدقيق',
+      descriptionAr: 'عرض سجل التدقيق للقراءة فقط.',
+    }),
+    createPermission({
+      code: 'document.view',
+      nameAr: 'عرض المستندات',
+      descriptionAr: 'عرض مستندات المستودعات.',
+    }),
+    createPermission({
+      code: 'document.post',
+      nameAr: 'ترحيل المستندات',
+      descriptionAr: 'ترحيل مستندات المستودعات المعتمدة.',
+    }),
+    createPermission({
+      code: 'inventory.view',
+      nameAr: 'عرض المخزون',
+      descriptionAr: 'عرض أرصدة المخزون والمواد.',
+    }),
+    createPermission({
+      code: 'asset.view',
+      nameAr: 'عرض الأصول',
+      descriptionAr: 'عرض سجل الأصول الثابتة.',
+    }),
+    createPermission({
+      code: 'custody.assign',
+      nameAr: 'إسناد العهدة',
+      descriptionAr: 'إسناد العهدة الشخصية ونقلها وإعادتها.',
+    }),
+  ]
+
+  const adminRole = createRole({
+    roleId: fixtureUuid(301),
+    code: 'SYSTEM_ADMIN',
+    nameAr: 'مدير النظام',
+    permissionCodes: [
+      'admin.user.view',
+      'admin.user.manage',
+      'admin.role.view',
+      'admin.role.manage',
+      'audit.view',
+      'document.view',
+      'document.post',
+      'inventory.view',
+      'asset.view',
+      'custody.assign',
+    ],
+    rowVersion: 1,
+    status: 'Active',
+  })
+  const auditorRole = createRole({
+    roleId: fixtureUuid(302),
+    code: 'AUDITOR',
+    nameAr: 'مدقق',
+    permissionCodes: [
+      'audit.view',
+      'document.view',
+      'inventory.view',
+      'asset.view',
+      'custody.assign',
+    ],
+    rowVersion: 1,
+    status: 'Active',
+  })
+  const keeperRole = createRole({
+    roleId: fixtureUuid(303),
+    code: 'WAREHOUSE_KEEPER',
+    nameAr: 'أمين مستودع',
+    permissionCodes: ['document.view', 'document.post', 'inventory.view'],
+    rowVersion: 1,
+    status: 'Active',
+  })
+  const roles = [adminRole, auditorRole, keeperRole]
+
+  const users = [
+    createUserSummary({
+      userId: fixtureUuid(311),
+      username: 'admin.ahmad',
+      displayName: 'أحمد الحريري',
+      status: 'Active',
+      rowVersion: 1,
+    }),
+    createUserSummary({
+      userId: fixtureUuid(312),
+      username: 'auditor.layla',
+      displayName: 'ليلى العلي',
+      status: 'Active',
+      rowVersion: 1,
+    }),
+    createUserSummary({
+      userId: fixtureUuid(313),
+      username: 'keeper.omar',
+      displayName: 'عمر الفتى',
+      status: 'Active',
+      rowVersion: 2,
+    }),
+    createUserSummary({
+      userId: fixtureUuid(314),
+      username: 'keeper.sara',
+      displayName: 'سارة منصور',
+      status: 'Suspended',
+      rowVersion: 1,
+    }),
+    createUserSummary({
+      userId: fixtureUuid(315),
+      username: 'viewer.nour',
+      displayName: 'نور الحسن',
+      status: 'Active',
+      rowVersion: 1,
+    }),
+    createUserSummary({
+      userId: fixtureUuid(316),
+      username: 'manager.khaled',
+      displayName: 'خالد إبراهيم',
+      status: 'Active',
+      rowVersion: 3,
+    }),
+    createUserSummary({
+      userId: fixtureUuid(317),
+      username: 'suspended.rana',
+      displayName: 'رنا يوسف',
+      status: 'Suspended',
+      rowVersion: 1,
+    }),
+    createUserSummary({
+      userId: fixtureUuid(318),
+      username: 'auditor.tariq',
+      displayName: 'طارق سعيد',
+      status: 'Active',
+      rowVersion: 1,
+    }),
+  ]
+
+  const userRoleScopes = [
+    createUserRoleScope({
+      userRoleScopeId: fixtureUuid(321),
+      userId: fixtureUuid(311),
+      role: adminRole,
+      scope: {
+        scopeType: 'Enterprise',
+        scopeId: null,
+        displayName: 'الهيئة العامة للرقابة والتفتيش',
+      },
+    }),
+    createUserRoleScope({
+      userRoleScopeId: fixtureUuid(322),
+      userId: fixtureUuid(312),
+      role: auditorRole,
+      scope: {
+        scopeType: 'Enterprise',
+        scopeId: null,
+        displayName: 'الهيئة العامة للرقابة والتفتيش',
+      },
+    }),
+    createUserRoleScope({
+      userRoleScopeId: fixtureUuid(323),
+      userId: fixtureUuid(313),
+      role: keeperRole,
+      scope: {
+        scopeType: 'Warehouse',
+        scopeId: centralWarehouse.warehouseId,
+        displayName: centralWarehouse.nameAr,
+      },
+    }),
+  ]
+
+  const auditLogs = [
+    createAuditLog({
+      auditLogId: fixtureUuid(331),
+      action: 'Create',
+      entityId: fixtureUuid(311),
+      entityType: 'User',
+      entityDisplay: 'أحمد الحريري',
+      occurredAt: '2026-08-20T09:12:00.000Z',
+      occurredBy: { id: fixtureUuid(316), displayName: 'خالد إبراهيم' },
+      summaryAr: 'تم إنشاء حساب المستخدم أحمد الحريري.',
+      entries: [
+        createAuditLogEntry({
+          entryId: fixtureUuid(341),
+          fieldName: 'displayName',
+          oldValue: null,
+          newValue: 'أحمد الحريري',
+          redacted: false,
+          redactionReasonAr: null,
+        }),
+        createAuditLogEntry({
+          entryId: fixtureUuid(342),
+          fieldName: 'initialPassword',
+          oldValue: null,
+          newValue: null,
+          redacted: true,
+          redactionReasonAr: 'قيمة سرية لا تُعرض.',
+        }),
+      ],
+    }),
+    createAuditLog({
+      auditLogId: fixtureUuid(332),
+      action: 'Update',
+      entityId: fixtureUuid(313),
+      entityType: 'User',
+      entityDisplay: 'عمر الفتى',
+      occurredAt: '2026-08-21T11:40:00.000Z',
+      occurredBy: { id: fixtureUuid(311), displayName: 'أحمد الحريري' },
+      summaryAr: 'تم تحديث حالة المستخدم عمر الفتى.',
+      entries: [
+        createAuditLogEntry({
+          entryId: fixtureUuid(343),
+          fieldName: 'status',
+          oldValue: 'Active',
+          newValue: 'Suspended',
+          redacted: false,
+          redactionReasonAr: null,
+        }),
+      ],
+    }),
+    createAuditLog({
+      auditLogId: fixtureUuid(333),
+      action: 'Post',
+      entityId: fixtureUuid(200),
+      entityType: 'WarehouseDocument',
+      entityDisplay: 'سند استلام RCV-2026-0001',
+      occurredAt: '2026-08-22T08:05:00.000Z',
+      occurredBy: { id: fixtureUuid(316), displayName: 'خالد إبراهيم' },
+      summaryAr: 'تم ترحيل سند الاستلام RCV-2026-0001.',
+      entries: [
+        createAuditLogEntry({
+          entryId: fixtureUuid(344),
+          fieldName: 'documentStatus',
+          oldValue: 'Submitted',
+          newValue: 'Posted',
+          redacted: false,
+          redactionReasonAr: null,
+        }),
+      ],
+    }),
+    createAuditLog({
+      auditLogId: fixtureUuid(334),
+      action: 'Login',
+      entityId: fixtureUuid(312),
+      entityType: 'User',
+      entityDisplay: 'ليلى العلي',
+      occurredAt: '2026-08-23T07:30:00.000Z',
+      occurredBy: { id: fixtureUuid(312), displayName: 'ليلى العلي' },
+      summaryAr: 'تسجيل دخول من جلسة موثوقة.',
+      entries: [],
+    }),
+    createAuditLog({
+      auditLogId: fixtureUuid(335),
+      action: 'SetActiveScope',
+      entityId: fixtureUuid(30),
+      entityType: 'Warehouse',
+      entityDisplay: 'المستودع المركزي',
+      occurredAt: '2026-08-23T07:31:00.000Z',
+      occurredBy: { id: fixtureUuid(312), displayName: 'ليلى العلي' },
+      summaryAr: 'تم تعيين النطاق النشط إلى المستودع المركزي.',
+      entries: [
+        createAuditLogEntry({
+          entryId: fixtureUuid(345),
+          fieldName: 'scopeType',
+          oldValue: 'Enterprise',
+          newValue: 'Warehouse',
+          redacted: false,
+          redactionReasonAr: null,
+        }),
+      ],
+    }),
+    createAuditLog({
+      auditLogId: fixtureUuid(336),
+      action: 'Update',
+      entityId: fixtureUuid(50),
+      entityType: 'Asset',
+      entityDisplay: 'AST-2026-0001',
+      occurredAt: '2026-08-24T13:15:00.000Z',
+      occurredBy: { id: fixtureUuid(311), displayName: 'أحمد الحريري' },
+      summaryAr: 'تم تحديث حالة الأصل AST-2026-0001.',
+      entries: [
+        createAuditLogEntry({
+          entryId: fixtureUuid(346),
+          fieldName: 'derivedStatus',
+          oldValue: 'InStock',
+          newValue: 'Issued',
+          redacted: false,
+          redactionReasonAr: null,
+        }),
+      ],
+    }),
+    createAuditLog({
+      auditLogId: fixtureUuid(337),
+      action: 'Create',
+      entityId: fixtureUuid(303),
+      entityType: 'Role',
+      entityDisplay: 'أمين مستودع',
+      occurredAt: '2026-08-25T10:00:00.000Z',
+      occurredBy: { id: fixtureUuid(311), displayName: 'أحمد الحريري' },
+      summaryAr: 'تم إنشاء الدور أمين مستودع.',
+      entries: [
+        createAuditLogEntry({
+          entryId: fixtureUuid(347),
+          fieldName: 'nameAr',
+          oldValue: null,
+          newValue: 'أمين مستودع',
+          redacted: false,
+          redactionReasonAr: null,
+        }),
+        createAuditLogEntry({
+          entryId: fixtureUuid(348),
+          fieldName: 'permissionCodes',
+          oldValue: null,
+          newValue: 'document.view,document.post,inventory.view',
+          redacted: false,
+          redactionReasonAr: null,
+        }),
+      ],
+    }),
+    createAuditLog({
+      auditLogId: fixtureUuid(338),
+      action: 'Reverse',
+      entityId: fixtureUuid(201),
+      entityType: 'WarehouseDocument',
+      entityDisplay: 'سند إصدار ISS-2026-0003',
+      occurredAt: '2026-08-25T15:45:00.000Z',
+      occurredBy: { id: fixtureUuid(316), displayName: 'خالد إبراهيم' },
+      summaryAr: 'تم عكس سند الإصدار ISS-2026-0003.',
+      entries: [
+        createAuditLogEntry({
+          entryId: fixtureUuid(349),
+          fieldName: 'documentStatus',
+          oldValue: 'Posted',
+          newValue: 'Reversed',
+          redacted: false,
+          redactionReasonAr: null,
+        }),
+      ],
+    }),
+    createAuditLog({
+      auditLogId: fixtureUuid(339),
+      action: 'Update',
+      entityId: fixtureUuid(314),
+      entityType: 'User',
+      entityDisplay: 'سارة منصور',
+      occurredAt: '2026-08-26T09:20:00.000Z',
+      occurredBy: { id: fixtureUuid(311), displayName: 'أحمد الحريري' },
+      summaryAr: 'تم تحديث بيانات المستخدم سارة منصور.',
+      entries: [
+        createAuditLogEntry({
+          entryId: fixtureUuid(350),
+          fieldName: 'username',
+          oldValue: 'sara.m',
+          newValue: 'keeper.sara',
+          redacted: false,
+          redactionReasonAr: null,
+        }),
+        createAuditLogEntry({
+          entryId: fixtureUuid(351),
+          fieldName: 'initialPassword',
+          oldValue: null,
+          newValue: null,
+          redacted: true,
+          redactionReasonAr: 'قيمة سرية لا تُعرض.',
+        }),
+      ],
+    }),
+    createAuditLog({
+      auditLogId: fixtureUuid(340),
+      action: 'Create',
+      entityId: fixtureUuid(31),
+      entityType: 'Site',
+      entityDisplay: 'المقر الرئيسي',
+      occurredAt: '2026-08-26T12:00:00.000Z',
+      occurredBy: { id: fixtureUuid(316), displayName: 'خالد إبراهيم' },
+      summaryAr: 'تم إنشاء الموقع المقر الرئيسي.',
+      entries: [
+        createAuditLogEntry({
+          entryId: fixtureUuid(352),
+          fieldName: 'nameAr',
+          oldValue: null,
+          newValue: 'المقر الرئيسي',
+          redacted: false,
+          redactionReasonAr: null,
+        }),
+      ],
+    }),
+  ]
+
   return {
     domains: [itDomain, financeDomain, medicalDomain],
     categories: [hardwareCategory, consumablesCategory, stationeryCategory],
@@ -898,6 +1324,11 @@ function buildSeed(): MockDatabase {
     assets,
     warehouseDocuments: documents,
     documentLifecycleEvents,
+    permissions,
+    roles,
+    users,
+    userRoleScopes,
+    auditLogs,
     createdAdjustments: [],
   }
 }

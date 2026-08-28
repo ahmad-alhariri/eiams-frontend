@@ -54,7 +54,10 @@ function ServerPaginationControls({
     <nav
       aria-label="تنقل بين الصفحات"
       data-slot="data-table-server-controls"
-      className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-2', className)}
+      className={cn(
+        'flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2',
+        className,
+      )}
     >
       {hasRangeText ? (
         <p aria-live="polite" className="text-sm text-muted-foreground">
@@ -66,7 +69,7 @@ function ServerPaginationControls({
         </span>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-start">
         <Select
           value={String(pageSize)}
           itemToStringLabel={(value) => `عرض ${toArabicDigits(Number(value))} صفاً`}
