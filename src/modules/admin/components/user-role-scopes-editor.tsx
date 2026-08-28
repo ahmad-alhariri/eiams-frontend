@@ -27,6 +27,7 @@ const EMPTY_ASSIGNMENT: UserRoleScopesFormValues['assignments'][number] = {
 
 interface UserRoleScopesEditorProps {
   canManage: boolean
+  canSelectRoles: boolean
   form: UseFormReturn<UserRoleScopesFormValues>
   isPending: boolean
   isRoleCatalogLoading: boolean
@@ -37,6 +38,7 @@ interface UserRoleScopesEditorProps {
 /** Contract-shaped field-array editor for a user's complete role-scope assignment set. */
 export function UserRoleScopesEditor({
   canManage,
+  canSelectRoles,
   form,
   isPending,
   isRoleCatalogLoading,
@@ -55,7 +57,7 @@ export function UserRoleScopesEditor({
       title="أدوار المستخدم ونطاقاتها"
       description="كل تعيين يربط دوراً بنطاق. الحفظ يستبدل مجموعة التعيينات بالكامل باستخدام إصدار المستخدم الحالي."
       action={
-        canManage ? (
+        canManage && canSelectRoles ? (
           <Button type="button" onClick={() => append({ ...EMPTY_ASSIGNMENT })}>
             <IconCirclePlus aria-hidden data-icon="inline-start" />
             إضافة تعيين
@@ -86,34 +88,43 @@ export function UserRoleScopesEditor({
                     className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-card p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-start"
                   >
                     <legend className="sr-only">تعيين الدور {index + 1}</legend>
-                    <FormField
-                      control={form.control}
-                      name={`assignments.${index}.roleId`}
-                      render={({ field: roleField, fieldState }) => (
-                        <FormItem>
-                          <FormLabel>الدور</FormLabel>
-                          <Select
-                            value={roleField.value}
-                            disabled={!canManage || isRoleCatalogLoading}
-                            onValueChange={roleField.onChange}
-                          >
-                            <FormControl>
-                              <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                                <SelectValue placeholder="اختر الدور" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {roles.map((role) => (
-                                <SelectItem key={role.roleId} value={role.roleId}>
-                                  {role.nameAr}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {canManage && canSelectRoles ? (
+                      <FormField
+                        control={form.control}
+                        name={`assignments.${index}.roleId`}
+                        render={({ field: roleField, fieldState }) => (
+                          <FormItem>
+                            <FormLabel>الدور</FormLabel>
+                            <Select
+                              value={roleField.value}
+                              disabled={isRoleCatalogLoading}
+                              onValueChange={roleField.onChange}
+                            >
+                              <FormControl>
+                                <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
+                                  <SelectValue placeholder="اختر الدور" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {roles.map((role) => (
+                                  <SelectItem key={role.roleId} value={role.roleId}>
+                                    {role.nameAr}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    ) : (
+                      <div className="grid content-start gap-2">
+                        <span className="text-sm font-medium text-foreground">الدور</span>
+                        <p className="min-h-9 rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
+                          {roleName}
+                        </p>
+                      </div>
+                    )}
                     <FormField
                       control={form.control}
                       name={`assignments.${index}.scopeType`}
@@ -199,6 +210,13 @@ export function UserRoleScopesEditor({
           {form.formState.errors.root?.['serverError']?.message ? (
             <p role="alert" className="text-sm text-destructive">
               {form.formState.errors.root['serverError'].message}
+            </p>
+          ) : null}
+
+          {canManage && !canSelectRoles ? (
+            <p className="text-sm text-muted-foreground">
+              يمكنك تعديل نطاقات الأدوار المعيّنة أو إزالتها. تتطلب إضافة دور أو تغييره صلاحية عرض
+              الأدوار.
             </p>
           ) : null}
 

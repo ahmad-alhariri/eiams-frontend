@@ -41,10 +41,12 @@ function UserDetailPage() {
   const navigate = useNavigate()
   const { has } = usePermission()
   const canManage = has('admin.user.manage')
+  const canViewRoleCatalog = has('admin.role.view')
+  const canSelectRoles = canManage && canViewRoleCatalog
 
   const userQuery = useUserQuery(userId)
   const roleScopesQuery = useUserRoleScopesQuery(userId)
-  const rolesQuery = useRolesQuery()
+  const rolesQuery = useRolesQuery(canSelectRoles)
   const replaceMutation = useReplaceUserRoleScopesMutation()
   const submitFeedback = useSubmitFeedback()
   const form = useForm<UserRoleScopesFormValues>({
@@ -64,7 +66,7 @@ function UserDetailPage() {
     return [...roleById.values()]
   }, [roleScopesQuery.data, rolesQuery.data])
   const isLoading =
-    userQuery.isLoading || roleScopesQuery.isLoading || (canManage && rolesQuery.isLoading)
+    userQuery.isLoading || roleScopesQuery.isLoading || (canSelectRoles && rolesQuery.isLoading)
 
   const submit = async (values: UserRoleScopesFormValues) => {
     if (userId === undefined) return
@@ -94,7 +96,9 @@ function UserDetailPage() {
   }
 
   const retryUserData = () => {
-    void Promise.all([userQuery.refetch(), roleScopesQuery.refetch(), rolesQuery.refetch()])
+    void userQuery.refetch()
+    void roleScopesQuery.refetch()
+    if (canSelectRoles) void rolesQuery.refetch()
   }
 
   return (
@@ -114,7 +118,7 @@ function UserDetailPage() {
         <div className="flex justify-center py-16">
           <LoadingSpinner />
         </div>
-      ) : userQuery.isError || roleScopesQuery.isError || (canManage && rolesQuery.isError) ? (
+      ) : userQuery.isError || roleScopesQuery.isError || (canSelectRoles && rolesQuery.isError) ? (
         <ErrorState
           title="تعذّر تحميل تعيينات المستخدم"
           description="تعذّر جلب المستخدم وأدواره من الخادم. تحقق من الاتصال ثم أعد المحاولة."
@@ -150,6 +154,7 @@ function UserDetailPage() {
             isRoleCatalogLoading={rolesQuery.isLoading}
             onSubmit={submit}
             roles={roles}
+            canSelectRoles={canSelectRoles}
           />
         </div>
       )}

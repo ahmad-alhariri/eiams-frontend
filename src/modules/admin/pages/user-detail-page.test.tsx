@@ -18,7 +18,7 @@ import { server } from '@/test/msw/server'
 import UserDetailPage from './user-detail-page'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
-const permissions = vi.hoisted(() => ({ canManage: true }))
+const permissions = vi.hoisted(() => ({ canManage: true, canViewRoles: true }))
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
@@ -35,9 +35,11 @@ function PageWrapper({ children }: PropsWithChildren) {
   client.setQueryData(
     authSessionQueryKey,
     createSession({
-      permissionCodes: permissions.canManage
-        ? ['admin.user.view', 'admin.user.manage']
-        : ['admin.user.view'],
+      permissionCodes: [
+        'admin.user.view',
+        ...(permissions.canManage ? ['admin.user.manage'] : []),
+        ...(permissions.canViewRoles ? ['admin.role.view'] : []),
+      ],
     }),
   )
   return (
@@ -79,6 +81,7 @@ function seedRoleScopes() {
 afterEach(() => {
   activeScope.key = { kind: 'enterprise' }
   permissions.canManage = true
+  permissions.canViewRoles = true
 })
 
 describe('UserDetailPage', () => {
@@ -165,6 +168,41 @@ describe('UserDetailPage', () => {
 
     expect(await screen.findByText('يجب اختيار دور صالح.')).toBeInTheDocument()
   })
+
+  it.each([
+    { canManage: false, canViewRoles: false, label: 'read-only user viewer' },
+    { canManage: false, canViewRoles: true, label: 'read-only user and role viewer' },
+    { canManage: true, canViewRoles: false, label: 'user manager without role-catalog access' },
+  ])(
+    'does not request an unused role catalog for a $label',
+    async ({ canManage, canViewRoles }) => {
+      let roleCatalogRequests = 0
+      permissions.canManage = canManage
+      permissions.canViewRoles = canViewRoles
+      seedRoleScopes()
+      server.use(
+        http.get(`${API_BASE_URL}/admin/roles`, () => {
+          roleCatalogRequests += 1
+          return new HttpResponse(null, { status: 403 })
+        }),
+      )
+
+      render(<UserDetailPage />, { wrapper: PageWrapper })
+
+      expect(await screen.findByText('مدير النظام')).toBeInTheDocument()
+      await waitFor(() => expect(roleCatalogRequests).toBe(0))
+      expect(screen.queryByRole('button', { name: 'إضافة تعيين' })).not.toBeInTheDocument()
+      if (canManage) {
+        expect(screen.getByRole('button', { name: 'حفظ التعيينات' })).toBeInTheDocument()
+        expect(
+          screen.getByText(/تتطلب إضافة دور أو تغييره صلاحية عرض الأدوار/u),
+        ).toBeInTheDocument()
+      } else {
+        expect(screen.queryByRole('button', { name: 'حفظ التعيينات' })).not.toBeInTheDocument()
+        expect(screen.getByText(/عرض للقراءة فقط/u)).toBeInTheDocument()
+      }
+    },
+  )
 
   it.each([
     {

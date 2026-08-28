@@ -40,13 +40,13 @@ export function usePermissionsQuery() {
   })
 }
 
-export function useRolesQuery() {
+export function useRolesQuery(enabled = true) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
     queryKey:
       scope === undefined ? queryKeys.public(ADMIN_RESOURCE, 'roles') : adminQueryKeys.roles(scope),
     queryFn: adminService.listRoles,
-    enabled: scope !== undefined,
+    enabled: scope !== undefined && enabled,
     staleTime: MASTER_DATA_STALE_TIME,
   })
 }
