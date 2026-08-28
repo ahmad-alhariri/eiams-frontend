@@ -2066,6 +2066,20 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     const db = getDb()
     const userId = String(params['userId'])
     const body = (await request.json()) as ReplaceRoleScopesRequest
+    const userIndex = db.users.findIndex((user) => user.userId === userId)
+    if (userIndex === -1) return notFound()
+    const currentUser = db.users[userIndex]!
+    if (body.rowVersion !== currentUser.rowVersion) {
+      return HttpResponse.json(
+        {
+          status: 409,
+          code: 'admin.user_conflict',
+          titleAr: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
+          traceId: 'dev-admin-role-scope-conflict',
+        },
+        { status: 409 },
+      )
+    }
     const roleByCode = new Map(db.roles.map((role) => [role.roleId, role]))
     const next: UserRoleScope[] = body.assignments.map((assignment) => ({
       userRoleScopeId: nextFixtureUuid(),
@@ -2090,6 +2104,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       rowVersion: 1,
     }))
     db.userRoleScopes = db.userRoleScopes.filter((item) => item.userId !== userId).concat(next)
+    db.users[userIndex] = { ...currentUser, rowVersion: currentUser.rowVersion + 1 }
     return HttpResponse.json(next)
   }),
 

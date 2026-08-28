@@ -7,7 +7,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import { createRole, createSession, createUserRoleScope } from '@/test/msw/factories'
+import {
+  createRole,
+  createSession,
+  createUserRoleScope,
+  createUserSummary,
+} from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 import UserDetailPage from './user-detail-page'
@@ -21,6 +26,7 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 const API_BASE_URL = '/api/v1'
 const USER_ID = '00000000-0000-4000-8000-000000000099'
+const SITE_ID = '00000000-0000-4000-8000-000000000071'
 const ROLE_A = createRole({ roleId: '00000000-0000-4000-8000-0000000000a1', nameAr: 'مدير النظام' })
 const ROLE_B = createRole({ roleId: '00000000-0000-4000-8000-0000000000b2', nameAr: 'مدقق' })
 
@@ -48,6 +54,16 @@ function PageWrapper({ children }: PropsWithChildren) {
 
 function seedRoleScopes() {
   server.use(
+    http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
+      HttpResponse.json(
+        createUserSummary({
+          userId: USER_ID,
+          username: 'review.user',
+          displayName: 'مستخدم المراجعة',
+          rowVersion: 7,
+        }),
+      ),
+    ),
     http.get(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, () =>
       HttpResponse.json([
         createUserRoleScope({
@@ -117,6 +133,8 @@ describe('UserDetailPage', () => {
     const siteOption = scopeOptions.find((option) => (option.textContent ?? '').includes('موقع'))
     expect(siteOption).toBeDefined()
     await user.click(siteOption!)
+    const scopeInputs = screen.getAllByRole('textbox', { name: 'معرّف النطاق' })
+    await user.type(scopeInputs.at(-1)!, SITE_ID)
 
     await user.click(screen.getByRole('button', { name: 'حفظ التعيينات' }))
 
@@ -125,9 +143,9 @@ describe('UserDetailPage', () => {
         {
           assignments: [
             { roleId: ROLE_A.roleId, scopeId: null, scopeType: 'Enterprise' },
-            { roleId: ROLE_B.roleId, scopeId: null, scopeType: 'Site' },
+            { roleId: ROLE_B.roleId, scopeId: SITE_ID, scopeType: 'Site' },
           ],
-          rowVersion: 0,
+          rowVersion: 7,
         },
       ]),
     )
@@ -137,8 +155,65 @@ describe('UserDetailPage', () => {
     expect(saveButton).toBeEnabled()
   })
 
+  it('blocks incomplete assignments with Arabic inline validation', async () => {
+    const user = userEvent.setup()
+    seedRoleScopes()
+    render(<UserDetailPage />, { wrapper: PageWrapper })
+
+    await user.click(await screen.findByRole('button', { name: 'إضافة تعيين' }))
+    await user.click(screen.getByRole('button', { name: 'حفظ التعيينات' }))
+
+    expect(await screen.findByText('يجب اختيار دور صالح.')).toBeInTheDocument()
+  })
+
+  it.each([
+    {
+      status: 409,
+      body: {
+        status: 409,
+        code: 'admin.user_conflict',
+        titleAr: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
+        traceId: 'trace-conflict',
+      },
+      expected: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
+    },
+    {
+      status: 422,
+      body: {
+        status: 422,
+        code: 'validation.failed',
+        titleAr: 'تعذر تنفيذ الطلب. راجع البيانات المدخلة.',
+        traceId: 'trace-validation',
+        fieldErrors: [
+          {
+            field: 'assignments',
+            code: 'invalid_scope',
+            messageAr: 'يتعذر إسناد الدور إلى النطاق المحدد.',
+          },
+        ],
+      },
+      expected: 'يتعذر إسناد الدور إلى النطاق المحدد.',
+    },
+  ])('renders Arabic mutation feedback for HTTP $status', async ({ status, body, expected }) => {
+    const user = userEvent.setup()
+    seedRoleScopes()
+    server.use(
+      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, () =>
+        HttpResponse.json(body, { status }),
+      ),
+    )
+    render(<UserDetailPage />, { wrapper: PageWrapper })
+
+    await user.click(await screen.findByRole('button', { name: 'حفظ التعيينات' }))
+
+    expect(await screen.findByText(expected)).toBeInTheDocument()
+  })
+
   it('renders an actionable Arabic error state when the role-scopes request fails', async () => {
     server.use(
+      http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
+        HttpResponse.json(createUserSummary({ userId: USER_ID, rowVersion: 7 })),
+      ),
       http.get(
         `${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`,
         () => new HttpResponse(null, { status: 500 }),

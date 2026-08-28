@@ -5,10 +5,12 @@ import { useForm } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router'
 
 import { ROUTE_PATHS } from '@/config/routes'
+import { RolePermissionMatrixField } from '@/modules/admin/components/role-permission-matrix-field'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { useUpdateRoleMutation } from '@/modules/admin/hooks/use-admin-mutations'
 import { usePermissionsQuery, useRoleQuery } from '@/modules/admin/hooks/use-admin-queries'
 import {
+  applyRolePermissionsServerError,
   rolePermissionsSchema,
   toPermissionMatrixRows,
   toRolePermissionsRequest,
@@ -17,16 +19,13 @@ import {
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { StatusBadge } from '@/shared/feedback/status-badge'
-import { Form, FormField, FormItem, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
+import { Form } from '@/shared/forms/form'
 import { useConfirm } from '@/shared/hooks/use-confirm'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
-import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
-import { Checkbox } from '@/shared/ui/checkbox'
 import { toast } from '@/shared/ui/toast-manager'
 
 const EMPTY_VALUES: RolePermissionsFormValues = { permissionCodes: [] }
@@ -78,12 +77,7 @@ function RolePermissionsPage() {
         toast.success({ title: 'تم حفظ صلاحيات الدور.' })
       })
     } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, { schemaKeys: ['permissionCodes'] })
-      const firstFieldError = apiError.fieldErrors[0]
-      if (firstFieldError !== undefined) {
-        form.setError('permissionCodes', { type: 'server', message: firstFieldError.messageAr })
-      }
+      applyRolePermissionsServerError(form, error)
     }
   }
 
@@ -189,61 +183,11 @@ function RolePermissionsPage() {
               className="grid gap-4"
               onSubmit={form.handleSubmit(submit)}
             >
-              <FormField
+              <RolePermissionMatrixField
                 control={form.control}
-                name="permissionCodes"
-                render={({ field, fieldState }) => (
-                  <FormItem>
-                    <fieldset
-                      aria-invalid={fieldState.invalid || undefined}
-                      className="overflow-hidden rounded-md border border-border"
-                    >
-                      <legend className="sr-only">الصلاحيات المسندة إلى الدور</legend>
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 border-b border-border bg-muted/40 px-4 py-3 text-sm font-semibold text-muted-foreground">
-                        <span>الصلاحية</span>
-                        <span>مُسندة</span>
-                      </div>
-                      {rows.map((permission) => {
-                        const checked = field.value.includes(permission.code)
-                        return (
-                          <div
-                            key={permission.code}
-                            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 border-b border-border px-4 py-3 last:border-b-0"
-                          >
-                            <div className="grid gap-1">
-                              <label
-                                htmlFor={`role-permission-${permission.code}`}
-                                className="cursor-pointer font-semibold text-foreground"
-                              >
-                                {permission.nameAr}
-                              </label>
-                              <code dir="ltr" className="w-fit text-xs text-muted-foreground">
-                                {permission.code}
-                              </code>
-                              {permission.descriptionAr ? (
-                                <span className="text-sm text-muted-foreground">
-                                  {permission.descriptionAr}
-                                </span>
-                              ) : null}
-                            </div>
-                            <Checkbox
-                              id={`role-permission-${permission.code}`}
-                              checked={checked}
-                              disabled={updateMutation.isPending}
-                              onCheckedChange={(nextChecked) => {
-                                const nextCodes = nextChecked
-                                  ? [...field.value, permission.code]
-                                  : field.value.filter((code) => code !== permission.code)
-                                field.onChange(nextCodes)
-                              }}
-                            />
-                          </div>
-                        )
-                      })}
-                    </fieldset>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                disabled={updateMutation.isPending}
+                idPrefix="role-permission"
+                rows={rows}
               />
               <div className="flex flex-wrap gap-2">
                 <Button type="submit" loading={updateMutation.isPending}>

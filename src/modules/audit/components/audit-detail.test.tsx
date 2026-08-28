@@ -78,7 +78,7 @@ describe('AuditDetail', () => {
     expect(screen.getAllByText('قيمة محجوبة').length).toBeGreaterThan(0)
     expect(screen.queryByText('CONF-9981')).not.toBeInTheDocument()
     expect(screen.queryByText('CONF-9982')).not.toBeInTheDocument()
-    expect(screen.getByText('قيمة محجوبة لارتباطها بعقد سرّي.')).toBeInTheDocument()
+    expect(screen.getByText('قيمة محجوبة لارتباطها بعقد سرّي.')).toHaveClass('text-warning')
   })
 
   it('renders an actionable Arabic error state when the detail request fails', async () => {

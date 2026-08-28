@@ -68,7 +68,7 @@ function AuditDiffList({ entries }: { entries: readonly AuditLogEntry[] }) {
             </div>
             {display.redacted ? (
               <div className="sm:col-span-3">
-                <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                <p className="flex items-center gap-1.5 text-xs text-warning">
                   <IconInfoCircle aria-hidden className="size-3.5 shrink-0" />
                   {display.redactionReasonAr ?? 'القيمة محجوبة وفق سياسة التدقيق.'}
                 </p>

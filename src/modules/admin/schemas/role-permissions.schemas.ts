@@ -1,5 +1,8 @@
 import { z } from 'zod'
+import type { UseFormReturn } from 'react-hook-form'
 
+import { setFormServerErrors } from '@/shared/forms/server-errors'
+import { normalizeApiError } from '@/shared/services/api-error'
 import type { Permission, Role, RoleUpsertRequest } from '@/shared/types/generated/eiams-v1'
 
 /**
@@ -12,6 +15,19 @@ export const rolePermissionsSchema = z.object({
 })
 
 export type RolePermissionsFormValues = z.infer<typeof rolePermissionsSchema>
+
+/** Applies the shared contract error shape to either permission editor surface. */
+export function applyRolePermissionsServerError(
+  form: UseFormReturn<RolePermissionsFormValues>,
+  error: unknown,
+): void {
+  const apiError = normalizeApiError(error)
+  setFormServerErrors(form, apiError.fieldErrors, { schemaKeys: ['permissionCodes'] })
+  const firstFieldError = apiError.fieldErrors[0]
+  if (firstFieldError !== undefined) {
+    form.setError('permissionCodes', { type: 'server', message: firstFieldError.messageAr })
+  }
+}
 
 /** One selectable row of the role permission matrix. */
 export type PermissionMatrixRow = Pick<Permission, 'code' | 'descriptionAr' | 'nameAr'>

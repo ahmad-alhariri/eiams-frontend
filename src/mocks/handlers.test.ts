@@ -583,6 +583,36 @@ describe('mock API handlers', () => {
     expect(searched.items.map((user) => user.username)).toEqual(['admin.ahmad'])
   })
 
+  it('replaces user role scopes with the current user version and rejects a stale version', async () => {
+    const db = getDb()
+    const currentScope = db.userRoleScopes[0]
+    if (currentScope === undefined) throw new Error('User role-scope seed is incomplete.')
+    const currentUser = db.users.find((user) => user.userId === currentScope.userId)
+    if (currentUser === undefined) throw new Error('User seed is incomplete.')
+
+    const request = {
+      assignments: [
+        {
+          roleId: currentScope.role.roleId,
+          scopeType: currentScope.scope.scopeType,
+          scopeId: currentScope.scope.scopeId,
+        },
+      ],
+      rowVersion: currentUser.rowVersion,
+    }
+
+    await expect(
+      apiClient.put(`/admin/users/${currentUser.userId}/role-scopes`, request),
+    ).resolves.toMatchObject({ status: 200 })
+    expect(getDb().users.find((user) => user.userId === currentUser.userId)?.rowVersion).toBe(
+      currentUser.rowVersion + 1,
+    )
+
+    await expect(
+      apiClient.put(`/admin/users/${currentUser.userId}/role-scopes`, request),
+    ).rejects.toMatchObject({ response: { status: 409 } })
+  })
+
   it('serves immutable audit headers in fixed reverse chronology with a stable id tie-break', async () => {
     const db = getDb()
     const first = db.auditLogs[0]
