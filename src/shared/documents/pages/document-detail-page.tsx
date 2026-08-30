@@ -295,6 +295,8 @@ function DocumentLineRow({
   showOpeningType: boolean
 }) {
   const assetInputs = line.assetInputs ?? []
+  const issuedAssetIds = line.issuedAssetIds ?? []
+  const linkedAssetCount = assetInputs.length + issuedAssetIds.length
   return (
     <>
       <tr data-slot="document-line-row" className="border-b border-border last:border-b-0">
@@ -335,9 +337,9 @@ function DocumentLineRow({
             className="bg-muted/30 px-4 py-2"
           >
             <p className="text-xs font-semibold text-foreground">
-              الأصول المرتبطة — العدد: {toArabicDigits(assetInputs.length)}
+              الأصول المرتبطة — العدد: {toArabicDigits(linkedAssetCount)}
             </p>
-            {assetInputs.length === 0 ? (
+            {linkedAssetCount === 0 ? (
               <p className="mt-0.5 text-xs text-muted-foreground">
                 لم تُسجل أرقام أصول على بنود هذا السند.
               </p>
@@ -351,6 +353,17 @@ function DocumentLineRow({
                         ? ` | الرقم التسلسلي: ${asset.serialNumber}`
                         : ''}
                     </span>
+                  </li>
+                ))}
+                {issuedAssetIds.map((assetId) => (
+                  <li key={assetId} className="text-xs text-muted-foreground">
+                    <span>معرّف الأصل: </span>
+                    <Link
+                      className="break-all font-mono text-foreground underline-offset-4 hover:underline"
+                      to={ROUTE_PATHS.assetDetail.replace(':assetId', assetId)}
+                    >
+                      <span dir="ltr">{assetId}</span>
+                    </Link>
                   </li>
                 ))}
               </ul>

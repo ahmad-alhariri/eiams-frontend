@@ -325,6 +325,54 @@ describe('DocumentDetailPage', () => {
     )
   })
 
+  it('renders contract-projected issued asset ids as links to asset detail', async () => {
+    const issuedAssetIds = [fixtureUuid(255), fixtureUuid(256)]
+    const document = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Issue',
+      documentStatus: 'Posted',
+      lines: [
+        createWarehouseDocumentLine({
+          issuedAssetIds,
+          lineId: fixtureUuid(257),
+          lineType: 'Asset',
+          material: {
+            ...createMaterial({
+              materialKind: 'Asset',
+              requiresAssetNumber: true,
+              trackingType: 'Serial',
+            }),
+            nameAr: 'حاسوب محمول',
+          },
+          quantity: 2,
+        }),
+      ],
+      policy: createDocumentPolicy({
+        documentId: DOCUMENT_ID,
+        documentStatus: 'Posted',
+      }),
+    })
+
+    server.use(
+      ...createWarehouseDocumentDetailHandler(document),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
+      ...createWarehouseDocumentPolicyHandler(document.policy),
+    )
+
+    render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/issue/${DOCUMENT_ID}`, ['document.view']),
+    })
+
+    expect(await screen.findByText('الأصول المرتبطة — العدد: ٢')).toBeInTheDocument()
+    for (const assetId of issuedAssetIds) {
+      expect(screen.getByRole('link', { name: assetId })).toHaveAttribute(
+        'href',
+        `/assets/${assetId}`,
+      )
+    }
+    expect(screen.queryByText('لم تُسجل أرقام أصول على بنود هذا السند.')).not.toBeInTheDocument()
+  })
+
   it('hides Opening lifecycle actions when the server presents them but the active session lacks authority', async () => {
     const document = createWarehouseDocument({
       documentId: DOCUMENT_ID,

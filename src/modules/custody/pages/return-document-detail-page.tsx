@@ -1,5 +1,6 @@
-import { useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 
+import { ROUTE_PATHS } from '@/config/routes'
 import { DetailField } from '@/shared/layout/detail-field'
 import DocumentDetailPage from '@/shared/documents/pages/document-detail-page'
 import { useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
@@ -32,15 +33,39 @@ export default function ReturnDocumentDetailPage() {
 }
 
 function ReturnPetalView({ info }: { info: ReturnInfo }) {
+  const assetIds = info.assetIds ?? []
+
   return (
     <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
       <DetailField label="سند الصرف الأصلي" ltr>
-        <span className="font-mono text-sm">{info.originalIssueDocumentId}</span>
+        <Link
+          className="break-all font-mono text-sm underline-offset-4 hover:underline"
+          to={ROUTE_PATHS.documentIssueDetail.replace(':documentId', info.originalIssueDocumentId)}
+        >
+          {info.originalIssueDocumentId}
+        </Link>
       </DetailField>
       <DetailField label="رقم سند الصرف الورقي" ltr>
         {info.originalIssueReference ?? '—'}
       </DetailField>
       <DetailField label="سبب الإرجاع">{info.returnReason}</DetailField>
+      {assetIds.length > 0 ? (
+        <DetailField label="الأصول المعادة">
+          <ul className="grid gap-1">
+            {assetIds.map((assetId) => (
+              <li key={assetId}>
+                <Link
+                  className="break-all font-mono text-sm underline-offset-4 hover:underline"
+                  dir="ltr"
+                  to={ROUTE_PATHS.assetDetail.replace(':assetId', assetId)}
+                >
+                  {assetId}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </DetailField>
+      ) : null}
     </dl>
   )
 }
