@@ -52,6 +52,7 @@ describe('ReturnDocumentDetailPage (e19-t07)', () => {
       documentType: 'Return',
       documentStatus: 'Draft',
       returnInfo: {
+        assetIds: ['77777777-7777-4777-8777-777777777777'],
         originalIssueDocumentId: '66666666-6666-4666-8666-666666666666',
         originalIssueReference: 'ISSUE-2026-0001',
         returnReason: 'عودة المواد بعد انتهاء الحاجة',
@@ -73,5 +74,11 @@ describe('ReturnDocumentDetailPage (e19-t07)', () => {
     expect(screen.getByText('ISSUE-2026-0001')).toBeInTheDocument()
     expect(screen.getByText('سند الصرف الأصلي')).toBeInTheDocument()
     expect(screen.getByText('سبب الإرجاع')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '66666666-6666-4666-8666-666666666666' }),
+    ).toHaveAttribute('href', '/documents/issue/66666666-6666-4666-8666-666666666666')
+    expect(
+      screen.getByRole('link', { name: '77777777-7777-4777-8777-777777777777' }),
+    ).toHaveAttribute('href', '/assets/77777777-7777-4777-8777-777777777777')
   })
 })
