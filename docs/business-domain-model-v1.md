@@ -62,7 +62,7 @@ types and read models rather than database tables.
 | Identity and authorization | `User`, `Role`, `Permission`, `RolePermission`, `UserRoleScope` | A User receives roles through scoped assignments. Scope is `Enterprise`, `Site`, or `Warehouse`; permission/scope enforcement is server-authoritative. An Employee and a User are distinct concepts, though a user may link to an employee. |
 | Organization and counterparties | Organization, `Site`, `OrganizationalUnit`, `Employee`, `ExternalParty` | Sites belong to the organization; organizational units form a tree; employees belong to organizational structure. `ExternalParty` is the approved active/inactive reference entity for the PRD `External` counterpart type. |
 | Catalog | `MaterialDomain`, `MaterialCategory`, `MaterialFamily`, `Material`, `UnitOfMeasure` | Domain → category tree → mandatory family → material. Material has authoritative kind/tracking properties. Category/domain are derived through the hierarchy; clients do not duplicate hierarchy-derived values. |
-| Warehouse and availability | `Warehouse`, `WarehouseCapability`, `WarehouseCapabilityOperation`, `WarehouseMaterialSetting` | A warehouse is the only balance holder. Capability authorizes a warehouse to handle material domains for named operations; settings hold operational thresholds, not a second balance. |
+| Warehouse and availability | `Warehouse`, `WarehouseCapability`, `WarehouseCapabilityOperation`, `WarehouseMaterialSetting` | A warehouse is the only balance holder. Capability authorizes a warehouse to handle material domains for named operations; settings hold operational thresholds, not a second balance. (see D-WH-01 A/B interpretation in `docs/route-permission-scope-matrix.md`) |
 | Operational documents | `WarehouseDocument`, `DocumentLine`, `DocumentAttachment`, document sequence/reference, `ReceivingInfo`, `IssueTo`, `TransferInfo` | WarehouseDocument is the document spine. Lines and attachments belong to it; the named petals supply type-specific data. Document types are Receiving, Issue, Transfer, Adjustment, Opening, and Return. A document is the provenance of every stock movement. |
 | Inventory and ledger | `InventoryBalance`, `StockMovement` | Balance is the cached signed sum of immutable movements for one warehouse/material. StockMovement belongs to a posted document and source line. No UI or service directly edits balance. |
 | Counts and adjustments | `InventoryCount`, `InventoryCountLine`, `InventoryAdjustment`, `AdjustmentLine` | A count belongs to a warehouse and has scoped snapshot/actual lines. Adjustment is document-backed, may reference a count, and has purpose-specific lines. Disposal is a special single asset-backed adjustment, not an independent undocumented asset action. |
@@ -121,12 +121,14 @@ balances, and asset transfer are not v1 domain concepts.
 ### Authentication, session, and scope
 
 - User is the authentication subject and remains separate from Employee.
-- The authoritative session supplies available scopes, selected active scope,
-  effective roles, and effective permission codes; the client never recreates
-  the RBAC engine from role assignments.
+- Every User has exactly one persistent `UserRoleScope`: one Role at one
+  Enterprise, Site, or Warehouse scope (D-SRS-01). The authoritative session
+  supplies that required active scope, effective role information, and
+  effective permission codes; it has no `availableScopes` collection or
+  `SelectionRequired` state, and the client never recreates the RBAC engine.
 - Enterprise scope has no entity UUID. Site and Warehouse scopes use their
-  entity UUIDs, and permissions accumulate only from assignments covering the
-  selected hierarchy as defined by D-AUTH-01.
+  entity UUIDs. The sole assignment's hierarchy expands effective permissions;
+  it does not create additional role-scope assignments.
 - Access tokens are memory-only and refresh credentials are browser-managed
   HttpOnly cookies. Token material is never domain/UI state.
 

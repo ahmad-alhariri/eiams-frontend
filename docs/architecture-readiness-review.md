@@ -9,7 +9,7 @@ unblock the implementation epics, with three tracked increments below.
 
 This review is the final gate of the *Architecture and contract decisions*
 epic. It verifies that every approved P0 decision (D-OAS-01/02, D-AUTH-01,
-D-LIFE-01, D-ATT-01, D-AUD-02, D-RBAC-01, D-ADJ-01, D-ICF-01, D-POST-01,
+D-LIFE-01, D-ATT-01, D-AUD-02, D-RBAC-01, D-RBAC-02, D-ADJ-01, D-ICF-01, D-POST-01,
 D-RAE-01) is consistently represented in the admitted provisional OpenAPI
 snapshot and its provenance, and that the frontend can begin implementation
 without guessing business rules.
@@ -49,8 +49,8 @@ deliberately (audit service `e22-t07` is P2 and lands after the revision).
 
 | Area | Decision | Verdict | Evidence |
 | --- | --- | --- | --- |
-| Contract provenance and publication gate | D-OAS-01/02 | PASS | Stable `operationId` on every operation; snapshot admitted with provenance, digests, generation output, and explicit ratification policy (`e01.7`). |
-| Authentication, session, active scope | D-AUTH-01 | PASS | `bearerAuth` (JWT, memory-only) + `eiams_refresh` cookie scheme (Secure/HttpOnly/SameSite=Strict, Path=/api/v1/auth); `SessionResponse` (`user`, `availableScopes`, `scopeState`, optional `activeScope`, `activeRoles`, `permissionCodes` unique array); refresh bodyless; logout idempotent; `AuthErrorCode` exact 7-code set; Enterprise `scopeId` nullable (`NullableUuid`). |
+| Contract provenance and publication gate | D-OAS-01/02, D-INT-01 | PASS pending integration | Stable `operationId` on every operation; the former provisional snapshot is historical input only. The backend's real OpenAPI export is the sole source for generated frontend types and production ratification (`e01.7`, `whhu`). |
+| Authentication, session, active scope | D-AUTH-01, D-SRS-01 | PASS pending backend enforcement | `bearerAuth` (JWT, memory-only) + `eiams_refresh` cookie scheme (Secure/HttpOnly/SameSite=Strict, Path=/api/v1/auth); `SessionResponse` has `user`, required `activeScope`, singular `activeRole`, `scopeState` (`Selected | Unavailable`), and unique `permissionCodes`, with no `availableScopes` collection or ordinary-user selection gate; refresh bodyless; logout idempotent; Enterprise `scopeId` nullable (`NullableUuid`). |
 | Document lifecycle, actions, history | D-LIFE-01 | PASS | `LifecyclePolicyKind` (Generic/Adjustment/Disposal); `ActionPresentation` (Hidden/Disabled/Enabled); typed `DocumentActionType` incl. `Edit`, `Revise`, `UploadAttachment`, `DeleteAttachment`; `LifecycleEventType` = Created/Submitted/Posted/Rejected/RevisionStarted/Cancelled/Reversed (no `Updated`, no `Approved`); event carries actor snapshot, `documentRowVersion`, `correlationId`, `relatedDocument`; `GET …/history`, `GET …/policy`; version-only and reason-required request bodies; `LifecycleConflictProblemDetails`. |
 | Signed-original attachment gate | D-ATT-01 | PASS with increment (F-01) | `DocumentPolicy.signedOriginalSatisfied`, `blockers[]` with machine code + `messageAr`, `advisories[]`; upload multipart with `rowVersion`, delete draft-only, list with `checksum`/`uploadedBy`/`uploadedAt`/`downloadUrl`. Gate blocker codes and satisfier summary are not yet in the snapshot schema (F-01). |
 | Audit detail and redaction | D-AUD-02 | CONDITIONAL PASS with increment (F-02) | `AuditLog`/`AuditLogEntry`/`AuditLogPage` with `redacted`, `redactionReasonAr`, `summaryAr`, `traceId`, filters (`entityType`, `entityId`, search, date range). Three gaps: list returns entries inline (must be header-only), `fieldLabelAr` missing, audit action untyped. |
@@ -97,7 +97,7 @@ deliberately (audit service `e22-t07` is P2 and lands after the revision).
 The architecture workstream has reached definition-of-done for the frontend:
 one admitted, provenance-backed provisional contract; the full approved
 decision set (D-OAS-01/02, D-BDM-01, D-POST-01, D-RAE-01, D-ADJ-01, D-ICF-01,
-D-AUTH-01, D-LIFE-01, D-ATT-01, D-AUD-02, D-RBAC-01); one
+D-AUTH-01, D-LIFE-01, D-ATT-01, D-AUD-02, D-RBAC-01, D-RBAC-02); one
 consistency/verification review; conflict matrix current. The
 next implementation work (e02) can begin against the provisional snapshot,
 respecting the increments and the ratification gates above. The repository
