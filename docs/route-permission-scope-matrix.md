@@ -108,19 +108,22 @@ Semantics notes:
 
 ## Scope derivation (consumption model)
 
-The active scope on the session is the *only* scope axis: `permissionCodes`
-are computed by the server for that scope (union semantics per D-AUTH-01).
-Consequences the matrix relies on:
+The required active scope on the session is the *only* scope axis:
+`permissionCodes` are computed by the server for that scope. D-SRS-01 gives a
+user one persistent role-scope assignment, so the session does not offer a
+client scope choice. Consequences the matrix relies on:
 
 - A role granted at Enterprise scope applies to all sites/warehouses; at Site
   scope to that site's warehouses; at Warehouse scope to one warehouse. This
   realizes the Architecture Overview's "Enterprise/Site/Warehouse Manager"
   without extra roles codes — `WH_MGR` at a higher assignment scope is the
-  "Enterprise WH Manager".
+  "Enterprise WH Manager". This is effective hierarchy coverage, not multiple
+  assignments.
 - Data returned by any query is further scoped by the active scope
   server-side. The frontend never filters locally to emulate scope.
-- After a scope switch, the old `permissionCodes` are gone; navigation and
-  guards re-evaluate from the new session (scope switch flow, D-AUTH-01).
+- After a server-reported assignment change or invalidation, old
+  `permissionCodes` are discarded and navigation/guards re-evaluate from the
+  returned session.
 
 ## Route permission and scope matrix
 
@@ -132,9 +135,8 @@ points, e.g., a create page that serves two doc types).
 | Group / page | Route pattern (illustrative) | Required codes | Scope note |
 | --- | --- | --- | --- |
 | Login | `/login` | — (public) | Anonymous only. |
-| Scope selection | `/session/scope` | — | Authenticated + `SelectionRequired`. |
-| No access | `/session/no-access` | — | Authenticated + `Unavailable`. |
-| Dashboard | `/` | `permissionAny` of the operational view codes (`document.view`/`inventory.view`/`report.view`/…) | Authenticated + scope selected. |
+| No access | `/session/no-access` | — | Authenticated + the sole assignment is `Unavailable`. |
+| Dashboard | `/` | `permissionAny` of the operational view codes (`document.view`/`inventory.view`/`report.view`/…) | Authenticated + required active scope. |
 | Catalog admin | `/catalog/domains`, `/catalog/categories`, `/catalog/families`, `/catalog/materials`, `/catalog/units` | read: `catalog.view`; create/update writes: `catalog.manage` | Enterprise-facing pages. |
 | Organization refs | `/organization/sites`, `/organization/org-units`, `/organization/employees`, `/organization/external-parties` | read: `organization.view`; writes: `organization.manage` | Enterprise-facing pages. |
 | Warehouses | `/warehouses` | read: `warehouse.view`; writes: `warehouse.manage` | Enterprise-facing pages (capabilities, settings). |
@@ -154,9 +156,9 @@ Unlisted URLs → `404`-style not-found, not a permissions experiment.
 
 1. Guards use session state only (query-backed). Until hydration ends, show a
    neutral loading boundary (SAD §7/D-AUTH-01); no flash of the shell.
-2. Not authenticated → `login` (anonymous route). Authenticated without a
-   scope → `SelectionRequired` gate or `Unavailable` screen; never falls
-   through to a protected page.
+2. Not authenticated → `login` (anonymous route). An authenticated session
+   whose sole assignment is `Unavailable` renders the no-access screen and
+   never falls through to a protected page. V1 has no scope-selection gate.
 3. Authenticated with scope but missing the code → Arabic permission-denied
    surface ("ليست لديك صلاحية الوصول") with a link back; **this is not a
    logout** and the session stays.
@@ -188,8 +190,8 @@ Notes:
   (`Hidden/Disabled/Enabled`); the codes are its permission layer.
 - `WH_MGR` granted at Enterprise scope == the Architecture Overview's
   "Enterprise WH Manager"; at Site scope == "Site Manager"; at Warehouse
-  scope == "Warehouse Manager". One role code, three assignment scopes —
-  using D-AUTH-01 semantics instead of inventing role variants.
+  scope == "Warehouse Manager". One role code is assignable at one of three
+  scope levels; each user receives exactly one such assignment (D-SRS-01).
 - Data entry roles are deliberately narrow: `DATA_MANAGER` cannot post
   documents; `WH_KEEPER` cannot post; `WH_MGR` sees no `admin.*` — default.
 
@@ -268,3 +270,132 @@ Notes:
 
 Implementation does not invent codes or roles beyond this table; guards,
 navigation, and actions are derived from one approved vocabulary.
+
+## Addendum — Enterprise scope is oversight only (D-RBAC-02, ratified e01.9)
+
+**Status:** Ratified
+**Decision ID:** D-RBAC-02
+**Version:** 1.0.0
+**Beads:** `eiams-frontend-e01.9`
+**Decision date:** 2026-09-02
+
+### Decision
+
+DECISION (current v1): The Enterprise scope (المؤسسة) is ORGANIZATIONAL and SUPERVISORY only. It confers GOVERN oversight (monitor all sites/warehouses, dashboards, movement-following, statistics) and STRUCTURAL authority (decides the org structure), but NO inventory OPERATE permission and NO approval gate in the transaction path. Routine and exception transactions occur ONLY at Site/Warehouse scope by WH_MGR. Structural creation of sites/warehouses/users/roles is executed by SYSTEM_ADMIN on the enterprise director's authority (separate user per the single-role/single-scope rule, D-SRS-01). The director approves nothing today; he observes and organizes.
+
+PERMISSION AXES (foundation for future): OPERATE (receive/issue/transfer/post/count), GOVERN (view_all/view_reports), APPROVE (future, see D-APP-01), ADMIN (structural, SYSTEM_ADMIN only). v1 uses OPERATE + GOVERN.
+
+RATIONALE: A government oversight authority must not place a single identity who both authorizes the org AND posts inventory; separation of duties is preserved by keeping the enterprise director as a pure observer-governor. This corrects the earlier 'one role code, three scopes' simplification in route-permission-scope-matrix.md: the Enterprise scope of WH_MGR is governance, not a super-operator.
+
+SUPERSEDES: the loose reading of D-RBAC-01's 'one role code, three assignment scopes' as implying enterprise = wider operator. Assignment cardinality still single-role/single-scope per D-SRS-01.
+
+AFFECTED: docs/route-permission-scope-matrix.md (add Enterprise=oversight note); permission mapping (e24-t06); no code change required in v1.
+
+### Permission axes (v1)
+
+| Axis | Meaning | Scopes that may hold it in v1 |
+| --- | --- | --- |
+| OPERATE | receive / issue / transfer / post / count | Site scope, Warehouse scope (WH_MGR, WH_KEEPER subset) |
+| GOVERN | view_all / view_reports / dashboards / movement-following / statistics | Enterprise scope, Site scope, Warehouse scope |
+| APPROVE | future transaction-path approval gate | Reserved for D-APP-01 (no scope grants it in v1) |
+| ADMIN | structural authority: create/update sites, warehouses, users, roles | Enterprise scope — SYSTEM_ADMIN only (separate user, D-SRS-01) |
+
+In v1 the Enterprise scope of WH_MGR grants GOVERN only; the Site and Warehouse scopes of WH_MGR grant OPERATE + GOVERN. ADMIN is held by SYSTEM_ADMIN at the Enterprise structural level and never co-located with an OPERATE role. APPROVE is not granted to any v1 scope; the transaction path is `Draft → Submitted → Posted` per D-LIFE-01 with the signed-original gate (D-ATT-01) and is not a separate approval step in v1.
+
+### Rejected alternatives
+
+| Alternative | Reason rejected |
+| --- | --- |
+| Reading D-RBAC-01's "one role code, three assignment scopes" as Enterprise = wider operator (i.e., Enterprise WH_MGR inherits all Site + Warehouse operations) | Conflates scope cardinality with permission widening; lets a single identity both authorize the org and post inventory, breaking separation of duties. The Enterprise scope is governance, not a super-operator. |
+| Letting the enterprise director approve exception transactions directly | Adds an approval gate (APPROVE axis) to v1 that the contract does not model and that conflicts with D-APP-01's deferral. The director observes and organizes; WH_MGR at Site/Warehouse scope owns the transaction path. |
+| Co-locating SYSTEM_ADMIN on the same user identity as an OPERATE role | Mixes structural ADMIN with inventory OPERATE on one identity, violating the single-role/single-scope rule (D-SRS-01) and the separation-of-duties rationale above. |
+
+### Affected Beads
+
+- `e24-t06` — Verify RBAC and scope across all modules (consumes the Enterprise-oversight semantics as a verification check).
+- `e06-t06` — `usePermission` predicates (the predicate surface reads `permissionCodes`; the axes table above is the vocabulary the predicate composes against).
+
+### Supersedes
+
+- The loose reading of D-RBAC-01's "one role code, three assignment scopes" as implying Enterprise = wider operator. The original D-RBAC-01 content above is **not** modified; this addendum only tightens the Enterprise-scope semantics. Assignment cardinality (single-role/single-scope) remains as defined by D-SRS-01.
+
+D-RBAC-02 introduces no new permission codes and no new artifacts; it narrows the meaning of the existing Enterprise-scope grant. v1 implements OPERATE + GOVERN; APPROVE is reserved for D-APP-01 (future); ADMIN is structural and held by SYSTEM_ADMIN only.
+
+## Addendum — Warehouse is a separation-of-duties boundary (D-WH-01, ratified e01.11)
+
+**Status:** Approved frontend and provisional API contract decision
+**Decision ID:** D-WH-01
+**Version:** 1.0.0
+**Beads:** `eiams-frontend-e01.11`
+**Decision date:** 2026-09-02
+
+### Decision
+
+A Warehouse entity represents a **separation-of-duties boundary**, not a
+physical building.
+
+**INTERPRETATION A (functionally separated stores):** Where a location
+separates duties across functional stores (e.g. central HQ: عامة /
+معلوماتية / آليات in separate stores), model MULTIPLE Warehouse records,
+each with its own capability matrix and its own scoped manager/keeper.
+Scope separates the managers; capability is the per-warehouse operational
+constraint.
+
+**INTERPRETATION B (single responsible manager):** Where a branch operates
+as ONE store under ONE responsible manager for ALL materials (one room,
+all domains, no domain-specific keepers), model ONE Warehouse record whose
+capability matrix covers all applicable domains. Scope + per-warehouse
+capability fully express this with no new concept.
+
+### Interpretation table
+
+| Interpretation | When it applies | Warehouse records | Manager/keeper scoping | Capability matrix |
+| --- | --- | --- | --- | --- |
+| A — functionally separated stores | A location splits duties across distinct functional stores (e.g. central HQ: عامة / معلوماتية / آليات). | MULTIPLE Warehouse records, one per store. | Each warehouse has its own scoped manager/keeper. | Each warehouse has its own capability matrix scoped to its store. |
+| B — single responsible manager | A branch operates as ONE store under ONE responsible manager for ALL materials (one room, all domains, no domain-specific keepers). | ONE Warehouse record. | One scoped manager covers the warehouse. | Capability matrix covers all applicable domains for the warehouse. |
+
+### Governing rule
+
+> A single-Warehouse record (Interpretation B) must NEVER be paired with
+> multiple domain-specific keepers scoped to it — that combination cannot
+> be separated by scope (one warehouse) or by warehouse-level capability
+> (which permits all domains), and would require a net-new per-user
+> material-domain restriction that is **out of scope for v1**. If duties
+> later split inside a single warehouse, the warehouse must be divided
+> per Interpretation A (see D-WH-02).
+
+### Rationale
+
+Matches the organization's real duty boundaries; central HQ keeps strict
+separation (3 records, 3 scoped managers) while small branches stay
+simple (1 record, 1 manager). No per-user domain restriction needed in
+v1.
+
+### Rejected alternative
+
+| Alternative | Reason rejected |
+| --- | --- |
+| Per-user material-domain restriction (keep one Warehouse while allowing multiple domain-specific keepers scoped to it) | Out of scope for v1; would require a net-new authorization concept that conflicts with D-SRS-01 (one persistent role-scope per user) and D-RBAC-01 (warehouse-level capability, not per-user domain restriction). Use Interpretation A (split into multiple warehouses) instead. |
+
+### Affected Beads
+
+| Bead | Required outcome |
+| --- | --- |
+| `e10-t09` | Warehouse setup guidance (admin UI) documents the A/B choice per location; the data model is unchanged. |
+| `e24-t06` | Permission mapping integration verifies the per-warehouse capability matrix flows into the session's `permissionCodes` for the chosen interpretation. |
+
+### Future work
+
+Warehouse reorganization when duties split inside a single warehouse is
+document-driven; see D-WH-02 (`eiams-frontend-e01.12`) for the
+reorganization pattern.
+
+### Cross-references
+
+- D-WH-01 is recorded in the `Decisions published after baseline` table
+  of `docs/requirements-conflict-matrix.md` (rows: `eiams-frontend-e01.11`
+  self, `e10-t09`, `e24-t06`, `e01.12` future).
+- The BDM "Warehouse and availability" row in
+  `docs/business-domain-model-v1.md` cross-refs D-WH-01 for the A/B
+  interpretation that governs how capability + scope express duty
+  boundaries.
