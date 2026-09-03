@@ -12,6 +12,7 @@ describe('environment configuration', () => {
     expect(environment).toMatchObject({
       apiBaseUrl: '/api/v1',
       enableApiMocks: true,
+      experimentalSingularSession: false,
       mode: 'test',
       isDevelopment: true,
       isProduction: false,
@@ -24,6 +25,7 @@ describe('environment configuration', () => {
     expect(environment).toEqual({
       apiBaseUrl: '/api/v1',
       enableApiMocks: true,
+      experimentalSingularSession: false,
       mode: 'test',
       isDevelopment: false,
       isProduction: false,
@@ -40,6 +42,19 @@ describe('environment configuration', () => {
     expect(environment.enableApiMocks).toBe(false)
   })
 
+  it('defaults the D-SRS-01 singular-session flag to false', () => {
+    const environment = parseEnvironment(viteEnvironment)
+    expect(environment.experimentalSingularSession).toBe(false)
+  })
+
+  it('enables the D-SRS-01 singular-session flag when explicitly opted in', () => {
+    const environment = parseEnvironment({
+      ...viteEnvironment,
+      VITE_EXPERIMENTAL_SINGULAR_SESSION: 'true',
+    })
+    expect(environment.experimentalSingularSession).toBe(true)
+  })
+
   it.each(['1', 'TRUE', '', 'yes'])(
     'rejects an unsupported mocks flag value: %s',
     (enableApiMocks) => {
@@ -50,6 +65,20 @@ describe('environment configuration', () => {
         }),
       ).toThrowError(
         'Invalid EIAMS frontend environment configuration: VITE_ENABLE_API_MOCKS: Invalid option: expected one of "true"|"false"',
+      )
+    },
+  )
+
+  it.each(['1', 'TRUE', '', 'yes'])(
+    'rejects an unsupported singular-session flag value: %s',
+    (flag) => {
+      expect(() =>
+        parseEnvironment({
+          ...viteEnvironment,
+          VITE_EXPERIMENTAL_SINGULAR_SESSION: flag,
+        }),
+      ).toThrowError(
+        'Invalid EIAMS frontend environment configuration: VITE_EXPERIMENTAL_SINGULAR_SESSION: Invalid option: expected one of "true"|"false"',
       )
     },
   )

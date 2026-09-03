@@ -3,6 +3,7 @@ import { IconLockAccess, IconRoute, IconShieldLock } from '@tabler/icons-react'
 import type { ReactNode } from 'react'
 import { Link, Navigate } from 'react-router'
 
+import { environment } from '@/config/env'
 import { ROUTE_PATHS, type RouteKey } from '@/config/routes'
 import { useRoutePermission } from '@/modules/auth/hooks/use-permission'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
@@ -97,6 +98,9 @@ function AnonymousRoute({ children }: RouteGuardProps) {
   }
 
   if (session.scopeState === 'SelectionRequired') {
+    if (environment.experimentalSingularSession) {
+      return <Navigate to={ROUTE_PATHS.noAccess} replace />
+    }
     return <Navigate to={ROUTE_PATHS.scopeSelect} replace />
   }
 
@@ -125,6 +129,9 @@ function RequireSelectedScope({ children }: RouteGuardProps) {
   }
 
   if (session.scopeState === 'SelectionRequired') {
+    if (environment.experimentalSingularSession) {
+      return <Navigate to={ROUTE_PATHS.noAccess} replace />
+    }
     return <Navigate to={ROUTE_PATHS.scopeSelect} replace />
   }
 
@@ -181,6 +188,9 @@ function NoAccessRoute() {
   }
 
   if (session.scopeState === 'SelectionRequired') {
+    if (environment.experimentalSingularSession) {
+      return <Navigate to={ROUTE_PATHS.noAccess} replace />
+    }
     return <Navigate to={ROUTE_PATHS.scopeSelect} replace />
   }
 
