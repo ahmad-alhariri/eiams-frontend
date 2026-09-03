@@ -45,13 +45,6 @@ export function createDevSession(): AuthTokenResponse {
         rowVersion: 0,
       },
       activeRoles: [{ roleId: DEV_ROLE_ID, code: 'sysadmin', nameAr: 'مدير النظام' }],
-      availableScopes: [
-        {
-          scopeId: DEV_SCOPE_ID,
-          scopeType: 'Enterprise',
-          displayName: 'نطاق التطوير',
-        },
-      ],
       activeScope: {
         scopeId: DEV_SCOPE_ID,
         scopeType: 'Enterprise',
@@ -59,6 +52,18 @@ export function createDevSession(): AuthTokenResponse {
       },
       scopeState: 'Selected',
       permissionCodes: [...PERMISSION_CODES],
+      // The deprecated generated contract still requires `availableScopes` on
+      // SessionResponse; D-SRS-01 deprecates it but `whhu.5` (generated-artifact
+      // deletion) has not landed. Emit a single-element copy of activeScope so
+      // legacy dev fixtures continue to satisfy the type without ever being
+      // consumed — see useActiveScopeContext's read-only contract.
+      availableScopes: [
+        {
+          scopeId: DEV_SCOPE_ID,
+          scopeType: 'Enterprise',
+          displayName: 'نطاق التطوير',
+        },
+      ],
     },
   }
 }

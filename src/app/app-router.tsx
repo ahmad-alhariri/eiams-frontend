@@ -7,9 +7,8 @@ import {
   NoAccessRoute,
   RequireSelectedScope,
   RouteAccessGuard,
-  ScopeSelectionRoute,
 } from '@/modules/auth/components/route-guards'
-import { ActiveScopeSwitcher } from '@/modules/auth/components/active-scope-switcher'
+import { ActiveScopeBadge } from '@/modules/auth/components/active-scope-badge'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import {
   getWiredRouteKeys,
@@ -65,10 +64,6 @@ const appRouter = createBrowserRouter([
     ),
   },
   {
-    path: ROUTE_PATHS.scopeSelect,
-    element: <ScopeSelectionRoute />,
-  },
-  {
     path: ROUTE_PATHS.noAccess,
     element: <NoAccessRoute />,
   },
@@ -79,7 +74,7 @@ const appRouter = createBrowserRouter([
   {
     element: (
       <RequireSelectedScope>
-        <AppLayout scopeSwitcher={<ActiveScopeSwitcher />} />
+        <AppLayout scopeSwitcher={<ActiveScopeBadge />} />
       </RequireSelectedScope>
     ),
     children: PROTECTED_ROUTE_OBJECTS,
