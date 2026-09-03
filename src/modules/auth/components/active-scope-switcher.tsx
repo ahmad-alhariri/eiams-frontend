@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 
-import { environment } from '@/config/env'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { Skeleton } from '@/shared/ui/skeleton'
 import {
@@ -35,12 +34,6 @@ function sameScope(first: ScopeContext, second: ScopeContext): boolean {
  * scope choice. The session query remains the sole source of truth; selecting
  * another option delegates cache isolation and session replacement to
  * useActiveScopeContext.
- *
- * D-SRS-01 singular-session path: when `experimentalSingularSession` is true,
- * the contract exposes exactly one activeScope and the user has no scope
- * choice — the switcher collapses to a read-only badge of the singular scope
- * displayName. The mutation triple (`switchScope`, `isSwitchingScope`,
- * `switchError`) is intentionally not consumed in that mode.
  */
 function ActiveScopeSwitcher() {
   const {
@@ -51,10 +44,9 @@ function ActiveScopeSwitcher() {
     switchError,
     switchScope,
   } = useActiveScopeContext()
-  const singularSession = environment.experimentalSingularSession
 
   useEffect(() => {
-    if (singularSession || switchError === null) {
+    if (switchError === null) {
       return
     }
 
@@ -63,7 +55,7 @@ function ActiveScopeSwitcher() {
       title: apiError.titleAr,
       ...(apiError.detailAr === null ? {} : { description: apiError.detailAr }),
     })
-  }, [singularSession, switchError])
+  }, [switchError])
 
   if (isLoading) {
     return (
@@ -83,8 +75,7 @@ function ActiveScopeSwitcher() {
   }
 
   const availableScopes = session.availableScopes
-  const canSwitch = !singularSession && availableScopes.length > 1
-
+  const canSwitch = availableScopes.length > 1
   if (!canSwitch) {
     return (
       <div
