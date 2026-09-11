@@ -78,7 +78,6 @@ function putHandler(capture: PutCapture) {
       capture.bodies.push(body)
       return HttpResponse.json(
         createWarehouseMaterialSetting({
-          settingId: fixtureUuid(140),
           warehouseId: WAREHOUSE_ID,
           material: { id: body.materialId, displayName: 'مادة مخزنية' },
           minQuantity: body.minQuantity ?? null,
@@ -148,9 +147,8 @@ describe('WarehouseMaterialSettingsEditor', () => {
 
   it('edits an existing setting: material is locked, thresholds update, rowVersion preserved', async () => {
     const existing = createWarehouseMaterialSetting({
-      settingId: fixtureUuid(140),
       warehouseId: WAREHOUSE_ID,
-      material: { id: INK.materialId, displayName: 'حبر أسود', code: 'INK-001', status: 'Active' },
+      material: { id: INK.materialId, displayName: 'حبر أسود', code: 'INK-001' },
       minQuantity: 2,
       maxQuantity: 10,
       rowVersion: 3,
@@ -210,7 +208,6 @@ describe('WarehouseMaterialSettingsEditor', () => {
 
   it('excludes already-configured materials from the picker', async () => {
     const existing = createWarehouseMaterialSetting({
-      settingId: fixtureUuid(140),
       warehouseId: WAREHOUSE_ID,
       material: { id: INK.materialId, displayName: 'حبر أسود' },
       status: 'Active',

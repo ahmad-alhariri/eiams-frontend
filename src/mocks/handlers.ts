@@ -70,13 +70,15 @@ import type {
   UserSummary,
   UserUpsertRequest,
   VersionOnlyDocumentActionRequest,
-  WarehouseCapabilityUpsertRequest,
   WarehouseDocument,
   WarehouseDocumentDraftRequest,
-  WarehouseMaterialSetting,
-  WarehouseMaterialSettingUpsertRequest,
   WarehouseUpsertRequest,
 } from '@/shared/types/generated/eiams-v1'
+import type {
+  WarehouseCapabilityUpsertRequest,
+  WarehouseMaterialSetting,
+  WarehouseMaterialSettingUpsertRequest,
+} from '@/modules/warehouse/types/warehouse.api-types'
 
 /**
  * Contract-derived handlers for the development mock API.
@@ -1457,8 +1459,8 @@ export const mockApiHandlers: readonly HttpHandler[] = [
           capability.warehouseId === warehouseId && capability.domain.id === item.domainId,
       )
       return {
-        capabilityId: existing?.capabilityId ?? nextFixtureUuid(),
         warehouseId,
+        domainId: item.domainId,
         domain: {
           id: item.domainId,
           displayName: db.domains.find((domain) => domain.domainId === item.domainId)?.nameAr ?? '',
@@ -1521,8 +1523,8 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       )
       if (existing === undefined) {
         const created = createWarehouseMaterialSetting({
-          settingId: nextFixtureUuid(),
           warehouseId,
+          materialId: body.materialId,
           material: namedMaterial,
           minQuantity: body.minQuantity ?? null,
           maxQuantity: body.maxQuantity ?? null,

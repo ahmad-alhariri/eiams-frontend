@@ -1,4 +1,4 @@
-import type { NamedReference } from '@/shared/types/generated/eiams-v1'
+import type { NamedReference } from '@/modules/catalog/types/catalog.types'
 
 import {
   createEntitySelectorAdapter,
@@ -11,17 +11,17 @@ import {
 export type NamedReferenceLoader = EntityLoader<NamedReference>
 
 /**
- * Adapter for the contract's generic reference shape (`{ id, code?, displayName, status? }`),
+ * Adapter for the contract's generic reference shape (`{ id, displayName }`),
  * used wherever a document references an entity by name (warehouse, site, org unit,
- * material, ...). Label = displayName, hint = code, and references explicitly marked
- * inactive are disabled.
+ * material, ...). Label = displayName; the contract only returns active references
+ * so all options are enabled.
  */
 const namedReferenceAdapter: EntitySelectorAdapter<NamedReference> =
   createEntitySelectorAdapter<NamedReference>({
     toOption: (reference) => ({
       value: reference.id,
       label: reference.displayName,
-      disabled: reference.status != null && reference.status !== 'Active',
+      disabled: false,
       payload: reference,
     }),
   })

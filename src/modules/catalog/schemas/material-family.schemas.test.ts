@@ -4,7 +4,7 @@ import { toMaterialFamilyRequest, materialFamilySchema } from './material-family
 
 describe('materialFamilySchema', () => {
   const values = {
-    categoryId: '00000000-0000-4000-8000-000000000021',
+    materialCategoryId: '00000000-0000-4000-8000-000000000021',
     code: 'IT-HW-PC',
     nameAr: 'الحواسيب',
     status: 'Active' as const,
@@ -12,9 +12,9 @@ describe('materialFamilySchema', () => {
 
   it('enforces v1 category, code, and Arabic name constraints', () => {
     expect(materialFamilySchema.safeParse(values).success).toBe(true)
-    expect(materialFamilySchema.safeParse({ ...values, categoryId: 'not-a-uuid' }).success).toBe(
-      false,
-    )
+    expect(
+      materialFamilySchema.safeParse({ ...values, materialCategoryId: 'not-a-uuid' }).success,
+    ).toBe(false)
     expect(materialFamilySchema.safeParse({ ...values, code: 'x'.repeat(51) }).success).toBe(false)
     expect(materialFamilySchema.safeParse({ ...values, nameAr: 'x'.repeat(201) }).success).toBe(
       false,
@@ -25,8 +25,12 @@ describe('materialFamilySchema', () => {
     expect(
       toMaterialFamilyRequest({ ...values, code: ' IT-HW-PC ', nameAr: ' الحواسيب ' }, null),
     ).toEqual({
-      ...values,
+      materialCategoryId: values.materialCategoryId,
+      parentFamilyId: null,
+      code: 'IT-HW-PC',
+      nameAr: 'الحواسيب',
       rowVersion: 0,
+      status: 'Active',
     })
   })
 })

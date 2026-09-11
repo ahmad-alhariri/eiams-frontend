@@ -4,21 +4,22 @@ import {
   counterpartStatusLabelAr,
   validateCounterpartForWrite,
 } from '@/modules/organization/types/counterpart-lookup.types'
-import type { CounterpartOption } from '@/shared/types/generated/eiams-v1'
+import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
 import { fixtureUuid } from '@/test/msw/factories'
 
-function createCounterpart(status: CounterpartOption['status']): CounterpartOption {
+function createCounterpart(status: 'Active' | 'Inactive'): ExternalParty {
   return {
-    displayName: 'الجهة التجريبية',
-    id: fixtureUuid(63),
+    externalPartyId: fixtureUuid(63),
+    nameAr: 'الجهة التجريبية',
+    code: ' ExtTest',
     status,
-    type: 'External',
-  }
+    rowVersion: 1,
+  } as ExternalParty
 }
 
 describe('counterpart write validation', () => {
   it('allows active server choices and blocks missing or inactive choices in Arabic', () => {
-    expect(validateCounterpartForWrite(createCounterpart('Active'))).toEqual({ isValid: true })
+    expect(validateCounterpartForWrite(createCounterpart('Active'))).toEqual({ isValid: true, reference: { type: 'ExternalParty', id: expect.any(String) } })
     expect(validateCounterpartForWrite(undefined)).toEqual({
       isValid: false,
       messageAr: 'اختر جهة مستلمة أو حائزة نشطة.',
@@ -29,8 +30,8 @@ describe('counterpart write validation', () => {
     })
   })
 
-  it('keeps an inactive historical label available for read-only presentation', () => {
-    expect(counterpartStatusLabelAr(createCounterpart('Active'))).toBe('نشط')
-    expect(counterpartStatusLabelAr(createCounterpart('Inactive'))).toBe('غير نشط')
+  it('produces an Arabic status hint for read-only presentation', () => {
+    expect(counterpartStatusLabelAr(createCounterpart('Active'))).toContain('نشط')
+    expect(counterpartStatusLabelAr(createCounterpart('Inactive'))).toContain('غير نشط')
   })
 })

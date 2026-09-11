@@ -1,52 +1,69 @@
 import { describe, expect, it } from 'vitest'
 
 import { createMaterialUnitConversion, fixtureUuid } from '@/test/msw/factories'
+import type { MaterialUnitConversion } from '@/modules/catalog/types/catalog.types'
 
 import {
   materialUnitConversionSchema,
-  toMaterialUnitConversionCreateRequest,
-  toMaterialUnitConversionUpdateRequest,
+  toMaterialUnitConversionRequest,
 } from './material-unit-conversion.schemas'
 
 describe('material unit-conversion schema', () => {
-  const validValues = { fromUnitId: fixtureUuid(26), factor: '12', status: 'Active' as const }
+  const validValues = {
+    unitId: fixtureUuid(26),
+    conversionFactor: 12,
+    status: 'Active' as const,
+  }
 
-  it('preserves every valid DECIMAL(18,6) character without number coercion', () => {
-    for (const factor of [
-      '0.125',
-      '999999999999.999999',
-      '999999999999.000001',
-      '123456789012.123456',
-    ]) {
-      const parsed = materialUnitConversionSchema.safeParse({ ...validValues, factor })
-      expect(parsed.success).toBe(true)
-      if (parsed.success) expect(parsed.data.factor).toBe(factor)
-    }
-
-    for (const factor of ['0', '0.000000', '-1', '0.1234567', '1000000000000', '12.', '1e3']) {
-      expect(materialUnitConversionSchema.safeParse({ ...validValues, factor }).success).toBe(false)
-    }
+  it('rejects zero, negative, and non-numeric conversion factors', () => {
+    expect(
+      materialUnitConversionSchema.safeParse({ ...validValues, conversionFactor: 0 }).success,
+    ).toBe(false)
+    expect(
+      materialUnitConversionSchema.safeParse({ ...validValues, conversionFactor: -1 }).success,
+    ).toBe(false)
   })
 
-  it('maps only contract-owned fields for creation', () => {
-    expect(toMaterialUnitConversionCreateRequest(validValues)).toEqual({
-      fromUnitId: validValues.fromUnitId,
-      factor: '12',
+  it('accepts positive numeric conversion factors', () => {
+    expect(
+      materialUnitConversionSchema.safeParse({ ...validValues, conversionFactor: 0.5 }).success,
+    ).toBe(true)
+  })
+
+  it('maps a create request without an existing conversion', () => {
+    expect(toMaterialUnitConversionRequest(validValues, fixtureUuid(60), null)).toEqual({
+      materialId: fixtureUuid(60),
+      unitId: validValues.unitId,
+      conversionFactor: 12,
+      rowVersion: 0,
+      status: 'Active',
     })
   })
 
-  it('preserves the historical factor and row version while archiving a used conversion', () => {
-    const conversion = createMaterialUnitConversion({
-      factor: '12',
+  it('preserves the row version from the existing conversion on update', () => {
+    const conversion: MaterialUnitConversion = {
+      ...createMaterialUnitConversion(),
+      materialUnitConversionId: fixtureUuid(33),
+      materialId: fixtureUuid(60),
+      material: { id: fixtureUuid(60), displayName: 'حاسوب' },
+      unitId: fixtureUuid(26),
+      unit: { id: fixtureUuid(26), displayName: 'كرتونة' },
+      conversionFactor: 12,
       rowVersion: 7,
-      usedInPostedDocuments: true,
-    })
+    }
 
     expect(
-      toMaterialUnitConversionUpdateRequest(
-        { ...validValues, factor: '10', status: 'Inactive' },
+      toMaterialUnitConversionRequest(
+        { ...validValues, conversionFactor: 10, status: 'Inactive' },
+        fixtureUuid(60),
         conversion,
       ),
-    ).toEqual({ factor: '12', rowVersion: 7, status: 'Inactive' })
+    ).toEqual({
+      materialId: fixtureUuid(60),
+      unitId: fixtureUuid(26),
+      conversionFactor: 10,
+      rowVersion: 7,
+      status: 'Inactive',
+    })
   })
 })

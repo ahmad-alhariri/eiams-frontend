@@ -5,15 +5,14 @@ import { catalogService } from '@/modules/catalog/services/catalog.service'
 import { queryKeys } from '@/shared/services/query-keys'
 import type {
   MaterialCategoryUpsertRequest,
+  MaterialDomainUpsertRequest,
   MaterialFamilyUpsertRequest,
-  MaterialUnitConversionCreateRequest,
-  MaterialUnitConversionUpdateRequest,
+  MaterialUnitConversionUpsertRequest,
   MaterialUpsertRequest,
-  NamedCodeUpsertRequest,
   UnitOfMeasureUpsertRequest,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/modules/catalog/types/catalog.types'
 
-type UpdateMaterialDomainVariables = { domainId: string; request: NamedCodeUpsertRequest }
+type UpdateMaterialDomainVariables = { domainId: string; request: MaterialDomainUpsertRequest }
 type UpdateMaterialCategoryVariables = {
   categoryId: string
   request: MaterialCategoryUpsertRequest
@@ -22,12 +21,12 @@ type UpdateMaterialFamilyVariables = { familyId: string; request: MaterialFamily
 type UpdateMaterialVariables = { materialId: string; request: MaterialUpsertRequest }
 type CreateMaterialUnitConversionVariables = {
   materialId: string
-  request: MaterialUnitConversionCreateRequest
+  request: MaterialUnitConversionUpsertRequest
 }
 type UpdateMaterialUnitConversionVariables = {
   materialId: string
   conversionId: string
-  request: MaterialUnitConversionUpdateRequest
+  request: MaterialUnitConversionUpsertRequest
 }
 type UpdateUnitOfMeasureVariables = { unitId: string; request: UnitOfMeasureUpsertRequest }
 

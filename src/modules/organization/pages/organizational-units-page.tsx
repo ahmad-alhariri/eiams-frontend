@@ -23,7 +23,7 @@ import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import { toast } from '@/shared/ui/toast-manager'
-import type { OrganizationalUnit } from '@/shared/types/generated/eiams-v1'
+import type { OrganizationalUnit } from '@/modules/organization/types/organization.types'
 
 const ORGANIZATIONAL_UNIT_TREE_PAGE_SIZE = 200
 
@@ -60,7 +60,7 @@ function OrganizationalUnitsPage() {
     async (values: OrganizationalUnitFormValues) => {
       const unit = dialogUnit ?? null
       await submitFeedback(async () => {
-        const request = toOrganizationalUnitRequest(values, unit)
+        const request = toOrganizationalUnitRequest(values)
         if (unit === null) {
           await createMutation.mutateAsync(request)
           toast.success({ title: 'تمت إضافة الوحدة التنظيمية.' })

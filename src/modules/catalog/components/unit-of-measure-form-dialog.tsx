@@ -6,6 +6,7 @@ import {
   unitOfMeasureSchema,
   type UnitOfMeasureFormValues,
 } from '@/modules/catalog/schemas/unit-of-measure.schemas'
+import type { UnitOfMeasure } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -20,12 +21,13 @@ import {
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { UnitOfMeasure } from '@/shared/types/generated/eiams-v1'
 
 const EMPTY_VALUES: UnitOfMeasureFormValues = {
   code: '',
   nameAr: '',
-  symbolAr: '',
+  descriptionAr: null,
+  nominalConversionFactor: 1,
+  baseUnitId: null,
   status: 'Active',
 }
 
@@ -55,7 +57,9 @@ export function UnitOfMeasureFormDialog({
     form.reset({
       code: unit?.code ?? '',
       nameAr: unit?.nameAr ?? '',
-      symbolAr: unit?.symbolAr ?? '',
+      descriptionAr: unit?.descriptionAr ?? null,
+      nominalConversionFactor: unit?.nominalConversionFactor ?? 1,
+      baseUnitId: unit?.baseUnitId ?? null,
       status: unit?.status ?? 'Active',
     })
   }, [form, open, unit])
@@ -67,7 +71,14 @@ export function UnitOfMeasureFormDialog({
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['code', 'nameAr', 'symbolAr', 'status'],
+        schemaKeys: [
+          'code',
+          'nameAr',
+          'descriptionAr',
+          'nominalConversionFactor',
+          'baseUnitId',
+          'status',
+        ],
       })
     }
   }
@@ -105,13 +116,13 @@ export function UnitOfMeasureFormDialog({
               />
               <FormField
                 control={form.control}
-                name="symbolAr"
+                name="code"
                 rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>رمز العرض</FormLabel>
+                    <FormLabel>الرمز</FormLabel>
                     <FormControl>
-                      <Input {...field} disabled={isPending} placeholder="مثال: قطعة" />
+                      <Input {...field} dir="ltr" disabled={isPending} placeholder="EA" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -121,13 +132,21 @@ export function UnitOfMeasureFormDialog({
             <div className="grid gap-5 sm:grid-cols-2">
               <FormField
                 control={form.control}
-                name="code"
+                name="nominalConversionFactor"
                 rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>الرمز</FormLabel>
+                    <FormLabel>عامل التحويل</FormLabel>
                     <FormControl>
-                      <Input {...field} dir="ltr" disabled={isPending} placeholder="EA" />
+                      <Input
+                        type="number"
+                        step="any"
+                        min="0"
+                        dir="ltr"
+                        disabled={isPending}
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.currentTarget.valueAsNumber)}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -156,6 +175,25 @@ export function UnitOfMeasureFormDialog({
                 )}
               />
             </div>
+            <FormField
+              control={form.control}
+              name="descriptionAr"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>الوصف (اختياري)</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      value={field.value ?? ''}
+                      onChange={(event) => field.onChange(event.currentTarget.value || null)}
+                      disabled={isPending}
+                      placeholder="وصف مختصر لوحدة القياس"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <DialogFooter>
               <Button type="submit" loading={isPending}>
                 {unit ? 'حفظ التعديلات' : 'إضافة الوحدة'}

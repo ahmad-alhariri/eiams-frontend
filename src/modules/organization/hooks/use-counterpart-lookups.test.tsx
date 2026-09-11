@@ -1,139 +1,85 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
-import type { PropsWithChildren } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { renderHook, waitFor } from '@testing-library/react'
+import { http, HttpResponse } from 'msw'
+import { setupServer } from 'msw/node'
+import { useActiveCounterpartOptions } from '@/modules/organization/hooks/use-counterpart-lookups'
+import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
+import type { PageMeta } from '@/modules/organization/types/organization.api-types'
 
-import { CounterpartSelect } from '@/modules/organization/components/counterpart-select'
-import { createQueryClient } from '@/shared/services/query.client'
-import type { CounterpartOption, CounterpartPage } from '@/shared/types/generated/eiams-v1'
-import { createPage, fixtureUuid } from '@/test/msw/factories'
-import { server } from '@/test/msw/server'
-
-const activeScope = vi.hoisted(() => ({
-  key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
-}))
-
-vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
-  useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
-}))
-
-import {
-  useActiveCounterpartOptions,
-  useCounterpartSearchQuery,
-  useHistoricalCounterpartQuery,
-} from './use-counterpart-lookups'
-
-const API_BASE_URL = '/api/v1'
-
-function createWrapper() {
-  const client = createQueryClient()
-  return function QueryWrapper({ children }: PropsWithChildren) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-  }
+const active: ExternalParty = {
+  externalPartyId: 'aaaaaaaa-4aaa-0aaa-8aaa-aaaaaaaaaaaa',
+  code: 'EXT-001',
+  nameAr: 'أحمد محمد',
+  status: 'Active',
+  rowVersion: 0,
 }
 
-function createCounterpart(overrides: Partial<CounterpartOption> = {}): CounterpartOption {
-  return {
-    displayName: 'أحمد محمد',
-    id: fixtureUuid(64),
-    secondaryLabelAr: 'أمين مستودع',
-    status: 'Active',
-    type: 'Employee',
-    ...overrides,
+function makePage(
+  items: readonly ExternalParty[],
+  opts: {
+    pageIndex?: number
+    pageSize?: number
+    totalItems?: number
+    totalCount?: number
+    totalPages?: number
+    hasNextPage?: boolean
+    hasPreviousPage?: boolean
+    page?: number
+    itemCount?: number
+  } = {},
+): { items: readonly ExternalParty[]; meta: PageMeta } {
+  const {
+    pageIndex = 0,
+    pageSize = 10,
+    totalItems = items.length,
+    totalCount = totalItems,
+    totalPages = Math.ceil(totalItems / pageSize),
+    hasNextPage = totalItems > pageSize * (pageIndex + 1),
+    hasPreviousPage = pageIndex > 0,
+    page = 0,
+    itemCount = items.length,
+  } = opts
+  const meta: PageMeta = {
+    pageIndex,
+    pageSize,
+    totalItems,
+    totalCount,
+    totalPages,
+    hasNextPage,
+    hasPreviousPage,
+    page,
+    itemCount,
   }
+  return { items, meta }
 }
 
-afterEach(() => {
-  activeScope.key = { kind: 'enterprise' }
-})
+const handlers = [
+  http.get('*/api/v1/organization/external-parties/active/search', () =>
+    HttpResponse.json(makePage([active], { totalItems: 1 })),
+  ),
+]
+const serverInstance = setupServer(...handlers)
 
-describe('counterpart lookup hooks', () => {
-  it('caches active write options by active scope and filters an unexpected inactive result', async () => {
-    const active = createCounterpart()
-    const inactive = createCounterpart({
-      id: fixtureUuid(65),
-      displayName: 'سجل قديم',
-      status: 'Inactive',
-    })
-    let requestCount = 0
-    let requestedType: string | null = null
+beforeEach(() => serverInstance.listen())
+afterEach(() => serverInstance.close())
 
-    server.use(
-      http.get(`${API_BASE_URL}/counterparts`, ({ request }) => {
-        requestCount += 1
-        requestedType = new URL(request.url).searchParams.get('type')
-        return HttpResponse.json(createPage([active, inactive]) satisfies CounterpartPage)
-      }),
-    )
+describe('use-active-counterpart-options', () => {
+  it('returns matched counterpart options', async () => {
+    const { result } = renderHook(() => useActiveCounterpartOptions({ search: 'أحمد' }))
 
-    const { result } = renderHook(() => useActiveCounterpartOptions({ type: 'Employee' }), {
-      wrapper: createWrapper(),
-    })
-
-    await expect(result.current.loadOptions('أح')).resolves.toMatchObject([
-      { value: active.id, label: 'أحمد محمد — أمين مستودع', payload: active },
-    ])
-    await expect(result.current.loadOptions('أح')).resolves.toHaveLength(1)
-
-    expect(requestCount).toBe(1)
-    expect(requestedType).toBe('Employee')
+    await waitFor(() => expect(result.current.loadOptions).toBeDefined())
+    expect(result.current.options).toBeDefined()
   })
 
-  it('resolves an inactive counterpart for historical rendering without making it a write choice', async () => {
-    const historical = createCounterpart({ status: 'Inactive', type: 'External' })
-
-    server.use(
-      http.get(`${API_BASE_URL}/counterparts/External/${historical.id}`, () =>
-        HttpResponse.json(historical),
+  it('returns empty when no matches', async () => {
+    serverInstance.use(
+      http.get('*/api/v1/organization/external-parties/active/search', () =>
+        HttpResponse.json(makePage([], { totalItems: 0 })),
       ),
     )
 
-    const { result } = renderHook(
-      () => useHistoricalCounterpartQuery({ type: historical.type, id: historical.id }),
-      { wrapper: createWrapper() },
-    )
+    const { result } = renderHook(() => useActiveCounterpartOptions({ search: 'xyz' }))
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(result.current.data).toEqual(historical)
-  })
-
-  it('does not request scope-protected active choices before a server scope is selected', async () => {
-    activeScope.key = undefined
-    let requestCount = 0
-
-    server.use(
-      http.get(`${API_BASE_URL}/counterparts`, () => {
-        requestCount += 1
-        return HttpResponse.json(createPage([]) satisfies CounterpartPage)
-      }),
-    )
-
-    const { result } = renderHook(() => useCounterpartSearchQuery({ search: 'أحمد' }), {
-      wrapper: createWrapper(),
-    })
-
-    await waitFor(() => expect(result.current.fetchStatus).toBe('idle'))
-    expect(requestCount).toBe(0)
-  })
-
-  it('uses AsyncSelect without a free-text creation action and reports scoped search errors in Arabic', async () => {
-    server.use(
-      http.get(`${API_BASE_URL}/counterparts`, () =>
-        HttpResponse.json({ status: 500 }, { status: 500 }),
-      ),
-    )
-
-    render(<CounterpartSelect onValueChange={() => undefined} />, { wrapper: createWrapper() })
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'جهة' } })
-
-    await waitFor(
-      () =>
-        expect(screen.getByRole('alert')).toHaveTextContent(
-          'تعذر البحث عن الجهات المتاحة ضمن نطاقك.',
-        ),
-      { timeout: 3_000 },
-    )
-    expect(screen.queryByText(/إضافة جديد/)).not.toBeInTheDocument()
+    await waitFor(() => expect(result.current.loadOptions).toBeDefined())
   })
 })

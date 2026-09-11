@@ -1,11 +1,23 @@
-import type { operations } from '@/shared/types/generated/eiams-v1'
+export type { PageMeta } from './organization.api-types'
 
-/** Contract-derived server-side filters for organization reference lists. */
-export type ListSitesQuery = NonNullable<operations['listSites']['parameters']['query']>
-export type ListOrganizationalUnitsQuery = NonNullable<
-  operations['listOrganizationalUnits']['parameters']['query']
->
-export type ListEmployeesQuery = NonNullable<operations['listEmployees']['parameters']['query']>
-export type ListExternalPartiesQuery = NonNullable<
-  operations['listExternalParties']['parameters']['query']
->
+export type {
+  Site,
+  SiteUpsertRequest,
+  SitePage,
+  OrganizationalUnit,
+  OrganizationalUnitUpsertRequest,
+  OrganizationalUnitPage,
+  Employee,
+  EmployeeUpsertRequest,
+  EmployeePage,
+  ExternalParty,
+  ExternalPartyUpsertRequest,
+  ExternalPartyPage,
+  ListSitesQuery,
+  ListOrganizationalUnitsQuery,
+  ListEmployeesQuery,
+  ListExternalPartiesQuery,
+  NamedReference,
+  Uuid,
+  RecordStatus,
+} from './organization.api-types'

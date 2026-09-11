@@ -61,7 +61,7 @@ export function useIssueLineBalances(
         ? []
         : distinctMaterialIds.map((materialId) => {
             const listQuery: ListInventoryBalancesQuery = {
-              pageIndex: 0,
+              page: 0,
               pageSize: 1,
               warehouseId,
               materialId,

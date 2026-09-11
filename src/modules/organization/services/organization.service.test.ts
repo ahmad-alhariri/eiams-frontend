@@ -2,7 +2,11 @@ import axios from 'axios'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { createOrganizationService } from '@/modules/organization/services/organization.service'
+import {
+  createOrganizationService,
+  organizationService,
+  setOrganizationService,
+} from '@/modules/organization/services/organization.service'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
@@ -20,7 +24,10 @@ const bundles: ApiClientBundle[] = []
 function setupService() {
   const bundle = createApiClient({ baseURL: API_BASE_URL })
   bundles.push(bundle)
-  return createOrganizationService(bundle.client)
+  setOrganizationService(
+    bundle.client as unknown as Parameters<typeof createOrganizationService>[0],
+  )
+  return organizationService
 }
 
 afterEach(() => {
@@ -61,7 +68,7 @@ describe('OrganizationService', () => {
       }),
     )
 
-    await expect(service.listSites({ pageIndex: 2, search: 'دمشق' })).resolves.toMatchObject({
+    await expect(service.listSites({ page: 2, search: 'دمشق' })).resolves.toMatchObject({
       items: [site],
     })
     await expect(service.listOrganizationalUnits({ siteId: site.siteId })).resolves.toMatchObject({
@@ -244,9 +251,7 @@ describe('OrganizationService', () => {
     )
 
     await expect(
-      service.deactivateExternalParty(externalParty.externalPartyId, {
-        headers: { 'Idempotency-Key': '7dd1d219-2ca2-4f38-a3c4-57f6df9cee55' },
-      }),
+      service.deactivateExternalParty(externalParty.externalPartyId),
     ).resolves.toMatchObject({ status: 'Inactive' })
     expect(idempotencyKey).toBe('7dd1d219-2ca2-4f38-a3c4-57f6df9cee55')
   })
