@@ -1,0 +1,55 @@
+name: Cross-repository traceability
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: traceability-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  traceability:
+    name: Trusted contract and permission drift gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted governance documentation
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: ahmad-alhariri/EIAMS-Project
+          ref: main
+          path: governance
+          token: ${{ secrets.EIAMS_CROSS_REPO_READ_TOKEN }}
+          persist-credentials: false
+      - name: Checkout canonical backend as data
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: ahmad-alhariri/eiams-backend
+          ref: main
+          path: governance/eiams-backend
+          token: ${{ secrets.EIAMS_CROSS_REPO_READ_TOKEN }}
+          persist-credentials: false
+      - name: Checkout frontend source under review as data
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: governance/eiams-frontend
+          persist-credentials: false
+      - name: Setup Node.js for the trusted validator
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate contract, permission, and traceability drift
+        run: node docs/integration/supporting/validate-traceability.mjs
+        working-directory: governance
