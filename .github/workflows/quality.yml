@@ -17,6 +17,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  traceability:
+    name: Cross-repository traceability
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout governance documentation
+        uses: actions/checkout@v4
+        with:
+          repository: ahmad-alhariri/EIAMS-Project
+          ref: main
+          path: governance
+          token: ${{ secrets.EIAMS_CROSS_REPO_READ_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Checkout canonical backend
+        uses: actions/checkout@v4
+        with:
+          repository: ahmad-alhariri/eiams-backend
+          ref: main
+          path: governance/eiams-backend
+          token: ${{ secrets.EIAMS_CROSS_REPO_READ_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Checkout frontend change under review
+        uses: actions/checkout@v4
+        with:
+          path: governance/eiams-frontend
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Validate contract, permission, and traceability drift
+        run: node docs/integration/supporting/validate-traceability.mjs
+        working-directory: governance
+
   quality:
     name: Quality Gate
     runs-on: ubuntu-latest
