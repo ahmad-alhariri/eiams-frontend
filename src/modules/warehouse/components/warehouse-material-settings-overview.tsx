@@ -1,11 +1,14 @@
-import { IconEdit, IconPlus } from '@tabler/icons-react'
+import { IconEdit } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
 import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { WarehouseMaterialSettingsEditor } from '@/modules/warehouse/components/warehouse-material-settings-editor'
 import { useWarehouseMaterialSettingsQuery } from '@/modules/warehouse/hooks/use-warehouse-queries'
-import type { ListWarehouseMaterialSettingsQuery } from '@/modules/warehouse/types/warehouse.types'
+import type {
+  ListWarehouseMaterialSettingsQuery,
+  WarehouseMaterialSetting,
+} from '@/modules/warehouse/types/warehouse.api-types'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
@@ -13,7 +16,6 @@ import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Button } from '@/shared/ui/button'
 import { pageRows } from '@/shared/utils/table-data'
-import type { WarehouseMaterialSetting } from '@/shared/types/generated/eiams-v1'
 
 const settingColumnHelper = createColumnHelper<typeof dataTableFeatures, WarehouseMaterialSetting>()
 
@@ -21,10 +23,6 @@ export interface WarehouseMaterialSettingsOverviewProps {
   warehouseId: string
 }
 
-/**
- * Server-paginated view of one warehouse's material settings, with a
- * create/edit dialog gated by the `warehouse.manage` permission.
- */
 export function WarehouseMaterialSettingsOverview({
   warehouseId,
 }: WarehouseMaterialSettingsOverviewProps) {
@@ -38,8 +36,7 @@ export function WarehouseMaterialSettingsOverview({
 
   const settingsQueryInput = useMemo<ListWarehouseMaterialSettingsQuery>(
     () => ({
-      // DataTable controls are 1-based; EIAMS v1 list endpoints are 0-based.
-      pageIndex: currentPage - 1,
+      page: currentPage,
       pageSize,
       ...(search === '' ? {} : { search }),
     }),
@@ -59,51 +56,39 @@ export function WarehouseMaterialSettingsOverview({
     setEditorSetting(null)
     setIsEditorOpen(true)
   }, [])
-
   const openEdit = useCallback((setting: WarehouseMaterialSetting) => {
     setEditorSetting(setting)
     setIsEditorOpen(true)
+  }, [])
+  const closeEditor = useCallback((open: boolean) => {
+    if (!open) setEditorSetting(null)
   }, [])
 
   const columns = useMemo(
     () =>
       settingColumnHelper.columns([
-        settingColumnHelper.accessor('material', {
+        settingColumnHelper.accessor('material.displayName', {
           id: 'material',
           header: 'المادة',
-          cell: ({ getValue }) => (
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{getValue().displayName}</span>
-              <span dir="ltr" className="text-xs text-muted-foreground">
-                {getValue().code}
-              </span>
-            </div>
-          ),
+        }),
+        settingColumnHelper.accessor((s) => s.material.code ?? '—', {
+          id: 'materialCode',
+          header: 'الرمز',
+          cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
         }),
         settingColumnHelper.accessor('minQuantity', {
           id: 'minQuantity',
           header: 'الحد الأدنى',
-          cell: ({ getValue }) =>
-            getValue() === null ? (
-              <span className="text-muted-foreground">—</span>
-            ) : (
-              <span dir="ltr">{getValue()}</span>
-            ),
+          cell: ({ getValue }) => <span dir="ltr">{getValue() ?? '—'}</span>,
         }),
         settingColumnHelper.accessor('maxQuantity', {
           id: 'maxQuantity',
           header: 'الحد الأعلى',
-          cell: ({ getValue }) =>
-            getValue() === null ? (
-              <span className="text-muted-foreground">—</span>
-            ) : (
-              <span dir="ltr">{getValue()}</span>
-            ),
+          cell: ({ getValue }) => <span dir="ltr">{getValue() ?? '—'}</span>,
         }),
         settingColumnHelper.accessor('status', {
-          id: 'status',
           header: 'الحالة',
-          cell: ({ getValue }) => <StatusBadge entity="record" status={getValue()} />,
+          cell: ({ row }) => <StatusBadge entity="record" status={row.original.status} />,
         }),
         ...(canManage
           ? [
@@ -128,61 +113,54 @@ export function WarehouseMaterialSettingsOverview({
     [canManage, openEdit],
   )
 
-  const page = settingsQuery.data
+  const meta = settingsQuery.data?.meta
+  const totalItems = meta?.totalItems ?? 0
+  const totalPages =
+    meta?.pageSize !== undefined && meta?.pageSize !== 0
+      ? Math.max(Math.ceil(totalItems / meta.pageSize), 1)
+      : 1
 
   return (
-    <>
+    <div className="min-w-0">
       <ContentCard
         title="إعدادات المواد"
-        description="حدود الأدنى والأعلى لكل مادة في هذا المستودع، مع إمكانية البحث والترقيم الخادمي."
+        description="حدود الحد الأدنى والأعلى لكل مادة في هذا المستودع. تُدار الإضافتات والتعديلات في نافذة منفصلة."
       >
-        <div className="flex flex-col gap-4">
-          {canManage ? (
-            <div className="flex justify-end">
+        <DataTableServer
+          columns={columns}
+          data={pageRows(settingsQuery.data, settingsQuery.isError)}
+          isLoading={settingsQuery.isLoading}
+          isError={settingsQuery.isError}
+          onRetry={() => void settingsQuery.refetch()}
+          errorTitle="تعذّر تحميل إعدادات المواد"
+          errorMessage="تعذّر جلب إعدادات المواد. حاول مرة أخرى."
+          emptyTitle="لا توجد إعدادات مواد"
+          emptyDescription="لم يتم العثور على إعدادات مواد تطابق معايير البحث الحالية."
+          emptyAction={
+            canManage ? (
               <Button type="button" onClick={openCreate}>
-                <IconPlus aria-hidden data-icon="inline-start" />
                 إضافة إعداد
               </Button>
-            </div>
-          ) : null}
-          <DataTableServer
-            columns={columns}
-            data={pageRows(page, settingsQuery.isError)}
-            isLoading={settingsQuery.isLoading}
-            isError={settingsQuery.isError}
-            onRetry={() => void settingsQuery.refetch()}
-            errorTitle="تعذّر تحميل إعدادات المواد"
-            errorMessage="تعذّر جلب قائمة إعدادات المواد. حاول مرة أخرى."
-            emptyTitle="لا توجد إعدادات مواد"
-            emptyDescription="لم يتم العثور على إعدادات مواد تطابق معايير البحث الحالية."
-            emptyAction={
-              canManage ? (
-                <Button type="button" onClick={openCreate}>
-                  إضافة إعداد
-                </Button>
-              ) : undefined
-            }
-            page={currentPage}
-            pageSize={pageSize}
-            totalCount={page?.meta.totalItems}
-            totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            searchQuery={search}
-            onSearchChange={handleSearchChange}
-            searchPlaceholder="ابحث باسم المادة أو كودها..."
-          />
-        </div>
+            ) : undefined
+          }
+          page={currentPage}
+          pageSize={pageSize}
+          totalCount={totalItems}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          searchQuery={search}
+          onSearchChange={handleSearchChange}
+          searchPlaceholder="ابحث باسم المادة أو كودها..."
+        />
       </ContentCard>
       <WarehouseMaterialSettingsEditor
         warehouseId={warehouseId}
-        settings={page?.items ?? []}
+        settings={settingsQuery.data?.items ?? []}
         setting={editorSetting}
         open={isEditorOpen}
-        onOpenChange={setIsEditorOpen}
+        onOpenChange={closeEditor}
       />
-    </>
+    </div>
   )
 }
-
-export default WarehouseMaterialSettingsOverview

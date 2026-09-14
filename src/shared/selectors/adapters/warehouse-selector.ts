@@ -1,4 +1,4 @@
-import type { Warehouse } from '@/shared/types/generated/eiams-v1'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 
 import {
   createEntitySelectorAdapter,

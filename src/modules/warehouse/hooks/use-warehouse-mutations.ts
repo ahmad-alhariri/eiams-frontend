@@ -1,66 +1,135 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
-import { warehouseService } from '@/modules/warehouse/services/warehouse.service'
-import { queryKeys } from '@/shared/services/query-keys'
+import { createWarehouseService } from '@/modules/warehouse/services/warehouse.service'
 import type {
   WarehouseCapabilityUpsertRequest,
   WarehouseMaterialSettingUpsertRequest,
   WarehouseUpsertRequest,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/modules/warehouse/types/warehouse.types'
+import { toast } from '@/shared/ui/toast-manager'
+import { queryKeys } from '@/shared/services/query-keys'
 
-type UpdateWarehouseVariables = { warehouseId: string; request: WarehouseUpsertRequest }
-type ReplaceWarehouseCapabilitiesVariables = {
-  warehouseId: string
-  request: readonly WarehouseCapabilityUpsertRequest[]
-}
-type UpsertWarehouseMaterialSettingVariables = {
-  warehouseId: string
-  request: WarehouseMaterialSettingUpsertRequest
+const WAREHOUSE_PUBLIC_KEY = 'warehouse' as const
+
+function useActiveScopeCacheKey() {
+  return useActiveScopeContext().activeScopeCacheKey
 }
 
-function useInvalidateWarehouses() {
-  const queryClient = useQueryClient()
-  const { activeScopeCacheKey } = useActiveScopeContext()
+let warehouseService: ReturnType<typeof createWarehouseService> = createWarehouseService(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  {} as any,
+)
 
-  return async () => {
-    if (activeScopeCacheKey === undefined) return
+export function useWarehouseService() {
+  return warehouseService
+}
 
-    await queryClient.invalidateQueries({
-      queryKey: queryKeys.scoped(activeScopeCacheKey, 'warehouse'),
-      exact: false,
-    })
-  }
+export function setWarehouseService(transport: Parameters<typeof createWarehouseService>[0]) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  warehouseService = createWarehouseService(transport as any)
 }
 
 export function useCreateWarehouseMutation() {
-  const invalidate = useInvalidateWarehouses()
-  return useMutation({ mutationFn: warehouseService.createWarehouse, onSuccess: invalidate })
+  const queryClient = useQueryClient()
+  const scope = useActiveScopeCacheKey()
+  return useMutation({
+    mutationFn: (request: WarehouseUpsertRequest) => warehouseService.createWarehouse(request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          WAREHOUSE_PUBLIC_KEY,
+          'warehouses',
+          {},
+        ),
+      })
+      toast.success({ title: 'تمت إضافة المستودع.' })
+    },
+  })
 }
 
 export function useUpdateWarehouseMutation() {
-  const invalidate = useInvalidateWarehouses()
+  const queryClient = useQueryClient()
+  const scope = useActiveScopeCacheKey()
   return useMutation({
-    mutationFn: ({ warehouseId, request }: UpdateWarehouseVariables) =>
-      warehouseService.updateWarehouse(warehouseId, request),
-    onSuccess: invalidate,
+    mutationFn: ({
+      warehouseId,
+      request,
+    }: {
+      readonly warehouseId: string
+      readonly request: WarehouseUpsertRequest
+    }) => warehouseService.updateWarehouse(warehouseId, request),
+    onSuccess: ({ warehouseId }) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          WAREHOUSE_PUBLIC_KEY,
+          'warehouses',
+          warehouseId,
+        ),
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          WAREHOUSE_PUBLIC_KEY,
+          'warehouses',
+          {},
+        ),
+      })
+      toast.success({ title: 'تم حفظ تعديلات المستودع.' })
+    },
   })
 }
 
 export function useReplaceWarehouseCapabilitiesMutation() {
-  const invalidate = useInvalidateWarehouses()
+  const queryClient = useQueryClient()
+  const scope = useActiveScopeCacheKey()
   return useMutation({
-    mutationFn: ({ warehouseId, request }: ReplaceWarehouseCapabilitiesVariables) =>
-      warehouseService.replaceWarehouseCapabilities(warehouseId, request),
-    onSuccess: invalidate,
+    mutationFn: ({
+      warehouseId,
+      request,
+    }: {
+      readonly warehouseId: string
+      readonly request: readonly WarehouseCapabilityUpsertRequest[]
+    }) => warehouseService.replaceWarehouseCapabilities(warehouseId, request),
+    onSuccess: (_, { warehouseId }) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          WAREHOUSE_PUBLIC_KEY,
+          'warehouses',
+          warehouseId,
+          'capabilities',
+        ),
+      })
+      toast.success({ title: 'تم حفظ إعدادات القدرات.' })
+    },
   })
 }
 
 export function useUpsertWarehouseMaterialSettingMutation() {
-  const invalidate = useInvalidateWarehouses()
+  const queryClient = useQueryClient()
+  const scope = useActiveScopeCacheKey()
   return useMutation({
-    mutationFn: ({ warehouseId, request }: UpsertWarehouseMaterialSettingVariables) =>
-      warehouseService.upsertWarehouseMaterialSetting(warehouseId, request),
-    onSuccess: invalidate,
+    mutationFn: ({
+      warehouseId,
+      request,
+    }: {
+      readonly warehouseId: string
+      readonly request: WarehouseMaterialSettingUpsertRequest
+    }) => warehouseService.upsertWarehouseMaterialSetting(warehouseId, request),
+    onSuccess: ({ warehouseId }) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          WAREHOUSE_PUBLIC_KEY,
+          'warehouses',
+          warehouseId,
+          'material-settings',
+          {},
+        ),
+      })
+      toast.success({ title: 'تم حفظ إعداد المادة.' })
+    },
   })
 }

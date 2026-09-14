@@ -124,7 +124,7 @@ describe('useWarehouseCapabilityValidation', () => {
       'Transfer',
     ])
     const emptyFirst = result.current.getOperationsForDomain(fixtureUuid(99))
-    const emptySecond = result.current.getOperationsForDomain(undefined)
+    const emptySecond = result.current.getOperationsForDomain('')
     expect(emptyFirst).toStrictEqual([])
     expect(emptySecond).toBe(emptyFirst)
   })
@@ -216,7 +216,6 @@ describe('useWarehouseCapabilityValidation', () => {
     })
     const financeCapability = createWarehouseCapability({
       warehouseId: WAREHOUSE_ID,
-      capabilityId: fixtureUuid(33),
       domain: createNamedReference({ id: fixtureUuid(21), displayName: 'الشؤون المالية' }),
       operations: ['Count'],
     })

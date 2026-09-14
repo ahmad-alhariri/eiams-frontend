@@ -66,7 +66,7 @@ function EmployeesListPage() {
     [currentPage, pageSize, search, siteId, status],
   )
   const employeesQuery = useEmployeesQuery(employeesQueryInput)
-  const sitesQuery = useSitesQuery({ pageIndex: 0, pageSize: 200, status: 'Active' })
+  const sitesQuery = useSitesQuery({ page: 0, pageSize: 200, status: 'Active' })
   const createMutation = useCreateEmployeeMutation()
   const updateMutation = useUpdateEmployeeMutation()
   const submitFeedback = useSubmitFeedback()

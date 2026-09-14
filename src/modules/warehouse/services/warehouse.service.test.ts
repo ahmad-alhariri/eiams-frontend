@@ -1,4 +1,3 @@
-import axios from 'axios'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -12,14 +11,15 @@ import {
   createWarehouseMaterialSetting,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import type { ApiTransport } from '@/shared/api/api-transport'
 
 const API_BASE_URL = '/api/v1'
 const bundles: ApiClientBundle[] = []
 
-function setupService() {
+function setupService(): ReturnType<typeof createWarehouseService> {
   const bundle = createApiClient({ baseURL: API_BASE_URL })
   bundles.push(bundle)
-  return createWarehouseService(bundle.client)
+  return createWarehouseService(bundle.client as unknown as ApiTransport)
 }
 
 afterEach(() => {
@@ -51,7 +51,7 @@ describe('WarehouseService', () => {
 
     await expect(
       service.listWarehouses({
-        pageIndex: 2,
+        page: 2,
         pageSize: 10,
         siteId: warehouse.site.id,
         status: 'Active',
@@ -59,15 +59,15 @@ describe('WarehouseService', () => {
     ).resolves.toEqual(createPage([warehouse]))
     await expect(
       service.listWarehouseMaterialSettings(warehouse.warehouseId, {
-        pageIndex: 1,
+        page: 1,
         pageSize: 25,
         search: 'حاسوب',
       }),
     ).resolves.toEqual(createPage([setting]))
 
     expect(requestedUrls).toEqual([
-      `${API_BASE_URL}/warehouses?pageIndex=2&pageSize=10&siteId=${warehouse.site.id}&status=Active`,
-      `${API_BASE_URL}/warehouses/${warehouse.warehouseId}/material-settings?pageIndex=1&pageSize=25&search=%D8%AD%D8%A7%D8%B3%D9%88%D8%A8`,
+      `${API_BASE_URL}/warehouses?page=2&pageSize=10&siteId=${warehouse.site.id}&status=Active`,
+      `${API_BASE_URL}/warehouses/${warehouse.warehouseId}/material-settings?page=1&pageSize=25&search=%D8%AD%D8%A7%D8%B3%D9%88%D8%A8`,
     ])
   })
 
@@ -88,13 +88,15 @@ describe('WarehouseService', () => {
     }
     const capabilitiesRequest = [
       {
-        domainId: capability.domain.id,
+        warehouseId: capability.warehouseId,
+        domainId: capability.domainId,
         operations: capability.operations,
         rowVersion: capability.rowVersion,
       },
     ]
-    const settingRequest = {
-      materialId: setting.material.id,
+    const settingRequest: Parameters<typeof service.upsertWarehouseMaterialSetting>[1] = {
+      warehouseId: setting.warehouseId,
+      materialId: setting.materialId,
       rowVersion: setting.rowVersion,
       status: setting.status,
       ...(setting.minQuantity === undefined ? {} : { minQuantity: setting.minQuantity }),
@@ -172,7 +174,6 @@ describe('WarehouseService', () => {
 
     const error = await service.getWarehouse('missing').catch((reason: unknown) => reason)
 
-    expect(axios.isAxiosError(error)).toBe(true)
     expect(normalizeApiError(error)).toMatchObject({ status: 409, code: 'warehouse.stale' })
   })
 })

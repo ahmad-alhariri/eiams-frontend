@@ -1,5 +1,15 @@
 # EIAMS — Frontend Agent Guide
 
+> **Governance notice (2026-09-11):** The repository-wide constitution at
+> [`../AGENTS.md`](../AGENTS.md), live parent Beads state, approved conflict
+> resolutions, and target contracts take precedence over this older frontend
+> guide. In particular, instructions below that assume generated OpenAPI types,
+> the provisional snapshot, legacy session/scope behavior, or stale business
+> rules are historical context and MUST NOT drive new implementation. Current
+> production integration uses D-INT-02 handwritten per-module wire contracts
+> through the shared `ApiTransport`. Preserve useful frontend conventions that
+> do not conflict with the parent governance and approved target state.
+
 **Enterprise Inventory & Asset Management System**
 الهيئة العامة للرقابة والتفتيش — Syrian General Authority for Oversight and Inspection
 

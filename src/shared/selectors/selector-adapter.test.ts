@@ -1,6 +1,11 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { Material, NamedReference } from '@/modules/catalog/types/catalog.types'
+import type { Employee } from '@/modules/organization/types/organization.types'
+import type { OrganizationalUnit } from '@/modules/organization/types/organization.types'
+import type { Site } from '@/modules/organization/types/organization.types'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import { useEmployeeSelector } from '@/shared/selectors/adapters/employee-selector'
 import { useMaterialSelector } from '@/shared/selectors/adapters/material-selector'
 import { useNamedReferenceSelector } from '@/shared/selectors/adapters/named-reference-selector'
@@ -15,20 +20,10 @@ import {
   useScopedEntityOptions,
   type SelectorOption,
 } from '@/shared/selectors/selector-adapter'
-import type {
-  Employee,
-  Material,
-  NamedReference,
-  OrganizationalUnit,
-  Site,
-  Warehouse,
-} from '@/shared/types/generated/eiams-v1'
 
 const siteRef: NamedReference = {
   id: '11111111-1111-4111-8111-111111111111',
-  code: 'S-01',
   displayName: 'فرع دمشق',
-  status: 'Active',
 }
 
 const activeWarehouse: Warehouse = {
@@ -36,6 +31,7 @@ const activeWarehouse: Warehouse = {
   code: 'W-01',
   nameAr: 'مستودع دمشق الرئيسي',
   locationAr: 'دمشق',
+  siteId: siteRef.id,
   site: siteRef,
   status: 'Active',
   rowVersion: 1,
@@ -54,7 +50,7 @@ const activeEmployee: Employee = {
   employeeNumber: 'EMP-001',
   fullNameAr: 'أحمد علي',
   jobTitleAr: 'أمين مستودع',
-  orgUnit: { id: 'ou-1', code: 'OU-01', displayName: 'قسم المستودعات', status: 'Active' },
+  orgUnit: { id: 'ou-1', displayName: 'قسم المستودعات' },
   site: siteRef,
   status: 'Active',
   rowVersion: 1,
@@ -71,6 +67,7 @@ const activeOrgUnit: OrganizationalUnit = {
 
 const activeSite: Site = {
   siteId: 'site-1',
+  organizationId: 'org-1',
   code: 'S-01',
   nameAr: 'فرع دمشق',
   status: 'Active',
@@ -81,13 +78,18 @@ const activeMaterial: Material = {
   materialId: 'mat-1',
   code: 'M-01',
   nameAr: 'ورق تصوير A4',
-  baseUnit: { id: 'uom-1', code: 'RL', displayName: 'رزمة', status: 'Active' },
-  category: { id: 'cat-1', code: 'C-01', displayName: 'قرطاسية', status: 'Active' },
-  domain: { id: 'dom-1', code: 'D-01', displayName: 'مستهلكات', status: 'Active' },
-  family: { id: 'fam-1', code: 'F-01', displayName: 'ورق', status: 'Active' },
+  descriptionAr: null,
+  materialFamilyId: 'fam-1',
+  materialFamily: { id: 'fam-1', displayName: 'ورق' },
+  materialCategoryId: 'cat-1',
+  materialCategory: { id: 'cat-1', displayName: 'قرطاسية' },
+  materialDomainId: 'dom-1',
+  materialDomain: { id: 'dom-1', displayName: 'مستهلكات' },
+  unitId: 'uom-1',
+  unit: { id: 'uom-1', displayName: 'رزمة' },
+  nominalConversionFactor: 1,
   materialKind: 'Consumable',
   requiresAssetNumber: false,
-  trackingType: 'Quantity',
   status: 'Active',
   rowVersion: 1,
 }
@@ -317,21 +319,16 @@ describe('filterEntitiesBySearchLabel', () => {
 })
 
 describe('useNamedReferenceSelector', () => {
-  it('labels with displayName, hints with code, disables only explicitly inactive references', () => {
+  it('labels with displayName, treats all v1 references as enabled', () => {
     const { result } = renderHook(() => useNamedReferenceSelector(vi.fn()))
 
-    const reference: NamedReference = { id: 'ref-1', code: 'W-01', displayName: 'مستودع دمشق' }
+    const reference: NamedReference = { id: 'ref-1', displayName: 'مستودع دمشق' }
     const option = result.current.options.toOption(reference)
 
     expect(option.value).toBe('ref-1')
     expect(option.label).toBe('مستودع دمشق')
     expect(option.disabled).toBe(false)
-    expect(option.payload?.code).toBe('W-01')
     expect(option.payload).toBe(reference)
-
-    expect(result.current.options.toOption({ ...reference, status: 'Inactive' }).disabled).toBe(
-      true,
-    )
   })
 })
 

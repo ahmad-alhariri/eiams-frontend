@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { toUnitOfMeasureRequest, unitOfMeasureSchema } from './unit-of-measure.schemas'
+import { unitOfMeasureSchema, toUnitOfMeasureRequest } from './unit-of-measure.schemas'
 
 describe('unitOfMeasureSchema', () => {
-  const validValues = { code: 'EA', nameAr: 'قطعة', symbolAr: 'قطعة', status: 'Active' as const }
+  const validValues = {
+    code: 'EA',
+    nameAr: 'قطعة',
+    descriptionAr: null,
+    nominalConversionFactor: 1,
+    baseUnitId: null,
+    status: 'Active' as const,
+  }
 
   it('requires the complete v1 unit reference and trims values at the request boundary', () => {
     expect(unitOfMeasureSchema.safeParse(validValues).success).toBe(true)
@@ -11,6 +18,7 @@ describe('unitOfMeasureSchema', () => {
 
     expect(toUnitOfMeasureRequest({ ...validValues, code: ' EA ' }, null)).toEqual({
       ...validValues,
+      code: 'EA',
       rowVersion: 0,
     })
   })

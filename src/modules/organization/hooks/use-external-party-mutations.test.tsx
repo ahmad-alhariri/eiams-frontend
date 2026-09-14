@@ -46,7 +46,7 @@ describe('external-party mutation cache invalidation', () => {
         listRequests += 1
         return HttpResponse.json({
           items: [listRequests === 1 ? party : updated],
-          meta: { pageIndex: 0, pageSize: 10, totalItems: 1, totalPages: 1 },
+          meta: { page: 0, pageSize: 10, totalItems: 1, totalPages: 1 },
         })
       }),
       http.get(`${API_BASE_URL}/external-parties/${party.externalPartyId}`, () => {
@@ -60,7 +60,7 @@ describe('external-party mutation cache invalidation', () => {
 
     const { result } = renderHook(
       () => ({
-        list: useExternalPartiesQuery({ pageIndex: 0, pageSize: 10 }),
+        list: useExternalPartiesQuery({ page: 0, pageSize: 10 }),
         detail: useExternalPartyQuery(party.externalPartyId),
         update: useUpdateExternalPartyMutation(),
       }),
