@@ -1,11 +1,16 @@
 import { z } from 'zod'
 
 import type {
-  ReplaceRoleScopesRequest,
+  ReplaceRoleScopeRequest,
   ScopeType,
   UserRoleScope,
-  UserSummary,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/modules/admin/types/admin.api-types'
+
+// DEVIATION NOTE (eiams-frontend-7ipk.2): the task text says to "map directly
+// to the generated singular backend request". D-INT-02 / ADR-0001 (accepted,
+// supersedes the generation strategy) requires handwritten per-module wire
+// contracts instead — hence the import from `./admin.api-types` and no import
+// from `@/shared/types/generated/eiams-v1` (see `no-new-generated-imports`).
 
 export const ROLE_SCOPE_TYPES = [
   'Enterprise',
@@ -13,14 +18,22 @@ export const ROLE_SCOPE_TYPES = [
   'Warehouse',
 ] as const satisfies readonly ScopeType[]
 
-const roleScopeAssignmentSchema = z
+/**
+ * Singular role-scope assignment form (D-SRS-01 / D-INT-01): exactly one
+ * roleId + one scopeType + one scopeId per user. Zero or multiple assignments
+ * are structurally impossible. No rowVersion — unsupported per acceptance.
+ */
+export const userRoleScopeSchema = z
   .object({
     roleId: z.uuid('يجب اختيار دور صالح.'),
     scopeType: z.enum(ROLE_SCOPE_TYPES),
-    scopeId: z.string().trim(),
+    scopeId: z.string().trim().nullable(),
   })
   .superRefine((assignment, context) => {
-    if (assignment.scopeType !== 'Enterprise' && !z.uuid().safeParse(assignment.scopeId).success) {
+    if (assignment.scopeType === 'Enterprise') {
+      return
+    }
+    if (assignment.scopeId === null || !z.uuid().safeParse(assignment.scopeId).success) {
       context.addIssue({
         code: 'custom',
         message: 'يجب إدخال معرّف نطاق صالح.',
@@ -29,38 +42,27 @@ const roleScopeAssignmentSchema = z
     }
   })
 
-/** Complete replacement form for the contract-backed role-scope assignment set. */
-export const userRoleScopesSchema = z.object({
-  assignments: z.array(roleScopeAssignmentSchema),
-  rowVersion: z.number().int().min(1, 'تعذّر تحديد إصدار المستخدم الحالي.'),
-})
+export type UserRoleScopeFormValues = z.infer<typeof userRoleScopeSchema>
 
-export type UserRoleScopesFormValues = z.infer<typeof userRoleScopesSchema>
-
-export function toUserRoleScopesFormValues(
-  user: UserSummary,
-  roleScopes: readonly UserRoleScope[],
-): UserRoleScopesFormValues {
+export function toUserRoleScopeFormValues(
+  roleScope: UserRoleScope | null,
+): UserRoleScopeFormValues {
   return {
-    assignments: roleScopes.map((roleScope) => ({
-      roleId: roleScope.role.roleId,
-      scopeType: roleScope.scope.scopeType,
-      scopeId: roleScope.scope.scopeId ?? '',
-    })),
-    rowVersion: user.rowVersion,
+    roleId: roleScope?.role.roleId ?? '',
+    scopeType: roleScope?.scope.scopeType ?? 'Enterprise',
+    scopeId: roleScope?.scope.scopeId ?? null,
   }
 }
 
-/** Maps validated form values to the exact full-replacement transport contract. */
-export function toReplaceRoleScopesRequest(
-  values: UserRoleScopesFormValues,
-): ReplaceRoleScopesRequest {
+/**
+ * Maps validated form values to the exact singular transport contract.
+ */
+export function toReplaceRoleScopeRequest(
+  values: UserRoleScopeFormValues,
+): ReplaceRoleScopeRequest {
   return {
-    assignments: values.assignments.map((assignment) => ({
-      roleId: assignment.roleId,
-      scopeType: assignment.scopeType,
-      scopeId: assignment.scopeType === 'Enterprise' ? null : assignment.scopeId,
-    })),
-    rowVersion: values.rowVersion,
+    roleId: values.roleId,
+    scopeType: values.scopeType,
+    scopeId: values.scopeType === 'Enterprise' ? null : values.scopeId,
   }
 }
