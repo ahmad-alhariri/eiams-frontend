@@ -13,13 +13,19 @@ import { getDb, nextFixtureUuid } from '@/mocks/db'
 import { createDevSession } from '@/shared/services/dev-session'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import {
+  createAsset,
+  createAssetCustody,
   createDocumentAttachment,
+  createDocumentPolicy,
+  createInventoryBalance,
   createLifecycleEvent,
   createMaterialUnitConversion,
   createNamedReference,
   createPolicyBlocker,
+  createWarehouseDocument,
   createWarehouseMaterialSetting,
   deriveLifecycleEvents,
+  fixtureUuid,
 } from '@/test/msw/factories'
 import {
   applyDocumentAction,
@@ -628,6 +634,8 @@ function sortMovements(
     )
   })
 }
+
+const FIXTURE_TIMESTAMP = '2026-01-01T00:00:00.000Z'
 
 export const mockApiHandlers: readonly HttpHandler[] = [
   // --- Catalog: domains -----------------------------------------------------
@@ -2693,5 +2701,191 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     }
     void body
     return HttpResponse.json(findInventoryCount(countId))
+  }),
+
+  // --- Reports: inventory ---------------------------------------------------
+  // GET /reports/inventory — server-paged inventory balance report.
+  // Only the documented filters (D-RPT-01) are forwarded.
+  http.get('/reports/inventory', async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const search = url.searchParams.get('search')?.trim() ?? ''
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '10')
+    const all = Array.from({ length: 12 }, (_, i) =>
+      createInventoryBalance({
+        balanceId: fixtureUuid(40 + i),
+        material: createNamedReference({ id: fixtureUuid(24 + i), displayName: `مادة ${i + 1}` }),
+        warehouse: createNamedReference({
+          id: fixtureUuid(30 + (i % 2)),
+          displayName: i % 2 === 0 ? 'المستودع المركزي' : 'مستودع الفرع',
+        }),
+        quantity: 10 + i,
+        lowStock: { state: i % 3 === 0 ? 'Low' : 'Sufficient', thresholdQuantity: 5 },
+      }),
+    )
+    const filtered = all.filter((row) => {
+      const matchesSearch =
+        search === '' ||
+        row.material.displayName.includes(search) ||
+        row.warehouse.displayName.includes(search)
+      const matchesWarehouse = warehouseId === null || row.warehouse.id === warehouseId
+      return matchesSearch && matchesWarehouse
+    })
+    const start = pageIndex * pageSize
+    const items = filtered.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      },
+    })
+  }),
+
+  // --- Reports: assets -------------------------------------------------------
+  // GET /reports/assets — server-paged asset report; custody shown inline
+  // (no client join, per D-RPT-01).
+  http.get('/reports/assets', async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const warehouseId = url.searchParams.get('warehouseId')
+    const search = url.searchParams.get('search')?.trim() ?? ''
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '10')
+    const all = Array.from({ length: 10 }, (_, i) =>
+      createAsset({
+        assetId: fixtureUuid(50 + i),
+        assetNumber: `AST-2026-${String(i + 1).padStart(4, '0')}`,
+        serialNumber: `SN-${String(100000 + i)}`,
+        derivedStatus: (['InStock', 'Issued', 'InCustody', 'Disposed'] as const)[i % 4]!,
+        currentCustody:
+          i % 2 === 0
+            ? createAssetCustody({
+                custodyId: fixtureUuid(51 + i),
+                holder: {
+                  displayName: `الجهة المكَلَّفة ${i + 1}`,
+                  id: fixtureUuid(20 + i),
+                  secondaryLabelAr: null,
+                  status: 'Active',
+                  type: 'OrganizationalUnit',
+                },
+              })
+            : undefined,
+      }),
+    )
+    const filtered = all.filter((row) => {
+      const matchesStatus = status === null || row.derivedStatus === status
+      const matchesWarehouse =
+        warehouseId === null || (row.currentWarehouse?.id ?? null) === warehouseId
+      const matchesSearch =
+        search === '' ||
+        row.assetNumber.includes(search) ||
+        (row.serialNumber ?? '').includes(search) ||
+        row.material.displayName.includes(search)
+      return matchesStatus && matchesWarehouse && matchesSearch
+    })
+    const start = pageIndex * pageSize
+    const items = filtered.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      },
+    })
+  }),
+
+  // --- Reports: count-adjustments ------------------------------------------
+  // GET /reports/count-adjustments — server-paged adjustment document list.
+  http.get('/reports/count-adjustments', async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '10')
+    const purposes: InventoryAdjustment['purpose'][] = [
+      'CountVariance',
+      'DirectCorrection',
+      'Disposal',
+    ]
+    const statuses: InventoryAdjustment['status'][] = ['Draft', 'Posted', 'Reversed']
+    const all = Array.from({ length: 8 }, (_, i) => {
+      const warehouseRef = createNamedReference({
+        id: fixtureUuid(30 + (i % 2)),
+        displayName: 'المستودع المركزي',
+      })
+      const adjustment: InventoryAdjustment = {
+        adjustmentId: fixtureUuid(150 + i),
+        documentId: fixtureUuid(160 + i),
+        documentReference: `ADJ-2026-${String(i + 1).padStart(4, '0')}`,
+        purpose: purposes[i % purposes.length]!,
+        status: statuses[i % statuses.length]!,
+        reason: `سبب التسوية ${i + 1}`,
+        countReference: i % 2 === 0 ? `CNT-2026-${String(i + 1).padStart(4, '0')}` : null,
+        warehouse: warehouseRef,
+        createdAt: FIXTURE_TIMESTAMP,
+        createdBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مستخدم تجريبي' }),
+        postedAt: i % 2 === 0 ? FIXTURE_TIMESTAMP : null,
+        lines: [],
+        policy: createDocumentPolicy({
+          documentId: fixtureUuid(160 + i),
+          documentStatus: statuses[i % statuses.length]!,
+          rowVersion: 1,
+        }),
+        rowVersion: 1,
+        attachments: [],
+      }
+      return adjustment
+    })
+    const filtered = all.filter((row) => warehouseId === null || row.warehouse.id === warehouseId)
+    const start = pageIndex * pageSize
+    const items = filtered.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      },
+    })
+  }),
+
+  // --- Reports: documents --------------------------------------------------
+  // GET /reports/documents — server-paged operational document list.
+  http.get('/reports/documents', async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '10')
+    const all = Array.from({ length: 9 }, (_, i) =>
+      createWarehouseDocument({
+        documentId: fixtureUuid(160 + i),
+        systemReferenceNumber: `DOC-2026-${String(i + 1).padStart(4, '0')}`,
+        paperDocumentNumber: String(100 + i),
+        paperDocumentYear: 2026,
+        documentType: (['Receiving', 'Issue', 'Transfer'] as const)[i % 3]!,
+      }),
+    )
+    const filtered = all.filter((row) => warehouseId === null || row.warehouse.id === warehouseId)
+    const start = pageIndex * pageSize
+    const items = filtered.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      },
+    })
   }),
 ]
