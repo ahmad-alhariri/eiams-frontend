@@ -2888,4 +2888,55 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       },
     })
   }),
+
+  // GET /reports/dashboard — KPI cards + trend/distribution series (D-RPT-02).
+  // Returns realistic fixture data matching the vocabulary in:
+  // - docs/dashboard-kpi-semantics-decision.md
+  // - contracts/openapi/eiams-v1.kpi-vocabulary.json
+  http.get('/reports/dashboard', async ({ request }) => {
+    await delay(180)
+    const url = new URL(request.url)
+    // siteId and warehouseId are accepted but do not filter fixtures (the
+    // mock db is not relational); in real usage the server filters.
+    const _siteId = url.searchParams.get('siteId')
+    const _warehouseId = url.searchParams.get('warehouseId')
+    void _siteId; void _warehouseId
+
+    const kpis = [
+      { code: 'total_balance_items', labelAr: 'إجمالي أرصدة المواد', value: 2847, unitAr: 'عنصر', changePercent: 3.2 },
+      { code: 'total_stock_quantity', labelAr: 'إجمالي الكمية بالمخزون', value: 141920, unitAr: 'وحدة', changePercent: -1.4 },
+      { code: 'active_assets', labelAr: 'الأصول النشطة', value: 412, unitAr: 'أصل', changePercent: 0.0 },
+      { code: 'documents_posted', labelAr: 'المستندات المرحّلة', value: 38, unitAr: 'مستند', changePercent: 12.1 },
+      { code: 'movements_this_period', labelAr: 'الحركات في الفترة', value: 127, unitAr: 'حركة', changePercent: -5.7 },
+      { code: 'pending_documents', labelAr: 'المستندات المعلقة', value: 7, unitAr: 'مستند', changePercent: 40.0 },
+      { code: 'low_stock_items', labelAr: 'المواد قرب النفاد', value: 23, unitAr: 'عنصر', changePercent: 15.0 },
+      { code: 'open_custodies', labelAr: 'التكليفات النشطة', value: 19, unitAr: 'تكليف', changePercent: -5.0 },
+    ] as const satisfies { code: string; labelAr: string; value: number; unitAr: string; changePercent: number }[]
+
+    // movementTrend: daily buckets for the selected date range.
+    // Per D-RPT-02 §4: 1 point per day, label is Arabic date string.
+    const movementTrend = [
+      { label: '١ محرّم', value: 12 },
+      { label: '٥ محرّم', value: 18 },
+      { label: '١٠ محرّم', value: 9 },
+      { label: '١٥ محرّم', value: 22 },
+      { label: '٢٠ محرّم', value: 15 },
+      { label: '٢٥ محرّم', value: 11 },
+    ] as const satisfies { label: string; value: number }[]
+
+    // assetStatusDistribution: one point per derived asset status.
+    const assetStatusDistribution = [
+      { label: 'نشط', value: 412 },
+      { label: 'قيد الصيانة', value: 28 },
+      { label: 'موقوف', value: 14 },
+      { label: 'جاهز للتسليم', value: 7 },
+    ] as const satisfies { label: string; value: number }[]
+
+    return HttpResponse.json({
+      generatedAt: new Date().toISOString(),
+      kpis,
+      movementTrend,
+      assetStatusDistribution,
+    })
+  }),
 ]

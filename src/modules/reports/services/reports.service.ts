@@ -3,6 +3,7 @@ import type { AxiosInstance } from 'axios'
 import { apiClient } from '@/shared/services/api.client'
 import type {
   AssetPage,
+  DashboardReport,
   InventoryAdjustmentPage,
   InventoryBalancePage,
   WarehouseDocumentPage,
@@ -12,6 +13,7 @@ import type {
 import type {
   ListAssetReportQuery,
   ListCountAdjustmentReportQuery,
+  ListDashboardReportQuery,
   ListInventoryReportQuery,
   ListOperationalDocumentsReportQuery,
 } from '@/modules/reports/types/reports.types'
@@ -20,6 +22,7 @@ const REPORTS_INVENTORY_PATH = '/reports/inventory' satisfies keyof paths
 const REPORTS_ASSETS_PATH = '/reports/assets' satisfies keyof paths
 const REPORTS_COUNT_ADJUSTMENT_PATH = '/reports/count-adjustments' satisfies keyof paths
 const REPORTS_DOCUMENTS_PATH = '/reports/documents' satisfies keyof paths
+const REPORTS_DASHBOARD_PATH = '/reports/dashboard' satisfies keyof paths
 
 /**
  * Conditional spread builders for each reports endpoint. Mirrors
@@ -65,6 +68,20 @@ function toOperationalDocumentsReportParams(query: Readonly<ListOperationalDocum
   }
 }
 
+/**
+ * Dashboard report — all four parameters forwarded; server applies own defaults.
+ * No pageIndex/pageSize (singleton response). Per D-RPT-02: server owns
+ * aggregation, date-boundary, null/zero treatment, and series bucket width.
+ */
+function toDashboardReportParams(query: Readonly<ListDashboardReportQuery>) {
+  return {
+    ...(query.siteId === undefined ? {} : { siteId: query.siteId }),
+    ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
+    ...(query.dateFrom === undefined ? {} : { dateFrom: query.dateFrom }),
+    ...(query.dateTo === undefined ? {} : { dateTo: query.dateTo }),
+  }
+}
+
 export interface ReportsService {
   /**
    * Inventory balance report — server-owned projection; the response is
@@ -91,6 +108,13 @@ export interface ReportsService {
   getOperationalDocumentsReport: (
     query: Readonly<ListOperationalDocumentsReportQuery>,
   ) => Promise<WarehouseDocumentPage>
+  /**
+   * Dashboard report — KPI cards + trend/distribution series (D-RPT-02).
+   * Singleton response; server owns all aggregation and series bucket definitions.
+   */
+  getDashboardReport: (
+    query: Readonly<ListDashboardReportQuery>,
+  ) => Promise<DashboardReport>
 }
 
 /**
@@ -124,6 +148,13 @@ export function createReportsService(client: AxiosInstance): ReportsService {
     async getOperationalDocumentsReport(query) {
       const response = await client.get<WarehouseDocumentPage>(REPORTS_DOCUMENTS_PATH, {
         params: toOperationalDocumentsReportParams(query),
+      })
+      return response.data
+    },
+
+    async getDashboardReport(query) {
+      const response = await client.get<DashboardReport>(REPORTS_DASHBOARD_PATH, {
+        params: toDashboardReportParams(query),
       })
       return response.data
     },

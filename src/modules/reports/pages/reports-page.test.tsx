@@ -41,16 +41,17 @@ function createWrapper() {
 }
 
 describe('ReportsPage', () => {
-  it('renders the Arabic page title and six accessible tabs with the activity tab as default', async () => {
+  it('renders the Arabic page title and seven accessible tabs with the dashboard tab as default', async () => {
     render(<ReportsPage />, { wrapper: createWrapper() })
 
     expect(await screen.findByRole('heading', { level: 1, name: 'التقارير' })).toBeInTheDocument()
 
-    expect(screen.getByRole('tab', { name: 'نشاط حديث' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: 'أرصدة المخزون' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'لوحة المؤشرات' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'نشاط حديث' })).toHaveAttribute(
       'aria-selected',
       'false',
     )
+    expect(screen.getByRole('tab', { name: 'أرصدة المخزون' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'حركات المخزون' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'الأصول والتكليف' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'الجرد والتسويات' })).toBeInTheDocument()
@@ -69,6 +70,6 @@ describe('ReportsPage', () => {
       'aria-selected',
       'true',
     )
-    expect(screen.getByRole('tab', { name: 'نشاط حديث' })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('tab', { name: 'لوحة المؤشرات' })).toHaveAttribute('aria-selected', 'false')
   })
 })

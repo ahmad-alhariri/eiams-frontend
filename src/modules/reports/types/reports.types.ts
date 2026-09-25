@@ -33,11 +33,23 @@ export type ListOperationalDocumentsReportQuery = NonNullable<
 >
 
 /**
+ * Dashboard report — `GET /reports/dashboard`.
+ * Ratified vocabulary: D-RPT-02 (`docs/dashboard-kpi-semantics-decision.md`).
+ * All four parameters are sent; the server applies its own defaults when omitted.
+ * No pageIndex/pageSize — this is a singleton response.
+ */
+export type ListDashboardReportQuery = NonNullable<
+  operations['getDashboardReport']['parameters']['query']
+>
+
+/**
  * Tab keys for the `/reports` page panel switcher. The order matches the
- * display order and the page-default is `'recentActivity'`. Every key maps
- * to one server projection or composition (D-RPT-01 §"V1 contract matrix").
+ * display order and the page-default is `'dashboard'` (the new first tab per
+ * ui-design.md §12.4 dashboard page pattern). Every key maps to one server
+ * projection or composition (D-RPT-01 §"V1 contract matrix").
  */
 export type ReportsTabKey =
+  | 'dashboard'
   | 'recentActivity'
   | 'inventoryBalance'
   | 'stockMovement'

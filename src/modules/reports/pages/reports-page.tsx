@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 
 import { AssetReportTable } from '@/modules/reports/components/asset-report-table'
 import { CountAdjustmentReportTable } from '@/modules/reports/components/count-adjustment-report-table'
+import { DashboardPanel } from '@/modules/reports/components/dashboard-panel'
 import { InventoryBalanceReportTable } from '@/modules/reports/components/inventory-balance-report-table'
 import { OperationalDocumentsReportTable } from '@/modules/reports/components/operational-documents-report-table'
 import { RecentActivityPanel } from '@/modules/reports/components/recent-activity-panel'
@@ -12,6 +13,11 @@ import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 
 const TAB_DEFINITIONS: ReadonlyArray<ReportsTabDefinition<ReportsTabKey>> = [
+  {
+    key: 'dashboard',
+    labelAr: 'لوحة المؤشرات',
+    content: <DashboardPanel />,
+  },
   {
     key: 'recentActivity',
     labelAr: 'نشاط حديث',
@@ -51,21 +57,20 @@ function isReportsTabKey(value: string): value is ReportsTabKey {
 }
 
 /**
- * Reports page (e23 route). One page, six server-owned projections under a
+ * Reports page (e23 route). One page, seven server-owned projections under a
  * WAI-ARIA tabs surface. Route guard (`report.view`) is already enforced by
  * `RouteAccessGuard`; this page does not double-check the permission.
  *
  * Each panel renders its own `PageHeader` + `ContentCard` so filters,
- * titles, and descriptions stay co-located with the table that consumes
- * them.
+ * titles, and descriptions stay co-located with the table that consumes them.
  *
- * No new endpoints are introduced. The dashboard KPI/charts surface
- * (e23-t02/t03) remains blocked on the external decision bead `4kd7` and
- * the export/print surface (e23-t10) on `opv2` — both are documented in
+ * The dashboard tab (e23-t02/t03) is unblocked by the ratified D-RPT-02
+ * decision (`docs/dashboard-kpi-semantics-decision.md`). The export/print
+ * surface (e23-t10) remains blocked on `opv2` and is documented in
  * `docs/reports-kpi-contract-decision.md` (D-RPT-01).
  */
 function ReportsPageImpl() {
-  const [activeTabKey, setActiveTabKey] = useState<ReportsTabKey>('recentActivity')
+  const [activeTabKey, setActiveTabKey] = useState<ReportsTabKey>('dashboard')
 
   const handleTabChange = useCallback((next: string) => {
     if (isReportsTabKey(next)) {

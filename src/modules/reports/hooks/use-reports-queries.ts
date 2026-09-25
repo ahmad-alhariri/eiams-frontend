@@ -5,6 +5,7 @@ import { reportsService } from '@/modules/reports/services/reports.service'
 import type {
   ListAssetReportQuery,
   ListCountAdjustmentReportQuery,
+  ListDashboardReportQuery,
   ListInventoryReportQuery,
   ListOperationalDocumentsReportQuery,
 } from '@/modules/reports/types/reports.types'
@@ -22,6 +23,8 @@ export const reportsQueryKeys = {
     queryKeys.scoped(scope, REPORTS_RESOURCE, 'countAdjustment', query),
   documents: (scope: ScopeCacheKey, query: ListOperationalDocumentsReportQuery) =>
     queryKeys.scoped(scope, REPORTS_RESOURCE, 'documents', query),
+  dashboard: (scope: ScopeCacheKey, query: ListDashboardReportQuery) =>
+    queryKeys.scoped(scope, REPORTS_RESOURCE, 'dashboard', query),
 }
 
 function useActiveScopeCacheKey() {
@@ -87,6 +90,24 @@ export function useOperationalDocumentsReportQuery(
         ? queryKeys.public(REPORTS_RESOURCE, 'documents', query)
         : reportsQueryKeys.documents(scope, query),
     queryFn: () => reportsService.getOperationalDocumentsReport(query),
+    enabled: scope !== undefined,
+    staleTime: OPERATIONAL_STALE_TIME,
+  })
+}
+
+/**
+ * Dashboard report — KPI cards + trend/distribution series (D-RPT-02).
+ * Singleton response, scope-keyed cache. Falls back to empty series when
+ * data is not yet available (server handles empty/null series per D-RPT-02 §5).
+ */
+export function useDashboardReportQuery(query: ListDashboardReportQuery = EMPTY_QUERY) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey:
+      scope === undefined
+        ? queryKeys.public(REPORTS_RESOURCE, 'dashboard', query)
+        : reportsQueryKeys.dashboard(scope, query),
+    queryFn: () => reportsService.getDashboardReport(query),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
