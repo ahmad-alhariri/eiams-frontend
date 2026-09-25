@@ -25,7 +25,7 @@ The following matrix defines which export formats and print modes apply to each 
 | Inventory Balance | ✅ Yes | PDF, CSV | ✅ Yes | ✅ Yes | Full-result export; filter-bound print |
 | Asset & Custody | ✅ Yes | PDF | ✅ Yes | ✅ Yes | Personal data sensitivity; CSV excluded |
 | Count Adjustment | ✅ Yes | PDF | ✅ Yes | ✅ Yes | Official record; full-result export |
-| Stock Movement | ✅ Yes | PDF, CSV | ✅ Yes | ✅ Yes | Full-result export; filter-bound print |
+| Stock Movement | ✅ Yes | PDF, CSV | ✅ Yes | ✅ Yes | Full-result export via `GET /inventory/movements/export` (no `/reports/movements` exists per D-RPT-01); filter-bound print |
 | Operational Documents | ✅ Yes | PDF | ✅ Yes | ✅ Yes | Official record; full-result export |
 | Dashboard (KPI) | ❌ No | — | ❌ No | ❌ No | Visual-only; not a legal document |
 
@@ -63,7 +63,7 @@ Every export operation writes an audit log entry containing:
 - Report type
 - Applied scope (site, warehouse)
 - Filter parameters used
-- Record count in exported result
+- `recordCount` of exported result
 - Download format
 - Download URL (if applicable)
 
@@ -112,6 +112,7 @@ GET /reports/exports/{jobId}
 | `processing` | `{ "jobId": "uuid", "status": "processing", "progress": 45 }` |
 | `ready` | `{ "jobId": "uuid", "status": "ready", "downloadUrl": "/reports/exports/{jobId}/download", "expiresAt": "ISO 8601", "recordCount": 14287 }` |
 | `failed` | `{ "jobId": "uuid", "status": "failed", "error": "message" }` |
+| `404 Not Found` | `{ "type": "about:blank", "title": "Not Found", "status": 404, "detail": "Export job not found or expired" }` |
 
 - Polling interval: 2 seconds
 - Download URL is valid for 24 hours and requires authentication
@@ -239,8 +240,8 @@ When the backend implements the export contract, the following must be added to 
    - `GET /reports/inventory/export`
    - `GET /reports/assets/export`
    - `GET /reports/count-adjustments/export`
-   - `GET /reports/movements/export`
    - `GET /reports/documents/export`
+   - `GET /inventory/movements/export` — Note: there is no `/reports/movements` endpoint; the stock movement export uses the existing `GET /inventory/movements` ledger path (per D-RPT-01 §3 line: "Use the existing generated inventory movement ledger read already governed by D-INV-READ-01, not an invented report endpoint")
 
 2. **1 async job path:**
    - `GET /reports/exports/{jobId}`
