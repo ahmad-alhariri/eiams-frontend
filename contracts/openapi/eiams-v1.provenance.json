@@ -96,8 +96,8 @@
       "decisionId": "D-RPT-02"
     },
     {
-      "path": "contracts/openapi/eiams-v1.kpi-vocabulary.json",
-      "description": "Machine-readable KPI code and series vocabulary registry for D-RPT-02"
+      "path": "docs/report-export-print-contract-decision.md",
+      "decisionId": "D-RPT-03"
     }
   ],
   "validation": {

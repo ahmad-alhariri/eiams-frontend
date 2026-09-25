@@ -92,10 +92,7 @@ snapshot. `pageIndex` is zero-based; `pageSize` is 1–200 (default 25 under
    calendar default, or inclusive/exclusive boundaries. The UI exposes only
    matrix-listed parameters. All table filtering/sorting/searching remains
    server-side and filtered totals come from the server `PageMeta`.
-4. **Export and print.** Until `eiams-frontend-opv2` is resolved, no output
-   button is rendered. A printed screen, client-built file, or merged pages
-   cannot be represented as an official report. `e23-t10` owns implementation
-   only after the approved contract identifies the permitted behavior.
+4. **Export and print.** Ratified by `D-RPT-03` (`docs/report-export-print-contract-decision.md`). Server-generated PDF and CSV export with scope enforcement, audit logging, and formal PDF layout. Informal `window.print()` button permitted as UX convenience on report tables (not dashboard); clearly labeled as unofficial. `e23-t10` implementation is now unblocked.
 5. **Arabic, RTL, and accessibility.** Use `PageHeader`, `ContentCard`,
    `DataTableServer`, `StatusBadge`, `EmptyState`, `ErrorState`, and shared
    formatting utilities before creating report-specific infrastructure. Use
@@ -146,7 +143,7 @@ page implementation.
 | `eiams-frontend-e23-t07` | Keep asset and custody projections separate and server-derived. |
 | `eiams-frontend-e23-t08` | Keep counts and adjustments as separately contracted projections; do not calculate variance/report totals. |
 | `eiams-frontend-e23-t09` | Consume only document-report filters/projection and server lifecycle truth. |
-| `eiams-frontend-e23-t10` | Remains blocked on `opv2`; no placeholder export/print behavior. |
+| `eiams-frontend-e23-t10` | Export/print implementation: `reports-export.service.ts`, `ExportButton` component, MSW handlers, informal print button. Unblocked by D-RPT-03. Backend export endpoint required. |
 | `eiams-frontend-e23-t11` | Verify the matrix's server-state, RTL/a11y, error, scope, and blocker rules once implementations exist. |
 | `eiams-frontend-e01.7` | Ratify all report additions and semantic compatibility against backend/Apidog before production integration. |
 
@@ -167,7 +164,7 @@ page implementation.
 || Gap | Blocking Bead | Consumers blocked | Required external resolution | Status |
 || --- | --- | --- | --- | --- |
 | KPI codes/formulas, series buckets, date/time semantics, zero/null/no-data, percentage baseline, and Arabic semantic labels | ~~`eiams-frontend-4kd7`~~ | ~~`e23-t02`, `e23-t03`~~ | Product plus backend/API approval and a versioned OpenAPI/provenance update or incorporated approved decision. | ✅ **Resolved — D-RPT-02 ratified 2026-09-25** (`docs/dashboard-kpi-semantics-decision.md` + `contracts/openapi/eiams-v1.kpi-vocabulary.json`). `e23-t02` and `e23-t03` are now unblocked. |
-| Export/print resource model, output scope/completeness, format, printable Arabic RTL layout, async/error/provenance/accessibility behavior | `eiams-frontend-opv2` | `e23-t10` | Product plus backend/API approval and versioned contract/decision evidence. | Open |
+| Export/print resource model, output scope/completeness, format, printable Arabic RTL layout, async/error/provenance/accessibility behavior | ~~`eiams-frontend-opv2`~~ | ~~`e23-t10`~~ | Product plus backend/API approval and versioned contract/decision evidence. | ✅ **Resolved — D-RPT-03 ratified 2026-09-25** (`docs/report-export-print-contract-decision.md`). `e23-t10` is now unblocked. Backend must implement `GET /reports/{type}/export` per D-RPT-03 §3. |
 | Production equivalence of the provisional report contract | `eiams-frontend-e01.7` | Production integration and release controls | Backend implementation and authoritative Apidog export ratification; it is not a reason to handwrite a frontend adapter. | Open |
 
 The unresolved gaps are intentionally represented as Beads dependencies. They
