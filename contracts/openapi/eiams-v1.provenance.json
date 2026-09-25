@@ -4,7 +4,7 @@
   "openapiVersion": "3.0.3",
   "status": "ArchitectureOwnedProvisional",
   "publishedAt": "2026-08-09T09:53:07+03:00",
-  "revisedAt": "2026-08-24T00:00:00+03:00",
+  "revisedAt": "2026-09-25T00:00:00+03:00",
   "snapshotPath": "contracts/openapi/eiams-v1.openapi.json",
   "sha256": "3c8b65ed6d8c2da8382657b8bf4b8e7d7f291ca270aa4e3d824d4be57fc64070",
   "source": {
@@ -90,6 +90,14 @@
     {
       "path": "docs/issue-line-existing-asset-reference-contract-decision.md",
       "decisionId": "D-IAR-01"
+    },
+    {
+      "path": "docs/dashboard-kpi-semantics-decision.md",
+      "decisionId": "D-RPT-02"
+    },
+    {
+      "path": "contracts/openapi/eiams-v1.kpi-vocabulary.json",
+      "description": "Machine-readable KPI code and series vocabulary registry for D-RPT-02"
     }
   ],
   "validation": {

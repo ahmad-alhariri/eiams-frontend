@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EIAMS v1 KPI Vocabulary Registry",
+  "description": "Machine-readable KPI code and series bucket semantics for GET /reports/dashboard. This file is the authoritative registry referenced by docs/dashboard-kpi-semantics-decision.md (D-RPT-02). Changes to any ratified code constitute a breaking semantic change.",
+  "decisionId": "D-RPT-02",
+  "decisionBead": "eiams-frontend-4kd7",
+  "ratifiedAt": "2026-09-25",
+  "contractVersion": "1.0.0-provisional.9",
+  "kpis": {
+    "period": {
+      "description": "Period KPIs compute over the dateFrom–dateTo window. changePercent is server-computed vs. equivalent prior period.",
+      "items": [
+        {
+          "code": "documents_posted",
+          "labelAr": "المستندات المرحّلة",
+          "meaning": "Count of posted warehouse documents within the period",
+          "unitAr": "مستند",
+          "changePercent": "server-computed-vs-prior-equivalent-period"
+        },
+        {
+          "code": "movements_count",
+          "labelAr": "عدد الحركات",
+          "meaning": "Total count of stock movements within the period",
+          "unitAr": "حركة",
+          "changePercent": "server-computed-vs-prior-equivalent-period"
+        },
+        {
+          "code": "items_received",
+          "labelAr": "إجمالي الاستلامات",
+          "meaning": "Count of receiving documents posted within the period",
+          "unitAr": "مستند",
+          "changePercent": "server-computed-vs-prior-equivalent-period"
+        },
+        {
+          "code": "items_issued",
+          "labelAr": "إجمالي عمليات الصرف",
+          "meaning": "Count of issue documents posted within the period",
+          "unitAr": "مستند",
+          "changePercent": "server-computed-vs-prior-equivalent-period"
+        },
+        {
+          "code": "adjustments_count",
+          "labelAr": "عدد التسويات",
+          "meaning": "Count of adjustment documents posted within the period",
+          "unitAr": "تسوية",
+          "changePercent": "server-computed-vs-prior-equivalent-period"
+        }
+      ]
+    },
+    "snapshot": {
+      "description": "Snapshot KPIs reflect the current state at generatedAt. dateFrom/dateTo filter does not affect these KPIs.",
+      "items": [
+        {
+          "code": "total_balance_items",
+          "labelAr": "أرصدة المواد النشطة",
+          "meaning": "Count of materials with non-zero inventory balance",
+          "unitAr": "عنصر",
+          "changePercent": null,
+          "notes": "Distinct material count, not quantity sum"
+        },
+        {
+          "code": "total_stock_quantity",
+          "labelAr": "إجمالي الكمية بالمخزون",
+          "meaning": "Sum of all inventory quantities across scoped warehouse(s)",
+          "unitAr": null,
+          "changePercent": null,
+          "notes": "Heterogeneous material sum; no single unit applies; server returns unitAr=null"
+        },
+        {
+          "code": "active_assets",
+          "labelAr": "الأصول النشطة",
+          "meaning": "Count of assets in non-Disposed derived state",
+          "unitAr": "أصل",
+          "changePercent": null,
+          "notes": "derivedStatus != Disposed"
+        },
+        {
+          "code": "open_custodies",
+          "labelAr": "التكليفات النشطة",
+          "meaning": "Count of active custody records",
+          "unitAr": "تكليف",
+          "changePercent": null,
+          "notes": "Custody.status = Active"
+        },
+        {
+          "code": "pending_documents",
+          "labelAr": "المستندات المعلقة",
+          "meaning": "Count of documents in Draft or Submitted status",
+          "unitAr": "مستند",
+          "changePercent": null,
+          "notes": "status IN (Draft, Submitted)"
+        },
+        {
+          "code": "low_stock_count",
+          "labelAr": "المواد قرب النفاد",
+          "meaning": "Count of materials at or below low-stock threshold",
+          "unitAr": "عنصر",
+          "changePercent": null,
+          "notes": "lowStock.state = Low"
+        }
+      ]
+    }
+  },
+  "series": {
+    "movementTrend": {
+      "bucketUnit": "day",
+      "valueMeaning": "Count of StockMovement rows posted on that calendar day",
+      "emptyDays": "included-with-value-zero",
+      "ordering": "chronological-oldest-first",
+      "labelFormat": "server-defined-Arabic-date-string"
+    },
+    "assetStatusDistribution": {
+      "valueMeaning": "Count of assets per derived status",
+      "canonicalStatuses": ["InStock", "Issued", "InCustody", "Disposed"],
+      "canonicalLabels": {
+        "InStock": "في المخزن",
+        "Issued": "مُصرَّف",
+        "InCustody": "بعهدة",
+        "Disposed": "مُستبعد"
+      },
+      "zeroCountStatus": "include-in-array",
+      "unknownStatus": "return-raw-label"
+    }
+  },
+  "changePercent": {
+    "numerator": "value-for-current-period",
+    "denominator": "value-for-equivalent-prior-period",
+    "formula": "((current - prior) / |prior|) * 100",
+    "precision": 1,
+    "priorZeroCurrentPositive": "null",
+    "priorZeroCurrentZero": "0",
+    "frontendRule": "render-exactly-as-returned-do-not-recalculate"
+  },
+  "nullTreatment": {
+    "noData": "value-is-0",
+    "unitArNotApplicable": "null",
+    "changePercentUndefined": "null",
+    "changePercentZero": "render-0-with-neutral-indicator",
+    "kpiNotInScope": "omit-from-array"
+  }
+}
