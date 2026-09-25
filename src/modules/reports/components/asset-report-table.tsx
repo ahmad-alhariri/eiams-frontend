@@ -16,6 +16,8 @@ import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
+import { ExportButton } from '@/shared/ui/export-button'
+import { PrintButton } from '@/shared/ui/print-button'
 import { pageRows } from '@/shared/utils/table-data'
 import type { Asset, AssetDerivedStatus } from '@/shared/types/generated/eiams-v1'
 
@@ -166,6 +168,23 @@ function AssetReportTableImpl() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Report actions — D-RPT-03 §6 informal print + §3 export */}
+            <div
+              className="col-span-full flex items-center justify-end gap-1"
+              role="toolbar"
+              aria-label="إجراءات التقرير"
+            >
+              <PrintButton aria-label="طباعة تقرير الأصول والتكليف" />
+              <ExportButton
+                reportType="assets"
+                requiredPermission="asset.view"
+                filters={
+                  warehouseId !== undefined ? { warehouseId } : undefined
+                }
+                label="تصدير تقرير الأصول والتكليف"
+              />
             </div>
           </div>
         }

@@ -11,6 +11,8 @@ import { PageHeader } from '@/shared/layout/page-header'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { AsyncSelect } from '@/shared/ui/async-select'
+import { ExportButton } from '@/shared/ui/export-button'
+import { PrintButton } from '@/shared/ui/print-button'
 import { formatDateTime, formatNumber } from '@/shared/utils/format'
 import { pageRows } from '@/shared/utils/table-data'
 import type { InventoryBalance } from '@/shared/types/generated/eiams-v1'
@@ -115,16 +117,31 @@ function InventoryBalanceReportTableImpl() {
         title="تقرير أرصدة المخزون"
         subtitle="عرض الأرصدة ضمن نطاق العمل الحالي. تُنفَّذ التصفية والترقيم في الخادم."
         toolbar={
-          <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
-            <span>المستودع</span>
-            <AsyncSelect
-              value={warehouseId ?? null}
-              onValueChange={handleWarehouseChange}
-              loadOptions={warehouseSelector.loadOptions}
-              disabled={!warehouseSelector.scopeReady}
-              placeholder="تصفية حسب المستودع..."
-              inputProps={{ 'aria-label': 'تصفية حسب المستودع' }}
-            />
+          <div className="flex items-center gap-3">
+            <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
+              <span>المستودع</span>
+              <AsyncSelect
+                value={warehouseId ?? null}
+                onValueChange={handleWarehouseChange}
+                loadOptions={warehouseSelector.loadOptions}
+                disabled={!warehouseSelector.scopeReady}
+                placeholder="تصفية حسب المستودع..."
+                inputProps={{ 'aria-label': 'تصفية حسب المستودع' }}
+              />
+            </div>
+
+            {/* Report actions — D-RPT-03 §6 informal print + §3 export */}
+            <div className="flex items-center gap-1" role="toolbar" aria-label="إجراءات التقرير">
+              <PrintButton aria-label="طباعة تقرير أرصدة المخزون" />
+              <ExportButton
+                reportType="inventory"
+                requiredPermission="inventory.view"
+                filters={
+                  warehouseId !== undefined ? { warehouseId } : undefined
+                }
+                label="تصدير تقرير أرصدة المخزون"
+              />
+            </div>
           </div>
         }
       />

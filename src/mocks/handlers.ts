@@ -2939,4 +2939,73 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       assetStatusDistribution,
     })
   }),
+
+  // --- Reports: export ------------------------------------------------------
+  // GET /reports/{type}/export — D-RPT-03 §3.
+  // Returns 501 Not Implemented until the backend provides the actual endpoint.
+  // Frontend implementation is complete; the export button shows error feedback
+  // when this returns 501, which is the correct interim state.
+  // GET /reports/inventory/export — D-RPT-03 §3.
+  // Returns 501 until the backend implements the endpoint.
+  http.get('/reports/inventory/export', async () => {
+    await delay(300)
+    return HttpResponse.json(
+      { type: 'about:blank', title: 'Not Implemented', status: 501, detail: 'Export endpoint not yet implemented.' },
+      { status: 501 },
+    )
+  }),
+
+  http.get('/reports/assets/export', async () => {
+    await delay(300)
+    return HttpResponse.json(
+      { type: 'about:blank', title: 'Not Implemented', status: 501, detail: 'Export endpoint not yet implemented.' },
+      { status: 501 },
+    )
+  }),
+
+  http.get('/reports/count-adjustments/export', async () => {
+    await delay(300)
+    return HttpResponse.json(
+      { type: 'about:blank', title: 'Not Implemented', status: 501, detail: 'Export endpoint not yet implemented.' },
+      { status: 501 },
+    )
+  }),
+
+  http.get('/reports/documents/export', async () => {
+    await delay(300)
+    return HttpResponse.json(
+      { type: 'about:blank', title: 'Not Implemented', status: 501, detail: 'Export endpoint not yet implemented.' },
+      { status: 501 },
+    )
+  }),
+
+  // GET /inventory/movements/export — D-RPT-03 §3 (movements use the inventory ledger path)
+  http.get('/inventory/movements/export', async () => {
+    await delay(300)
+    return HttpResponse.json(
+      { type: 'about:blank', title: 'Not Implemented', status: 501, detail: 'Export endpoint not yet implemented.' },
+      { status: 501 },
+    )
+  }),
+
+  // GET /reports/exports/{jobId} — async job status (D-RPT-03 §3.3)
+  http.get('/reports/exports/:jobId', async ({ params }) => {
+    await delay(200)
+    const { jobId } = params as { jobId: string }
+    return HttpResponse.json({ jobId, status: 'processing', progress: 50 })
+  }),
+
+  // GET /reports/exports/{jobId}/download — async download (D-RPT-03 §3.3)
+  http.get('/reports/exports/:jobId/download', async () => {
+    await delay(100)
+    // Minimal valid PDF preamble for browser download testing.
+    // Production: real server-generated PDF from backend.
+    const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a])
+    return HttpResponse.arrayBuffer(pdfBytes.buffer, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'attachment; filename="EIAMS_export.pdf"',
+      },
+    })
+  }),
 ]

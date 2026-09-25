@@ -13,6 +13,8 @@ import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { Input } from '@/shared/ui/input'
+import { ExportButton } from '@/shared/ui/export-button'
+import { PrintButton } from '@/shared/ui/print-button'
 import { pageRows } from '@/shared/utils/table-data'
 import { formatDateTime } from '@/shared/utils/format'
 import type { InventoryAdjustment } from '@/shared/types/generated/eiams-v1'
@@ -184,6 +186,29 @@ function CountAdjustmentReportTableImpl() {
                 value={dateToInput}
                 onChange={(event) => handleDateToChange(event.currentTarget.value)}
                 aria-label="تصفية حسب تاريخ النهاية"
+              />
+            </div>
+
+            {/* Report actions — D-RPT-03 §6 informal print + §3 export */}
+            <div
+              className="col-span-full flex items-center justify-end gap-1"
+              role="toolbar"
+              aria-label="إجراءات التقرير"
+            >
+              <PrintButton aria-label="طباعة تقرير الجرد والتسويات" />
+              <ExportButton
+                reportType="count-adjustments"
+                requiredPermission="inventory.view"
+                filters={
+                  warehouseId !== undefined
+                    ? {
+                        ...(dateFrom !== undefined ? { dateFrom } : {}),
+                        ...(dateTo !== undefined ? { dateTo } : {}),
+                        warehouseId,
+                      }
+                    : undefined
+                }
+                label="تصدير تقرير الجرد والتسويات"
               />
             </div>
           </div>
