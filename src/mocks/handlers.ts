@@ -483,6 +483,7 @@ function includedIn<T extends string>(
 
 const ARABIC_COLLATOR = new Intl.Collator('ar-SY', { sensitivity: 'base', usage: 'sort' })
 const INVENTORY_PREFIX = `${environment.apiBaseUrl}/inventory`
+const REPORTS_PREFIX = `${environment.apiBaseUrl}/reports`
 const BALANCE_SORT_FIELDS = [
   'WarehouseDisplayName',
   'MaterialDisplayName',
@@ -2706,7 +2707,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
   // --- Reports: inventory ---------------------------------------------------
   // GET /reports/inventory — server-paged inventory balance report.
   // Only the documented filters (D-RPT-01) are forwarded.
-  http.get('/reports/inventory', async ({ request }) => {
+  http.get(`${REPORTS_PREFIX}/inventory`, async ({ request }) => {
     await delay(120)
     const url = new URL(request.url)
     const search = url.searchParams.get('search')?.trim() ?? ''
@@ -2749,7 +2750,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
   // --- Reports: assets -------------------------------------------------------
   // GET /reports/assets — server-paged asset report; custody shown inline
   // (no client join, per D-RPT-01).
-  http.get('/reports/assets', async ({ request }) => {
+  http.get(`${REPORTS_PREFIX}/assets`, async ({ request }) => {
     await delay(120)
     const url = new URL(request.url)
     const status = url.searchParams.get('status')
@@ -2804,7 +2805,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
 
   // --- Reports: count-adjustments ------------------------------------------
   // GET /reports/count-adjustments — server-paged adjustment document list.
-  http.get('/reports/count-adjustments', async ({ request }) => {
+  http.get(`${REPORTS_PREFIX}/count-adjustments`, async ({ request }) => {
     await delay(120)
     const url = new URL(request.url)
     const warehouseId = url.searchParams.get('warehouseId')
@@ -2860,7 +2861,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
 
   // --- Reports: documents --------------------------------------------------
   // GET /reports/documents — server-paged operational document list.
-  http.get('/reports/documents', async ({ request }) => {
+  http.get(`${REPORTS_PREFIX}/documents`, async ({ request }) => {
     await delay(120)
     const url = new URL(request.url)
     const warehouseId = url.searchParams.get('warehouseId')
@@ -2893,7 +2894,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
   // Returns realistic fixture data matching the vocabulary in:
   // - docs/dashboard-kpi-semantics-decision.md
   // - contracts/openapi/eiams-v1.kpi-vocabulary.json
-  http.get('/reports/dashboard', async ({ request }) => {
+  http.get(`${REPORTS_PREFIX}/dashboard`, async ({ request }) => {
     await delay(180)
     const url = new URL(request.url)
     // siteId and warehouseId are accepted but do not filter fixtures (the
@@ -2947,7 +2948,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
   // when this returns 501, which is the correct interim state.
   // GET /reports/inventory/export — D-RPT-03 §3.
   // Returns 501 until the backend implements the endpoint.
-  http.get('/reports/inventory/export', async () => {
+  http.get(`${REPORTS_PREFIX}/inventory/export`, async () => {
     await delay(300)
     return HttpResponse.json(
       { type: 'about:blank', title: 'Not Implemented', status: 501, detail: 'Export endpoint not yet implemented.' },
@@ -2955,7 +2956,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     )
   }),
 
-  http.get('/reports/assets/export', async () => {
+  http.get(`${REPORTS_PREFIX}/assets/export`, async () => {
     await delay(300)
     return HttpResponse.json(
       { type: 'about:blank', title: 'Not Implemented', status: 501, detail: 'Export endpoint not yet implemented.' },
@@ -2963,7 +2964,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     )
   }),
 
-  http.get('/reports/count-adjustments/export', async () => {
+  http.get(`${REPORTS_PREFIX}/count-adjustments/export`, async () => {
     await delay(300)
     return HttpResponse.json(
       { type: 'about:blank', title: 'Not Implemented', status: 501, detail: 'Export endpoint not yet implemented.' },
@@ -2971,7 +2972,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     )
   }),
 
-  http.get('/reports/documents/export', async () => {
+  http.get(`${REPORTS_PREFIX}/documents/export`, async () => {
     await delay(300)
     return HttpResponse.json(
       { type: 'about:blank', title: 'Not Implemented', status: 501, detail: 'Export endpoint not yet implemented.' },
@@ -2989,14 +2990,14 @@ export const mockApiHandlers: readonly HttpHandler[] = [
   }),
 
   // GET /reports/exports/{jobId} — async job status (D-RPT-03 §3.3)
-  http.get('/reports/exports/:jobId', async ({ params }) => {
+  http.get(`${REPORTS_PREFIX}/exports/:jobId`, async ({ params }) => {
     await delay(200)
     const { jobId } = params as { jobId: string }
     return HttpResponse.json({ jobId, status: 'processing', progress: 50 })
   }),
 
   // GET /reports/exports/{jobId}/download — async download (D-RPT-03 §3.3)
-  http.get('/reports/exports/:jobId/download', async () => {
+  http.get(`${REPORTS_PREFIX}/exports/:jobId/download`, async () => {
     await delay(100)
     // Minimal valid PDF preamble for browser download testing.
     // Production: real server-generated PDF from backend.
