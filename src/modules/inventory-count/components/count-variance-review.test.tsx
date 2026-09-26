@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -133,9 +134,11 @@ describe('CountVarianceReview (e20-t07)', () => {
     useHandlers([{ ...varianceWithReason, actualQuantity: 0, difference: 3 }])
     renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn() })
 
-    const line = (await screen.findByText('حاسوب مكتبي')).closest('li')!
-    expect(within(line).getByText(/\(\+3\)/)).toBeVisible()
-    expect(within(line).queryByText(/\(-25\)/)).not.toBeInTheDocument()
+    // Server says difference = 3 while snapshot 25 / actual 0 would recompute
+    // to -25. The rendered cell must be the server's value.
+    expect(await screen.findByText('حاسوب مكتبي')).toBeInTheDocument()
+    expect(screen.getByText('+3')).toBeVisible()
+    expect(screen.queryByText('-25')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'إكمال الجلسة' })).toBeEnabled()
   })
 
@@ -168,11 +171,23 @@ describe('CountVarianceReview (e20-t07)', () => {
     )
     renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn() })
 
-    expect(await screen.findByText('طابعة ليزر')).toBeInTheDocument()
+    // The whole session is read (server pages 0 and 1), so the gate and the
+    // summary both account for all 201 lines. The 200 seeded lines share one
+    // material name, so wait on the unique range text instead of a row label.
+    expect(await screen.findByText('عرض ١–٥٠ من ٢٠١')).toBeInTheDocument()
     expect(screen.getByText(/إجمالي البنود:/)).toHaveTextContent('201')
     expect(screen.getByRole('button', { name: 'إكمال الجلسة' })).toBeDisabled()
     expect(requestedPages).toEqual([0, 1])
-  }, 20000)
+
+    // The line that only exists in the second server page is still reachable
+    // through the review's own pagination.
+    const user = userEvent.setup()
+    for (let page = 0; page < 4; page += 1) {
+      await user.click(screen.getByRole('button', { name: 'الصفحة التالية' }))
+    }
+    expect(await screen.findByText('طابعة ليزر')).toBeInTheDocument()
+    expect(screen.getByText('لم يُدخل سبب الفرق بعد.')).toBeInTheDocument()
+  }, 40000)
 
   it('does not publish a partial count when a later page fails and permits retry', async () => {
     let failLaterPage = true
@@ -260,5 +275,102 @@ describe('CountVarianceReview (e20-t07)', () => {
 
     await screen.findByText('حاسوب مكتبي')
     expect(screen.queryByRole('button', { name: 'إغلاق الجلسة' })).toBeNull()
+  }, 20000)
+})
+
+/**
+ * Regression cover for eiams-frontend-ef78: the paged review table must render
+ * the server's read model, never a client-side recomputation, on a session
+ * that mixes all four buckets at once.
+ */
+describe('CountVarianceReview mixed session (ef78)', () => {
+  const unentered = {
+    countLineId: 'U1',
+    material: { id: 'u1', displayName: 'ورق تصوير A4' },
+    snapshotQuantity: 40,
+    actualQuantity: null,
+    difference: 0,
+    reason: null,
+  }
+  const matching = {
+    countLineId: 'M1',
+    material: { id: 'm1', displayName: 'حبر طابعة' },
+    snapshotQuantity: 6,
+    actualQuantity: 6,
+    difference: 0,
+    reason: null,
+  }
+  const varianceExplained = {
+    countLineId: 'V1',
+    material: { id: 'v1', displayName: 'حاسوب مكتبي' },
+    snapshotQuantity: 25,
+    actualQuantity: 23,
+    difference: -2,
+    reason: 'تالف ولم يُرصد',
+  }
+  const varianceUnexplained = {
+    countLineId: 'V2',
+    material: { id: 'v2', displayName: 'طابعة ليزر' },
+    snapshotQuantity: 2,
+    actualQuantity: 5,
+    difference: 3,
+    reason: null,
+  }
+
+  it('renders every bucket from the server difference and never invents a shortage', async () => {
+    useHandlers([unentered, matching, varianceExplained, varianceUnexplained])
+    renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn() })
+
+    await screen.findByText('عرض ١–٤ من ٤')
+
+    // Bucket counters come from summarizeCountLines over the whole session.
+    expect(screen.getByText(/لم تُدخل بعد:/)).toHaveTextContent('1')
+    expect(screen.getByText(/مطابقة:/)).toHaveTextContent('1')
+    expect(screen.getByText(/ذات فرق:/)).toHaveTextContent('2')
+    expect(screen.getByText(/دون سبب:/)).toHaveTextContent('1')
+
+    // The unentered line shows an em dash in both its actual and difference
+    // cells, never the -40 a naive `actual - snapshot` (or `null =>
+    // -snapshot`) would produce.
+    const unenteredRow = screen.getByText('ورق تصوير A4').closest('tr')!
+    expect(within(unenteredRow).getAllByText('—').length).toBeGreaterThanOrEqual(1)
+    expect(within(unenteredRow).queryByText('-40')).not.toBeInTheDocument()
+    expect(within(unenteredRow).getByText('لم تُدخل الكمية بعد')).toBeInTheDocument()
+
+    // Entered lines show exactly the server's difference.
+    const varianceRow = screen.getByText('طابعة ليزر').closest('tr')!
+    expect(within(varianceRow).getByText('+3')).toBeInTheDocument()
+    expect(within(varianceRow).getByText('لم يُدخل سبب الفرق بعد.')).toBeInTheDocument()
+
+    const explainedRow = screen.getByText('حاسوب مكتبي').closest('tr')!
+    expect(within(explainedRow).getByText('-2')).toBeInTheDocument()
+    expect(within(explainedRow).getByText('تالف ولم يُرصد')).toBeInTheDocument()
+  }, 20000)
+
+  it('blocks completion for the unentered line and then for the missing reason only', async () => {
+    useHandlers([unentered, matching, varianceExplained, varianceUnexplained])
+    const onComplete = vi.fn()
+    renderReview({ permissions: ['count.complete'], canComplete: true, onComplete })
+
+    await screen.findByText('عرض ١–٤ من ٤')
+    // Both blockers are independently reported.
+    expect(screen.getByText(/لا يمكن إكمال الجلسة قبل إدخال الكمية الفعلية/)).toBeVisible()
+    expect(screen.getByText(/لا يمكن إكمال الجلسة قبل إدخال سبب لكل بند ذي فرق/)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'إكمال الجلسة' })).toBeDisabled()
+  }, 20000)
+
+  it('enables completion once every line is entered and every variance has a reason', async () => {
+    useHandlers([
+      { ...unentered, actualQuantity: 40, difference: 0 },
+      matching,
+      varianceExplained,
+      // The second variance still owes a reason, so it must be given one too.
+      { ...varianceUnexplained, reason: 'فقد أثناء النقل' },
+    ])
+    renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn() })
+
+    await screen.findByText('عرض ١–٤ من ٤')
+    expect(screen.queryByText(/لا يمكن إكمال الجلسة/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'إكمال الجلسة' })).toBeEnabled()
   }, 20000)
 })

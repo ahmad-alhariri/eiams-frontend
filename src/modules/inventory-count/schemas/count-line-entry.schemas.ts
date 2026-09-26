@@ -176,9 +176,14 @@ export function toCountLineUpdateRequest(
 }
 
 /**
- * Live difference for the table's «الفرق» column. Mirrors the server's
- * variance rule: an uncounted or unusable entry shows no difference rather
- * than a fabricated number, so the table can never display a value the save
+ * Live preview of the difference the operator is typing RIGHT NOW, for the
+ * quantity-entry table's «الفرق» column.
+ *
+ * This previews unsaved local form input and is never a read model: a stored
+ * line's difference is the server's `InventoryCountLine.difference`, and an
+ * unentered line is *unentered* rather than a full shortfall (kc7v,
+ * eiams-frontend-ef78). An entry that is blank or unusable previews nothing
+ * rather than a fabricated number, so the table can never show a value the save
  * path would reject.
  */
 export function countLineDifference(

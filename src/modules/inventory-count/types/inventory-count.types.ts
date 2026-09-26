@@ -54,20 +54,16 @@ export function isAssetCountLine(line: { assetId?: string | null }): boolean {
   return line.assetId !== undefined && line.assetId !== null
 }
 
-/**
- * The variance the server recorded for a stored line: `actual − snapshot`, and
- * a full shortfall (`−snapshot`) for a line that has not been counted yet.
+/*
+ * Deliberately absent: any client-side "variance" helper for a STORED line.
  *
- * One helper for every surface (review summary, difference column, result
- * column) so the review can never disagree with itself about which lines are
- * variances or which still owe a reason.
+ * A count line's difference is a server-owned read model
+ * (`InventoryCountLine.difference`). A line whose `actualQuantity` is null is
+ * *unentered*, not a full shortfall, and must never be rendered or gated as a
+ * variance — see kc7v and eiams-frontend-ef78. Read `line.difference` directly
+ * and bucket with `summarizeCountLines` in `utils/count-review.ts`.
+ *
+ * The quantity-entry workspace previews a difference only for its own unsaved
+ * draft input, which is a local form concern, not a stored read model; that
+ * preview lives with the entry schema, not here.
  */
-export function countLineVariance(line: {
-  actualQuantity?: number | null
-  snapshotQuantity: number
-}): number {
-  const actual = line.actualQuantity
-  return actual === null || actual === undefined
-    ? -line.snapshotQuantity
-    : actual - line.snapshotQuantity
-}
