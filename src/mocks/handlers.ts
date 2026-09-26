@@ -2422,12 +2422,20 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     await delay(100)
     const url = new URL(request.url)
     const warehouseId = url.searchParams.get('warehouseId')
+    const search = url.searchParams.get('search')?.trim()
     const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
     const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
     const assets = getDb().assets.filter(
       (asset) =>
         asset.derivedStatus !== 'Disposed' &&
-        (warehouseId === null || warehouseId === '' || asset.currentWarehouse?.id === warehouseId),
+        (warehouseId === null ||
+          warehouseId === '' ||
+          asset.currentWarehouse?.id === warehouseId) &&
+        matchesSearch(
+          asset,
+          search,
+          (item) => `${item.assetNumber} ${item.serialNumber ?? ''} ${item.material.displayName}`,
+        ),
     )
     return HttpResponse.json({
       items: assets.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),

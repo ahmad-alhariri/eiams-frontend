@@ -12,8 +12,10 @@ import { countService } from '@/modules/inventory-count/services/count.service'
 import { createIdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
 
 const COUNT_RESOURCE = 'inventory-counts'
+const ALL_COUNT_LINES_PAGE_SIZE = 200
 
 export const countQueryKeys = {
   counts: (scope: ScopeCacheKey, query: ListInventoryCountsQuery) =>
@@ -25,6 +27,33 @@ export const countQueryKeys = {
     countId: string,
     query: { pageIndex?: number; pageSize?: number; search?: string },
   ) => queryKeys.scoped(scope, COUNT_RESOURCE, 'lines', countId, query),
+  allLines: (scope: ScopeCacheKey, countId: string) =>
+    queryKeys.scoped(scope, COUNT_RESOURCE, 'lines', countId, 'all'),
+}
+
+/**
+ * Reads every page of one count snapshot before publishing any lines. A
+ * count-linked adjustment must never be seeded from a partial page: later
+ * variance lines carry the same material/asset provenance as the first page.
+ */
+async function listAllCountLines(countId: string): Promise<readonly InventoryCountLine[]> {
+  const firstPage = await countService.listLines(countId, {
+    pageIndex: 0,
+    pageSize: ALL_COUNT_LINES_PAGE_SIZE,
+  })
+  const remainingPages = await Promise.all(
+    Array.from({ length: Math.max(0, firstPage.meta.totalPages - 1) }, (_, index) =>
+      countService.listLines(countId, {
+        pageIndex: index + 1,
+        pageSize: ALL_COUNT_LINES_PAGE_SIZE,
+      }),
+    ),
+  )
+
+  return [
+    ...firstPage.items,
+    ...remainingPages.flatMap((page) => page.items),
+  ] satisfies readonly InventoryCountLine[]
 }
 
 export {
@@ -96,6 +125,25 @@ export function useCountLinesQuery(
         ? ['inventory-counts', 'lines', 'unscoped', countId, query]
         : countQueryKeys.lines(scope, countId, query),
     queryFn: () => countService.listLines(countId ?? '', query),
+    enabled: scope !== undefined && countId != null && countId !== '',
+    staleTime: OPERATIONAL_STALE_TIME,
+  })
+}
+
+/**
+ * Complete count-line snapshot for variance review and adjustment seeding.
+ * TanStack Query publishes the aggregate only after every advertised server
+ * page succeeds, so consumers cannot mistake a partial response for the full
+ * count.
+ */
+export function useAllCountLinesQuery(countId: string | undefined | null) {
+  const { activeScopeCacheKey: scope } = useActiveScopeContext()
+  return useQuery({
+    queryKey:
+      scope === undefined || countId == null
+        ? ['inventory-counts', 'lines', 'all', 'unscoped', countId]
+        : countQueryKeys.allLines(scope, countId),
+    queryFn: () => listAllCountLines(countId ?? ''),
     enabled: scope !== undefined && countId != null && countId !== '',
     staleTime: OPERATIONAL_STALE_TIME,
   })

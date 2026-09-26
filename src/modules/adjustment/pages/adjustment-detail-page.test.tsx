@@ -98,7 +98,14 @@ function useDetailHandler(adjustment: InventoryAdjustment) {
   server.use(http.get(`*/api/v1/adjustments/${ADJUSTMENT_ID}`, () => HttpResponse.json(adjustment)))
 }
 
-function renderPage(permissionCodes: readonly string[] = ['document.view', 'document.create']) {
+function renderPage(
+  permissionCodes: readonly string[] = [
+    'document.view',
+    'document.create',
+    'document.post',
+    'document.reverse',
+  ],
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(authSessionQueryKey, sessionWith(permissionCodes))
   return render(
@@ -158,6 +165,9 @@ describe('AdjustmentDetailPage (e21-t07)', () => {
     await screen.findByRole('heading', { level: 1 })
     expect(screen.getByText('إعدام أصل')).toBeInTheDocument()
     expect(screen.getByText('سند إعدام مرحّل لا يقبل العكس')).toBeInTheDocument()
+    const table = screen.getByRole('table')
+    expect(table.parentElement).toHaveClass('overflow-x-auto')
+    expect(table.closest('[data-slot="content-card"]')?.parentElement).toHaveClass('grid-cols-1')
     expect(screen.queryByRole('button', { name: 'عكس السند' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'ترحيل السند' })).toBeNull()
   })

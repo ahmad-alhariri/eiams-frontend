@@ -4,6 +4,7 @@ import { getDb, resetMockDatabase } from '@/mocks/db'
 import { mockApiHandlers } from '@/mocks/handlers'
 import { apiClient } from '@/shared/services/api.client'
 import { createDevSession } from '@/shared/services/dev-session'
+import type { AssetPage } from '@/shared/types/generated/eiams-v1'
 import { createStockMovement, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
@@ -18,6 +19,49 @@ describe('mock API handlers', () => {
   beforeEach(() => {
     resetMockDatabase()
     server.use(...mockApiHandlers)
+  })
+
+  it('searches disposal-eligible assets before paging and keeps the warehouse filter', async () => {
+    const db = getDb()
+    const target = db.assets.find((asset) => asset.derivedStatus !== 'Disposed')
+    if (target === undefined || target.currentWarehouse == null) {
+      throw new Error('Disposal-eligible asset seed is incomplete.')
+    }
+    db.assets.unshift(
+      ...Array.from({ length: 50 }, (_, index) => ({
+        ...target,
+        assetId: fixtureUuid(5000 + index),
+        assetNumber: `BEFORE-${index}`,
+      })),
+    )
+    const warehouseId = target.currentWarehouse.id
+
+    const { data: firstPage } = await apiClient.get<AssetPage>(
+      '/adjustments/disposal-eligible-assets',
+      { params: { pageIndex: 0, pageSize: 50, warehouseId } },
+    )
+    expect(firstPage.items.map((asset) => asset.assetId)).not.toContain(target.assetId)
+
+    const { data: searched } = await apiClient.get<AssetPage>(
+      '/adjustments/disposal-eligible-assets',
+      { params: { pageIndex: 0, pageSize: 10, warehouseId, search: target.assetNumber } },
+    )
+    expect(searched.items.map((asset) => asset.assetId)).toEqual([target.assetId])
+    expect(searched.meta.totalItems).toBe(1)
+
+    const { data: outsideWarehouse } = await apiClient.get<AssetPage>(
+      '/adjustments/disposal-eligible-assets',
+      {
+        params: {
+          pageIndex: 0,
+          pageSize: 10,
+          warehouseId: fixtureUuid(9999),
+          search: target.assetNumber,
+        },
+      },
+    )
+    expect(outsideWarehouse.items).toEqual([])
+    expect(outsideWarehouse.meta.totalItems).toBe(0)
   })
 
   it('lists catalog domains as an array and filters by status', async () => {

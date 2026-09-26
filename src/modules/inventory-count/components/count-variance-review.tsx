@@ -1,11 +1,13 @@
 import { useMemo } from 'react'
 
-import { useCountLinesQuery } from '@/modules/inventory-count/hooks/use-count-queries'
+import { useAllCountLinesQuery } from '@/modules/inventory-count/hooks/use-count-queries'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
 import { isAssetCountLine } from '@/modules/inventory-count/types/inventory-count.types'
+import { summarizeCountLines } from '@/modules/inventory-count/utils/count-review'
+import { Button } from '@/shared/ui/button'
 
 interface VarianceRow {
   line: InventoryCountLine
@@ -15,10 +17,9 @@ interface VarianceRow {
 
 /**
  * Variance review (e20-t07). Read-only split of the lines into matching vs.
- * differing (variance) buckets, with the captured reason surfaced per variance
- * line. The "complete" gate (enforced server-side too) requires every line
- * whose difference ≠ 0 to carry a reason — the UI blocks the complete action
- * and lists the offending lines otherwise.
+ * differing (variance) and unentered buckets. PRD §12.6 requires actual entry
+ * before completion; retain the existing reason gate for nonzero differences.
+ * All differences come from the server; the UI never treats null as zero.
  */
 export function CountVarianceReview({
   countId,
@@ -42,26 +43,23 @@ export function CountVarianceReview({
   closeError?: string | null
 }) {
   const can = usePermission()
-  const linesQuery = useCountLinesQuery(countId, { pageIndex: 0, pageSize: 200 })
+  const linesQuery = useAllCountLinesQuery(countId)
   const items = useMemo(
-    () => (linesQuery.data?.items ?? []) as readonly InventoryCountLine[],
+    () => (linesQuery.data ?? []) as readonly InventoryCountLine[],
     [linesQuery.data],
   )
 
-  const { matching, variance, missingReason } = useMemo(() => {
-    const rows: VarianceRow[] = items.map((line) => {
-      const actual = line.actualQuantity
-      const difference =
-        actual === null || actual === undefined
-          ? -line.snapshotQuantity
-          : actual - line.snapshotQuantity
-      return { line, difference, hasReason: (line.reason ?? '').trim() !== '' }
+  const { matching, variance, missingReason, unentered } = useMemo(() => {
+    const summary = summarizeCountLines(items)
+    const toRow = (line: InventoryCountLine): VarianceRow => ({
+      line,
+      difference: line.difference,
+      hasReason: (line.reason ?? '').trim() !== '',
     })
-    const varianceRows = rows.filter((row) => row.difference !== 0)
     return {
-      matching: rows.filter((row) => row.difference === 0),
-      variance: varianceRows,
-      missingReason: varianceRows.filter((row) => !row.hasReason),
+      ...summary,
+      matching: summary.matching.map(toRow),
+      variance: summary.variance.map(toRow),
     }
   }, [items])
 
@@ -69,10 +67,25 @@ export function CountVarianceReview({
     return <LoadingSpinner label="جارٍ تحميل بنود الفروقات..." />
   }
   if (linesQuery.isError) {
-    return <ErrorState title="تعذّر تحميل بنود الفروقات" description="حاول مرة أخرى." />
+    return (
+      <ErrorState
+        title="تعذّر تحميل بنود الفروقات"
+        description="لم يكتمل تحميل جميع صفحات البنود. حاول مرة أخرى."
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            disabled={linesQuery.isFetching}
+            onClick={() => void linesQuery.refetch()}
+          >
+            إعادة المحاولة
+          </Button>
+        }
+      />
+    )
   }
 
-  const completeBlocked = missingReason.length > 0
+  const completeBlocked = missingReason.length > 0 || unentered.length > 0
   const canTriggerComplete =
     canComplete && can.has('count.complete') && !completeBlocked && !isCompleting
 
@@ -89,9 +102,36 @@ export function CountVarianceReview({
           ذات فرق: <strong className="text-foreground">{variance.length}</strong>
         </span>
         <span>
+          لم تُدخل بعد: <strong className="text-foreground">{unentered.length}</strong>
+        </span>
+        <span>
           دون سبب: <strong className="text-destructive">{missingReason.length}</strong>
         </span>
       </div>
+
+      {unentered.length > 0 ? (
+        <section className="grid gap-3">
+          <h3 className="text-sm font-medium text-foreground">بنود لم تُدخل كمياتها الفعلية</h3>
+          <p className="text-sm text-muted-foreground">
+            أدخل الكمية الفعلية لكل بند في بنود الجرد؛ الكمية غير المدخلة ليست صفراً ولا تُعدّ
+            فرقاً.
+          </p>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {unentered.map((line) => (
+              <li
+                key={line.countLineId}
+                className="flex flex-wrap justify-between gap-2 px-3 py-2 text-sm"
+              >
+                <span>
+                  {line.material.displayName}
+                  {line.assetNumber ? ` · ${line.assetNumber}` : ''}
+                </span>
+                <span className="text-muted-foreground">الكمية الفعلية: لم تُدخل بعد</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="grid gap-3">
         <h3 className="text-sm font-medium text-foreground">بنود مطابقة</h3>
@@ -102,7 +142,7 @@ export function CountVarianceReview({
             {matching.map((row) => (
               <li
                 key={row.line.countLineId}
-                className="flex items-center justify-between px-3 py-2 text-sm"
+                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
               >
                 <span className="flex items-center gap-2">
                   {row.line.material.displayName}
@@ -132,7 +172,7 @@ export function CountVarianceReview({
           <ul className="divide-y divide-border rounded-lg border border-border">
             {variance.map((row) => (
               <li key={row.line.countLineId} className="grid gap-1 px-3 py-2">
-                <div className="flex items-center justify-between text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                   <span className="flex items-center gap-2">
                     {row.line.material.displayName}
                     {isAssetCountLine(row.line) ? (
@@ -161,17 +201,17 @@ export function CountVarianceReview({
         )}
       </section>
 
-      {can.has('count.complete') ? (
+      {canComplete && can.has('count.complete') ? (
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={onComplete}
-            disabled={!canTriggerComplete}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-          >
+          <Button type="button" onClick={onComplete} disabled={!canTriggerComplete}>
             {isCompleting ? 'جارٍ الإكمال...' : 'إكمال الجلسة'}
-          </button>
-          {completeBlocked ? (
+          </Button>
+          {unentered.length > 0 ? (
+            <p role="alert" className="text-sm text-destructive">
+              لا يمكن إكمال الجلسة قبل إدخال الكمية الفعلية لكل بند ({unentered.length} بند).
+            </p>
+          ) : null}
+          {missingReason.length > 0 ? (
             <p role="alert" className="text-sm text-destructive">
               لا يمكن إكمال الجلسة قبل إدخال سبب لكل بند ذي فرق ({missingReason.length} بند).
             </p>
@@ -186,14 +226,9 @@ export function CountVarianceReview({
 
       {can.has('count.close') && canClose ? (
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isClosing}
-            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground disabled:opacity-50"
-          >
+          <Button type="button" onClick={onClose} disabled={isClosing} variant="outline">
             {isClosing ? 'جارٍ الإغلاق...' : 'إغلاق الجلسة'}
-          </button>
+          </Button>
           {closeError ? (
             <p role="alert" className="text-sm text-destructive">
               {closeError}

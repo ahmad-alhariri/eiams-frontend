@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCallback, useMemo, type FormEvent } from 'react'
 import { FormProvider, useForm, useWatch, Controller, type Resolver } from 'react-hook-form'
-import { useNavigate, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import { AdjustmentLineEditor } from '@/modules/adjustment/components/adjustment-line-editor'
 import { useCreateAdjustmentMutation } from '@/modules/adjustment/hooks/use-adjustment-queries'
@@ -10,23 +10,28 @@ import {
   createEmptyAdjustmentLine,
   DRAFT_FORM_PURPOSES,
   DRAFT_FORM_PURPOSE_LABELS_AR,
-  isDraftFormPurpose,
   toAdjustmentDraftRequest,
   type AdjustmentFormValues,
   type AdjustmentLineValues,
 } from '@/modules/adjustment/schemas/adjustment-form.schemas'
-import { usePermission } from '@/modules/auth/hooks/use-permission'
+import { useRoutePermission } from '@/modules/auth/hooks/use-permission'
 import {
-  useCountLinesQuery,
+  useAllCountLinesQuery,
   useInventoryCountQuery,
 } from '@/modules/inventory-count/hooks/use-count-queries'
+import {
+  isCountAdjustmentEligible,
+  summarizeCountLines,
+} from '@/modules/inventory-count/utils/count-review'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
+import { ErrorState } from '@/shared/feedback/error-state'
+import { EmptyState } from '@/shared/feedback/empty-state'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { AsyncSelect } from '@/shared/ui/async-select'
-import { Button } from '@/shared/ui/button'
+import { Button, buttonVariants } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
@@ -47,38 +52,36 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
  */
 export default function AdjustmentDraftFormPage() {
   const [searchParams] = useSearchParams()
-  const { has } = usePermission()
+  const canCreate = useRoutePermission('adjustmentNew')
 
   const launchCountId = searchParams.get('countId') ?? ''
-  const launchWarehouseId = searchParams.get('warehouseId') ?? ''
   const launchPurposeParam = searchParams.get('purpose')
-  const launchedFromCount = launchCountId !== '' && isDraftFormPurpose(launchPurposeParam)
-  const lockedPurpose = launchedFromCount ? launchPurposeParam : null
+  const invalidCountLink = launchCountId !== '' && launchPurposeParam !== 'CountVariance'
+  const launchedFromCount = launchCountId !== '' && !invalidCountLink
+  const lockedPurpose = launchedFromCount ? 'CountVariance' : null
 
-  // CountVariance seed source: the session's own line list (snapshot vs actual).
-  const countLinesQuery = useCountLinesQuery(
-    launchedFromCount && lockedPurpose === 'CountVariance' ? launchCountId : null,
-    { pageIndex: 0, pageSize: 200 },
+  // CountVariance seed source: the session's server-provided differences.
+  const countLinesQuery = useAllCountLinesQuery(
+    canCreate && launchedFromCount ? launchCountId : null,
+  )
+  const countSummary = useMemo(
+    () =>
+      countLinesQuery.data === undefined ? undefined : summarizeCountLines(countLinesQuery.data),
+    [countLinesQuery.data],
   )
   const varianceSeed = useMemo<AdjustmentLineValues[] | undefined>(() => {
-    if (!launchedFromCount || countLinesQuery.data === undefined) return undefined
-    return countLinesQuery.data.items
-      .filter((line) => line.difference !== 0)
-      .map((line) => ({
-        materialId: line.material.id,
-        materialNameAr: line.material.displayName,
-        ...(line.assetId === undefined || line.assetId === null ? {} : { assetId: line.assetId }),
-        quantityDelta: line.difference,
-        reason: line.reason ?? '',
-      }))
-  }, [launchedFromCount, countLinesQuery.data])
+    if (!launchedFromCount || countSummary === undefined) return undefined
+    return countSummary.variance.map((line) => ({
+      materialId: line.material.id,
+      materialNameAr: line.material.displayName,
+      ...(line.assetId === undefined || line.assetId === null ? {} : { assetId: line.assetId }),
+      quantityDelta: line.difference,
+      reason: line.reason ?? '',
+    }))
+  }, [launchedFromCount, countSummary])
 
-  // Launch-warehouse display label resolved from the session itself (the deep
-  // link carries only the id) so the locked control renders المستودع المركزي,
-  // not the raw UUID (QA-flagged UX defect).
-  const countQuery = useInventoryCountQuery(
-    launchedFromCount && lockedPurpose === 'CountVariance' ? launchCountId : null,
-  )
+  // Both warehouse identity and Arabic label come from the fetched count.
+  const countQuery = useInventoryCountQuery(canCreate && launchedFromCount ? launchCountId : null)
   const launchWarehouseLabel =
     launchedFromCount && countQuery.data !== undefined
       ? countQuery.data.warehouse.displayName
@@ -88,12 +91,9 @@ export default function AdjustmentDraftFormPage() {
   // label must be resolved before the form component mounts, so its
   // defaultValues and the combobox's initial option are complete.
   const seedReady =
-    !launchedFromCount ||
-    (lockedPurpose === 'CountVariance'
-      ? varianceSeed !== undefined && countQuery.data !== undefined
-      : true)
+    !launchedFromCount || (varianceSeed !== undefined && countQuery.data !== undefined)
 
-  if (!has('document.create')) {
+  if (!canCreate) {
     return (
       <div dir="rtl" className="min-w-0">
         <PageHeader title={ROUTE_METADATA.adjustmentNew.labelAr} />
@@ -106,6 +106,37 @@ export default function AdjustmentDraftFormPage() {
     )
   }
 
+  if (invalidCountLink) {
+    return (
+      <ErrorState
+        title="رابط الجرد غير صالح"
+        description="افتح إنشاء سند التسوية من جلسة الجرد لربط فروقاتها بالسند."
+      />
+    )
+  }
+
+  if (countQuery.isError || countLinesQuery.isError) {
+    return (
+      <ErrorState
+        title="تعذّر تحميل بيانات الجرد"
+        description="تعذّر تحميل جلسة الجرد أو بنود الفروقات. حاول مرة أخرى."
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            disabled={countQuery.isFetching || countLinesQuery.isFetching}
+            onClick={() => {
+              void countQuery.refetch()
+              void countLinesQuery.refetch()
+            }}
+          >
+            إعادة المحاولة
+          </Button>
+        }
+      />
+    )
+  }
+
   if (!seedReady) {
     return (
       <div dir="rtl" className="min-w-0">
@@ -115,6 +146,44 @@ export default function AdjustmentDraftFormPage() {
     )
   }
 
+  if (launchedFromCount && countQuery.data !== undefined) {
+    const returnToCount = (
+      <Link
+        to={ROUTE_PATHS.countDetail.replace(':countId', encodeURIComponent(launchCountId))}
+        className={buttonVariants({ variant: 'outline' })}
+      >
+        العودة إلى جلسة الجرد
+      </Link>
+    )
+    if (!isCountAdjustmentEligible(countQuery.data.status)) {
+      return (
+        <ErrorState
+          title="جلسة الجرد غير جاهزة للتسوية"
+          description="لا يمكن إنشاء سند تسوية قبل اكتمال جلسة الجرد. أكمل إدخال الكميات ومراجعة الفروقات أولاً."
+          action={returnToCount}
+        />
+      )
+    }
+    if (countSummary !== undefined && countSummary.unentered.length > 0) {
+      return (
+        <ErrorState
+          title="بيانات الجرد غير مكتملة"
+          description="توجد بنود لم تُدخل كمياتها الفعلية. راجع جلسة الجرد قبل إنشاء التسوية."
+          action={returnToCount}
+        />
+      )
+    }
+    if (varianceSeed?.length === 0) {
+      return (
+        <EmptyState
+          title="لا توجد فروقات للتسوية"
+          description="جميع بنود الجرد مطابقة؛ لا يلزم إنشاء سند تسوية لهذه الجلسة."
+          action={returnToCount}
+        />
+      )
+    }
+  }
+
   return (
     <div dir="rtl" className="min-w-0">
       <PageHeader
@@ -122,9 +191,10 @@ export default function AdjustmentDraftFormPage() {
         subtitle="أنشئ سند تسوية جديدًا: حدد المستودع والغرض والسبب، ثم بنود الفروقات الموقعة مع سبب لكل بند."
       />
       <AdjustmentDraftForm
+        key={launchedFromCount ? launchCountId : 'direct-correction'}
         launchedFromCount={launchedFromCount}
         launchCountId={launchCountId || undefined}
-        launchWarehouseId={launchedFromCount ? launchWarehouseId : ''}
+        launchWarehouseId={launchedFromCount ? (countQuery.data?.warehouse.id ?? '') : ''}
         launchWarehouseLabel={launchWarehouseLabel}
         lockedPurpose={lockedPurpose}
         varianceSeed={lockedPurpose === 'CountVariance' ? varianceSeed : undefined}
@@ -161,8 +231,7 @@ function AdjustmentDraftForm({
   const defaultValues = useMemo<AdjustmentFormValues>(
     () => ({
       header: {
-        // The count-launch deep-link carries the session's warehouse;
-        // preseeding it keeps the locked control valid (QA defect D3).
+        // Seed from the fetched count, never the untrusted warehouse query parameter.
         warehouseId: launchedFromCount ? launchWarehouseId : '',
         purpose: launchedFromCount ? 'CountVariance' : 'DirectCorrection',
         reason: '',
@@ -183,12 +252,13 @@ function AdjustmentDraftForm({
     defaultValues,
     mode: 'onChange',
   })
-  const isSubmitting = form.formState.isSubmitting
+  const isSubmitting = form.formState.isSubmitting || createMutation.isPending
   const watchedPurpose = useWatch({ control: form.control, name: 'header.purpose' })
 
   const onSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault()
+      if (createMutation.isPending) return
       void form.handleSubmit((values) => {
         createMutation.mutate(toAdjustmentDraftRequest(values), {
           onSuccess: () => {

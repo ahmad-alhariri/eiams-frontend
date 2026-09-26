@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AdjustmentActionBar } from './adjustment-action-bar'
+import { AdjustmentActionBar } from '@/modules/adjustment/components/adjustment-action-bar'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
 import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
@@ -88,6 +88,7 @@ function Harness({
   purpose,
   actions,
   blockers = [],
+  permissions = ['document.view', 'document.post', 'document.reverse'],
 }: {
   status: 'Draft' | 'Posted' | 'Reversed'
   purpose: 'CountVariance' | 'DirectCorrection' | 'Disposal'
@@ -99,11 +100,12 @@ function Harness({
     reasonRequired?: boolean
   }>
   blockers?: ReadonlyArray<{ code: string; messageAr: string }>
+  permissions?: string[]
 }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  client.setQueryData(authSessionQueryKey, sessionWith(['document.view', 'document.create']))
+  client.setQueryData(authSessionQueryKey, sessionWith(permissions))
   return (
     <QueryClientProvider client={client}>
       <AdjustmentActionBar
@@ -123,6 +125,29 @@ beforeEach(() => {
 })
 
 describe('AdjustmentActionBar (e21-t06)', () => {
+  it('hides Reverse without document.reverse despite create/post and an enabled server policy', () => {
+    render(
+      <Harness
+        status="Posted"
+        purpose="CountVariance"
+        actions={ENABLED_REVERSE}
+        permissions={['document.view', 'document.create', 'document.post']}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'عكس السند' })).not.toBeInTheDocument()
+  })
+
+  it('allows Reverse with its own permission without requiring create/post', () => {
+    render(
+      <Harness
+        status="Posted"
+        purpose="CountVariance"
+        actions={ENABLED_REVERSE}
+        permissions={['document.view', 'document.reverse']}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'عكس السند' })).toBeEnabled()
+  })
   it('renders Post for a manager on a clean Draft and posts idempotently', async () => {
     usePostHandler()
     const user = userEvent.setup()
@@ -176,9 +201,9 @@ describe('AdjustmentActionBar (e21-t06)', () => {
     expect(await screen.findByRole('button', { name: 'عكس السند' })).toBeInTheDocument()
   })
 
-  it('renders nothing for a keeper (no document.create)', () => {
+  it('hides Post from a keeper despite document.create and an enabled policy', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(authSessionQueryKey, sessionWith(['document.view']))
+    client.setQueryData(authSessionQueryKey, sessionWith(['document.view', 'document.create']))
     render(
       <QueryClientProvider client={client}>
         <AdjustmentActionBar
