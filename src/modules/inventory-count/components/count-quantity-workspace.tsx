@@ -1,35 +1,61 @@
-import { useMemo, useState } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { createColumnHelper } from '@tanstack/react-table'
+import { useCallback, useMemo } from 'react'
+import { useForm } from 'react-hook-form'
 
 import {
-  useCountLinesQuery as useCountLines,
+  CountLineDifferenceField,
+  CountLineQuantityField,
+  CountLineReasonField,
+} from '@/modules/inventory-count/components/count-line-entry-fields'
+import { useCountLineDrafts } from '@/modules/inventory-count/components/count-line-drafts'
+import { countLinePageStats } from '@/modules/inventory-count/components/count-quantity-workspace.model'
+import {
+  useCountLinesQuery,
   useUpdateCountLinesMutation,
 } from '@/modules/inventory-count/hooks/use-count-queries'
-import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { ErrorState } from '@/shared/feedback/error-state'
-import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
-import { Button } from '@/shared/ui/button'
-import { Input } from '@/shared/ui/input'
-import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
+import {
+  countDirtyLineIndexes,
+  countLineEntrySchema,
+  toCountLineEntryFormValues,
+  toCountLineUpdateRequest,
+  type CountLineEntryFormValues,
+} from '@/modules/inventory-count/schemas/count-line-entry.schemas'
 import { isAssetCountLine } from '@/modules/inventory-count/types/inventory-count.types'
+import { usePermission } from '@/modules/auth/hooks/use-permission'
+import { Form } from '@/shared/forms/form'
+import { useConfirm } from '@/shared/hooks/use-confirm'
+import { useServerPagination } from '@/shared/hooks/use-server-pagination'
+import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
+import { Button } from '@/shared/ui/button'
+import { dataTableFeatures } from '@/shared/ui/data-table'
+import { DataTableServer } from '@/shared/ui/data-table-server'
+import { toast } from '@/shared/ui/toast-manager'
+import { toArabicDigits } from '@/shared/utils/format'
+import { pageRows } from '@/shared/utils/table-data'
+import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
 
-/** An asset line carries an `assetId` (and `assetNumber`) — a serialized asset
- * verified as present (1) or missing (0), rather than a bulk quantity. */
-function isAssetLine(line: InventoryCountLine): boolean {
-  return isAssetCountLine(line)
-}
+/** Rows requested on first render; the shared bar offers 10/25/50/100. */
+const INITIAL_PAGE_SIZE = 25
 
-interface LineDraft {
-  actualQuantity: string
-  reason: string
-}
+const countLineColumnHelper = createColumnHelper<typeof dataTableFeatures, InventoryCountLine>()
+
+const EMPTY_LINES: readonly InventoryCountLine[] = []
 
 /**
- * Quantity-entry workspace (e20-t06). Operators record the `actualQuantity`
- * counted for each line; the difference vs. the captured snapshot (book)
- * quantity is computed live. The save is batched (PUT
- * `updateInventoryCountLines`) and only sends lines whose value changed, so a
- * partial count can be persisted and resumed. Variance reasons are captured
- * per line (PRD §12.7 — required before completion, surfaced in t07).
+ * Quantity-entry workspace (e20-t06, hbfu).
+ *
+ * The server owns paging: every count line is reachable through the shared RTL
+ * pagination bar, and the draft form is scoped to the page on screen. Because
+ * drafts are per page, navigating away from a page with unsaved entry is
+ * explicitly guarded by a discard confirmation instead of silently dropping
+ * operator work.
+ *
+ * Saves are batched through `updateInventoryCountLines` and carry only the
+ * rows that actually changed and hold a usable counted quantity, so a
+ * partially counted page stays savable and resumable. The page is re-seeded
+ * from the server after every successful save, and by `values` on navigation,
+ * so a row never keeps comparing against a stale baseline.
  */
 export function CountQuantityWorkspace({
   countId,
@@ -38,236 +64,223 @@ export function CountQuantityWorkspace({
   countId: string
   countRowVersion: number
 }) {
-  const can = usePermission()
-  const canEnter = can.has('count.enter')
-  const linesQuery = useCountLines(countId, { pageIndex: 0, pageSize: 200 })
-  const updateMutation = useUpdateCountLinesMutation(countId)
+  const { has } = usePermission()
+  const canEnter = has('count.enter')
+  const pagination = useServerPagination({ initialPageSize: INITIAL_PAGE_SIZE })
+  const { page, pageSize, setPage, setPageSize } = pagination
 
-  const [drafts, setDrafts] = useState<Record<string, LineDraft>>({})
+  // DataTableServer controls are 1-based; the count-lines read is 0-based.
+  const linesQueryInput = useMemo(() => ({ pageIndex: page - 1, pageSize }), [page, pageSize])
+  const linesQuery = useCountLinesQuery(countId, linesQueryInput)
+  const serverPage = linesQuery.data
+  const items: readonly InventoryCountLine[] = serverPage?.items ?? EMPTY_LINES
 
-  const lines = linesQuery.data?.items ?? []
-  const items = lines as readonly InventoryCountLine[]
+  const currentPageValues = useMemo(() => toCountLineEntryFormValues(items), [items])
 
-  const setDraft = (lineId: string, patch: Partial<LineDraft>) => {
-    setDrafts((prev) => ({
-      ...prev,
-      [lineId]: { actualQuantity: '', reason: '', ...prev[lineId], ...patch },
-    }))
-  }
-
-  const draftFor = (line: InventoryCountLine): LineDraft => ({
-    actualQuantity: drafts[line.countLineId]?.actualQuantity ?? String(line.actualQuantity ?? ''),
-    reason:
-      drafts[line.countLineId]?.reason ??
-      (line.actualQuantity !== null && line.actualQuantity !== line.snapshotQuantity
-        ? (line.reason ?? '')
-        : ''),
+  const form = useForm<CountLineEntryFormValues>({
+    resolver: zodResolver(countLineEntrySchema),
+    defaultValues: currentPageValues,
+    values: currentPageValues,
   })
+  const drafts = useCountLineDrafts(form.control)
 
-  const isDirty = (line: InventoryCountLine, draft: LineDraft): boolean => {
-    const base = line.actualQuantity === null ? '' : String(line.actualQuantity)
-    const baseReason =
-      line.actualQuantity !== null && line.actualQuantity !== line.snapshotQuantity
-        ? (line.reason ?? '')
-        : ''
-    return draft.actualQuantity !== base || draft.reason !== baseReason
-  }
+  const updateMutation = useUpdateCountLinesMutation(countId)
+  const submitFeedback = useSubmitFeedback()
+  const { confirm: openConfirm, element: confirmDialog } = useConfirm()
 
-  const { varianceCount, totalVariance, countedCount } = useMemo(() => {
-    let variance = 0
-    let totalDiff = 0
-    let counted = 0
-    for (const line of items) {
-      const draft = draftFor(line)
-      const entered = draft.actualQuantity.trim() === '' ? null : Number(draft.actualQuantity)
-      if (entered !== null) {
-        counted += 1
-        const diff = entered - line.snapshotQuantity
-        totalDiff += diff
-        if (diff !== 0) variance += 1
+  const dirtyCount = useMemo(() => countDirtyLineIndexes(items, drafts).length, [drafts, items])
+  const pageStats = useMemo(() => countLinePageStats(items, drafts), [drafts, items])
+  const isEditorDisabled = !canEnter || updateMutation.isPending
+
+  /**
+   * hbfu: a page's drafts are scoped to that page, so leaving it with unsaved
+   * entry is an explicit decision, never an implicit discard.
+   */
+  const navigateWithDraftGuard = useCallback(
+    async (navigate: () => void) => {
+      if (dirtyCount === 0) {
+        navigate()
+        return
       }
-    }
-    return { varianceCount: variance, totalVariance: totalDiff, countedCount: counted }
-    // draftFor reads only `drafts` state and line props; adding its per-render
-    // function identity would re-run this memo on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, drafts])
+      const { confirmed } = await openConfirm({
+        title: 'تغييرات غير محفوظة',
+        message: 'لديك كميات غير محفوظة في هذه الصفحة. الانتقال إلى صفحة أخرى سيفقدها.',
+        confirmLabel: 'الانتقال وفقدان التغييرات',
+        cancelLabel: 'البقاء في هذه الصفحة',
+      })
+      if (confirmed) {
+        navigate()
+      }
+    },
+    [dirtyCount, openConfirm],
+  )
 
-  const dirtyLines = items
-    .map((line) => ({ line, draft: draftFor(line) }))
-    .filter(({ line, draft }) => isDirty(line, draft))
-    .filter(
-      ({ draft }) =>
-        draft.actualQuantity.trim() !== '' && Number.isFinite(Number(draft.actualQuantity)),
-    )
+  const handlePageChange = useCallback(
+    (nextPage: number) => {
+      if (nextPage !== page) {
+        void navigateWithDraftGuard(() => setPage(nextPage))
+      }
+    },
+    [navigateWithDraftGuard, page, setPage],
+  )
 
-  const handleSave = () => {
-    updateMutation.mutate({
-      countRowVersion,
-      lines: dirtyLines.map(({ line, draft }) => ({
-        countLineId: line.countLineId,
-        actualQuantity: Number(draft.actualQuantity),
-        rowVersion: countRowVersion,
-        ...(draft.reason.trim() !== '' ? { reason: draft.reason.trim() } : {}),
-      })),
-    })
-  }
+  const handlePageSizeChange = useCallback(
+    (nextPageSize: number) => {
+      if (nextPageSize !== pageSize) {
+        void navigateWithDraftGuard(() => setPageSize(nextPageSize))
+      }
+    },
+    [navigateWithDraftGuard, pageSize, setPageSize],
+  )
 
-  if (linesQuery.isLoading) {
-    return <LoadingSpinner label="جارٍ تحميل بنود الجرد..." />
-  }
-  if (linesQuery.isError) {
-    return (
-      <ErrorState
-        title="تعذّر تحميل بنود الجرد"
-        description="تعذّر جلب بنود هذه الجلسة. حاول مرة أخرى."
-        action={
-          <Button variant="outline" onClick={() => void linesQuery.refetch()}>
-            إعادة المحاولة
-          </Button>
-        }
-      />
-    )
-  }
+  const columns = useMemo(
+    () =>
+      countLineColumnHelper.columns([
+        countLineColumnHelper.accessor((line) => line.material.displayName, {
+          id: 'material',
+          header: 'المادة',
+          cell: ({ row }) => (
+            <div className="flex flex-col gap-0.5">
+              <span>{row.original.material.displayName}</span>
+              {isAssetCountLine(row.original) ? (
+                <span className="inline-flex w-fit items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                  أصل مسلسل
+                  {row.original.assetNumber != null ? ` · ${row.original.assetNumber}` : ''}
+                </span>
+              ) : null}
+            </div>
+          ),
+        }),
+        countLineColumnHelper.accessor('snapshotQuantity', {
+          id: 'snapshotQuantity',
+          header: 'الكمية الدفترية',
+          cell: ({ getValue }) => <span className="ltr">{getValue()}</span>,
+        }),
+        countLineColumnHelper.display({
+          id: 'actualQuantity',
+          header: 'الكمية الفعلية',
+          cell: ({ row }) => (
+            <CountLineQuantityField
+              index={row.index}
+              line={row.original}
+              disabled={isEditorDisabled}
+            />
+          ),
+        }),
+        countLineColumnHelper.display({
+          id: 'difference',
+          header: 'الفرق',
+          cell: ({ row }) => <CountLineDifferenceField index={row.index} line={row.original} />,
+        }),
+        countLineColumnHelper.display({
+          id: 'reason',
+          header: 'سبب الفرق',
+          cell: ({ row }) => (
+            <CountLineReasonField
+              index={row.index}
+              line={row.original}
+              disabled={isEditorDisabled}
+            />
+          ),
+        }),
+      ]),
+    [isEditorDisabled],
+  )
+
+  const handleSave = form.handleSubmit(
+    async (values) => {
+      const request = toCountLineUpdateRequest(countRowVersion, items, values)
+      if (request.lines.length === 0) {
+        return
+      }
+      try {
+        await submitFeedback(async () => {
+          await updateMutation.mutateAsync(request)
+          toast.success({ title: 'حُفظت الكميات الفعلية.' })
+        })
+        // The mutation invalidated every page of this session, so refetch the
+        // page on screen and reseed the form from it. Without this the typed
+        // drafts would keep comparing against the pre-save baseline and the
+        // page would keep claiming unsaved changes.
+        const refreshed = await linesQuery.refetch()
+        form.reset(toCountLineEntryFormValues(refreshed.data?.items ?? EMPTY_LINES))
+      } catch {
+        // submitFeedback already surfaced the failure in Arabic; the inline
+        // alert beside the save action carries the retry guidance.
+      }
+    },
+    () => {
+      // Arabic validation messages render inline on the offending field.
+    },
+  )
 
   return (
     <div dir="rtl" className="grid gap-4">
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-popover px-4 py-3 text-sm">
         <span>
-          إجمالي البنود: <strong className="text-foreground">{items.length}</strong>
+          إجمالي البنود:{' '}
+          <strong className="text-foreground">
+            {toArabicDigits(serverPage?.meta.totalItems ?? 0)}
+          </strong>
         </span>
         <span>
-          أُدخلت: <strong className="text-foreground">{countedCount}</strong>
+          في هذه الصفحة — أُدخلت:{' '}
+          <strong className="text-foreground">{toArabicDigits(pageStats.countedCount)}</strong>
         </span>
         <span>
-          ذات فرق: <strong className="text-foreground">{varianceCount}</strong>
+          في هذه الصفحة — ذات فرق:{' '}
+          <strong className="text-foreground">{toArabicDigits(pageStats.varianceCount)}</strong>
         </span>
         <span>
-          إجمالي الفرق: <strong className="text-foreground">{totalVariance}</strong>
+          في هذه الصفحة — إجمالي الفرق:{' '}
+          <strong className="text-foreground">{toArabicDigits(pageStats.totalVariance)}</strong>
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="min-w-full text-sm">
-          <thead className="bg-muted/40 text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 text-start font-medium">المادة</th>
-              <th className="px-3 py-2 text-start font-medium">الكمية الدفترية</th>
-              <th className="px-3 py-2 text-start font-medium">الكمية الفعلية</th>
-              <th className="px-3 py-2 text-start font-medium">الفرق</th>
-              <th className="px-3 py-2 text-start font-medium">سبب الفرق</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((line) => {
-              const draft = draftFor(line)
-              const assetLine = isAssetLine(line)
-              const entered =
-                draft.actualQuantity.trim() === '' ? null : Number(draft.actualQuantity)
-              const diff = entered === null ? null : entered - line.snapshotQuantity
-              const hasVariance = diff !== null && diff !== 0
-              return (
-                <tr key={line.countLineId} className="border-t border-border">
-                  <td className="px-3 py-2">
-                    <div className="flex flex-col gap-0.5">
-                      <span>{line.material.displayName}</span>
-                      {assetLine ? (
-                        <span className="inline-flex w-fit items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                          أصل مسلسل
-                          {line.assetNumber !== undefined && line.assetNumber !== null
-                            ? ` · ${line.assetNumber}`
-                            : ''}
-                        </span>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 ltr">{line.snapshotQuantity}</td>
-                  <td className="px-3 py-2">
-                    {assetLine ? (
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          aria-label={`تأكيد وجود ${line.material.displayName}`}
-                          disabled={!canEnter || updateMutation.isPending}
-                          onClick={() => setDraft(line.countLineId, { actualQuantity: '1' })}
-                          className={`rounded border px-2 py-1 text-xs ${
-                            entered === 1
-                              ? 'border-primary bg-primary text-primary-foreground'
-                              : 'border-border text-foreground'
-                          }`}
-                        >
-                          موجود
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`تأكيد فقدان ${line.material.displayName}`}
-                          disabled={!canEnter || updateMutation.isPending}
-                          onClick={() => setDraft(line.countLineId, { actualQuantity: '0' })}
-                          className={`rounded border px-2 py-1 text-xs ${
-                            entered === 0
-                              ? 'border-destructive bg-destructive text-destructive-foreground'
-                              : 'border-border text-foreground'
-                          }`}
-                        >
-                          مفقود
-                        </button>
-                      </div>
-                    ) : (
-                      <Input
-                        type="number"
-                        min={0}
-                        inputMode="numeric"
-                        aria-label={`الكمية الفعلية لـ ${line.material.displayName}`}
-                        value={draft.actualQuantity}
-                        disabled={!canEnter || updateMutation.isPending}
-                        onChange={(event) =>
-                          setDraft(line.countLineId, { actualQuantity: event.target.value })
-                        }
-                        className="w-32"
-                      />
-                    )}
-                  </td>
-                  <td className={`px-3 py-2 ltr ${hasVariance ? 'text-destructive' : ''}`}>
-                    {diff === null ? '—' : diff}
-                  </td>
-                  <td className="px-3 py-2">
-                    <Input
-                      type="text"
-                      aria-label={`سبب الفرق لـ ${line.material.displayName}`}
-                      placeholder={hasVariance ? 'سبب الفرق' : '—'}
-                      value={draft.reason}
-                      disabled={!canEnter || updateMutation.isPending}
-                      onChange={(event) =>
-                        setDraft(line.countLineId, { reason: event.target.value })
-                      }
-                      className="w-48"
-                    />
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <Form {...form}>
+        <DataTableServer
+          columns={columns}
+          data={pageRows(serverPage, linesQuery.isError)}
+          isLoading={linesQuery.isLoading}
+          isError={linesQuery.isError}
+          onRetry={() => void linesQuery.refetch()}
+          errorTitle="تعذّر تحميل بنود الجرد"
+          errorMessage="تعذّر جلب بنود هذه الجلسة. حاول مرة أخرى."
+          emptyTitle="لا توجد بنود في هذه الجلسة"
+          emptyDescription="لم يُلتقط أي بند ضمن نطاق هذه الجلسة. راجع نطاق الجرد ثم أعد تحميل الصفحة."
+          page={page}
+          pageSize={pageSize}
+          totalCount={serverPage?.meta.totalItems}
+          totalPages={Math.max(serverPage?.meta.totalPages ?? 1, 1)}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
 
-      {canEnter ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            onClick={() => void handleSave()}
-            disabled={updateMutation.isPending || dirtyLines.length === 0}
-          >
-            {updateMutation.isPending ? 'جارٍ الحفظ...' : `حفظ (${dirtyLines.length})`}
-          </Button>
-          {dirtyLines.length === 0 ? (
-            <span className="text-sm text-muted-foreground">لا تغييرات غير محفوظة.</span>
-          ) : null}
-          {updateMutation.error !== null ? (
-            <p role="alert" className="text-sm text-destructive">
-              تعذّر حفظ بنود الجرد. تحقق من عدم وجود جلسة أخرى أو حدّث الصفحة.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+        {canEnter ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={updateMutation.isPending || dirtyCount === 0}
+            >
+              {updateMutation.isPending ? 'جارٍ الحفظ...' : `حفظ (${toArabicDigits(dirtyCount)})`}
+            </Button>
+            {dirtyCount === 0 ? (
+              <span className="text-sm text-muted-foreground">لا تغييرات غير محفوظة.</span>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                تغييرات غير محفوظة في هذه الصفحة: {toArabicDigits(dirtyCount)}
+              </span>
+            )}
+            {updateMutation.error !== null ? (
+              <p role="alert" className="text-sm text-destructive">
+                تعذّر حفظ بنود الجرد. تحقق من عدم وجود جلسة أخرى أو حدّث الصفحة.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </Form>
+      {confirmDialog}
     </div>
   )
 }

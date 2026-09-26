@@ -53,3 +53,21 @@ export const INVENTORY_COUNT_SCOPE_LABELS_AR = {
 export function isAssetCountLine(line: { assetId?: string | null }): boolean {
   return line.assetId !== undefined && line.assetId !== null
 }
+
+/**
+ * The variance the server recorded for a stored line: `actual − snapshot`, and
+ * a full shortfall (`−snapshot`) for a line that has not been counted yet.
+ *
+ * One helper for every surface (review summary, difference column, result
+ * column) so the review can never disagree with itself about which lines are
+ * variances or which still owe a reason.
+ */
+export function countLineVariance(line: {
+  actualQuantity?: number | null
+  snapshotQuantity: number
+}): number {
+  const actual = line.actualQuantity
+  return actual === null || actual === undefined
+    ? -line.snapshotQuantity
+    : actual - line.snapshotQuantity
+}
