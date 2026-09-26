@@ -556,7 +556,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     countId,
     countType: 'Full',
     createdAt: '2026-08-24T08:00:00.000Z',
-    createdBy: keeperRef,
+    createdBy: managerRef,
     freezePolicy: 'SoftFreeze',
     lineCount: 1,
     notes: 'جرد دوري للمستودع المركزي',
@@ -580,6 +580,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     },
   ]
   const countVariance: InventoryAdjustment = {
+    attachments: adjustmentDocument.attachments,
     adjustmentId: fixtureUuid(927),
     countId,
     countReference: count.referenceNumber,
@@ -597,6 +598,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     warehouse: sourceRef,
   }
   const disposal: InventoryAdjustment = {
+    attachments: disposalDocument.attachments,
     adjustmentId: disposalAdjustmentId,
     createdAt: '2026-08-25T09:30:00.000Z',
     createdBy: managerRef,

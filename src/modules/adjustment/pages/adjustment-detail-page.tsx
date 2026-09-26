@@ -65,7 +65,7 @@ export default function AdjustmentDetailPage() {
         }
       />
 
-      <div className="grid gap-5">
+      <div className="grid grid-cols-1 gap-5">
         <ContentCard title="بيانات السند">
           <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
             <DetailField label="الحالة">

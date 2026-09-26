@@ -355,13 +355,13 @@ export const ROUTE_METADATA: RouteMetaMap = {
   adjustmentNew: {
     labelAr: 'سند تسوية جديد',
     group: 'adjustments',
-    permissions: ['document.view', 'document.create'],
+    permissions: ['document.view', 'document.create', 'document.post'],
     parent: 'adjustments',
   },
   assetDisposalNew: {
     labelAr: 'سند إعدام أصل',
     group: 'adjustments',
-    permissions: ['document.view', 'document.create'],
+    permissions: ['document.view', 'document.create', 'document.post'],
     parent: 'adjustments',
   },
   adjustmentDetail: {

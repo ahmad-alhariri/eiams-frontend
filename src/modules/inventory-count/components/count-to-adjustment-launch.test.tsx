@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
-import { CountToAdjustmentLaunch } from './count-to-adjustment-launch'
+import { CountToAdjustmentLaunch } from '@/modules/inventory-count/components/count-to-adjustment-launch'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { InventoryCount, SessionResponse } from '@/shared/types/generated/eiams-v1'
 import { fixtureUuid } from '@/test/msw/factories'
@@ -66,8 +66,43 @@ function renderLaunch(count: InventoryCount, permissionCodes: readonly string[])
 }
 
 describe('CountToAdjustmentLaunch (e21-t03)', () => {
+  it.each(['Planned', 'InProgress'] as const)(
+    'hides launch for %s even with variance and manager permissions',
+    (status) => {
+      renderLaunch({ ...completedCount(), status }, [
+        'document.view',
+        'document.create',
+        'document.post',
+      ])
+      expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    },
+  )
+
+  it.each(['Completed', 'Closed'] as const)('permits %s with nonzero variances', (status) => {
+    renderLaunch({ ...completedCount(), status }, [
+      'document.view',
+      'document.create',
+      'document.post',
+    ])
+    expect(screen.getByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' })).toBeVisible()
+  })
+
+  it('hides launch when the server reports zero variances', () => {
+    renderLaunch({ ...completedCount(), varianceCount: 0 }, [
+      'document.view',
+      'document.create',
+      'document.post',
+    ])
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
   it('renders the launch CTA for an eligible manager with full count context', () => {
-    renderLaunch(completedCount(), ['count.view', 'document.create'])
+    renderLaunch(completedCount(), [
+      'count.view',
+      'document.view',
+      'document.create',
+      'document.post',
+    ])
 
     const cta = screen.getByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' })
     expect(cta.getAttribute('href')).toBe(
@@ -75,8 +110,8 @@ describe('CountToAdjustmentLaunch (e21-t03)', () => {
     )
   })
 
-  it('hides the CTA entirely for a user without document.create (keeper view)', () => {
-    renderLaunch(completedCount(), ['count.view'])
+  it('hides the CTA for a keeper who can create ordinary documents but cannot post', () => {
+    renderLaunch(completedCount(), ['count.view', 'document.view', 'document.create'])
 
     expect(screen.queryByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' })).toBeNull()
     expect(screen.queryByText('إنشاء سند تسوية')).toBeNull()
@@ -88,7 +123,7 @@ describe('CountToAdjustmentLaunch (e21-t03)', () => {
       countId: 'id-with-سبيشل?chars',
       warehouse: { id: 'wh&with=params', displayName: 'المستودع' },
     }
-    renderLaunch(count, ['document.create'])
+    renderLaunch(count, ['document.view', 'document.create', 'document.post'])
 
     const href = screen
       .getByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' })

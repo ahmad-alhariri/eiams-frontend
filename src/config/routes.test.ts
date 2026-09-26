@@ -94,6 +94,17 @@ describe('Route constants (D-RBAC-01)', () => {
     }
   })
 
+  it('requires manager capabilities for adjustment and disposal creation', () => {
+    for (const route of ['adjustmentNew', 'assetDisposalNew'] as const) {
+      expect(ROUTE_METADATA[route].permissions).toEqual([
+        'document.view',
+        'document.create',
+        'document.post',
+      ])
+    }
+    expect(ROUTE_METADATA.documentIssueNew.permissions).not.toContain('document.post')
+  })
+
   it('guards count planning with count.view + count.plan', () => {
     expect(ROUTE_METADATA.countNew.permissions).toEqual(['count.view', 'count.plan'])
     expect(ROUTE_METADATA.counts.permissions).toEqual(['count.view'])

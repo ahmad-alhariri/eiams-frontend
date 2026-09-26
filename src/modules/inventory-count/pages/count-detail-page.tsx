@@ -179,7 +179,7 @@ export default function CountDetailPage() {
           </ContentCard>
         ) : null}
 
-        {isReviewable ? <CountToAdjustmentLaunch count={count} /> : null}
+        <CountToAdjustmentLaunch count={count} />
       </div>
       {confirmDialog}
     </div>

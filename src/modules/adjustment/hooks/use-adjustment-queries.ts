@@ -8,6 +8,8 @@ import type {
   UpdateAdjustmentRequest,
 } from '@/modules/adjustment/types/adjustment.types'
 import { adjustmentService } from '@/modules/adjustment/services/adjustment.service'
+import { normalizeApiError } from '@/shared/services/api-error'
+import { toast } from '@/shared/ui/toast-manager'
 import { createIdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
@@ -128,7 +130,14 @@ export function useCreateAdjustmentMutation() {
   const invalidate = useAdjustmentInvalidation()
   return useMutation({
     mutationFn: (request: AdjustmentDraftRequest) => adjustmentService.createAdjustment(request),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate()
+      toast.success({ title: 'تم حفظ مسودة سند التسوية' })
+    },
+    onError: (error) => {
+      const apiError = normalizeApiError(error)
+      toast.error({ title: apiError.titleAr, description: apiError.detailAr ?? undefined })
+    },
   })
 }
 

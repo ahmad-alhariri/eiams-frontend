@@ -168,21 +168,22 @@ describe('AdjustmentsListPage (e21-t02)', () => {
     expect(detailLink.getAttribute('href')).toBe(`/adjustments/${ADJUSTMENT_ID}`)
   })
 
-  it('offers the create CTA to a manager with document.create', async () => {
+  it('offers the create CTA to a manager with create and post permissions', async () => {
     useAdjustmentsHandler([])
-    renderPage(['document.view', 'document.create'])
+    renderPage(['document.view', 'document.create', 'document.post'])
 
     await screen.findByRole('heading', { level: 1, name: 'سندات التسوية' })
     const cta = screen.getByRole('link', { name: 'سند تسوية جديد' })
     expect(cta.getAttribute('href')).toBe('/adjustments/new')
   })
 
-  it('hides the create CTA without document.create (keeper view)', async () => {
+  it('hides the create CTAs from keepers with create but without post', async () => {
     useAdjustmentsHandler([])
-    renderPage(['document.view'])
+    renderPage(['document.view', 'document.create'])
 
     await screen.findByRole('heading', { level: 1, name: 'سندات التسوية' })
     expect(screen.queryByRole('link', { name: 'سند تسوية جديد' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'سند إعدام أصل' })).toBeNull()
   })
 
   it('refetches with the selected purpose filter as a query param', async () => {

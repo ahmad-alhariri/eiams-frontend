@@ -4,12 +4,11 @@ import { FormProvider, useForm, Controller, type Resolver } from 'react-hook-for
 import { useNavigate } from 'react-router'
 import { z } from 'zod'
 
+import { useDisposalEligibleAssetSelector } from '@/modules/adjustment/hooks/use-disposal-eligible-asset-selector'
 import { useCreateAdjustmentMutation } from '@/modules/adjustment/hooks/use-adjustment-queries'
-import { useDisposalEligibleAssetsQuery } from '@/modules/adjustment/hooks/use-adjustment-queries'
-import { usePermission } from '@/modules/auth/hooks/use-permission'
+import { useRoutePermission } from '@/modules/auth/hooks/use-permission'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import { ROUTE_PATHS } from '@/config/routes'
-import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
@@ -35,8 +34,7 @@ const DISPOSAL_REASON_MAX = 500
 const disposalFormSchema = z.object({
   warehouseId: z.uuid('يجب اختيار مستودع صالح من القائمة.'),
   assetId: z.uuid('يجب اختيار أصل صالح من القائمة.'),
-  /** Selection-time display snapshot (never sent). */
-  assetLabel: z.string(),
+  materialId: z.uuid('يجب اختيار أصل صالح من القائمة.'),
   /** Canonical signed quantity: always exactly −1 for a disposal. */
   quantityDelta: z.literal(-1),
   reason: z
@@ -50,7 +48,7 @@ type DisposalFormValues = z.infer<typeof disposalFormSchema>
 
 export default function AssetDisposalFormPage() {
   const navigate = useNavigate()
-  const { has } = usePermission()
+  const canCreate = useRoutePermission('assetDisposalNew')
   const warehouseSelector = useScopedWarehouseSelector()
   const createMutation = useCreateAdjustmentMutation()
 
@@ -60,45 +58,47 @@ export default function AssetDisposalFormPage() {
         title="سند إعدام أصل"
         subtitle="إعدام أصل واحد بموجب محضر لجنة الفحص؛ الأصل يصبح مستبعدًا نهائيًا بعد الترحيل ولا يمكن عكس السند."
       />
-      <AssetDisposalFormInner
-        navigate={navigate}
-        has={has}
-        warehouseSelector={warehouseSelector}
-        createMutation={createMutation}
-      />
+      {canCreate ? (
+        <AssetDisposalFormInner
+          navigate={navigate}
+          warehouseSelector={warehouseSelector}
+          createMutation={createMutation}
+        />
+      ) : (
+        <ContentCard title="غير مصرّح">
+          <p role="alert" className="text-sm text-destructive">
+            لا تملك صلاحية إنشاء سندات الإعدام؛ هذه العملية حصرية لمديري المستودعات.
+          </p>
+        </ContentCard>
+      )}
     </div>
   )
 }
 
 function AssetDisposalFormInner({
   navigate,
-  has,
   warehouseSelector,
   createMutation,
 }: {
   navigate: ReturnType<typeof useNavigate>
-  has: (code: Parameters<ReturnType<typeof usePermission>['has']>[0]) => boolean
   warehouseSelector: ReturnType<typeof useScopedWarehouseSelector>
   createMutation: ReturnType<typeof useCreateAdjustmentMutation>
 }) {
   const [warehouseId, setWarehouseId] = useState('')
+  const eligibleAssetSelector = useDisposalEligibleAssetSelector(warehouseId)
 
-  // Authoritative eligible-asset lookup — re-fetched per warehouse.
-  const eligibleQuery = useDisposalEligibleAssetsQuery(
-    warehouseId === '' ? undefined : { pageIndex: 0, pageSize: 50, warehouseId },
-  )
-
-  const defaultValues = useMemoDefaultValues()
+  const defaultValues = createDisposalDefaultValues()
   const form = useForm<DisposalFormValues>({
     resolver: zodResolver(disposalFormSchema) as Resolver<DisposalFormValues>,
     defaultValues,
     mode: 'onChange',
   })
-  const isSubmitting = form.formState.isSubmitting
+  const isSubmitting = form.formState.isSubmitting || createMutation.isPending
 
   const onSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault()
+      if (createMutation.isPending) return
       void form.handleSubmit((values) => {
         createMutation.mutate(
           {
@@ -107,7 +107,7 @@ function AssetDisposalFormInner({
             reason: values.reason,
             lines: [
               {
-                materialId: values.assetId === '' ? '' : values.assetId,
+                materialId: values.materialId,
                 assetId: values.assetId,
                 quantityDelta: -1,
                 reason: values.reason,
@@ -126,16 +126,6 @@ function AssetDisposalFormInner({
     [createMutation, form, navigate],
   )
 
-  if (!has('document.create')) {
-    return (
-      <ContentCard title="غير مصرّح">
-        <p role="alert" className="text-sm text-destructive">
-          لا تملك صلاحية إنشاء سندات الإعدام؛ هذه العملية حصرية لمديري المستودعات.
-        </p>
-      </ContentCard>
-    )
-  }
-
   return (
     <FormProvider {...form}>
       <form data-slot="disposal-form" onSubmit={onSubmit} noValidate className="grid gap-5">
@@ -153,11 +143,12 @@ function AssetDisposalFormInner({
                       field.onChange(value ?? '')
                       setWarehouseId(value ?? '')
                       form.setValue('assetId', '', { shouldValidate: false })
+                      form.setValue('materialId', '', { shouldValidate: false })
                     }}
                     loadOptions={warehouseSelector.loadOptions}
                     disabled={!warehouseSelector.scopeReady || isSubmitting}
                     placeholder="اختر المستودع..."
-                    inputProps={{ 'aria-label': 'مستودع الإعدام' }}
+                    inputProps={{ id: 'disposal-warehouse', 'aria-label': 'مستودع الإعدام' }}
                   />
                 )}
               />
@@ -175,50 +166,33 @@ function AssetDisposalFormInner({
                 name="assetId"
                 render={({ field }) => (
                   <AsyncSelect
+                    key={warehouseId}
                     value={field.value || null}
                     onValueChange={(value, option: AsyncSelectOption<Asset> | undefined) => {
                       field.onChange(value ?? '')
-                      form.setValue(
-                        'assetLabel',
-                        option?.label ??
-                          (option?.payload as { assetNumber?: string } | undefined)?.assetNumber ??
-                          '',
-                        { shouldValidate: false },
-                      )
+                      form.setValue('materialId', option?.payload?.material.id ?? '', {
+                        shouldValidate: false,
+                      })
                     }}
-                    loadOptions={
-                      eligibleQuery.data !== undefined
-                        ? () =>
-                            Promise.resolve(
-                              eligibleQuery.data.items.map((asset) => ({
-                                value: asset.assetId,
-                                label: `${asset.assetNumber} — ${asset.material.displayName}`,
-                                payload: asset,
-                              })),
-                            )
-                        : async () => []
-                    }
-                    disabled={warehouseId === '' || isSubmitting || eligibleQuery.isLoading}
+                    loadOptions={eligibleAssetSelector.loadOptions}
+                    disabled={!eligibleAssetSelector.scopeReady || isSubmitting}
                     placeholder={
                       warehouseId === '' ? 'اختر المستودع أولًا...' : 'ابحث برقم الأصل...'
                     }
-                    inputProps={{ 'aria-label': 'الأصل المستبعد' }}
+                    emptyMessage="لا توجد أصول مؤهلة مطابقة في هذا المستودع."
+                    errorMessage="تعذّر البحث في الأصول المؤهلة للإعدام. حاول مرة أخرى."
+                    inputProps={{ id: 'disposal-asset', 'aria-label': 'الأصل المستبعد' }}
                   />
                 )}
               />
-              {warehouseId !== '' && eligibleQuery.isLoading ? (
-                <LoadingSpinner className="min-h-8" label="جارٍ تحميل الأصول المؤهلة..." />
-              ) : null}
-              {warehouseId !== '' &&
-              !eligibleQuery.isLoading &&
-              (eligibleQuery.data?.items.length ?? 0) === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  لا توجد أصول مؤهلة للإعدام في هذا المستودع.
-                </p>
-              ) : null}
               {form.formState.errors.assetId ? (
                 <p role="alert" className="text-sm text-destructive">
                   {form.formState.errors.assetId.message}
+                </p>
+              ) : null}
+              {form.formState.errors.materialId && !form.formState.errors.assetId ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {form.formState.errors.materialId.message}
                 </p>
               ) : null}
             </div>
@@ -271,11 +245,11 @@ function AssetDisposalFormInner({
   )
 }
 
-function useMemoDefaultValues(): DisposalFormValues {
+function createDisposalDefaultValues(): DisposalFormValues {
   return {
     warehouseId: '',
     assetId: '',
-    assetLabel: '',
+    materialId: '',
     quantityDelta: -1,
     reason: '',
   }

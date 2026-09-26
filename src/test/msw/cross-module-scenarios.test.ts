@@ -44,6 +44,11 @@ describe('cross-module scenario data', () => {
       policy: expect.objectContaining({ policyKind: 'Disposal' }),
     })
     for (const document of [scenario.documents.adjustment, scenario.documents.disposal]) {
+      const adjustment = Object.values({
+        countVariance: scenario.adjustments.countVariance,
+        disposal: scenario.adjustments.disposal,
+      }).find((candidate) => candidate.documentId === document.documentId)
+      expect(adjustment?.attachments).toEqual(document.attachments)
       expect(
         scenario.ledgers.lifecycleEvents[document.documentId]?.map((event) => event.eventType),
       ).toEqual(['Created', 'Posted'])
