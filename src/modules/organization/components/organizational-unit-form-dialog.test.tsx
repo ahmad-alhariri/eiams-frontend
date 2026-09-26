@@ -10,6 +10,10 @@ import {
   isInvalidOrganizationalUnitParent,
   toOrganizationalUnitRequest,
 } from '@/modules/organization/schemas/organizational-unit.schemas'
+import type {
+  Site,
+  OrganizationalUnit as OrgUnit,
+} from '@/modules/organization/types/organization.types'
 import { createOrganizationalUnit, createPage, createSite, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
@@ -37,7 +41,7 @@ afterEach(() => {
 describe('OrganizationalUnitFormDialog', () => {
   it('loads contract reference lists and submits selected identifiers rather than free text', async () => {
     const user = userEvent.setup()
-    const site = createSite()
+    const site = createSite() as unknown as Site
     const parent = createOrganizationalUnit({ orgUnitId: fixtureUuid(61), siteId: site.siteId })
     const onSubmit = vi.fn().mockResolvedValue(undefined)
 
@@ -71,32 +75,32 @@ describe('OrganizationalUnitFormDialog', () => {
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     expect(onSubmit).toHaveBeenCalledWith({
-      siteId: site.siteId,
-      parentOrgUnitId: '',
-      nameAr: 'مديرية الموارد البشرية',
+      displayName: 'مديرية الموارد البشرية',
       code: 'DAM-HR',
       status: 'Active',
+      siteId: site.siteId,
+      parentOrgUnitId: '',
+      rowVersion: 0,
     })
   })
 
   it('maps an empty parent to omission and preserves row-version concurrency on updates', () => {
-    const unit = createOrganizationalUnit({ rowVersion: 7 })
+    const unit = createOrganizationalUnit({ rowVersion: 7 }) as unknown as OrgUnit
 
     expect(
-      toOrganizationalUnitRequest(
-        {
-          siteId: unit.siteId,
-          parentOrgUnitId: '',
-          code: ' DAM-UPDATED ',
-          nameAr: ' مديرية محدّثة ',
-          status: 'Inactive',
-        },
-        unit,
-      ),
+      toOrganizationalUnitRequest({
+        siteId: unit.siteId,
+        parentOrgUnitId: '',
+        code: 'DAM-UPDATED',
+        displayName: 'مديرية محدّثة',
+        status: 'Inactive',
+        rowVersion: 7,
+      }),
     ).toEqual({
-      siteId: unit.siteId,
-      code: 'DAM-UPDATED',
       nameAr: 'مديرية محدّثة',
+      code: 'DAM-UPDATED',
+      siteId: unit.siteId,
+      parentOrgUnitId: null,
       status: 'Inactive',
       rowVersion: 7,
     })
@@ -115,18 +119,18 @@ describe('OrganizationalUnitFormDialog', () => {
       siteId: fixtureUuid(75),
     })
 
-    expect(isInvalidOrganizationalUnitParent(root.orgUnitId, siteId, root, [root, child])).toBe(
-      true,
-    )
-    expect(isInvalidOrganizationalUnitParent(child.orgUnitId, siteId, root, [root, child])).toBe(
-      true,
-    )
     expect(
-      isInvalidOrganizationalUnitParent(otherSite.orgUnitId, siteId, root, [
-        root,
-        child,
-        otherSite,
-      ]),
+      isInvalidOrganizationalUnitParent(root, { orgUnitId: root.orgUnitId }, [root, child]),
+    ).toBe(true)
+    expect(
+      isInvalidOrganizationalUnitParent(root, { orgUnitId: child.orgUnitId }, [root, child]),
+    ).toBe(true)
+    expect(
+      isInvalidOrganizationalUnitParent(
+        { orgUnitId: otherSite.orgUnitId, parentOrgUnitId: root.orgUnitId },
+        { orgUnitId: root.orgUnitId },
+        [root, child, otherSite],
+      ),
     ).toBe(true)
   })
 })

@@ -7,9 +7,9 @@ import {
   NoAccessRoute,
   RequireSelectedScope,
   RouteAccessGuard,
-  ScopeSelectionRoute,
 } from '@/modules/auth/components/route-guards'
-import { ActiveScopeSwitcher } from '@/modules/auth/components/active-scope-switcher'
+import { ActiveScopeBadge } from '@/modules/auth/components/active-scope-badge'
+import { AuthSessionExpiredBridge } from '@/modules/auth/components/auth-session-expired-bridge'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import {
   getWiredRouteKeys,
@@ -65,10 +65,6 @@ const appRouter = createBrowserRouter([
     ),
   },
   {
-    path: ROUTE_PATHS.scopeSelect,
-    element: <ScopeSelectionRoute />,
-  },
-  {
     path: ROUTE_PATHS.noAccess,
     element: <NoAccessRoute />,
   },
@@ -79,7 +75,13 @@ const appRouter = createBrowserRouter([
   {
     element: (
       <RequireSelectedScope>
-        <AppLayout scopeSwitcher={<ActiveScopeSwitcher />} />
+        {/* The bridge lives inside the router context (as a child of a route's
+            element branch) so its `useNavigate` resolves. It owns the
+            D-AUTH-01 §"Token and session lifecycle" navigation half of the
+            `session-expired` contract; the cache-clearing half is owned by
+            `authSessionLifecycle.clearLocalSession`. */}
+        <AuthSessionExpiredBridge />
+        <AppLayout scopeSwitcher={<ActiveScopeBadge />} />
       </RequireSelectedScope>
     ),
     children: PROTECTED_ROUTE_OBJECTS,

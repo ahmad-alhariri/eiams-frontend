@@ -7,11 +7,23 @@ const viteEnvironment = {
   PROD: false,
 }
 
+const viteDevelopmentEnvironment = {
+  MODE: 'development',
+  DEV: true,
+  PROD: false,
+}
+
+const viteProductionEnvironment = {
+  MODE: 'production',
+  DEV: false,
+  PROD: true,
+}
+
 describe('environment configuration', () => {
   it('exposes the validated Vite runtime environment', () => {
     expect(environment).toMatchObject({
       apiBaseUrl: '/api/v1',
-      enableApiMocks: true,
+      enableApiMocks: false,
       mode: 'test',
       isDevelopment: true,
       isProduction: false,
@@ -23,7 +35,7 @@ describe('environment configuration', () => {
 
     expect(environment).toEqual({
       apiBaseUrl: '/api/v1',
-      enableApiMocks: true,
+      enableApiMocks: false,
       mode: 'test',
       isDevelopment: false,
       isProduction: false,
@@ -38,6 +50,15 @@ describe('environment configuration', () => {
     })
 
     expect(environment.enableApiMocks).toBe(false)
+  })
+
+  it('enables development API mocks with an explicit flag', () => {
+    const environment = parseEnvironment({
+      ...viteEnvironment,
+      VITE_ENABLE_API_MOCKS: 'true',
+    })
+
+    expect(environment.enableApiMocks).toBe(true)
   })
 
   it.each(['1', 'TRUE', '', 'yes'])(
@@ -79,5 +100,114 @@ describe('environment configuration', () => {
     expect(() => parseEnvironment({})).toThrowError(
       'Invalid EIAMS frontend environment configuration',
     )
+  })
+
+  // ---------------------------------------------------------------------------
+  // Direct-backend integration (D-INT-02): localhost absolute URLs are allowed
+  // in dev for the cross-origin topology from §5.1 of the integration plan.
+  // ---------------------------------------------------------------------------
+
+  it('accepts http://localhost:5000/api/v1 in development', () => {
+    const environment = parseEnvironment({
+      ...viteDevelopmentEnvironment,
+      VITE_API_BASE_URL: 'http://localhost:5000/api/v1',
+    })
+
+    expect(environment.apiBaseUrl).toBe('http://localhost:5000/api/v1')
+    expect(environment.isDevelopment).toBe(true)
+    expect(environment.isProduction).toBe(false)
+  })
+
+  it('accepts http://127.0.0.1:5000/api/v1 in development', () => {
+    const environment = parseEnvironment({
+      ...viteDevelopmentEnvironment,
+      VITE_API_BASE_URL: 'http://127.0.0.1:5000/api/v1',
+    })
+
+    expect(environment.apiBaseUrl).toBe('http://127.0.0.1:5000/api/v1')
+  })
+
+  it('accepts a localhost URL in the default (non-production) test environment', () => {
+    const environment = parseEnvironment({
+      ...viteEnvironment,
+      VITE_API_BASE_URL: 'http://localhost:5000/api/v1/',
+    })
+
+    expect(environment.apiBaseUrl).toBe('http://localhost:5000/api/v1')
+  })
+
+  it.each([
+    'https://example.com/api/v1',
+    'http://example.com/api/v1',
+    'http://api.example.test/api/v1',
+    'http://localhost.local/api/v1',
+    'http://0.0.0.0/api/v1',
+  ])('rejects a non-local host in development: %s', (apiBaseUrl) => {
+    expect(() =>
+      parseEnvironment({
+        ...viteDevelopmentEnvironment,
+        VITE_API_BASE_URL: apiBaseUrl,
+      }),
+    ).toThrowError(/VITE_API_BASE_URL/)
+  })
+
+  it.each([
+    'https://example.com/api/v1',
+    'http://example.com/api/v1',
+    'http://localhost:5000/api/v1',
+    'http://127.0.0.1:5000/api/v1',
+    '/api/v1',
+  ])('rejects any non-origin-relative base URL in production: %s', (apiBaseUrl) => {
+    expect(() =>
+      parseEnvironment({
+        ...viteProductionEnvironment,
+        VITE_API_BASE_URL: apiBaseUrl,
+      }),
+    ).toThrowError(/VITE_API_BASE_URL/)
+  })
+
+  it('rejects embedded credentials in a dev-localhost URL', () => {
+    expect(() =>
+      parseEnvironment({
+        ...viteDevelopmentEnvironment,
+        VITE_API_BASE_URL: 'http://user:pass@localhost:5000/api/v1',
+      }),
+    ).toThrowError(/VITE_API_BASE_URL/)
+  })
+
+  it('rejects a query string in a dev-localhost URL', () => {
+    expect(() =>
+      parseEnvironment({
+        ...viteDevelopmentEnvironment,
+        VITE_API_BASE_URL: 'http://localhost:5000/api/v1?x=1',
+      }),
+    ).toThrowError(/VITE_API_BASE_URL/)
+  })
+
+  it('rejects a fragment in a dev-localhost URL', () => {
+    expect(() =>
+      parseEnvironment({
+        ...viteDevelopmentEnvironment,
+        VITE_API_BASE_URL: 'http://localhost:5000/api/v1#x',
+      }),
+    ).toThrowError(/VITE_API_BASE_URL/)
+  })
+
+  it('rejects an http:// origin in production builds', () => {
+    expect(() =>
+      parseEnvironment({
+        ...viteProductionEnvironment,
+        VITE_API_BASE_URL: 'http://localhost:5000/api/v1',
+      }),
+    ).toThrowError(/VITE_API_BASE_URL/)
+  })
+
+  it('rejects a non-http scheme on a dev-localhost host', () => {
+    expect(() =>
+      parseEnvironment({
+        ...viteDevelopmentEnvironment,
+        VITE_API_BASE_URL: 'ftp://localhost:5000/api/v1',
+      }),
+    ).toThrowError(/VITE_API_BASE_URL/)
   })
 })

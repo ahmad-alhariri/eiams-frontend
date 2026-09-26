@@ -6,6 +6,11 @@ import {
   materialUnitConversionSchema,
   type MaterialUnitConversionFormValues,
 } from '@/modules/catalog/schemas/material-unit-conversion.schemas'
+import type {
+  Material,
+  MaterialUnitConversion,
+  UnitOfMeasure,
+} from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -20,22 +25,17 @@ import {
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type {
-  Material,
-  MaterialUnitConversion,
-  UnitOfMeasure,
-} from '@/shared/types/generated/eiams-v1'
 
 const EMPTY_VALUES: MaterialUnitConversionFormValues = {
-  fromUnitId: '',
-  factor: '1',
+  unitId: '',
+  conversionFactor: 1,
   status: 'Active',
 }
 
 type MaterialUnitConversionFormDialogProps = {
   material: Material
   conversion: MaterialUnitConversion | null
-  activeFromUnitIds: ReadonlySet<string>
+  activeUnitIds: ReadonlySet<string>
   units: readonly UnitOfMeasure[]
   isUnitsLoading: boolean
   isUnitsError: boolean
@@ -52,7 +52,7 @@ type MaterialUnitConversionFormDialogProps = {
 export function MaterialUnitConversionFormDialog({
   material,
   conversion,
-  activeFromUnitIds,
+  activeUnitIds,
   units,
   isUnitsLoading,
   isUnitsError,
@@ -66,40 +66,29 @@ export function MaterialUnitConversionFormDialog({
       units.filter(
         (unit) =>
           unit.status === 'Active' &&
-          unit.unitId !== material.baseUnit.id &&
-          !activeFromUnitIds.has(unit.unitId),
+          unit.unitId !== material.unit.id &&
+          !activeUnitIds.has(unit.unitId),
       ),
-    [activeFromUnitIds, material.baseUnit.id, units],
+    [activeUnitIds, material.unit.id, units],
   )
   const form = useForm<MaterialUnitConversionFormValues>({
     resolver: zodResolver(materialUnitConversionSchema),
     defaultValues: EMPTY_VALUES,
   })
-  const isUsedConversion = conversion?.usedInPostedDocuments === true
 
   useEffect(() => {
     if (!open) return
     form.reset({
-      fromUnitId: conversion?.fromUnit.id ?? '',
-      factor: conversion?.factor ?? '1',
-      status:
-        conversion?.usedInPostedDocuments === true || conversion?.status === 'Inactive'
-          ? 'Inactive'
-          : 'Active',
+      unitId: conversion?.unit.id ?? '',
+      conversionFactor: conversion?.conversionFactor ?? 1,
+      status: conversion?.status ?? 'Active',
     })
   }, [conversion, form, open])
 
   const submit = async (values: MaterialUnitConversionFormValues) => {
-    if (conversion === null && !selectableUnits.some((unit) => unit.unitId === values.fromUnitId)) {
-      form.setError('fromUnitId', {
+    if (conversion === null && !selectableUnits.some((unit) => unit.unitId === values.unitId)) {
+      form.setError('unitId', {
         message: 'اختر وحدة بديلة نشطة وغير مكررة لهذه المادة.',
-      })
-      return
-    }
-
-    if (isUsedConversion && values.factor !== conversion.factor) {
-      form.setError('factor', {
-        message: 'لا يمكن تعديل عامل تحويل استُخدم في مستندات مرحّلة.',
       })
       return
     }
@@ -110,7 +99,7 @@ export function MaterialUnitConversionFormDialog({
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['fromUnitId', 'factor', 'status'],
+        schemaKeys: ['unitId', 'conversionFactor', 'status'],
       })
     }
   }
@@ -123,7 +112,7 @@ export function MaterialUnitConversionFormDialog({
           <DialogDescription>
             {conversion
               ? 'يبقى التحويل مرتبطًا بالمادة ووحدة أساسها فقط.'
-              : `وحدة أساس المادة هي ${material.baseUnit.displayName}. مثال: كرتونة واحدة = 12 ${material.baseUnit.displayName}.`}
+              : `وحدة أساس المادة هي ${material.unit.displayName}. مثال: كرتونة واحدة = 12 ${material.unit.displayName}.`}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -136,14 +125,12 @@ export function MaterialUnitConversionFormDialog({
             {conversion ? (
               <div className="grid gap-1 rounded-lg border border-border bg-muted/30 p-3">
                 <span className="text-sm font-medium text-muted-foreground">الوحدة البديلة</span>
-                <span className="font-semibold text-foreground">
-                  {conversion.fromUnit.displayName}
-                </span>
+                <span className="font-semibold text-foreground">{conversion.unit.displayName}</span>
               </div>
             ) : (
               <FormField
                 control={form.control}
-                name="fromUnitId"
+                name="unitId"
                 render={({ field, fieldState }) => (
                   <FormItem>
                     <FormLabel>الوحدة البديلة</FormLabel>
@@ -163,7 +150,7 @@ export function MaterialUnitConversionFormDialog({
                       <SelectContent>
                         {selectableUnits.map((unit) => (
                           <SelectItem key={unit.unitId} value={unit.unitId}>
-                            {unit.nameAr} ({unit.symbolAr})
+                            {unit.nameAr}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -186,37 +173,31 @@ export function MaterialUnitConversionFormDialog({
 
             <FormField
               control={form.control}
-              name="factor"
+              name="conversionFactor"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>عامل التحويل إلى {material.baseUnit.displayName}</FormLabel>
+                  <FormLabel>عامل التحويل إلى {material.unit.displayName}</FormLabel>
                   <FormControl>
                     <Input
-                      type="text"
+                      type="number"
+                      step="any"
+                      min="0"
                       dir="ltr"
-                      inputMode="decimal"
                       aria-describedby="conversion-factor-help"
-                      disabled={isPending || isUsedConversion}
+                      disabled={isPending}
                       value={field.value}
-                      onChange={(event) => field.onChange(event.currentTarget.value)}
+                      onChange={(event) => field.onChange(event.currentTarget.valueAsNumber)}
                     />
                   </FormControl>
                   <p id="conversion-factor-help" className="text-sm text-muted-foreground">
-                    وحدة بديلة واحدة = العامل × {material.baseUnit.displayName}، بحد أقصى ست منازل
-                    عشرية.
+                    وحدة بديلة واحدة = العامل × {material.unit.displayName}.
                   </p>
-                  {isUsedConversion ? (
-                    <p className="text-sm text-muted-foreground">
-                      استُخدم هذا التحويل في مستندات مرحّلة؛ لا يمكن تغيير العامل. أوقفه وأنشئ
-                      بديلًا عند تغير التعبئة.
-                    </p>
-                  ) : null}
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            {conversion && !isUsedConversion ? (
+            {conversion ? (
               <FormField
                 control={form.control}
                 name="status"
@@ -241,19 +222,10 @@ export function MaterialUnitConversionFormDialog({
                 )}
               />
             ) : null}
-            {conversion && isUsedConversion ? (
-              <p className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-                سيُؤرشف هذا التحويل عند الحفظ، وستبقى المستندات المرحّلة محتفظة بعاملها التاريخي.
-              </p>
-            ) : null}
 
             <DialogFooter>
               <Button type="submit" loading={isPending}>
-                {conversion
-                  ? isUsedConversion
-                    ? 'أرشفة التحويل'
-                    : 'حفظ التعديلات'
-                  : 'إضافة التحويل'}
+                {conversion ? 'حفظ التعديلات' : 'إضافة التحويل'}
               </Button>
               <Button
                 type="button"

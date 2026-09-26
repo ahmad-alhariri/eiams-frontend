@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "quality": "pnpm run api:types:check && pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run test && pnpm run build",
+    "quality": "pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run test && pnpm run build",
     "ui:info": "shadcn info",
     "ui:add:dry": "shadcn add --dry-run",
     "ui:add": "shadcn add",

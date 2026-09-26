@@ -1,24 +1,37 @@
+import { createColumnHelper } from '@tanstack/react-table'
 import { useMemo } from 'react'
 
-import { useCountLinesQuery } from '@/modules/inventory-count/hooks/use-count-queries'
+import {
+  MAX_COUNT_LINE_REVIEW_LINES,
+  useAllCountLinesQuery,
+} from '@/modules/inventory-count/hooks/use-count-queries'
+import {
+  countLineVariance,
+  isAssetCountLine,
+} from '@/modules/inventory-count/types/inventory-count.types'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
+import { useServerPagination } from '@/shared/hooks/use-server-pagination'
+import { Button } from '@/shared/ui/button'
+import { dataTableFeatures } from '@/shared/ui/data-table'
+import { DataTableServer } from '@/shared/ui/data-table-server'
+import { toArabicDigits } from '@/shared/utils/format'
 import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
-import { isAssetCountLine } from '@/modules/inventory-count/types/inventory-count.types'
 
-interface VarianceRow {
-  line: InventoryCountLine
-  difference: number
-  hasReason: boolean
-}
+/** Rows paged client-side out of the fully-loaded session (hbfu). */
+const REVIEW_PAGE_SIZE = 50
+
+const countLineColumnHelper = createColumnHelper<typeof dataTableFeatures, InventoryCountLine>()
 
 /**
- * Variance review (e20-t07). Read-only split of the lines into matching vs.
- * differing (variance) buckets, with the captured reason surfaced per variance
- * line. The "complete" gate (enforced server-side too) requires every line
- * whose difference ≠ 0 to carry a reason — the UI blocks the complete action
- * and lists the offending lines otherwise.
+ * Variance review (e20-t07, hbfu).
+ *
+ * The review reads the WHOLE session through `useAllCountLinesQuery` and pages
+ * that complete set client-side, because the completion gate depends on every
+ * variance line carrying a reason. Paging the *read* would silently drop the
+ * lines beyond the first page out of the gate, so the read is exhaustive and
+ * the pagination bar is presentational only.
  */
 export function CountVarianceReview({
   countId,
@@ -41,139 +54,174 @@ export function CountVarianceReview({
   completeError?: string | null
   closeError?: string | null
 }) {
-  const can = usePermission()
-  const linesQuery = useCountLinesQuery(countId, { pageIndex: 0, pageSize: 200 })
-  const items = useMemo(
-    () => (linesQuery.data?.items ?? []) as readonly InventoryCountLine[],
-    [linesQuery.data],
+  const { has } = usePermission()
+  const pagination = useServerPagination({ initialPageSize: REVIEW_PAGE_SIZE })
+  const { page, pageSize, offset, setPage, setPageSize } = pagination
+  const review = useAllCountLinesQuery(countId)
+  const lines = review.lines
+
+  const { matchingCount, varianceCount, missingReasonCount } = useMemo(() => {
+    let matching = 0
+    let variance = 0
+    let missingReason = 0
+    for (const line of lines) {
+      if (countLineVariance(line) === 0) {
+        matching += 1
+        continue
+      }
+      variance += 1
+      if ((line.reason ?? '').trim() === '') {
+        missingReason += 1
+      }
+    }
+    return { matchingCount: matching, varianceCount: variance, missingReasonCount: missingReason }
+  }, [lines])
+
+  const visibleRows = useMemo(
+    () => lines.slice(offset, offset + pageSize),
+    [lines, offset, pageSize],
   )
 
-  const { matching, variance, missingReason } = useMemo(() => {
-    const rows: VarianceRow[] = items.map((line) => {
-      const actual = line.actualQuantity
-      const difference =
-        actual === null || actual === undefined
-          ? -line.snapshotQuantity
-          : actual - line.snapshotQuantity
-      return { line, difference, hasReason: (line.reason ?? '').trim() !== '' }
-    })
-    const varianceRows = rows.filter((row) => row.difference !== 0)
-    return {
-      matching: rows.filter((row) => row.difference === 0),
-      variance: varianceRows,
-      missingReason: varianceRows.filter((row) => !row.hasReason),
-    }
-  }, [items])
+  const columns = useMemo(
+    () =>
+      countLineColumnHelper.columns([
+        countLineColumnHelper.accessor((line) => line.material.displayName, {
+          id: 'material',
+          header: 'المادة',
+          cell: ({ row }) => (
+            <div className="flex flex-col gap-0.5">
+              <span>{row.original.material.displayName}</span>
+              {isAssetCountLine(row.original) ? (
+                <span className="inline-flex w-fit items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                  أصل مسلسل
+                  {row.original.assetNumber != null ? ` · ${row.original.assetNumber}` : ''}
+                </span>
+              ) : null}
+            </div>
+          ),
+        }),
+        countLineColumnHelper.accessor('snapshotQuantity', {
+          id: 'snapshotQuantity',
+          header: 'الكمية الدفترية',
+          cell: ({ getValue }) => <span className="ltr">{getValue()}</span>,
+        }),
+        countLineColumnHelper.accessor('actualQuantity', {
+          id: 'actualQuantity',
+          header: 'الكمية الفعلية',
+          cell: ({ getValue }) => <span className="ltr">{getValue() ?? '—'}</span>,
+        }),
+        countLineColumnHelper.display({
+          id: 'difference',
+          header: 'الفرق',
+          cell: ({ row }) => {
+            const difference = countLineVariance(row.original)
+            return (
+              <span className={`ltr ${difference !== 0 ? 'text-destructive' : ''}`}>
+                {difference > 0 ? `+${difference}` : difference}
+              </span>
+            )
+          },
+        }),
+        countLineColumnHelper.accessor('reason', {
+          id: 'reason',
+          header: 'سبب الفرق',
+          cell: ({ row }) => {
+            if (countLineVariance(row.original) === 0) {
+              return <span className="text-muted-foreground">—</span>
+            }
+            const reason = (row.original.reason ?? '').trim()
+            return reason === '' ? (
+              <span className="text-destructive">لم يُدخل سبب الفرق بعد.</span>
+            ) : (
+              <span>{reason}</span>
+            )
+          },
+        }),
+        countLineColumnHelper.display({
+          id: 'result',
+          header: 'النتيجة',
+          cell: ({ row }) =>
+            countLineVariance(row.original) === 0 ? (
+              <span className="text-muted-foreground">مطابق</span>
+            ) : (
+              <span className="text-destructive">عنده فرق</span>
+            ),
+        }),
+      ]),
+    [],
+  )
 
-  if (linesQuery.isLoading) {
+  if (review.isLoading) {
     return <LoadingSpinner label="جارٍ تحميل بنود الفروقات..." />
   }
-  if (linesQuery.isError) {
-    return <ErrorState title="تعذّر تحميل بنود الفروقات" description="حاول مرة أخرى." />
+
+  if (review.isOversized) {
+    return (
+      <ErrorState
+        title="جلسة جرد أكبر من حدود المراجعة"
+        description={`تحتوي هذه الجلسة على أكثر من ${toArabicDigits(MAX_COUNT_LINE_REVIEW_LINES)} بند ولا يمكن عرضها كاملة في الوقت الحالي. راجع نطاق الجرد أو قسّم الجلسة إلى جلسات أصغر.`}
+      />
+    )
   }
 
-  const completeBlocked = missingReason.length > 0
+  if (review.isError) {
+    return (
+      <ErrorState
+        title="تعذّر تحميل بنود الفروقات"
+        description="تعذّر جلب بنود هذه الجلسة. حاول مرة أخرى."
+        action={
+          <Button variant="outline" onClick={review.refetch}>
+            إعادة المحاولة
+          </Button>
+        }
+      />
+    )
+  }
+
+  const completeBlocked = missingReasonCount > 0
   const canTriggerComplete =
-    canComplete && can.has('count.complete') && !completeBlocked && !isCompleting
+    canComplete && has('count.complete') && !completeBlocked && !isCompleting
 
   return (
     <div dir="rtl" className="grid gap-5">
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-popover px-4 py-3 text-sm">
         <span>
-          إجمالي البنود: <strong className="text-foreground">{items.length}</strong>
+          إجمالي البنود: <strong className="text-foreground">{toArabicDigits(lines.length)}</strong>
         </span>
         <span>
-          مطابقة: <strong className="text-foreground">{matching.length}</strong>
+          مطابقة: <strong className="text-foreground">{toArabicDigits(matchingCount)}</strong>
         </span>
         <span>
-          ذات فرق: <strong className="text-foreground">{variance.length}</strong>
+          ذات فرق: <strong className="text-foreground">{toArabicDigits(varianceCount)}</strong>
         </span>
         <span>
-          دون سبب: <strong className="text-destructive">{missingReason.length}</strong>
+          دون سبب:{' '}
+          <strong className="text-destructive">{toArabicDigits(missingReasonCount)}</strong>
         </span>
       </div>
 
-      <section className="grid gap-3">
-        <h3 className="text-sm font-medium text-foreground">بنود مطابقة</h3>
-        {matching.length === 0 ? (
-          <p className="text-sm text-muted-foreground">لا توجد بنود مطابقة.</p>
-        ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {matching.map((row) => (
-              <li
-                key={row.line.countLineId}
-                className="flex items-center justify-between px-3 py-2 text-sm"
-              >
-                <span className="flex items-center gap-2">
-                  {row.line.material.displayName}
-                  {isAssetCountLine(row.line) ? (
-                    <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                      أصل مسلسل
-                      {row.line.assetNumber !== undefined && row.line.assetNumber !== null
-                        ? ` · ${row.line.assetNumber}`
-                        : ''}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="ltr text-muted-foreground">
-                  {row.line.snapshotQuantity} → {row.line.actualQuantity ?? '—'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <DataTableServer
+        columns={columns}
+        data={visibleRows}
+        emptyTitle="لا توجد بنود في هذه الجلسة"
+        emptyDescription="لم يُلتقط أي بند ضمن نطاق هذه الجلسة. راجع نطاق الجرد ثم أعد تحميل الصفحة."
+        page={page}
+        pageSize={pageSize}
+        totalCount={lines.length}
+        totalPages={pagination.pageCount(lines.length)}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
 
-      <section className="grid gap-3">
-        <h3 className="text-sm font-medium text-foreground">بنود ذات فرق</h3>
-        {variance.length === 0 ? (
-          <p className="text-sm text-muted-foreground">لا توجد فروقات مسجّلة.</p>
-        ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {variance.map((row) => (
-              <li key={row.line.countLineId} className="grid gap-1 px-3 py-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
-                    {row.line.material.displayName}
-                    {isAssetCountLine(row.line) ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                        أصل مسلسل
-                        {row.line.assetNumber !== undefined && row.line.assetNumber !== null
-                          ? ` · ${row.line.assetNumber}`
-                          : ''}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="ltr text-destructive">
-                    {row.line.snapshotQuantity} → {row.line.actualQuantity ?? '—'} (
-                    {row.difference > 0 ? '+' : ''}
-                    {row.difference})
-                  </span>
-                </div>
-                <p
-                  className={`text-xs ${row.hasReason ? 'text-muted-foreground' : 'text-destructive'}`}
-                >
-                  {row.hasReason ? `سبب الفرق: ${row.line.reason}` : 'لم يُدخل سبب الفرق بعد.'}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {can.has('count.complete') ? (
+      {has('count.complete') ? (
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={onComplete}
-            disabled={!canTriggerComplete}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-          >
+          <Button type="button" onClick={onComplete} disabled={!canTriggerComplete}>
             {isCompleting ? 'جارٍ الإكمال...' : 'إكمال الجلسة'}
-          </button>
+          </Button>
           {completeBlocked ? (
             <p role="alert" className="text-sm text-destructive">
-              لا يمكن إكمال الجلسة قبل إدخال سبب لكل بند ذي فرق ({missingReason.length} بند).
+              لا يمكن إكمال الجلسة قبل إدخال سبب لكل بند ذي فرق (
+              {toArabicDigits(missingReasonCount)} بند).
             </p>
           ) : null}
           {completeError ? (
@@ -184,16 +232,11 @@ export function CountVarianceReview({
         </div>
       ) : null}
 
-      {can.has('count.close') && canClose ? (
+      {has('count.close') && canClose ? (
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isClosing}
-            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground disabled:opacity-50"
-          >
+          <Button type="button" variant="outline" onClick={onClose} disabled={isClosing}>
             {isClosing ? 'جارٍ الإغلاق...' : 'إغلاق الجلسة'}
-          </button>
+          </Button>
           {closeError ? (
             <p role="alert" className="text-sm text-destructive">
               {closeError}

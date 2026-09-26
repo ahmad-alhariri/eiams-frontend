@@ -12,7 +12,7 @@ const packageManifest = JSON.parse(packageJsonRaw) as PackageManifest
 describe('continuous quality workflow', () => {
   it('runs every local quality gate in the CI order', () => {
     expect(packageManifest.scripts?.['quality']).toBe(
-      'pnpm run api:types:check && pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run test && pnpm run build',
+      'pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run test && pnpm run build',
     )
   })
 

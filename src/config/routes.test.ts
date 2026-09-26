@@ -57,7 +57,6 @@ describe('Route constants (D-RBAC-01)', () => {
   it('marks the dev gallery as dev-only and auth routes as public', () => {
     expect(ROUTE_METADATA.devGallery.devOnly).toBe(true)
     expect(ROUTE_METADATA.login.public).toBe(true)
-    expect(ROUTE_METADATA.scopeSelect.public).toBe(true)
     expect(ROUTE_METADATA.noAccess.public).toBe(true)
     expect(ROUTE_METADATA.notFound.public).toBe(true)
   })

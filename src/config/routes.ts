@@ -11,9 +11,8 @@ import type { PermissionCode } from '@/config/permissions'
  */
 
 export const ROUTE_PATHS = {
-  /** Auth (public until e06 lands). */
+  /** Auth (anonymous). */
   login: '/login',
-  scopeSelect: '/session/scope',
   noAccess: '/session/no-access',
   /** Dashboard. */
   dashboard: '/',
@@ -125,7 +124,6 @@ type RouteMetaMap = Record<RouteKey, RouteMeta>
 
 export const ROUTE_METADATA: RouteMetaMap = {
   login: { labelAr: 'تسجيل الدخول', group: 'auth', public: true },
-  scopeSelect: { labelAr: 'اختيار نطاق العمل', group: 'auth', public: true },
   noAccess: { labelAr: 'لا توجد صلاحية', group: 'auth', public: true },
 
   dashboard: {

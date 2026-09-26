@@ -27,7 +27,7 @@ import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import { toast } from '@/shared/ui/toast-manager'
-import type { MaterialCategory } from '@/shared/types/generated/eiams-v1'
+import type { MaterialCategory } from '@/modules/catalog/types/catalog.types'
 
 /** Contract-backed hierarchy with guarded create/edit actions for catalog managers. */
 function MaterialCategoriesPage() {
@@ -43,7 +43,7 @@ function MaterialCategoriesPage() {
   const createMutation = useCreateMaterialCategoryMutation()
   const updateMutation = useUpdateMaterialCategoryMutation()
   const categories = useMemo(
-    () => filterMaterialCategories(categoriesQuery.data ?? [], search),
+    () => filterMaterialCategories(categoriesQuery.data?.items ?? [], search),
     [categoriesQuery.data, search],
   )
 
@@ -61,7 +61,7 @@ function MaterialCategoriesPage() {
           await createMutation.mutateAsync(request)
           toast.success({ title: 'تمت إضافة تصنيف المادة.' })
         } else {
-          await updateMutation.mutateAsync({ categoryId: category.categoryId, request })
+          await updateMutation.mutateAsync({ categoryId: category.materialCategoryId, request })
           toast.success({ title: 'تم حفظ تعديلات تصنيف المادة.' })
         }
         setDialogCategory(undefined)
@@ -157,8 +157,8 @@ function MaterialCategoriesPage() {
       <MaterialCategoryFormDialog
         open={dialogCategory !== undefined}
         category={dialogCategory ?? null}
-        categories={categoriesQuery.data ?? []}
-        domains={domainsQuery.data ?? []}
+        categories={categoriesQuery.data?.items ?? []}
+        domains={domainsQuery.data?.items ?? []}
         isPending={createMutation.isPending || updateMutation.isPending}
         onOpenChange={closeDialog}
         onSubmit={submitForm}

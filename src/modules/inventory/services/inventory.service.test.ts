@@ -2,7 +2,11 @@ import axios from 'axios'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { createInventoryService } from '@/modules/inventory/services/inventory.service'
+import {
+  createInventoryService,
+  inventoryService,
+  setInventoryService,
+} from '@/modules/inventory/services/inventory.service'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import type { StockMovement } from '@/shared/types/generated/eiams-v1'
@@ -21,7 +25,8 @@ const bundles: ApiClientBundle[] = []
 function setupService() {
   const bundle = createApiClient({ baseURL: API_BASE_URL })
   bundles.push(bundle)
-  return createInventoryService(bundle.client)
+  setInventoryService(bundle.client as unknown as Parameters<typeof createInventoryService>[0])
+  return inventoryService
 }
 
 function createStockMovement(): StockMovement {
@@ -63,52 +68,38 @@ describe('InventoryService', () => {
 
     await expect(
       service.listBalances({
-        lowStockState: 'Low',
         materialId: balance.material.id,
-        pageIndex: 2,
+        page: 2,
         pageSize: 25,
         search: 'حاسوب',
-        sortBy: 'Quantity',
-        sortDirection: 'Descending',
         warehouseId: balance.warehouse.id,
       }),
     ).resolves.toEqual(createPage([balance]))
     await expect(
       service.listMovements({
-        dateFrom: '2026-08-01T00:00:00.000Z',
-        dateTo: '2026-08-31T23:59:59.000Z',
         documentId: movement.documentId,
         materialId: movement.material.id,
         movementType: 'Receipt',
-        pageIndex: 1,
+        page: 1,
         pageSize: 50,
-        sortBy: 'QuantityDelta',
-        sortDirection: 'Ascending',
         warehouseId: movement.warehouse.id,
       }),
     ).resolves.toEqual(createPage([movement]))
 
     expect(requestedQueries).toEqual([
       {
-        lowStockState: 'Low',
         materialId: balance.material.id,
-        pageIndex: '2',
+        page: '2',
         pageSize: '25',
         search: 'حاسوب',
-        sortBy: 'Quantity',
-        sortDirection: 'Descending',
         warehouseId: balance.warehouse.id,
       },
       {
-        dateFrom: '2026-08-01T00:00:00.000Z',
-        dateTo: '2026-08-31T23:59:59.000Z',
         documentId: movement.documentId,
         materialId: movement.material.id,
         movementType: 'Receipt',
-        pageIndex: '1',
+        page: '1',
         pageSize: '50',
-        sortBy: 'QuantityDelta',
-        sortDirection: 'Ascending',
         warehouseId: movement.warehouse.id,
       },
     ])

@@ -25,17 +25,16 @@ describe('material core mutation integration', () => {
     const material = createMaterial({ rowVersion: 4 })
     const request = toMaterialRequest(
       {
-        baseUnitId: fixtureUuid(23),
-        code: ' IT-HW-PC-001 ',
-        descriptionAr: '',
-        familyId: fixtureUuid(22),
+        code: 'IT-HW-PC-001',
+        nameAr: 'حاسوب مكتبي',
+        descriptionAr: null,
+        materialFamilyId: fixtureUuid(22),
+        unitId: fixtureUuid(23),
+        nominalConversionFactor: 1,
         materialKind: 'Asset',
-        nameAr: ' حاسوب مكتبي ',
-        requiresAssetNumber: true,
         status: 'Active',
-        trackingType: 'Serial',
       },
-      material,
+      null,
     )
     let received: unknown
 

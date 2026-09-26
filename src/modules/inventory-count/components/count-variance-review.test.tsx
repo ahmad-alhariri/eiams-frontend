@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -14,6 +15,9 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 const API_BASE_URL = '/api/v1'
 const COUNT_ID = '00000000-0000-4000-8000-000000000007'
+
+/** The whole-session review reads with this page size (hbfu). */
+const REVIEW_PAGE_SIZE = 100
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
@@ -33,14 +37,24 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   }
 }
 
-function useHandlers(lines: unknown[]) {
+/** Server-paged handler: the review fans out over every page of the session. */
+function useHandlers(lines: readonly unknown[]) {
   server.use(
-    http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-      HttpResponse.json({
-        items: lines,
-        meta: { pageIndex: 0, pageSize: 200, totalItems: lines.length, totalPages: 1 },
-      }),
-    ),
+    http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
+      const url = new URL(request.url)
+      const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+      const pageSize = Number(url.searchParams.get('pageSize') ?? String(REVIEW_PAGE_SIZE))
+      const start = pageIndex * pageSize
+      return HttpResponse.json({
+        items: lines.slice(start, start + pageSize),
+        meta: {
+          pageIndex,
+          pageSize,
+          totalItems: lines.length,
+          totalPages: Math.max(1, Math.ceil(lines.length / pageSize)),
+        },
+      })
+    }),
   )
 }
 
@@ -179,4 +193,108 @@ describe('CountVarianceReview (e20-t07)', () => {
     await screen.findByText('حاسوب مكتبي')
     expect(screen.queryByRole('button', { name: 'إغلاق الجلسة' })).toBeNull()
   }, 20000)
+})
+
+describe('CountVarianceReview across server pages (hbfu)', () => {
+  /**
+   * 120 lines across 2 server pages. The unreasoned variance is the first line
+   * of server page 2, so a gate computed from page 1 alone would wrongly allow
+   * completion, and it sits on the review's third client page.
+   */
+  function pagedSession() {
+    const matching = (countLineId: string, displayName: string) => ({
+      countLineId,
+      material: { id: countLineId, displayName },
+      snapshotQuantity: 10,
+      actualQuantity: 10,
+      difference: 0,
+      reason: null,
+    })
+    const serverPageOne = Array.from({ length: REVIEW_PAGE_SIZE }, (_unused, index) =>
+      matching(`L${index + 1}`, `مادة ${index + 1}`),
+    )
+    const serverPageTwo = [
+      {
+        countLineId: 'X1',
+        material: { id: 'mx1', displayName: 'شاشة محطمة' },
+        snapshotQuantity: 4,
+        actualQuantity: 2,
+        difference: -2,
+        reason: null,
+      },
+      ...Array.from({ length: 19 }, (_unused, index) =>
+        matching(`P${index + 1}`, `مادة صفحة ثانية ${index + 1}`),
+      ),
+    ]
+    return [...serverPageOne, ...serverPageTwo]
+  }
+
+  it('blocks completion on an unreasoned variance that lives beyond the first server page', async () => {
+    useHandlers(pagedSession())
+    const onComplete = vi.fn()
+    renderReview({ permissions: ['count.complete'], canComplete: true, onComplete })
+
+    // The summary counts the whole session, not just the first server page.
+    await screen.findByText('مادة 1')
+    expect(screen.getByText(/دون سبب:/).textContent).toBe('دون سبب: ١')
+    const button = screen.getByRole('button', { name: 'إكمال الجلسة' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(
+      screen.getByText(/لا يمكن إكمال الجلسة قبل إدخال سبب لكل بند ذي فرق/),
+    ).toBeInTheDocument()
+    expect(onComplete).not.toHaveBeenCalled()
+  }, 40000)
+
+  it('makes a line from a later server page reachable through the review pagination', async () => {
+    useHandlers(pagedSession())
+    const user = userEvent.setup()
+    renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn() })
+
+    await screen.findByText('مادة 1')
+    expect(screen.queryByText('شاشة محطمة')).toBeNull()
+    expect(screen.getByText('عرض ١–٥٠ من ١٢٠')).toBeInTheDocument()
+
+    // Server page 2 starts at overall index 100 ⇒ the review's third page.
+    const next = screen.getByRole('button', { name: 'الصفحة التالية' })
+    await user.click(next)
+    await user.click(next)
+
+    expect(await screen.findByText('شاشة محطمة')).toBeInTheDocument()
+    expect(screen.getByText('لم يُدخل سبب الفرق بعد.')).toBeInTheDocument()
+  }, 40000)
+
+  it('refuses to review a session larger than the review read ceiling instead of truncating it', async () => {
+    server.use(
+      http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
+        const url = new URL(request.url)
+        const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+        const pageSize = Number(url.searchParams.get('pageSize') ?? String(REVIEW_PAGE_SIZE))
+        return HttpResponse.json({
+          items: [],
+          meta: {
+            pageIndex,
+            pageSize,
+            totalItems: 10_001,
+            totalPages: Math.ceil(10_001 / REVIEW_PAGE_SIZE),
+          },
+        })
+      }),
+    )
+    renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn() })
+
+    expect(await screen.findByText('جلسة جرد أكبر من حدود المراجعة')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'إكمال الجلسة' })).toBeNull()
+  }, 40000)
+
+  it('surfaces a retryable error when the session read fails', async () => {
+    server.use(
+      http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
+        HttpResponse.json({ error: { code: 'x', message: 'boom' } }, { status: 500 }),
+      ),
+    )
+    renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn() })
+
+    expect(await screen.findByText('تعذّر تحميل بنود الفروقات')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'إعادة المحاولة' })).toBeInTheDocument()
+  }, 40000)
 })
