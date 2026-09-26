@@ -1,4 +1,4 @@
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/auth.api-types'
 
 export type SessionAdapterEvent =
   | Readonly<{

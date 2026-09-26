@@ -1,10 +1,11 @@
-/**
- * Stub ApiTransport for use in tests and dev tooling when the real backend is
- * unavailable. Returns synthetic success responses so callers can verify their
- * query shapes, invalidation, and UI branches without hitting the network.
+/** Stub ApiTransport for use in tests and dev tooling when the real backend is
+ *  unavailable. Returns synthetic success responses so callers can verify their
+ *  query shapes, invalidation, and UI branches without hitting the network.
  *
- * Replaces the generated `ApiClient` in non-production contexts only. Shared
- * with `docs/direct-backend-integration-plan.md` §4.2 (transport seam).
+ *  Replaces the generated `ApiClient` in non-production contexts only. Shared
+ *  with `docs/direct-backend-integration-plan.md` §4.2 (transport seam).
+ *
+ *  Post-vi65.3.5: stub meta uses canonical camelCase (`requestId`, `timestampUtc`).
  */
 
 import type { ApiSuccessResponse, ApiPage } from './api-contracts'
@@ -35,7 +36,7 @@ export function createStubTransport(): import('./api-transport').ApiTransport {
         success: true,
         data: null as unknown as TResponse,
         pagination: null,
-        meta: { request_id: 'stub-' + Date.now(), timestamp: new Date().toISOString() },
+        meta: { requestId: 'stub-' + Date.now(), timestampUtc: new Date().toISOString() },
       }
     },
 

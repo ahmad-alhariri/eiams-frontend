@@ -24,15 +24,15 @@ const DEMO_ROLE_ID = '20000000-0000-4000-8000-000000000002'
 const DEMO_SCOPE_ID = '30000000-0000-4000-8000-000000000003'
 
 const DOCUMENT_PERMISSION_CODES: readonly PermissionCode[] = [
-  'document.view',
-  'document.create',
-  'document.update',
-  'document.submit',
-  'document.post',
-  'document.reject',
-  'document.revise',
-  'document.cancel',
-  'document.reverse',
+  'warehouse-documents:view',
+  'warehouse-documents:create',
+  'warehouse-documents:edit',
+  'warehouse-documents:submit',
+  'warehouse-documents:post',
+  'warehouse-documents:reject',
+  'warehouse-documents:revise',
+  'warehouse-documents:cancel',
+  'warehouse-documents:reverse',
 ]
 
 /** Reference session presets, aligned with the D-RBAC-01 seed roles. */
@@ -40,12 +40,12 @@ const ROLE_PRESETS = {
   keeper: {
     labelAr: 'أمين المستودع (WH_KEEPER)',
     permissionCodes: [
-      'document.view',
-      'document.create',
-      'document.update',
-      'document.submit',
-      'document.revise',
-      'document.cancel',
+      'warehouse-documents:view',
+      'warehouse-documents:create',
+      'warehouse-documents:edit',
+      'warehouse-documents:submit',
+      'warehouse-documents:revise',
+      'warehouse-documents:cancel',
     ],
   },
   manager: {
@@ -58,7 +58,7 @@ const ROLE_PRESETS = {
   },
   auditor: {
     labelAr: 'مدقق قراءة فقط (AUDITOR)',
-    permissionCodes: ['document.view'],
+    permissionCodes: ['warehouse-documents:view'],
   },
 } as const
 

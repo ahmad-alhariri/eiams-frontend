@@ -67,11 +67,11 @@ function materialsHandler(materials = [INK, PC]) {
   })
 }
 
-type PutCapture = { bodies: WarehouseMaterialSettingUpsertRequest[]; requestCount: number }
+type PostCapture = { bodies: WarehouseMaterialSettingUpsertRequest[]; requestCount: number }
 
-function putHandler(capture: PutCapture) {
-  return http.put(
-    `${API_BASE_URL}/warehouses/:warehouseId/material-settings`,
+function postHandler(capture: PostCapture) {
+  return http.post(
+    `${API_BASE_URL}/warehouse-material-settings`,
     async ({ request }) => {
       capture.requestCount += 1
       const body = (await request.json()) as WarehouseMaterialSettingUpsertRequest
@@ -90,15 +90,10 @@ function putHandler(capture: PutCapture) {
   )
 }
 
-function renderEditor(props: {
-  settings: Parameters<typeof WarehouseMaterialSettingsEditor>[0]['settings']
-  setting: Parameters<typeof WarehouseMaterialSettingsEditor>[0]['setting']
-}) {
+function renderEditor(props: { setting: Parameters<typeof WarehouseMaterialSettingsEditor>[0]['setting'] }) {
   const onOpenChange = vi.fn()
   const view = render(
     <WarehouseMaterialSettingsEditor
-      warehouseId={WAREHOUSE_ID}
-      settings={props.settings}
       setting={props.setting}
       open
       onOpenChange={onOpenChange}
@@ -118,11 +113,11 @@ afterEach(() => {
 })
 
 describe('WarehouseMaterialSettingsEditor', () => {
-  it('creates a setting: searches materials, fills thresholds, confirms, and PUTs', async () => {
-    const capture: PutCapture = { bodies: [], requestCount: 0 }
-    server.use(materialsHandler(), putHandler(capture))
+  it('creates a setting: searches materials, fills thresholds, confirms, and POSTs', async () => {
+    const capture: PostCapture = { bodies: [], requestCount: 0 }
+    server.use(materialsHandler(), postHandler(capture))
 
-    const { onOpenChange } = renderEditor({ settings: [], setting: null })
+    const { onOpenChange } = renderEditor({ setting: null })
 
     fireEvent.input(materialPicker(), { target: { value: 'حبر' } })
     fireEvent.click(await screen.findByRole('option', { name: 'حبر أسود' }))
@@ -154,10 +149,10 @@ describe('WarehouseMaterialSettingsEditor', () => {
       rowVersion: 3,
       status: 'Active',
     })
-    const capture: PutCapture = { bodies: [], requestCount: 0 }
-    server.use(materialsHandler(), putHandler(capture))
+    const capture: PostCapture = { bodies: [], requestCount: 0 }
+    server.use(materialsHandler(), postHandler(capture))
 
-    const { onOpenChange } = renderEditor({ settings: [existing], setting: existing })
+    const { onOpenChange } = renderEditor({ setting: existing })
 
     expect(screen.queryByPlaceholderText(MATERIAL_PICKER_PLACEHOLDER)).not.toBeInTheDocument()
     const materialInput = screen.getByLabelText('المادة')
@@ -186,10 +181,10 @@ describe('WarehouseMaterialSettingsEditor', () => {
   })
 
   it('blocks submission when the upper threshold is below the lower threshold', async () => {
-    const capture: PutCapture = { bodies: [], requestCount: 0 }
-    server.use(materialsHandler(), putHandler(capture))
+    const capture: PostCapture = { bodies: [], requestCount: 0 }
+    server.use(materialsHandler(), postHandler(capture))
 
-    renderEditor({ settings: [], setting: null })
+    renderEditor({ setting: null })
 
     fireEvent.input(materialPicker(), { target: { value: 'حاسوب' } })
     fireEvent.click(await screen.findByRole('option', { name: 'حاسوب مكتبي' }))
@@ -212,10 +207,10 @@ describe('WarehouseMaterialSettingsEditor', () => {
       material: { id: INK.materialId, displayName: 'حبر أسود' },
       status: 'Active',
     })
-    const capture: PutCapture = { bodies: [], requestCount: 0 }
-    server.use(materialsHandler(), putHandler(capture))
+    const capture: PostCapture = { bodies: [], requestCount: 0 }
+    server.use(materialsHandler(), postHandler(capture))
 
-    renderEditor({ settings: [existing], setting: null })
+    renderEditor({ setting: null })
 
     fireEvent.input(materialPicker(), { target: { value: 'سو' } })
 

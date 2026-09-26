@@ -34,7 +34,7 @@ function isRecordStatus(value: string | null): value is RecordStatus {
 /** Scoped, contract-backed material domain directory. The endpoint is intentionally unpaginated in v1. */
 function MaterialDomainsPage() {
   const { has } = usePermission()
-  const canManage = has('catalog.manage')
+  const canManage = has('materials:manage')
   const [status, setStatus] = useState<RecordStatus | undefined>()
   const [dialogDomain, setDialogDomain] = useState<MaterialDomain | null | undefined>(undefined)
   const domainsQuery = useMaterialDomainsQuery(status === undefined ? {} : { status })

@@ -31,6 +31,10 @@ const warehouseScopeSchema = z.object({
 /**
  * Mirrors the D-AUTH-01 active-scope invariant that OpenAPI's nullable UUID
  * type cannot express alone: only Enterprise may use a null scope identifier.
+ *
+ * Authorized admin override only (D-INT-01 § authorized administration
+ * override: audited impersonation or debugging workflow). No ordinary UI
+ * renders a form from this schema — there is no scope picker or switcher.
  */
 export const setActiveScopeSchema = z.discriminatedUnion('scopeType', [
   enterpriseScopeSchema,

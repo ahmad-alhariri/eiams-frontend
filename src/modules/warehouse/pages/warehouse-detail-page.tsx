@@ -33,7 +33,7 @@ function WarehouseDetailPage() {
   const submitFeedback = useSubmitFeedback()
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const warehouse = warehouseQuery.data
-  const canManage = has('warehouse.manage')
+  const canManage = has('warehouses:manage')
   const returnToWarehouses = useCallback(() => navigate(ROUTE_PATHS.warehouses), [navigate])
 
   const submitForm = useCallback(

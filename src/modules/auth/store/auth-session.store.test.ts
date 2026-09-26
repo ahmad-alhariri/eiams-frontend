@@ -6,19 +6,21 @@ import type {
   SessionAdapterEvent,
   SessionAdapterListener,
 } from '@/shared/services/session-adapter'
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/auth.api-types'
 
 const sessionFixture: SessionResponse = {
   user: {
     userId: '10000000-0000-4000-8000-000000000001',
     username: 'warehouse.keeper',
     displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
   },
-  permissionCodes: ['document.create'],
-  availableScopes: [],
-  scopeState: 'SelectionRequired',
+  permissionCodes: ['warehouse-documents:create'],
+  activeScope: {
+    scopeType: 'Warehouse',
+    scopeId: '20000000-0000-4000-8000-000000000001',
+    displayName: 'المستودع المركزي',
+  },
+  scopeState: 'Selected',
   activeRoles: [],
 }
 

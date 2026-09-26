@@ -34,7 +34,7 @@ const ORGANIZATIONAL_UNIT_TREE_PAGE_SIZE = 200
  */
 function OrganizationalUnitsPage() {
   const { has } = usePermission()
-  const canManage = has('organization.manage')
+  const canManage = has('organizations:manage')
   const [searchInput, setSearchInput] = useState('')
   const [dialogUnit, setDialogUnit] = useState<OrganizationalUnit | null | undefined>(undefined)
   const search = useDebounce(searchInput)

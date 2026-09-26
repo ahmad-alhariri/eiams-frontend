@@ -28,7 +28,7 @@ const unitColumnHelper = createColumnHelper<typeof dataTableFeatures, UnitOfMeas
 /** The v1 contract returns all units in one reference-data response. */
 function UnitsOfMeasurePage() {
   const { has } = usePermission()
-  const canManage = has('catalog.manage')
+  const canManage = has('materials:manage')
   const unitsQuery = useUnitsOfMeasureQuery()
   const createMutation = useCreateUnitOfMeasureMutation()
   const updateMutation = useUpdateUnitOfMeasureMutation()

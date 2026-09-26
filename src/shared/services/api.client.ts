@@ -7,16 +7,16 @@ import axios, {
 } from 'axios'
 
 import { environment } from '@/config/env'
-import { createDevSession, isDevAuthBypassEnabled } from '@/shared/services/dev-session'
+import { isDevAuthBypassEnabled } from '@/shared/services/dev-session'
 import {
   createSessionAdapter,
   type RefreshSessionRequest,
   type SessionAdapter,
 } from '@/shared/services/session-adapter'
-import type { AuthTokenResponse, paths } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse } from '@/modules/auth/types/auth.api-types'
 
-const AUTH_LOGIN_PATH = '/auth/login' satisfies keyof paths
-const AUTH_REFRESH_PATH = '/auth/refresh' satisfies keyof paths
+const AUTH_LOGIN_PATH = '/auth/login'
+const AUTH_REFRESH_PATH = '/auth/refresh'
 
 type RetriableRequestConfig = InternalAxiosRequestConfig & {
   _eiamsAuthRetry?: true
@@ -46,7 +46,7 @@ function requestPath(url: string | undefined): string {
   }
 }
 
-function pathEndsWith(url: string | undefined, endpoint: keyof paths): boolean {
+function pathEndsWith(url: string | undefined, endpoint: string): boolean {
   return requestPath(url).endsWith(endpoint)
 }
 
@@ -167,6 +167,21 @@ export function createApiClient({
         return Promise.reject(nonJsonResponseError(response.config))
       }
 
+      // Unwrap the backend envelope (`ApiResponse<T>` / `ApiErrorResponse`) so
+      // service code receives the typed payload (`response.data.data`) instead
+      // of the envelope. The wrapper still surfaces the envelope to error
+      // consumers via `error.response.data` on 4xx/5xx because we don't
+      // re-throw here for those.
+      const envelope = response.data
+      if (
+        envelope !== null &&
+        typeof envelope === 'object' &&
+        'success' in envelope &&
+        'data' in envelope
+      ) {
+        response.data = (envelope as { data: unknown }).data
+      }
+
       return response
     },
     async (error: unknown) => {
@@ -198,9 +213,20 @@ if (useDevSession) {
 
 const sharedApiClient = createApiClient(
   useDevSession
-    ? { baseURL: environment.apiBaseUrl, refreshSession: async () => createDevSession() }
+    ? { baseURL: environment.apiBaseUrl }
     : { baseURL: environment.apiBaseUrl },
 )
 
 export const apiClient = sharedApiClient.client
 export const sessionAdapter = sharedApiClient.sessionAdapter
+
+/**
+ * Surface-normalized Arabic error contract for transport failures.
+ *
+ * Kept next to the Axios client so both the real interceptor chain and the
+ * test seam use one source of truth for the Arabic feedback shape. Feature
+ * services and form boundaries import from here, not from the older
+ * `@/shared/services/api-error` module.
+ */
+export { normalizeApiError as normalizeError } from './api-error'
+export { normalizeApiError } from './api-error'

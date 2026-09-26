@@ -32,7 +32,7 @@ import type { MaterialCategory } from '@/modules/catalog/types/catalog.types'
 /** Contract-backed hierarchy with guarded create/edit actions for catalog managers. */
 function MaterialCategoriesPage() {
   const { has } = usePermission()
-  const canManage = has('catalog.manage')
+  const canManage = has('materials:manage')
   const [searchInput, setSearchInput] = useState('')
   const [dialogCategory, setDialogCategory] = useState<MaterialCategory | null | undefined>(
     undefined,

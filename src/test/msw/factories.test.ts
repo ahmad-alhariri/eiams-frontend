@@ -36,14 +36,13 @@ describe('contract-derived MSW factories', () => {
     })
     const session = createSession({
       activeScope: scope,
-      availableScopes: [scope],
-      permissionCodes: ['audit.view'],
+      permissionCodes: ['audit-logs:view'],
     })
     const response = createAuthTokenResponse({ expiresInSeconds: 60, session })
 
     expect(response).toMatchObject({ tokenType: 'Bearer', expiresInSeconds: 60 })
     expect(response.session.activeScope).toEqual(scope)
-    expect(response.session.permissionCodes).toEqual(['audit.view'])
+    expect(response.session.permissionCodes).toEqual(['audit-logs:view'])
   })
 
   it('uses the shared v1 paging envelope and derives its totals from items', () => {

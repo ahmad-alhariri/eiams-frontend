@@ -30,11 +30,15 @@
  */
 
 /** The backend's generic success envelope (per `docs/direct-backend-integration-plan.md` §2.1
- *  authority rules 1-5: `{ success: true, data: T, pagination?, meta: { request_id, timestamp } }`).
+ *  authority rules 1-5: `{ success: true, data: T, pagination?, meta: { requestId, timestampUtc } }`).
  *
- * Note: `pagination` and `meta` are server-owned; clients must never invent their own pagination
- * or correlation IDs. `request_id` is propagated by `request-id.ts` (per `docs/direct-backend-integration-plan.md`
- * §11 reliability/observability: "Preserve backend `request_id` through normalized frontend errors").
+ *  Matches the canonical camelCase wire contract from `target-contract-baseline.md` §3.1
+ *  and `ApiContracts.cs` (ASP.NET `JsonSerializerDefaults.Web`): `meta.requestId`,
+ *  `meta.timestampUtc`, `data.pageInfo.pageSize/totalItems/totalPages/hasPreviousPage/hasNextPage`.
+ *
+ *  Note: `pagination` and `meta` are server-owned; clients must never invent their own pagination
+ *  or correlation IDs. `requestId` is propagated by `request-id.ts` (per `docs/direct-backend-integration-plan.md`
+ *  §11 reliability/observability: "Preserve backend `requestId` through normalized frontend errors").
  */
 export interface ApiSuccessResponse<T> {
   readonly success: true
@@ -45,29 +49,28 @@ export interface ApiSuccessResponse<T> {
 
 /** The server-computed pagination projection used by `shared/api/pagination.ts`.
  *
- * Matches the backend's 1-based pagination (`docs/direct-backend-integration-plan.md` §5.3):
- * `page` (1-based index), `page_size`, `total_items`, `total_pages`, `has_previous_page`,
- * `has_next_page`, `total_count` (nullable for non-paginated responses).
+ *  Matches the backend's 1-based camelCase pagination (`target-contract-baseline.md` §3.1
+ *  and `ApiContracts.cs` `PageInfo`): `page` (1-based index), `pageSize`, `totalItems`,
+ *  `totalPages`, `hasPreviousPage`, `hasNextPage`.
  *
- * Per-plan normalization (§4.2): the frontend-friendly `ApiPage<T>` (see below) derives
- * `items`, `page`, `pageSize`, `totalItems`, `hasPreviousPage`, `hasNextPage` from this
- * projection — NOT by rewriting backend values.
+ *  Per-plan normalization (§4.2): the frontend-friendly `ApiPage<T>` (see below) derives
+ *  `items`, `page`, `pageSize`, `totalItems`, `hasPreviousPage`, `hasNextPage` from this
+ *  projection — NOT by rewriting backend values.
  */
 export interface ApiPaginationResponse {
   readonly page: number
-  readonly page_size: number
-  readonly total_items: number
-  readonly total_pages: number
-  readonly has_previous_page: boolean
-  readonly has_next_page: boolean
-  readonly total_count: number | null
+  readonly pageSize: number
+  readonly totalItems: number
+  readonly totalPages: number
+  readonly hasPreviousPage: boolean
+  readonly hasNextPage: boolean
 }
 
 /** Normalized page interface consumed by `shared/ui/data-table-server.tsx` and all feature hooks
- * (`useAssetsQuery`, `useDocumentQueries`, etc.) after `whhu.13`.
+ *  (`useAssetsQuery`, `useDocumentQueries`, etc.) after `whhu.13`.
  *
- * Keeps 1-based `page` (per `docs/direct-backend-integration-plan.md` §5.2 first-base pagination);
- * does NOT switch to 0-based; `items` is a `Readonly` array (same convention as `WarehouseDocumentPage`).
+ *  Keeps 1-based `page` (per `docs/direct-backend-integration-plan.md` §5.2 first-base pagination);
+ *  does NOT switch to 0-based; `items` is a `Readonly` array (same convention as `WarehouseDocumentPage`).
  */
 export interface ApiPage<TItem> {
   readonly items: ReadonlyArray<TItem>
@@ -81,31 +84,31 @@ export interface ApiPage<TItem> {
 
 /** Backend response meta (used by `request-id.ts` for correlation; never cached with query data).
  *
- * Per-plan (§4.2): `request_id` is preserved for diagnostics; `timestamp` is preserved as ISO
- * string (formatted at UI edge per `design-tokens.md` §4). Neither is a user-facing label
- * (kept out of `StatusBadge` / `EmptyState` / `ErrorState` labels — only used in support/debug views).
+ *  Per-plan (§4.2): `requestId` is preserved for diagnostics; `timestampUtc` is preserved as ISO
+ *  string (formatted at UI edge per `design-tokens.md` §4). Neither is a user-facing label
+ *  (kept out of `StatusBadge` / `EmptyState` / `ErrorState` labels — only used in support/debug views).
  */
 export interface ApiResponseMeta {
-  readonly request_id: string
-  readonly timestamp: string
+  readonly requestId: string
+  readonly timestampUtc: string
 }
 
 /** Generic error envelope normalization (per `docs/direct-backend-integration-plan.md` §4.3
- * and `docs/feature-service-composition-standard.md` §testing).
+ *  and `docs/feature-service-composition-standard.md` §testing).
  *
- * Normalization rules (follow D-INT-02 / ADR-0001):
- *  - Trust `success: false`, `error.code`, `error.message`, `error.details`, `error.request_id`
- *    as transport facts; never display raw `message` to users (map to Arabic presentation
- *    via `shared/feedback/status-badge.tsx` / `shared/forms/form.tsx` `FieldError` mapping).
- *  - `details` is `unknown` (not `any`) and narrowed before mapping to form fields
- *    (`FieldError[]` shape from `shared/forms/form.tsx`).
- *  - Unknown error codes fall back safely (no crash); only mapped codes show
- *    user-facing Arabic labels (no new strings invented in transport layer —
- *    reuse `StatusBadge` vocabulary, per `component-guidelines.md` §6).
- *  - `GATEWAY_PROBLEM` (non-JSON response, per `shared/services/api.client.ts` §GATEWAY_PROBLEM)
- *    is mapped to `error.code` = `gateway.unexpected_response` (same code); `error.message`
- *    is mapped to safe Arabic fallback (`GATEWAY_PROBLEM.detailAr` already exists); `request_id`
- *    is propagated.
+ *  Normalization rules (follow D-INT-02 / ADR-0001):
+ *   - Trust `success: false`, `error.code`, `error.message`, `error.details`, `error.requestId`
+ *     as transport facts; never display raw `message` to users (map to Arabic presentation
+ *     via `shared/feedback/status-badge.tsx` / `shared/forms/form.tsx` `FieldError` mapping).
+ *   - `details` is `unknown` (not `any`) and narrowed before mapping to form fields
+ *     (`FieldError[]` shape from `shared/forms/form.tsx`).
+ *   - Unknown error codes fall back safely (no crash); only mapped codes show
+ *     user-facing Arabic labels (no new strings invented in transport layer —
+ *     reuse `StatusBadge` vocabulary, per `component-guidelines.md` §6).
+ *   - `GATEWAY_PROBLEM` (non-JSON response, per `shared/services/api.client.ts` §GATEWAY_PROBLEM)
+ *     is mapped to `error.code` = `gateway.unexpected_response` (same code); `error.message`
+ *     is mapped to safe Arabic fallback (`GATEWAY_PROBLEM.detailAr` already exists); `requestId`
+ *     is propagated.
  */
 export interface ApiErrorResponse {
   readonly success: false
@@ -113,8 +116,9 @@ export interface ApiErrorResponse {
     readonly code: string
     readonly message: string
     readonly details: unknown
-    readonly request_id: string
+    readonly requestId: string
   }
+  readonly meta: ApiResponseMeta
 }
 
 /** Minimal resource identity response (mutation return shape per backend contract §2.1). */
@@ -123,10 +127,10 @@ export interface ResourceIdResponse {
 }
 
 /** Contract-shape validation helpers (not feature-level validation — feature-level `zod` schemas
- * live in `src/modules/<m>/schemas/*.schema.ts`, e.g. `receiving-info.schema.ts`).
+ *  live in `src/modules/<m>/schemas/*.schema.ts`, e.g. `receiving-info.schema.ts`).
  *
- * These helpers support TYPE GUARDS only (compile-time + narrow `unknown`); they are NOT
- * runtime form validators (those are handled by `shared/forms/form.tsx` + `zod` in feature modules).
+ *  These helpers support TYPE GUARDS only (compile-time + narrow `unknown`); they are NOT
+ *  runtime form validators (those are handled by `shared/forms/form.tsx` + `zod` in feature modules).
  */
 export function isResourceIdResponse(value: unknown): value is ResourceIdResponse {
   return (

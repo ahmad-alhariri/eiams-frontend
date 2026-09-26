@@ -49,8 +49,8 @@ export function useUpdateExternalPartyMutation() {
 export function useDeactivateExternalPartyMutation() {
   const invalidate = useInvalidateExternalParties()
   return useMutation({
-    mutationFn: (externalPartyId: string) =>
-      organizationService.deactivateExternalParty(externalPartyId),
+    mutationFn: ({ externalPartyId, rowVersion }: { externalPartyId: string; rowVersion: number }) =>
+      organizationService.setExternalPartyStatus(externalPartyId, 'Inactive', rowVersion),
     onSuccess: invalidate,
   })
 }

@@ -1,8 +1,6 @@
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
-import { Link } from 'react-router'
 
-import { ROUTE_PATHS } from '@/config/routes'
 import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
 import { InventoryLowStockBadge } from '@/modules/inventory/components/inventory-low-stock-badge'
 import { useInventoryBalancesQuery } from '@/modules/inventory/hooks/use-inventory-queries'
@@ -150,15 +148,10 @@ function InventoryBalancesPage() {
         balanceColumnHelper.accessor('quantity', {
           id: 'Quantity',
           header: 'الرصيد',
-          cell: ({ getValue, row }) => (
-            <Link
-              dir="ltr"
-              aria-label={`عرض تفاصيل رصيد ${row.original.material.displayName} في ${row.original.warehouse.displayName}`}
-              className="font-semibold text-foreground underline-offset-4 hover:underline"
-              to={ROUTE_PATHS.inventoryBalanceDetail.replace(':balanceId', row.original.balanceId)}
-            >
+          cell: ({ getValue }) => (
+            <span className="font-semibold">
               {formatNumber(getValue(), { maxFractionDigits: 3 })}
-            </Link>
+            </span>
           ),
         }),
         balanceColumnHelper.accessor('lowStock', {

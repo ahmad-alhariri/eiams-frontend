@@ -1,17 +1,31 @@
-import { IconCirclePlus, IconDeviceFloppy, IconTrash } from '@tabler/icons-react'
+import { IconDeviceFloppy } from '@tabler/icons-react'
 import { useMemo } from 'react'
-import { useFieldArray, useWatch, type UseFormReturn } from 'react-hook-form'
+import { useWatch, type UseFormReturn } from 'react-hook-form'
+
+import type { Site } from '@/modules/organization/types/organization.api-types'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
+import type { OptionLoader } from '@/shared/selectors/selector-adapter'
 
 import {
   ROLE_SCOPE_TYPES,
-  type UserRoleScopesFormValues,
+  type UserRoleScopeFormValues,
 } from '@/modules/admin/schemas/user-role-scopes.schemas'
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
+import type { RoleRef, ScopeType } from '@/modules/admin/types/admin.api-types'
+import { useScopedSiteSelector } from '@/modules/organization/hooks/use-scoped-site-selector'
+import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  useFormField,
+} from '@/shared/forms/form'
 import { ContentCard } from '@/shared/layout/content-card'
+import { AsyncSelect } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
-import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { Role, ScopeType } from '@/shared/types/generated/eiams-v1'
 
 const SCOPE_TYPE_LABELS: Readonly<Record<ScopeType, string>> = {
   Enterprise: 'المؤسسة',
@@ -19,23 +33,72 @@ const SCOPE_TYPE_LABELS: Readonly<Record<ScopeType, string>> = {
   Warehouse: 'مستودع',
 }
 
-const EMPTY_ASSIGNMENT: UserRoleScopesFormValues['assignments'][number] = {
-  roleId: '',
-  scopeType: 'Enterprise',
-  scopeId: '',
-}
-
 interface UserRoleScopesEditorProps {
   canManage: boolean
   canSelectRoles: boolean
-  form: UseFormReturn<UserRoleScopesFormValues>
+  form: UseFormReturn<UserRoleScopeFormValues>
   isPending: boolean
   isRoleCatalogLoading: boolean
-  onSubmit: (values: UserRoleScopesFormValues) => Promise<void>
-  roles: readonly Role[]
+  onSubmit: (values: UserRoleScopeFormValues) => Promise<void>
+  roles: readonly RoleRef[]
 }
 
-/** Contract-shaped field-array editor for a user's complete role-scope assignment set. */
+/**
+ * Scope picker for the singular assignment (D-SRS-01). Enterprise carries no
+ * picker; Site and Warehouse resolve through the scoped Arabic async
+ * selectors so only scopes visible to the current administrator are offered.
+ */
+function ScopePicker({
+  scopeType,
+  disabled,
+  onChange,
+  value,
+}: {
+  scopeType: ScopeType
+  disabled: boolean
+  onChange: (scopeId: string | null) => void
+  value: string | null
+}) {
+  const { formItemId } = useFormField()
+  const siteSelector = useScopedSiteSelector()
+  const warehouseSelector = useScopedWarehouseSelector()
+
+  if (scopeType === 'Enterprise') {
+    return (
+      <p className="min-h-9 rounded-md border border-input bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+        يشمل هذا التعيين المؤسسة بالكامل ولا يتطلب اختيار موقع أو مستودع.
+      </p>
+    )
+  }
+
+  const isSite = scopeType === 'Site'
+  const selector = isSite ? siteSelector : warehouseSelector
+  const loadOptions = selector.loadOptions as OptionLoader<Site | Warehouse>
+  return (
+    <AsyncSelect<Site | Warehouse>
+      value={value}
+      loadOptions={loadOptions}
+      onValueChange={(next) => onChange(next)}
+      disabled={disabled || !selector.scopeReady}
+      inputProps={{ id: formItemId }}
+      placeholder={
+        selector.scopeReady
+          ? isSite
+            ? 'ابحث عن الموقع...'
+            : 'ابحث عن المستودع...'
+          : 'بانتظار اختيار النطاق...'
+      }
+      emptyMessage={
+        isSite ? 'لا توجد مواقع مطابقة ضمن نطاقك.' : 'لا توجد مستودعات مطابقة ضمن نطاقك.'
+      }
+      errorMessage={
+        isSite ? 'تعذر البحث عن المواقع ضمن نطاقك.' : 'تعذر البحث عن المستودعات ضمن نطاقك.'
+      }
+    />
+  )
+}
+
+/** Singular role/scope editor for a user's one persistent assignment (D-SRS-01). */
 export function UserRoleScopesEditor({
   canManage,
   canSelectRoles,
@@ -45,25 +108,18 @@ export function UserRoleScopesEditor({
   onSubmit,
   roles,
 }: UserRoleScopesEditorProps) {
-  const { fields, append, remove } = useFieldArray({ control: form.control, name: 'assignments' })
-  const watchedAssignments = useWatch({ control: form.control, name: 'assignments' }) ?? []
+  const scopeType = useWatch({ control: form.control, name: 'scopeType' })
+  const canEditRole = canManage && canSelectRoles
   const roleNameById = useMemo(
     () => new Map(roles.map((role) => [role.roleId, role.nameAr])),
     [roles],
   )
+  const selectedRoleName = roleNameById.get(form.getValues('roleId')) ?? 'غير محدد'
 
   return (
     <ContentCard
-      title="أدوار المستخدم ونطاقاتها"
-      description="كل تعيين يربط دوراً بنطاق. الحفظ يستبدل مجموعة التعيينات بالكامل باستخدام إصدار المستخدم الحالي."
-      action={
-        canManage && canSelectRoles ? (
-          <Button type="button" onClick={() => append({ ...EMPTY_ASSIGNMENT })}>
-            <IconCirclePlus aria-hidden data-icon="inline-start" />
-            إضافة تعيين
-          </Button>
-        ) : null
-      }
+      title="دور المستخدم ونطاقه"
+      description="تعيين واحد يربط الدور بالنطاق. الحفظ يستبدل التعيين الحالي بالكامل."
     >
       <Form {...form}>
         <form
@@ -72,141 +128,103 @@ export function UserRoleScopesEditor({
           className="grid gap-4"
           onSubmit={form.handleSubmit(onSubmit)}
         >
-          {fields.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              لا توجد أدوار معيّنة لهذا المستخدم ضمن نطاق العمل الحالي.
-            </p>
-          ) : (
-            <div className="grid gap-3">
-              {fields.map((field, index) => {
-                const assignment = watchedAssignments[index]
-                const scopeType = assignment?.scopeType ?? 'Enterprise'
-                const roleName = roleNameById.get(assignment?.roleId ?? '') ?? 'غير محدد'
-                return (
-                  <fieldset
-                    key={field.id}
-                    className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-card p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-start"
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-start">
+            {canEditRole ? (
+              <FormField
+                control={form.control}
+                name="roleId"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel>الدور</FormLabel>
+                    <Select
+                      value={field.value}
+                      disabled={isRoleCatalogLoading}
+                      onValueChange={field.onChange}
+                    >
+                      <FormControl>
+                        <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
+                          <SelectValue placeholder="اختر الدور" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {roles.map((role) => (
+                          <SelectItem key={role.roleId} value={role.roleId}>
+                            {role.nameAr}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : (
+              <div className="grid content-start gap-2">
+                <span className="text-sm font-medium text-foreground">الدور</span>
+                <p className="min-h-9 rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
+                  {selectedRoleName}
+                </p>
+              </div>
+            )}
+            <FormField
+              control={form.control}
+              name="scopeType"
+              render={({ field, fieldState }) => (
+                <FormItem>
+                  <FormLabel>النطاق</FormLabel>
+                  <Select
+                    value={field.value}
+                    disabled={!canManage}
+                    onValueChange={(value) => {
+                      const nextScopeType = ROLE_SCOPE_TYPES.find(
+                        (candidate) => candidate === value,
+                      )
+                      if (nextScopeType === undefined) return
+                      field.onChange(nextScopeType)
+                      form.setValue('scopeId', null, { shouldDirty: true, shouldValidate: true })
+                    }}
                   >
-                    <legend className="sr-only">تعيين الدور {index + 1}</legend>
-                    {canManage && canSelectRoles ? (
-                      <FormField
-                        control={form.control}
-                        name={`assignments.${index}.roleId`}
-                        render={({ field: roleField, fieldState }) => (
-                          <FormItem>
-                            <FormLabel>الدور</FormLabel>
-                            <Select
-                              value={roleField.value}
-                              disabled={isRoleCatalogLoading}
-                              onValueChange={roleField.onChange}
-                            >
-                              <FormControl>
-                                <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                                  <SelectValue placeholder="اختر الدور" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {roles.map((role) => (
-                                  <SelectItem key={role.roleId} value={role.roleId}>
-                                    {role.nameAr}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    ) : (
-                      <div className="grid content-start gap-2">
-                        <span className="text-sm font-medium text-foreground">الدور</span>
-                        <p className="min-h-9 rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
-                          {roleName}
-                        </p>
-                      </div>
-                    )}
-                    <FormField
-                      control={form.control}
-                      name={`assignments.${index}.scopeType`}
-                      render={({ field: scopeTypeField, fieldState }) => (
-                        <FormItem>
-                          <FormLabel>النطاق</FormLabel>
-                          <Select
-                            value={scopeTypeField.value}
-                            disabled={!canManage}
-                            onValueChange={(value) => {
-                              const nextScopeType = ROLE_SCOPE_TYPES.find(
-                                (candidate) => candidate === value,
-                              )
-                              if (nextScopeType === undefined) return
-                              scopeTypeField.onChange(nextScopeType)
-                              if (nextScopeType === 'Enterprise') {
-                                form.setValue(`assignments.${index}.scopeId`, '', {
-                                  shouldDirty: true,
-                                  shouldValidate: true,
-                                })
-                              }
-                            }}
-                          >
-                            <FormControl>
-                              <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {ROLE_SCOPE_TYPES.map((candidate) => (
-                                <SelectItem key={candidate} value={candidate}>
-                                  {SCOPE_TYPE_LABELS[candidate]}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name={`assignments.${index}.scopeId`}
-                      render={({ field: scopeIdField }) => (
-                        <FormItem>
-                          <FormLabel>معرّف النطاق</FormLabel>
-                          <FormControl>
-                            <Input
-                              {...scopeIdField}
-                              disabled={!canManage || scopeType === 'Enterprise'}
-                              placeholder={scopeType === 'Enterprise' ? 'غير مطلوب' : 'UUID'}
-                              dir="ltr"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="pt-7">
-                      {canManage ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`إزالة تعيين ${roleName}`}
-                          onClick={() => remove(index)}
-                        >
-                          <IconTrash aria-hidden />
-                        </Button>
-                      ) : null}
-                    </div>
-                  </fieldset>
-                )
-              })}
-            </div>
-          )}
+                    <FormControl>
+                      <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {ROLE_SCOPE_TYPES.map((candidate) => (
+                        <SelectItem key={candidate} value={candidate}>
+                          {SCOPE_TYPE_LABELS[candidate]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="scopeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {scopeType === 'Site'
+                      ? 'الموقع'
+                      : scopeType === 'Warehouse'
+                        ? 'المستودع'
+                        : 'النطاق'}
+                  </FormLabel>
+                  <ScopePicker
+                    scopeType={scopeType}
+                    disabled={!canManage}
+                    value={field.value}
+                    onChange={(next) => field.onChange(next)}
+                  />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
-          {form.formState.errors.assignments?.message ? (
-            <p role="alert" className="text-sm text-destructive">
-              {form.formState.errors.assignments.message}
-            </p>
-          ) : null}
           {form.formState.errors.root?.['serverError']?.message ? (
             <p role="alert" className="text-sm text-destructive">
               {form.formState.errors.root['serverError'].message}
@@ -215,8 +233,7 @@ export function UserRoleScopesEditor({
 
           {canManage && !canSelectRoles ? (
             <p className="text-sm text-muted-foreground">
-              يمكنك تعديل نطاقات الأدوار المعيّنة أو إزالتها. تتطلب إضافة دور أو تغييره صلاحية عرض
-              الأدوار.
+              يمكنك تعديل النطاق. يتطلب تغيير الدور صلاحية عرض الأدوار.
             </p>
           ) : null}
 
@@ -224,12 +241,12 @@ export function UserRoleScopesEditor({
             <div className="flex justify-end">
               <Button type="submit" loading={isPending}>
                 <IconDeviceFloppy aria-hidden data-icon="inline-start" />
-                حفظ التعيينات
+                حفظ التعيين
               </Button>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              عرض للقراءة فقط؛ لا تملك صلاحية تعديل أدوار المستخدم.
+              عرض للقراءة فقط؛ لا تملك صلاحية تعديل دور المستخدم.
             </p>
           )}
         </form>

@@ -3,7 +3,7 @@ import { delay, HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/auth.api-types'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -13,19 +13,8 @@ const sessionFixture: SessionResponse = {
     userId: '10000000-0000-4000-8000-000000000001',
     username: 'warehouse.keeper',
     displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
   },
-  permissionCodes: ['document.create'],
-  availableScopes: [
-    {
-      scopeType: 'Warehouse',
-      scopeId: '20000000-0000-4000-8000-000000000001',
-      warehouseId: '20000000-0000-4000-8000-000000000001',
-      siteId: '30000000-0000-4000-8000-000000000001',
-      displayName: 'المستودع المركزي',
-    },
-  ],
+  permissionCodes: ['warehouse-documents:create'],
   activeScope: {
     scopeType: 'Warehouse',
     scopeId: '20000000-0000-4000-8000-000000000001',

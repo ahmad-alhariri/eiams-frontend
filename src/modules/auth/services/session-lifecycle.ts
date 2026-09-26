@@ -3,7 +3,7 @@ import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import type { AuthService } from '@/modules/auth/services/auth.service'
 import type { AuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import type { SessionAdapter } from '@/shared/services/session-adapter'
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/auth.api-types'
 
 /** The sole cached server projection of the signed-in EIAMS session. */
 export const authSessionQueryKey = ['auth', 'session'] as const
@@ -90,7 +90,12 @@ export function createAuthSessionLifecycle({
   return {
     async hydrate() {
       try {
-        const session = await sessionAdapter.refreshSession()
+        await sessionAdapter.refreshSession()
+        // The /auth/refresh response carries the new access token but does NOT include the
+        // session projection (D-AUTH-01 §13.2). Fetch it separately so the route guards
+        // observe a populated `authSessionQueryKey` cache instead of stalling on the loading
+        // boundary after a successful refresh.
+        const session = await authService.getSession()
         queryClient.setQueryData(authSessionQueryKey, session)
         sessionStore.getState().markAuthenticated()
         return session
@@ -100,8 +105,8 @@ export function createAuthSessionLifecycle({
       }
     },
     installLogin(response) {
-      sessionStore.getState().installLogin(response)
       queryClient.setQueryData(authSessionQueryKey, response.session)
+      sessionStore.getState().installLogin(response)
     },
     async logout() {
       try {

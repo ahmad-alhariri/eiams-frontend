@@ -127,8 +127,8 @@ export function WarehouseMaterialSettingsEditor({
   const materialSelector = useMaterialSelector(async (query) => {
     const configuredIds = new Set(
       settings
-        .filter((item) => item.materialId !== setting?.materialId)
-        .map((item) => item.materialId),
+        .filter((item: WarehouseMaterialSetting) => item.materialId !== setting?.materialId)
+        .map((item: WarehouseMaterialSetting) => item.materialId),
     )
     const page = await catalogService.listMaterials({
       page: 0,
@@ -166,10 +166,9 @@ export function WarehouseMaterialSettingsEditor({
 
     try {
       await submitFeedback(async () => {
-        await upsertMutation.mutateAsync({
-          warehouseId,
-          request: toWarehouseMaterialSettingRequest(values, setting),
-        })
+        await upsertMutation.mutateAsync(
+          toWarehouseMaterialSettingRequest(values, setting),
+        )
         onOpenChange(false)
         toast.success({
           title: setting === null ? 'تمت إضافة إعداد المادة.' : 'تم حفظ تعديل إعداد المادة.',

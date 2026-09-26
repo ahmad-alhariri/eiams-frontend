@@ -3,10 +3,9 @@ import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createAdminService } from '@/modules/admin/services/admin.service'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { normalizeError } from '@/shared/services/api.client'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
-  createPage,
   createPermission,
   createRole,
   createUserRoleScope,
@@ -14,7 +13,7 @@ import {
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
-const API_BASE_URL = '/api/v1'
+const API_BASE_URL = 'http://localhost/api/v1'
 const bundles: ApiClientBundle[] = []
 
 function setupService() {
@@ -54,15 +53,31 @@ describe('AdminService', () => {
       http.get(`${API_BASE_URL}/admin/users`, ({ request }) => {
         const url = new URL(request.url)
         requestedUrls.push(`${url.pathname}${url.search}`)
-        return HttpResponse.json(createPage([user]))
+        return HttpResponse.json({
+          items: [user],
+          meta: {
+            page: 1,
+            pageIndex: 1,
+            pageSize: 20,
+            itemCount: 1,
+            totalItems: 1,
+            totalCount: 1,
+            totalPages: 1,
+            hasPreviousPage: false,
+            hasNextPage: false,
+          },
+        })
       }),
       http.get(`${API_BASE_URL}/admin/users/${user.userId}`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
         return HttpResponse.json(user)
       }),
-      http.get(`${API_BASE_URL}/admin/users/${user.userId}/role-scopes`, ({ request }) => {
+      http.get(`${API_BASE_URL}/admin/users/${user.userId}/role-scope`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
-        return HttpResponse.json([assignment])
+        return HttpResponse.json({
+          role: assignment.role,
+          scope: assignment.scope,
+        })
       }),
     )
 
@@ -73,15 +88,18 @@ describe('AdminService', () => {
       items: [user],
     })
     await expect(service.getUser(user.userId)).resolves.toEqual(user)
-    await expect(service.getUserRoleScopes(user.userId)).resolves.toEqual([assignment])
+    await expect(service.getUserRoleScope(user.userId)).resolves.toEqual({
+      role: assignment.role,
+      scope: assignment.scope,
+    })
 
     expect(requestedUrls).toEqual([
-      `${API_BASE_URL}/admin/permissions`,
-      `${API_BASE_URL}/admin/roles`,
-      `${API_BASE_URL}/admin/roles/${role.roleId}`,
-      `${API_BASE_URL}/admin/users?pageIndex=2&search=%D9%85%D8%B3%D8%AA%D8%AE%D8%AF%D9%85`,
-      `${API_BASE_URL}/admin/users/${user.userId}`,
-      `${API_BASE_URL}/admin/users/${user.userId}/role-scopes`,
+      '/api/v1/admin/permissions',
+      '/api/v1/admin/roles',
+      '/api/v1/admin/roles/00000000-0000-4000-8000-00000000000e',
+      '/api/v1/admin/users?pageIndex=2&search=%D9%85%D8%B3%D8%AA%D8%AE%D8%AF%D9%85',
+      '/api/v1/admin/users/00000000-0000-4000-8000-00000000000a',
+      '/api/v1/admin/users/00000000-0000-4000-8000-00000000000a/role-scope',
     ])
   })
 
@@ -106,15 +124,14 @@ describe('AdminService', () => {
       username: user.username,
       initialPassword: 'Initial-secret-123',
     }
-    const roleScopesRequest = {
-      assignments: [
-        {
-          roleId: role.roleId,
-          scopeType: assignment.scope.scopeType,
-          scopeId: assignment.scope.scopeId,
-        },
-      ],
-      rowVersion: user.rowVersion,
+    const roleScopeRequest = {
+      roleId: role.roleId,
+      scopeType: assignment.scope.scopeType,
+      scopeId: assignment.scope.scopeId,
+    }
+    const roleScopeResponse = {
+      role: { roleId: role.roleId, nameAr: role.nameAr },
+      scope: assignment.scope,
     }
     const receivedBodies: unknown[] = []
 
@@ -142,10 +159,10 @@ describe('AdminService', () => {
         },
       ),
       http.put(
-        `${API_BASE_URL}/admin/users/${encodeURIComponent(encodedUserId)}/role-scopes`,
+        `${API_BASE_URL}/admin/users/${encodeURIComponent(encodedUserId)}/role-scope`,
         async ({ request }) => {
           receivedBodies.push(await request.json())
-          return HttpResponse.json([assignment])
+          return HttpResponse.json(roleScopeResponse)
         },
       ),
     )
@@ -154,15 +171,15 @@ describe('AdminService', () => {
     await expect(service.updateRole(encodedRoleId, roleRequest)).resolves.toEqual(role)
     await expect(service.createUser(userRequest)).resolves.toEqual(user)
     await expect(service.updateUser(encodedUserId, userRequest)).resolves.toEqual(user)
-    await expect(service.replaceUserRoleScopes(encodedUserId, roleScopesRequest)).resolves.toEqual([
-      assignment,
-    ])
+    await expect(service.replaceUserRoleScope(encodedUserId, roleScopeRequest)).resolves.toEqual(
+      roleScopeResponse,
+    )
     expect(receivedBodies).toEqual([
       roleRequest,
       roleRequest,
       userRequest,
       userRequest,
-      roleScopesRequest,
+      roleScopeRequest,
     ])
   })
 
@@ -186,6 +203,6 @@ describe('AdminService', () => {
     const error = await service.getUser('missing').catch((reason: unknown) => reason)
 
     expect(axios.isAxiosError(error)).toBe(true)
-    expect(normalizeApiError(error)).toMatchObject({ status: 404, code: 'admin.user_not_found' })
+    expect(normalizeError(error)).toMatchObject({ status: 404, code: 'admin.user_not_found' })
   })
 })

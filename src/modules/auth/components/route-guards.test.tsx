@@ -12,28 +12,20 @@ import {
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import type { AuthSessionStatus } from '@/modules/auth/store/auth-session.store'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/auth.api-types'
 
 /**
- * D-SRS-01 singular-session fixtures.
- *
- * The frozen provisional contract still declares `availableScopes` and
- * `scopeState` as required fields on `SessionResponse`. The D-SRS-01
- * singular-session refactor removed their consumer code in the frontend,
- * but the type is still imported from the deprecated generated artifact.
- * These fixtures satisfy the type until `whhu.5` deletes the generated
- * artifact entirely.
+ * D-SRS-01 singular-session fixtures (handwritten contract: required
+ * `activeScope`, `scopeState` of `Selected` | `Unavailable` only — no
+ * `availableScopes`, no `SelectionRequired`).
  */
 const selectedSession: SessionResponse = {
   user: {
     userId: '10000000-0000-4000-8000-000000000001',
     username: 'warehouse.manager',
     displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
   },
-  permissionCodes: ['inventory.view'],
-  availableScopes: [],
+  permissionCodes: ['inventory:view'],
   scopeState: 'Selected',
   activeScope: {
     scopeType: 'Warehouse',
@@ -47,13 +39,13 @@ const selectedSession: SessionResponse = {
 
 const sessionWithoutScope: SessionResponse = {
   ...selectedSession,
-  // The generated contract types `activeScope` as optional with
-  // exactOptionalPropertyTypes: true. Omit it entirely to model the
-  // server-detected Unavailable case; the route-guards `hasActiveScope`
-  // predicate treats the absent property as a missing scope.
+  // Server-detected invalid assignment: the required `activeScope` still
+  // identifies the sole assigned context, but `scopeState` is Unavailable
+  // and the server returns no usable permissions. The guards render the
+  // contact-administrator no-access screen for this state.
+  scopeState: 'Unavailable',
   permissionCodes: [],
 }
-delete (sessionWithoutScope as { activeScope?: unknown }).activeScope
 
 function renderRoutes({
   initialPath = '/protected',
@@ -133,7 +125,16 @@ describe('authentication route guards (D-SRS-01 singular session)', () => {
     renderRoutes({ status: 'authenticated', session: sessionWithoutScope })
 
     expect(screen.getByRole('heading', { name: 'لا يتوفر نطاق عمل' })).toBeInTheDocument()
+    expect(screen.getByText(/تواصل مع مسؤول النظام/u)).toBeInTheDocument()
     expect(screen.queryByText('محتوى محمي')).not.toBeInTheDocument()
+  })
+
+  it('renders protected content directly for a Selected session with no selection gate', () => {
+    renderRoutes({ status: 'authenticated', session: selectedSession })
+
+    expect(screen.getByText('محتوى محمي')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'لا يتوفر نطاق عمل' })).not.toBeInTheDocument()
   })
 
   it('renders permission denial and keeps the session authenticated', () => {

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ActiveScopeBadge } from '@/modules/auth/components/active-scope-badge'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/auth.api-types'
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: vi.fn(),
@@ -12,24 +12,14 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 const mockedUseActiveScopeContext = vi.mocked(useActiveScopeContext)
 
-/**
- * The frozen provisional contract still declares `availableScopes` and
- * `scopeState` as required fields on `SessionResponse`. The D-SRS-01
- * singular-session refactor removed their consumer code in the frontend,
- * but the type is still imported from the deprecated generated artifact.
- * These fixtures satisfy the type until `whhu.5` deletes the generated
- * artifact entirely.
- */
+/** D-SRS-01 singular-session fixture (handwritten contract). */
 const sessionFixture: SessionResponse = {
   user: {
     userId: '10000000-0000-4000-8000-000000000001',
     username: 'warehouse.keeper',
     displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
   },
   permissionCodes: ['document.view'],
-  availableScopes: [],
   scopeState: 'Selected',
   activeScope: {
     scopeType: 'Warehouse',

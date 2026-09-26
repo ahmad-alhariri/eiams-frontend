@@ -1,10 +1,15 @@
 import type {
+  AuthTokenResponse,
+  EffectiveRole,
+  ScopeContext,
+  SessionResponse,
+} from '@/modules/auth/types/auth.api-types'
+import type {
   ActionAvailability,
   Asset,
   AssetCustody,
   AuditLog,
   AuditLogEntry,
-  AuthTokenResponse,
   DocumentActionResult,
   DocumentActionType,
   DocumentAttachment,
@@ -14,7 +19,6 @@ import type {
   DocumentStatus,
   Employee,
   ExternalParty,
-  EffectiveRole,
   FieldError,
   InventoryBalance,
   LifecycleActorSnapshot,
@@ -31,8 +35,6 @@ import type {
   ProblemDetails,
   Permission,
   Role,
-  ScopeContext,
-  SessionResponse,
   Site,
   StockMovement,
   OrganizationalUnit,
@@ -157,7 +159,7 @@ export function createPermission(overrides: FixtureOverrides<Permission> = {}): 
   return withOverrides(
     {
       permissionId: fixtureUuid(13),
-      code: 'admin.user.view',
+      code: 'users:view',
       nameAr: 'عرض المستخدمين',
       descriptionAr: 'عرض دليل حسابات المستخدمين.',
     },
@@ -171,7 +173,7 @@ export function createRole(overrides: FixtureOverrides<Role> = {}): Role {
       roleId: fixtureUuid(14),
       code: 'SYSTEM_ADMIN',
       nameAr: 'مدير النظام',
-      permissionCodes: ['admin.user.view', 'admin.user.manage'],
+      permissionCodes: ['users:view', 'users:manage'],
       rowVersion: 1,
       status: 'Active',
     },
@@ -217,9 +219,8 @@ export function createSession(overrides: FixtureOverrides<SessionResponse> = {})
   const activeScope = createScopeContext()
   return withOverrides(
     {
-      user: createUserSummary(),
-      permissionCodes: ['document.view'],
-      availableScopes: [activeScope],
+      user: { userId: fixtureUuid(10), username: 'fixture.user', displayName: 'مستخدم تجريبي' },
+      permissionCodes: ['warehouse-documents:view'],
       activeScope,
       scopeState: 'Selected',
       activeRoles: [createEffectiveRole()],

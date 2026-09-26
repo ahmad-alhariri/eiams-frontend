@@ -33,7 +33,7 @@ const familyColumnHelper = createColumnHelper<typeof dataTableFeatures, Material
 /** Contract-backed material family directory, with domains derived by the server. */
 function MaterialFamiliesPage() {
   const { has } = usePermission()
-  const canManage = has('catalog.manage')
+  const canManage = has('materials:manage')
   const [searchInput, setSearchInput] = useState('')
   const [dialogFamily, setDialogFamily] = useState<MaterialFamily | null | undefined>(undefined)
   const search = useDebounce(searchInput)

@@ -40,17 +40,17 @@ describe('custody.service (e19-t01)', () => {
     })
   })
 
-  it('posts assignments to /custodies/assign with the Idempotency-Key header', async () => {
+  it('posts assignments to /assets/{assetId}/custody-assignment with the Idempotency-Key header', async () => {
     vi.mocked(apiClient.post).mockResolvedValue({ data: {} })
     const service = createCustodyService(apiClient as never)
 
     await service.assignCustody(assignRequest, 'key-1')
 
     const [path, body, config] = vi.mocked(apiClient.post).mock.calls[0]!
-    expect(path).toBe('/custodies/assign')
-    expect(body).toEqual(assignRequest)
+    expect(path).toBe(`/assets/${ASSET_ID}/custody-assignment`)
+    expect(body).toEqual({ ...assignRequest, assetId: undefined })
     expect(config?.headers).toMatchObject({ 'Idempotency-Key': 'key-1' })
-  })
+  }),
 
   it('posts transfers to the encoded per-custody path with the idempotency header', async () => {
     vi.mocked(apiClient.post).mockResolvedValue({ data: {} })

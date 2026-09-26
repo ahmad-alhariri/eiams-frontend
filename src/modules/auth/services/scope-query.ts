@@ -1,5 +1,5 @@
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/auth.api-types'
 
 /**
  * Returns the sole server-selected active scope from the cached session, or

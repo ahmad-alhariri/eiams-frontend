@@ -56,14 +56,14 @@ export function AdjustmentActionBar({
 
   const canSeePost =
     status === 'Draft' &&
-    has('document.create') &&
+    has('warehouse-documents:create') &&
     postAvailability !== undefined &&
     postAvailability.presentation !== 'Hidden'
 
   const canSeeReverse =
     status === 'Posted' &&
     purpose !== 'Disposal' &&
-    has('document.create') &&
+    has('warehouse-documents:create') &&
     reverseAvailability !== undefined &&
     reverseAvailability.presentation !== 'Hidden'
 

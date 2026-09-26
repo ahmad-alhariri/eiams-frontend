@@ -3,7 +3,7 @@ import type { StoreApi } from 'zustand/vanilla'
 
 import { sessionAdapter } from '@/shared/services/api.client'
 import type { SessionAdapter } from '@/shared/services/session-adapter'
-import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse } from '@/modules/auth/types/auth.api-types'
 
 /**
  * Lifecycle state for the application shell and route guards.

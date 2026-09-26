@@ -48,7 +48,6 @@ beforeAll(async () => {
     import('@/modules/inventory/pages/stock-movements-page'),
     import('@/modules/inventory/pages/stock-movement-detail-page'),
     import('@/modules/inventory/pages/inventory-balances-page'),
-    import('@/modules/inventory/pages/inventory-balance-detail-page'),
   ])
 })
 
@@ -147,12 +146,6 @@ describe('atomic transfer propagation', () => {
       sortBy: 'WarehouseDisplayName',
       sortDirection: 'Ascending',
     })
-
-    await navigate(router, balanceDetailPath(sourceBalance))
-    await expectBalanceDetail(sourceBalance, '٩')
-
-    await navigate(router, balanceDetailPath(destinationBalance))
-    await expectBalanceDetail(destinationBalance, '٣')
   })
 
   it('isolates the transfer, both movements, and both balances across scope cache keys', async () => {
@@ -326,7 +319,6 @@ function renderJourney(initialEntry: string) {
       toRouteObject('inventoryMovements'),
       toRouteObject('inventoryMovementDetail'),
       toRouteObject('inventoryBalances'),
-      toRouteObject('inventoryBalanceDetail'),
     ],
     { initialEntries: [initialEntry] },
   )
@@ -423,10 +415,6 @@ function movementDetailPath(movement: StockMovement) {
   return ROUTE_PATHS.inventoryMovementDetail.replace(':movementId', movement.movementId)
 }
 
-function balanceDetailPath(balance: InventoryBalance) {
-  return ROUTE_PATHS.inventoryBalanceDetail.replace(':balanceId', balance.balanceId)
-}
-
 async function navigate(router: ReturnType<typeof createMemoryRouter>, path: string) {
   await act(async () => {
     await router.navigate(path)
@@ -446,12 +434,4 @@ async function expectMovementDetail(
   expect(screen.getByText(movement.documentId)).toBeInTheDocument()
   expect(screen.getByText(movement.documentLineId)).toBeInTheDocument()
   expect(screen.getByText(movement.movementId)).toBeInTheDocument()
-}
-
-async function expectBalanceDetail(balance: InventoryBalance, formattedQuantity: string) {
-  expect(await screen.findByRole('heading', { name: 'تفاصيل الرصيد' })).toBeInTheDocument()
-  expect(screen.getByText(balance.warehouse.displayName)).toBeInTheDocument()
-  expect(screen.getByText(balance.material.displayName)).toBeInTheDocument()
-  expect(screen.getByText(formattedQuantity)).toBeInTheDocument()
-  expect(screen.getByText(balance.balanceId.slice(0, 8) + '…')).toBeInTheDocument()
 }

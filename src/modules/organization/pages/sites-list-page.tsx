@@ -35,7 +35,7 @@ function isRecordStatus(value: string | null): value is RecordStatus {
  */
 function SitesListPage() {
   const { has } = usePermission()
-  const canManage = has('organization.manage')
+  const canManage = has('organizations:manage')
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [search, setSearch] = useState('')

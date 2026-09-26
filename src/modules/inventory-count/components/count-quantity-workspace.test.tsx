@@ -96,7 +96,7 @@ function useHandlers() {
 
 function renderWorkspace() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  client.setQueryData(authSessionQueryKey, sessionWith(['count.view', 'count.enter']))
+  client.setQueryData(authSessionQueryKey, sessionWith(['inventory-counts:view', 'inventory-counts:enter-actual']))
   return render(
     <QueryClientProvider client={client}>
       <CountQuantityWorkspace countId={COUNT_ID} countRowVersion={1} />

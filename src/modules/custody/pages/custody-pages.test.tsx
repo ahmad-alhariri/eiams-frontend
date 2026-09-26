@@ -18,7 +18,7 @@ const CUSTODY_ID = fixtureUuid(52)
 
 vi.mock('@/modules/auth/hooks/use-permission', () => ({
   usePermission: () => ({
-    has: (permission: string) => permission === 'asset.view' || permission === 'custody.assign',
+    has: (permission: string) => permission === 'assets:view' || permission === 'custody:manage',
   }),
 }))
 

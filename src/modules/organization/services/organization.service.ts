@@ -28,7 +28,7 @@ const EMPLOYEES_PATH = '/employees'
 const EMPLOYEE_PATH = '/employees/{employeeId}'
 const EXTERNAL_PARTIES_PATH = '/external-parties'
 const EXTERNAL_PARTY_PATH = '/external-parties/{externalPartyId}'
-const DEACTIVATE_EXTERNAL_PARTY_PATH = '/external-parties/{externalPartyId}/deactivate'
+const EXTERNAL_PARTY_STATUS_PATH = '/external-parties/{externalPartyId}/status'
 
 function pathWithId(path: string, parameter: string, id: string): string {
   return path.replace(parameter, encodeURIComponent(id))
@@ -77,7 +77,11 @@ export interface OrganizationService {
     externalPartyId: string,
     request: ExternalPartyUpsertRequest,
   ) => Promise<ExternalParty>
-  deactivateExternalParty: (externalPartyId: string) => Promise<ExternalParty>
+  setExternalPartyStatus: (
+    externalPartyId: string,
+    status: 'Active' | 'Inactive',
+    expectedRowVersion: number,
+  ) => Promise<ExternalParty>
 }
 
 export function createOrganizationService(transport: ApiTransport): OrganizationService {
@@ -222,10 +226,11 @@ export function createOrganizationService(transport: ApiTransport): Organization
       return response.data
     },
 
-    async deactivateExternalParty(externalPartyId) {
+    async setExternalPartyStatus(externalPartyId, status, expectedRowVersion) {
       const response = await transport.request<ExternalParty>({
-        path: pathWithId(DEACTIVATE_EXTERNAL_PARTY_PATH, '{externalPartyId}', externalPartyId),
-        method: 'POST',
+        path: pathWithId(EXTERNAL_PARTY_STATUS_PATH, '{externalPartyId}', externalPartyId),
+        method: 'PUT',
+        body: { status, expectedRowVersion },
       })
       return response.data
     },

@@ -46,7 +46,7 @@ function isRecordStatus(value: string | null): value is RecordStatus {
 function EmployeesListPage() {
   const navigate = useNavigate()
   const { has } = usePermission()
-  const canManage = has('organization.manage')
+  const canManage = has('organizations:manage')
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [search, setSearch] = useState('')

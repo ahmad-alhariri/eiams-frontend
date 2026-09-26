@@ -63,9 +63,9 @@ describe('Route constants (D-RBAC-01)', () => {
 
   it('guards the dashboard behind "any operational view" semantics', () => {
     const dashboard = ROUTE_METADATA.dashboard
-    expect(dashboard.permissionAny).toContain('catalog.view')
-    expect(dashboard.permissionAny).toContain('inventory.view')
-    expect(dashboard.permissionAny).toContain('report.view')
+    expect(dashboard.permissionAny).toContain('materials:view')
+    expect(dashboard.permissionAny).toContain('inventory:view')
+    expect(dashboard.permissionAny).toContain('reports:view')
   })
 
   it('keeps breadcrumb parents inside the route set', () => {
@@ -88,23 +88,20 @@ describe('Route constants (D-RBAC-01)', () => {
       ROUTE_METADATA.adjustmentNew,
     ]
     for (const meta of newRoutes) {
-      expect(meta.permissions).toContain('document.view')
-      expect(meta.permissions).toContain('document.create')
+      expect(meta.permissions).toContain('warehouse-documents:view')
+      expect(meta.permissions).toContain('warehouse-documents:create')
     }
   })
 
   it('guards count planning with count.view + count.plan', () => {
-    expect(ROUTE_METADATA.countNew.permissions).toEqual(['count.view', 'count.plan'])
-    expect(ROUTE_METADATA.counts.permissions).toEqual(['count.view'])
+    expect(ROUTE_METADATA.countNew.permissions).toEqual(['inventory-counts:view', 'inventory-counts:plan'])
+    expect(ROUTE_METADATA.counts.permissions).toEqual(['inventory-counts:view'])
   })
 
   it('guards inventory read routes with inventory.view only', () => {
-    expect(ROUTE_METADATA.inventoryBalances.permissions).toEqual(['inventory.view'])
-    expect(ROUTE_METADATA.inventoryBalanceDetail.permissions).toEqual(['inventory.view'])
-    expect(ROUTE_METADATA.inventoryBalanceDetail.parent).toBe('inventoryBalances')
-    expect(ROUTE_PATHS.inventoryBalanceDetail).toBe('/inventory/balances/:balanceId')
-    expect(ROUTE_METADATA.inventoryMovements.permissions).toEqual(['inventory.view'])
-    expect(ROUTE_METADATA.inventoryMovementDetail.permissions).toEqual(['inventory.view'])
+    expect(ROUTE_METADATA.inventoryBalances.permissions).toEqual(['inventory:view'])
+    expect(ROUTE_METADATA.inventoryMovements.permissions).toEqual(['inventory:view'])
+    expect(ROUTE_METADATA.inventoryMovementDetail.permissions).toEqual(['inventory:view'])
     expect(ROUTE_METADATA.inventoryMovementDetail.parent).toBe('inventoryMovements')
     expect(ROUTE_PATHS.inventoryMovementDetail).toBe('/inventory/movements/:movementId')
   })

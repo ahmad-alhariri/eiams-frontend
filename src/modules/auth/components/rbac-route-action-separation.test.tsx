@@ -11,7 +11,8 @@ import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { DocumentPolicy, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { DocumentPolicy } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/auth.api-types'
 
 const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = '20000000-0000-4000-8000-000000000001'
@@ -25,27 +26,15 @@ const warehouseScope = {
   warehouseId: WAREHOUSE_ID,
 }
 
-/**
- * D-SRS-01 singular-session fixture.
- *
- * The frozen provisional contract still declares `availableScopes` and
- * `scopeState` as required fields on `SessionResponse`. The D-SRS-01
- * singular-session refactor removed their consumer code in the frontend,
- * but the type is still imported from the deprecated generated artifact.
- * This fixture satisfies the type until `whhu.5` deletes the generated
- * artifact entirely.
- */
+/** D-SRS-01 singular-session fixture (handwritten contract). */
 function selectedSession(permissionCodes: readonly string[]): SessionResponse {
   return {
     user: {
       userId: '10000000-0000-4000-8000-000000000001',
       username: 'warehouse.keeper',
       displayName: 'أمين المستودع',
-      status: 'Active',
-      rowVersion: 1,
     },
     permissionCodes,
-    availableScopes: [warehouseScope],
     activeScope: warehouseScope,
     scopeState: 'Selected',
     activeRoles: [],
@@ -88,7 +77,7 @@ function InventoryWithDocumentAction({ onExecute }: { onExecute: () => void }) {
       <LifecycleActionBar
         policy={postPolicy}
         busyAction={null}
-        disabled={!has('document.post')}
+        disabled={!has('warehouse-documents:post')}
         onExecute={onExecute}
       />
     </section>
@@ -110,7 +99,7 @@ describe('RBAC route and action separation', () => {
   it('keeps an allowed route visible while disabling a policy-enabled action without its separate permission', async () => {
     const queryClient = createQueryClient()
     const onExecute = vi.fn()
-    queryClient.setQueryData(authSessionQueryKey, selectedSession(['inventory.view']))
+    queryClient.setQueryData(authSessionQueryKey, selectedSession(['inventory:view']))
     useAuthSessionStore.setState({ status: 'authenticated' })
 
     render(
@@ -156,9 +145,9 @@ describe('RBAC route and action separation', () => {
     bundles.push(bundle)
     const queryClient = createQueryClient()
     const onExecute = vi.fn()
-    const nextSession = selectedSession(['document.post', 'inventory.view'])
+    const nextSession = selectedSession(['warehouse-documents:post', 'inventory:view'])
 
-    queryClient.setQueryData(authSessionQueryKey, selectedSession(['inventory.view']))
+    queryClient.setQueryData(authSessionQueryKey, selectedSession(['inventory:view']))
     useAuthSessionStore.setState({ status: 'authenticated' })
 
     render(

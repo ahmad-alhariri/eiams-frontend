@@ -43,8 +43,8 @@ afterEach(() => {
 
 describe('RolesCatalogPage', () => {
   it('renders contract-backed roles and the permission catalog as a read-only Arabic surface', async () => {
-    const role = createRole({ permissionCodes: ['admin.role.view', 'admin.role.manage'] })
-    const permission = createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
+    const role = createRole({ permissionCodes: ['roles:view', 'roles:manage'] })
+    const permission = createPermission({ code: 'roles:view', nameAr: 'عرض الأدوار' })
 
     server.use(
       http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([role])),
@@ -102,11 +102,11 @@ describe('RolesCatalogPage', () => {
 
   it('opens the role permission matrix prefilled from the row action for admin.role.manage holders', async () => {
     const user = userEvent.setup()
-    const role = createRole({ permissionCodes: ['admin.role.view'] })
-    const viewPermission = createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
+    const role = createRole({ permissionCodes: ['roles:view'] })
+    const viewPermission = createPermission({ code: 'roles:view', nameAr: 'عرض الأدوار' })
     const managePermission = createPermission({
       permissionId: '00000000-0000-4000-8000-0000000000d1',
-      code: 'admin.role.manage',
+      code: 'roles:manage',
       nameAr: 'إدارة الأدوار',
     })
 
@@ -118,7 +118,7 @@ describe('RolesCatalogPage', () => {
     )
 
     render(<RolesCatalogPage />, {
-      wrapper: createWrapper(['admin.role.view', 'admin.role.manage']),
+      wrapper: createWrapper(['roles:view', 'roles:manage']),
     })
 
     await user.click(await screen.findByRole('button', { name: `تعديل صلاحيات ${role.nameAr}` }))

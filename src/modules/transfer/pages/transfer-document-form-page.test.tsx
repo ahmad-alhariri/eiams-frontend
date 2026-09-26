@@ -157,7 +157,7 @@ async function fillLine(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('الكمية'), '10')
 }
 
-function renderPage(permissionCodes: readonly string[] = ['document.view', 'document.create']) {
+function renderPage(permissionCodes: readonly string[] = ['warehouse-documents:view', 'warehouse-documents:create']) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(authSessionQueryKey, sessionWith(permissionCodes))
   return render(

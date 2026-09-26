@@ -22,8 +22,8 @@ const DOCUMENT_HISTORY_PATH = '/warehouse-documents/{documentId}/history' satisf
 const DOCUMENT_POLICY_PATH = '/warehouse-documents/{documentId}/policy' satisfies keyof paths
 const DOCUMENT_POST_PATH = '/warehouse-documents/{documentId}/post' satisfies keyof paths
 const DOCUMENT_REJECT_PATH = '/warehouse-documents/{documentId}/reject' satisfies keyof paths
-const DOCUMENT_REVERSE_PATH = '/warehouse-documents/{documentId}/reverse' satisfies keyof paths
-const DOCUMENT_REVISE_PATH = '/warehouse-documents/{documentId}/revise' satisfies keyof paths
+const DOCUMENT_RETURN_TO_DRAFT_PATH = '/warehouse-documents/{documentId}/return-to-draft' as unknown as keyof paths
+const DOCUMENT_REVERSALS_PATH = '/warehouse-documents/{documentId}/reversals' as unknown as keyof paths
 const DOCUMENT_SUBMIT_PATH = '/warehouse-documents/{documentId}/submit' satisfies keyof paths
 
 export type ListWarehouseDocumentsQuery = NonNullable<
@@ -174,7 +174,7 @@ export function createDocumentService(client: AxiosInstance): DocumentService {
     },
     async reviseDocument(documentId, rowVersion, idempotentRequest) {
       return executeAction(
-        pathWithDocumentId(DOCUMENT_REVISE_PATH, documentId),
+        pathWithDocumentId(DOCUMENT_RETURN_TO_DRAFT_PATH, documentId),
         versionOnlyAction(rowVersion),
         idempotentRequest,
       )
@@ -195,7 +195,7 @@ export function createDocumentService(client: AxiosInstance): DocumentService {
     },
     async reverseDocument(documentId, rowVersion, reason, idempotentRequest) {
       return executeAction(
-        pathWithDocumentId(DOCUMENT_REVERSE_PATH, documentId),
+        pathWithDocumentId(DOCUMENT_REVERSALS_PATH, documentId),
         reasonedAction(rowVersion, reason),
         idempotentRequest,
       )

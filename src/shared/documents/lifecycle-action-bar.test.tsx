@@ -218,7 +218,7 @@ describe('LifecycleActionBar', () => {
     renderBar({
       policy: makePolicy([
         availability({
-          action: 'document.submit' as DocumentActionType,
+          action: 'warehouse-documents:submit' as DocumentActionType,
           confirmationRequired: true,
         }),
       ]),

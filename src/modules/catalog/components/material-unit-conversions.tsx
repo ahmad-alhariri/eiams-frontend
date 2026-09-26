@@ -36,7 +36,7 @@ const conversionColumnHelper = createColumnHelper<
  */
 export function MaterialUnitConversions({ material }: { material: Material }) {
   const { has } = usePermission()
-  const canManage = has('catalog.manage')
+  const canManage = has('materials:manage')
   const conversionsQuery = useMaterialUnitConversionsQuery(material.materialId)
   const unitsQuery = useUnitsOfMeasureQuery()
   const createMutation = useCreateMaterialUnitConversionMutation()

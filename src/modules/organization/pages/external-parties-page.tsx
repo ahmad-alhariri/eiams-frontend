@@ -31,7 +31,7 @@ const columnHelper = createColumnHelper<typeof dataTableFeatures, ExternalParty>
 
 function ExternalPartiesPage() {
   const { has } = usePermission()
-  const canManage = has('organization.manage')
+  const canManage = has('organizations:manage')
   const pagination = useServerPagination()
   const [search, setSearch] = useState('')
   const [dialogParty, setDialogParty] = useState<ExternalParty | null | undefined>(undefined)
@@ -75,7 +75,10 @@ function ExternalPartiesPage() {
   const confirmDeactivation = useCallback(async () => {
     if (deactivationTarget === null) return
     await submitFeedback(async () => {
-      await deactivateMutation.mutateAsync(deactivationTarget.externalPartyId)
+      await deactivateMutation.mutateAsync({
+        externalPartyId: deactivationTarget.externalPartyId,
+        rowVersion: deactivationTarget.rowVersion,
+      })
       toast.success({ title: 'تم تعطيل الجهة الخارجية مع الاحتفاظ بالمراجع السابقة.' })
       setDeactivationTarget(null)
     })

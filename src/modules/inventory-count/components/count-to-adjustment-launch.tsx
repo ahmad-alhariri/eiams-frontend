@@ -20,7 +20,7 @@ import { ContentCard } from '@/shared/layout/content-card'
 export function CountToAdjustmentLaunch({ count }: { count: InventoryCount }) {
   const { has } = usePermission()
 
-  if (!has('document.create')) {
+  if (!has('warehouse-documents:create')) {
     return null
   }
 

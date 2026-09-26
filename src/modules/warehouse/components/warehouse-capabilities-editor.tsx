@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 
 import { useMaterialDomainsQuery } from '@/modules/catalog/hooks/use-catalog-queries'
-import { useReplaceWarehouseCapabilitiesMutation } from '@/modules/warehouse/hooks/use-warehouse-mutations'
+import { useReplaceWarehouseCapabilitiesMutation, useDeleteWarehouseCapabilityMutation } from '@/modules/warehouse/hooks/use-warehouse-mutations'
 import {
   CAPABILITY_OPERATIONS,
   toWarehouseCapabilitiesRequest,
@@ -43,7 +43,8 @@ export function WarehouseCapabilitiesEditor({
   const [open, setOpen] = useState(false)
   const { confirm, element: confirmElement } = useConfirm()
   const domainsQuery = useMaterialDomainsQuery({ status: 'Active' })
-  const replaceMutation = useReplaceWarehouseCapabilitiesMutation()
+  const createMutation = useReplaceWarehouseCapabilitiesMutation()
+  const deleteMutation = useDeleteWarehouseCapabilityMutation()
   const submitFeedback = useSubmitFeedback()
   const form = useForm<WarehouseCapabilitiesFormValues>({
     resolver: zodResolver(warehouseCapabilitiesSchema),
@@ -102,10 +103,15 @@ export function WarehouseCapabilitiesEditor({
 
     try {
       await submitFeedback(async () => {
-        await replaceMutation.mutateAsync({
-          warehouseId,
-          request: toWarehouseCapabilitiesRequest(values, capabilities, warehouseId),
-        })
+        for (const domainItem of toWarehouseCapabilitiesRequest(values, capabilities, warehouseId)) {
+          await createMutation.mutateAsync({ capability: domainItem })
+        }
+        const newDomainIds = new Set(values.capabilities.map((c) => c.domainId))
+        for (const cap of capabilities) {
+          if (!newDomainIds.has(cap.domainId)) {
+            await deleteMutation.mutateAsync(cap.domainId)
+          }
+        }
         toast.success({ title: 'تم حفظ قدرات المستودع.' })
       })
     } catch (error: unknown) {
@@ -157,7 +163,7 @@ export function WarehouseCapabilitiesEditor({
           <Form {...form}>
             <form
               noValidate
-              aria-busy={replaceMutation.isPending}
+              aria-busy={createMutation.isPending}
               className="grid gap-4"
               onSubmit={form.handleSubmit(submit)}
             >
@@ -253,7 +259,7 @@ export function WarehouseCapabilitiesEditor({
               <DialogFooter>
                 <Button
                   type="submit"
-                  loading={replaceMutation.isPending}
+                  loading={createMutation.isPending}
                   disabled={watchedCapabilities.length === 0}
                 >
                   حفظ القدرات
@@ -261,7 +267,7 @@ export function WarehouseCapabilitiesEditor({
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={replaceMutation.isPending}
+                  disabled={createMutation.isPending}
                   onClick={() => setOpen(false)}
                 >
                   إلغاء

@@ -55,7 +55,7 @@ function isRecordStatus(value: string | null): value is RecordStatus {
  */
 function MaterialsListPage() {
   const { has } = usePermission()
-  const canManage = has('catalog.manage')
+  const canManage = has('materials:manage')
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [search, setSearch] = useState('')

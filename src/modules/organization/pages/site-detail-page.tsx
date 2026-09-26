@@ -31,7 +31,7 @@ function SiteDetailPage() {
   const submitFeedback = useSubmitFeedback()
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const site = siteQuery.data
-  const canManage = has('organization.manage')
+  const canManage = has('organizations:manage')
 
   const returnToSites = useCallback(() => navigate(ROUTE_PATHS.organizationSites), [navigate])
   const closeEditDialog = useCallback((open: boolean) => {

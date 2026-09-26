@@ -43,7 +43,7 @@ function isRecordStatus(value: string | null): value is RecordStatus {
  */
 function WarehousesListPage() {
   const { has } = usePermission()
-  const canManage = has('warehouse.manage')
+  const canManage = has('warehouses:manage')
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [search, setSearch] = useState('')

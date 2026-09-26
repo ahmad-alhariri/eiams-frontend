@@ -10,6 +10,7 @@ import {
   transitionInventoryCount,
 } from '@/mocks/inventory-count-state'
 import { getDb, nextFixtureUuid } from '@/mocks/db'
+import type { ReplaceRoleScopeRequest } from '@/modules/admin/types/admin.api-types'
 import { createDevSession } from '@/shared/services/dev-session'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import {
@@ -56,7 +57,6 @@ import type {
   PageMeta,
   ProblemDetails,
   ReasonedDocumentActionRequest,
-  ReplaceRoleScopesRequest,
   Role,
   RoleUpsertRequest,
   SetActiveScopeRequest,
@@ -2058,36 +2058,25 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     db.roles.push(role)
     return HttpResponse.json(role, { status: 201 })
   }),
-  http.get(`${AUTH_PREFIX}/admin/users/:userId/role-scopes`, async ({ params }) => {
+  http.get(`${AUTH_PREFIX}/admin/users/:userId/role-scope`, async ({ params }) => {
     await delay(120)
-    const scopes = getDb().userRoleScopes.filter((item) => item.userId === String(params['userId']))
-    return HttpResponse.json(scopes)
+    const scope = getDb().userRoleScopes.find((item) => item.userId === String(params['userId']))
+    if (scope === undefined) return notFound()
+    return HttpResponse.json(scope)
   }),
-  http.put(`${AUTH_PREFIX}/admin/users/:userId/role-scopes`, async ({ params, request }) => {
+  http.put(`${AUTH_PREFIX}/admin/users/:userId/role-scope`, async ({ params, request }) => {
     await delay(120)
     const db = getDb()
     const userId = String(params['userId'])
-    const body = (await request.json()) as ReplaceRoleScopesRequest
+    const body = (await request.json()) as ReplaceRoleScopeRequest
     const userIndex = db.users.findIndex((user) => user.userId === userId)
     if (userIndex === -1) return notFound()
-    const currentUser = db.users[userIndex]!
-    if (body.rowVersion !== currentUser.rowVersion) {
-      return HttpResponse.json(
-        {
-          status: 409,
-          code: 'admin.user_conflict',
-          titleAr: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
-          traceId: 'dev-admin-role-scope-conflict',
-        },
-        { status: 409 },
-      )
-    }
-    const roleByCode = new Map(db.roles.map((role) => [role.roleId, role]))
-    const next: UserRoleScope[] = body.assignments.map((assignment) => ({
+    const roleById = new Map(db.roles.map((role) => [role.roleId, role]))
+    const next: UserRoleScope = {
       userRoleScopeId: nextFixtureUuid(),
       userId,
-      role: roleByCode.get(assignment.roleId) ?? {
-        roleId: assignment.roleId,
+      role: roleById.get(body.roleId) ?? {
+        roleId: body.roleId,
         code: '',
         nameAr: '',
         permissionCodes: [],
@@ -2095,18 +2084,17 @@ export const mockApiHandlers: readonly HttpHandler[] = [
         status: 'Active',
       },
       scope: {
-        scopeType: assignment.scopeType,
-        scopeId: assignment.scopeId,
+        scopeType: body.scopeType,
+        scopeId: body.scopeType === 'Enterprise' ? null : body.scopeId,
         displayName:
-          assignment.scopeType === 'Enterprise'
+          body.scopeType === 'Enterprise'
             ? 'الهيئة العامة للرقابة والتفتيش'
-            : (db.warehouses.find((warehouse) => warehouse.warehouseId === assignment.scopeId)
-                ?.nameAr ?? ''),
+            : (db.sites.find((site) => site.siteId === body.scopeId)?.nameAr ??
+              db.warehouses.find((warehouse) => warehouse.warehouseId === body.scopeId)?.nameAr ??
+              ''),
       },
-      rowVersion: 1,
-    }))
+    }
     db.userRoleScopes = db.userRoleScopes.filter((item) => item.userId !== userId).concat(next)
-    db.users[userIndex] = { ...currentUser, rowVersion: currentUser.rowVersion + 1 }
     return HttpResponse.json(next)
   }),
 

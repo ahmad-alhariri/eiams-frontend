@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { IconLockAccess, IconShieldLock } from '@tabler/icons-react'
+import { useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { Link, Navigate } from 'react-router'
 
@@ -20,19 +21,26 @@ type RouteAccessGuardProps = RouteGuardProps & {
 }
 
 /**
- * Observes the single query-backed session projection without triggering a
- * second hydration request. The application root owns hydration; guards only
- * decide what may render once its lifecycle outcome is known.
+ * Reads the cached session projection and re-renders this component whenever
+ * the cache entry changes (e.g. after `setQueryData` from `installLogin` or
+ * `hydrate`). `useQuery({enabled: false})` does NOT subscribe to cache
+ * mutations because the observer is disabled, and `getQueryData` alone does
+ * not trigger re-renders. The TanStack-canonical pattern is to subscribe to
+ * the QueryCache via `subscribe`; we wrap that in `useSyncExternalStore` so
+ * React treats the cache entry as the source of truth for re-rendering.
  */
 function useCachedSession(): SessionResponse | undefined {
-  const { data } = useQuery<SessionResponse>({
-    queryKey: authSessionQueryKey,
-    queryFn: () => Promise.reject(new Error('Session hydration is owned by the application root.')),
-    enabled: false,
-    staleTime: Number.POSITIVE_INFINITY,
-  })
-
-  return data
+  const queryClient = useQueryClient()
+  const subscribe = (onChange: () => void) =>
+    queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === 'updated' || event.type === 'added' || event.type === 'removed') {
+        const updatedKey = (event as { query: { queryKey: readonly unknown[] } }).query.queryKey
+        if (updatedKey[0] === authSessionQueryKey[0] && updatedKey[1] === authSessionQueryKey[1]) {
+          onChange()
+        }
+      }
+    })
+  return useSyncExternalStore(subscribe, () => queryClient.getQueryData<SessionResponse>(authSessionQueryKey))
 }
 
 function AuthLoadingBoundary() {

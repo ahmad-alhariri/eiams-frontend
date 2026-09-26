@@ -89,7 +89,7 @@ function useHandlers() {
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  client.setQueryData(authSessionQueryKey, sessionWith(['count.view', 'count.start']))
+  client.setQueryData(authSessionQueryKey, sessionWith(['inventory-counts:view', 'count.start']))
   return render(
     <MemoryRouter initialEntries={[`/counts/${COUNT_ID}`]}>
       <QueryClientProvider client={client}>

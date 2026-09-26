@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppProviders } from '@/app/providers/app-providers'
 import LoginPage from '@/modules/auth/pages/login-page'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
-import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse } from '@/modules/auth/types/auth.api-types'
 import { server } from '@/test/msw/server'
 
 const loginResponse: AuthTokenResponse = {
@@ -18,12 +18,14 @@ const loginResponse: AuthTokenResponse = {
       userId: '10000000-0000-4000-8000-000000000001',
       username: 'warehouse.keeper',
       displayName: 'أمين المستودع',
-      status: 'Active',
-      rowVersion: 1,
     },
-    permissionCodes: ['document.create'],
-    availableScopes: [],
-    scopeState: 'SelectionRequired',
+    permissionCodes: ['warehouse-documents:create'],
+    activeScope: {
+      scopeType: 'Warehouse',
+      scopeId: '20000000-0000-4000-8000-000000000001',
+      displayName: 'المستودع المركزي',
+    },
+    scopeState: 'Selected',
     activeRoles: [],
   },
 }

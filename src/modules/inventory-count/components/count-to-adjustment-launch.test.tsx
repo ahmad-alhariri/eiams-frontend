@@ -67,7 +67,7 @@ function renderLaunch(count: InventoryCount, permissionCodes: readonly string[])
 
 describe('CountToAdjustmentLaunch (e21-t03)', () => {
   it('renders the launch CTA for an eligible manager with full count context', () => {
-    renderLaunch(completedCount(), ['count.view', 'document.create'])
+    renderLaunch(completedCount(), ['inventory-counts:view', 'warehouse-documents:create'])
 
     const cta = screen.getByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' })
     expect(cta.getAttribute('href')).toBe(
@@ -76,7 +76,7 @@ describe('CountToAdjustmentLaunch (e21-t03)', () => {
   })
 
   it('hides the CTA entirely for a user without document.create (keeper view)', () => {
-    renderLaunch(completedCount(), ['count.view'])
+    renderLaunch(completedCount(), ['inventory-counts:view'])
 
     expect(screen.queryByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' })).toBeNull()
     expect(screen.queryByText('إنشاء سند تسوية')).toBeNull()
@@ -88,7 +88,7 @@ describe('CountToAdjustmentLaunch (e21-t03)', () => {
       countId: 'id-with-سبيشل?chars',
       warehouse: { id: 'wh&with=params', displayName: 'المستودع' },
     }
-    renderLaunch(count, ['document.create'])
+    renderLaunch(count, ['warehouse-documents:create'])
 
     const href = screen
       .getByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' })

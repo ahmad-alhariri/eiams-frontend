@@ -97,7 +97,7 @@ export function createCountService(client: AxiosInstance): CountService {
 
     async updateLines(countId, request) {
       const response = await client.put<InventoryCountLinePage>(
-        `/inventory-counts/${countId}/lines`,
+        `/inventory-counts/${countId}/actuals`,
         request,
       )
       return response.data

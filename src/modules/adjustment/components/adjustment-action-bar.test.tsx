@@ -103,7 +103,7 @@ function Harness({
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  client.setQueryData(authSessionQueryKey, sessionWith(['document.view', 'document.create']))
+  client.setQueryData(authSessionQueryKey, sessionWith(['warehouse-documents:view', 'warehouse-documents:create']))
   return (
     <QueryClientProvider client={client}>
       <AdjustmentActionBar
@@ -178,7 +178,7 @@ describe('AdjustmentActionBar (e21-t06)', () => {
 
   it('renders nothing for a keeper (no document.create)', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(authSessionQueryKey, sessionWith(['document.view']))
+    client.setQueryData(authSessionQueryKey, sessionWith(['warehouse-documents:view']))
     render(
       <QueryClientProvider client={client}>
         <AdjustmentActionBar

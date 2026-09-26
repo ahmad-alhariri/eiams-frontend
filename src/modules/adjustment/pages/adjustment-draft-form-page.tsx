@@ -93,7 +93,7 @@ export default function AdjustmentDraftFormPage() {
       ? varianceSeed !== undefined && countQuery.data !== undefined
       : true)
 
-  if (!has('document.create')) {
+  if (!has('warehouse-documents:create')) {
     return (
       <div dir="rtl" className="min-w-0">
         <PageHeader title={ROUTE_METADATA.adjustmentNew.labelAr} />

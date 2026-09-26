@@ -11,7 +11,12 @@ import {
 import { countService } from '@/modules/inventory-count/services/count.service'
 import { createIdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import {
+  invalidateResourceInstance,
+  invalidateResourceLists,
+  queryKeys,
+  type ScopeCacheKey,
+} from '@/shared/services/query-keys'
 
 const COUNT_RESOURCE = 'inventory-counts'
 
@@ -27,10 +32,7 @@ export const countQueryKeys = {
   ) => queryKeys.scoped(scope, COUNT_RESOURCE, 'lines', countId, query),
 }
 
-export {
-  INVENTORY_COUNT_STATUS_LABELS_AR as COUNT_STATUS_LABELS_AR,
-  INVENTORY_COUNT_TYPE_LABELS_AR as COUNT_TYPE_LABELS_AR,
-}
+export { INVENTORY_COUNT_STATUS_LABELS_AR as COUNT_STATUS_LABELS_AR, INVENTORY_COUNT_TYPE_LABELS_AR as COUNT_TYPE_LABELS_AR }
 
 /**
  * Shared invalidation for every count mutation: the touched count's detail
@@ -40,16 +42,13 @@ export {
 function useCountInvalidation() {
   const queryClient = useQueryClient()
   const scope = useActiveScopeContext()
-  return () => {
+  return (countId: string) => {
     if (scope.activeScopeCacheKey === undefined) return
-    // Every count query is scoped under [scoped, ...scopeParts, inventory-counts, ...].
-    const prefix = [
-      'scoped',
-      scope.activeScopeCacheKey.kind,
-      'id' in scope.activeScopeCacheKey ? scope.activeScopeCacheKey.id : null,
-      COUNT_RESOURCE,
-    ] as const
-    void queryClient.invalidateQueries({ queryKey: [...prefix] })
+    void invalidateResourceInstance(queryClient, scope.activeScopeCacheKey, COUNT_RESOURCE, 'count', [
+      countId,
+    ])
+    void invalidateResourceLists(queryClient, scope.activeScopeCacheKey, COUNT_RESOURCE, 'counts')
+    void invalidateResourceLists(queryClient, scope.activeScopeCacheKey, COUNT_RESOURCE, 'lines')
   }
 }
 
@@ -62,7 +61,7 @@ export function useInventoryCountsQuery(query: ListInventoryCountsQuery) {
   return useQuery({
     queryKey:
       scope.activeScopeCacheKey === undefined
-        ? ['inventory-counts', 'unscoped', query]
+        ? queryKeys.public(COUNT_RESOURCE, 'counts', query)
         : countQueryKeys.counts(scope.activeScopeCacheKey, query),
     queryFn: () => countService.listCounts(query),
     enabled: scope.activeScopeCacheKey !== undefined,
@@ -70,13 +69,15 @@ export function useInventoryCountsQuery(query: ListInventoryCountsQuery) {
   })
 }
 
-/** Single count session with its lifecycle state. */
+/**
+ * Single count session with its lifecycle state.
+ */
 export function useInventoryCountQuery(countId: string | undefined | null) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
     queryKey:
       scope === undefined || countId == null
-        ? ['inventory-counts', 'count', 'unscoped', countId]
+        ? queryKeys.public(COUNT_RESOURCE, 'count', countId)
         : countQueryKeys.count(scope, countId),
     queryFn: () => countService.getCount(countId ?? ''),
     enabled: scope !== undefined && countId != null && countId !== '',
@@ -84,7 +85,9 @@ export function useInventoryCountQuery(countId: string | undefined | null) {
   })
 }
 
-/** Paged count lines (snapshot vs actual vs difference). */
+/**
+ * Paged count lines (snapshot vs actual vs difference).
+ */
 export function useCountLinesQuery(
   countId: string | undefined | null,
   query: { pageIndex?: number; pageSize?: number; search?: string } = {},
@@ -93,7 +96,7 @@ export function useCountLinesQuery(
   return useQuery({
     queryKey:
       scope === undefined || countId == null
-        ? ['inventory-counts', 'lines', 'unscoped', countId, query]
+        ? queryKeys.public(COUNT_RESOURCE, 'lines', countId, query)
         : countQueryKeys.lines(scope, countId, query),
     queryFn: () => countService.listLines(countId ?? '', query),
     enabled: scope !== undefined && countId != null && countId !== '',
@@ -101,49 +104,63 @@ export function useCountLinesQuery(
   })
 }
 
-/** Plans a new count session (`count.plan`). Navigates on success at the page. */
+/**
+ * Plans a new count session (`count.plan`). Navigates on success at the page.
+ */
 export function usePlanCountMutation() {
   const invalidate = useCountInvalidation()
   return useMutation({
     mutationFn: (request: InventoryCountPlanRequest) =>
       countService.planCount(request, createIdempotencyKey()),
-    onSuccess: invalidate,
+    onSuccess: (result) => {
+      // planCount returns the created count; invalidate the list so the new
+      // row appears without assuming its position.
+      invalidate(result.countId)
+    },
   })
 }
 
-/** Starts a Planned session, capturing the balance snapshot. */
+/**
+ * Starts a Planned session, capturing the balance snapshot.
+ */
 export function useStartCountMutation(countId: string) {
   const invalidate = useCountInvalidation()
   return useMutation({
     mutationFn: (rowVersion: number) => countService.startCount(countId, rowVersion),
-    onSuccess: invalidate,
+    onSuccess: () => invalidate(countId),
   })
 }
 
-/** Batches actual-quantity entry onto count lines (`count.enter`). */
+/**
+ * Batches actual-quantity entry onto count lines (`count.enter`).
+ */
 export function useUpdateCountLinesMutation(countId: string) {
   const invalidate = useCountInvalidation()
   return useMutation({
     mutationFn: (request: UpdateCountLinesRequest) => countService.updateLines(countId, request),
-    onSuccess: invalidate,
+    onSuccess: () => invalidate(countId),
   })
 }
 
-/** Marks the session Completed (`count.complete`, idempotent). */
+/**
+ * Marks the session Completed (`count.complete`, idempotent).
+ */
 export function useCompleteCountMutation(countId: string) {
   const invalidate = useCountInvalidation()
   return useMutation({
     mutationFn: (rowVersion: number) =>
       countService.completeCount(countId, rowVersion, createIdempotencyKey()),
-    onSuccess: invalidate,
+    onSuccess: () => invalidate(countId),
   })
 }
 
-/** Closes the session after variance review (`count.close`). */
+/**
+ * Closes the session after variance review (`count.close`).
+ */
 export function useCloseCountMutation(countId: string) {
   const invalidate = useCountInvalidation()
   return useMutation({
     mutationFn: (rowVersion: number) => countService.closeCount(countId, rowVersion),
-    onSuccess: invalidate,
+    onSuccess: () => invalidate(countId),
   })
 }

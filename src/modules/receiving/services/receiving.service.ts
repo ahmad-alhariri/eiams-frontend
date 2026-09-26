@@ -3,7 +3,7 @@ import type { AxiosInstance } from 'axios'
 import { apiClient } from '@/shared/services/api.client'
 import type { paths } from '@/shared/types/generated/eiams-v1'
 
-const RECEIVING_SUPPLIERS_PATH = '/receiving/suppliers' satisfies keyof paths
+const RECEIVING_SUPPLIERS_PATH = '/receiving-infos/suppliers' as unknown as keyof paths
 
 export interface ReceivingService {
   /**

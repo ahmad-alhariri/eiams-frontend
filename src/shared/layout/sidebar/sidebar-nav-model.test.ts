@@ -63,7 +63,7 @@ describe('filterSidebarNav', () => {
   })
 
   it('requires every listed code for "all" mode', () => {
-    const grants = new Set(['document.view'])
+    const grants = new Set(['warehouse-documents:view'])
     const hasPermission = (codes: readonly string[], mode: 'all' | 'any') =>
       mode === 'all'
         ? codes.every((code) => grants.has(code))
@@ -82,7 +82,7 @@ describe('filterSidebarNav', () => {
 
   it('satisfies "any" mode with a single granted code', () => {
     const hasPermission = (codes: readonly string[]) =>
-      codes.some((code) => code === 'inventory.view')
+      codes.some((code) => code === 'inventory:view')
 
     const filtered = filterSidebarNav(SIDEBAR_NAV_GROUPS, hasPermission)
     expect(filtered.some((g) => g.id === 'inventory')).toBe(true)

@@ -175,7 +175,7 @@ function fixtureUserId(): string {
 
 function renderForm(initialEntry = '/adjustments/new') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  client.setQueryData(authSessionQueryKey, sessionWith(['document.view', 'document.create']))
+  client.setQueryData(authSessionQueryKey, sessionWith(['warehouse-documents:view', 'warehouse-documents:create']))
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <QueryClientProvider client={client}>
@@ -289,7 +289,7 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
 
   it('shows the keeper denial state without document.create', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(authSessionQueryKey, sessionWith(['document.view']))
+    client.setQueryData(authSessionQueryKey, sessionWith(['warehouse-documents:view']))
     render(
       <MemoryRouter initialEntries={['/adjustments/new']}>
         <QueryClientProvider client={client}>

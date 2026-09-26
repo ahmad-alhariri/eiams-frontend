@@ -91,7 +91,6 @@ beforeAll(async () => {
   // query timeout while the router is correctly showing its Suspense fallback.
   await Promise.all([
     import('@/modules/inventory/pages/inventory-balances-page'),
-    import('@/modules/inventory/pages/inventory-balance-detail-page'),
     import('@/modules/inventory/pages/stock-movements-page'),
     import('@/modules/inventory/pages/stock-movement-detail-page'),
   ])
@@ -101,7 +100,6 @@ function createInventoryRouter(initialEntry: string) {
   return createMemoryRouter(
     [
       toRouteObject('inventoryBalances'),
-      toRouteObject('inventoryBalanceDetail'),
       toRouteObject('inventoryMovements'),
       toRouteObject('inventoryMovementDetail'),
     ],

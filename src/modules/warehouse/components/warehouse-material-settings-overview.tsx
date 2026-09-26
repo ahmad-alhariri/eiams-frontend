@@ -27,7 +27,7 @@ export function WarehouseMaterialSettingsOverview({
   warehouseId,
 }: WarehouseMaterialSettingsOverviewProps) {
   const { has } = usePermission()
-  const canManage = has('warehouse.manage')
+  const canManage = has('warehouses:manage')
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [search, setSearch] = useState('')
@@ -155,8 +155,6 @@ export function WarehouseMaterialSettingsOverview({
         />
       </ContentCard>
       <WarehouseMaterialSettingsEditor
-        warehouseId={warehouseId}
-        settings={settingsQuery.data?.items ?? []}
         setting={editorSetting}
         open={isEditorOpen}
         onOpenChange={closeEditor}

@@ -17,28 +17,29 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
 }))
 
-import { useReplaceUserRoleScopesMutation } from './use-admin-mutations'
+import { useReplaceUserRoleScopeMutation } from './use-admin-mutations'
 
 const API_BASE_URL = '/api/v1'
 
 describe('admin mutation hooks', () => {
-  it('invalidates admin resources and the authoritative session after replacing role scopes', async () => {
+  it('invalidates admin resources and the authoritative session after replacing the role scope', async () => {
     const client = createQueryClient()
     const scope = { kind: 'enterprise' as const }
     const user = createUserSummary()
     const role = createRole()
-    const assignment = createUserRoleScope({ userId: user.userId, role })
+    const seeded = createUserRoleScope({ userId: user.userId, role })
+    const stored = { role: seeded.role, scope: seeded.scope }
     const usersKey = adminQueryKeys.users(scope, {})
-    const assignmentsKey = adminQueryKeys.userRoleScopes(scope, user.userId)
+    const assignmentKey = adminQueryKeys.userRoleScope(scope, user.userId)
     const warehouseKey = queryKeys.scoped(scope, 'warehouse', 'warehouses')
     client.setQueryData(usersKey, [])
-    client.setQueryData(assignmentsKey, [])
+    client.setQueryData(assignmentKey, [])
     client.setQueryData(warehouseKey, [])
     client.setQueryData(authSessionQueryKey, { permissionCodes: [] })
 
     server.use(
-      http.put(`${API_BASE_URL}/admin/users/${user.userId}/role-scopes`, () =>
-        HttpResponse.json([assignment]),
+      http.put(`${API_BASE_URL}/admin/users/${user.userId}/role-scope`, () =>
+        HttpResponse.json(stored),
       ),
     )
 
@@ -46,27 +47,22 @@ describe('admin mutation hooks', () => {
       return <QueryClientProvider client={client}>{children}</QueryClientProvider>
     }
 
-    const { result } = renderHook(() => useReplaceUserRoleScopesMutation(), {
+    const { result } = renderHook(() => useReplaceUserRoleScopeMutation(), {
       wrapper: QueryWrapper,
     })
 
     await result.current.mutateAsync({
       userId: user.userId,
       request: {
-        assignments: [
-          {
-            roleId: role.roleId,
-            scopeId: assignment.scope.scopeId,
-            scopeType: assignment.scope.scopeType,
-          },
-        ],
-        rowVersion: user.rowVersion,
+        roleId: role.roleId,
+        scopeId: seeded.scope.scopeId,
+        scopeType: seeded.scope.scopeType,
       },
     })
 
     await waitFor(() => {
       expect(client.getQueryState(usersKey)?.isInvalidated).toBe(true)
-      expect(client.getQueryState(assignmentsKey)?.isInvalidated).toBe(true)
+      expect(client.getQueryState(assignmentKey)?.isInvalidated).toBe(true)
       expect(client.getQueryState(authSessionQueryKey)?.isInvalidated).toBe(true)
     })
     expect(client.getQueryState(warehouseKey)?.isInvalidated).toBe(false)

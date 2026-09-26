@@ -16,6 +16,9 @@ import type { ApiPage } from '@/shared/api/api-contracts'
 const WAREHOUSES_PATH = '/warehouses'
 const WAREHOUSE_PATH = '/warehouses/{warehouseId}'
 const WAREHOUSE_CAPABILITIES_PATH = '/warehouses/{warehouseId}/capabilities'
+const WAREHOUSE_CAPABILITY_PATH = '/warehouse-capabilities/{capabilityId}'
+const WAREHOUSE_CAPABILITY_OPERATION_PATH =
+  '/warehouse-capabilities/{capabilityId}/operations/{operationType}'
 const WAREHOUSE_MATERIAL_SETTINGS_PATH = '/warehouses/{warehouseId}/material-settings'
 
 function pathWithId(path: string, parameter: string, id: string): string {
@@ -64,16 +67,27 @@ export interface WarehouseService {
   createWarehouse: (request: WarehouseUpsertRequest) => Promise<Warehouse>
   updateWarehouse: (warehouseId: string, request: WarehouseUpsertRequest) => Promise<Warehouse>
   getWarehouseCapabilities: (warehouseId: string) => Promise<readonly WarehouseCapability[]>
-  replaceWarehouseCapabilities: (
-    warehouseId: string,
-    request: readonly WarehouseCapabilityUpsertRequest[],
-  ) => Promise<readonly WarehouseCapability[]>
+  createWarehouseCapability: (
+    request: WarehouseCapabilityUpsertRequest,
+  ) => Promise<WarehouseCapability>
+  deleteWarehouseCapability: (capabilityId: string) => Promise<void>
+  addCapabilityOperation: (
+    capabilityId: string,
+    operationType: string,
+  ) => Promise<void>
+  removeCapabilityOperation: (
+    capabilityId: string,
+    operationType: string,
+  ) => Promise<void>
   listWarehouseMaterialSettings: (
     warehouseId: string,
     query: ListWarehouseMaterialSettingsQuery,
   ) => Promise<WarehouseMaterialSettingPage>
-  upsertWarehouseMaterialSetting: (
-    warehouseId: string,
+  createWarehouseMaterialSetting: (
+    request: WarehouseMaterialSettingUpsertRequest,
+  ) => Promise<WarehouseMaterialSetting>
+  updateWarehouseMaterialSetting: (
+    settingId: string,
     request: WarehouseMaterialSettingUpsertRequest,
   ) => Promise<WarehouseMaterialSetting>
 }
@@ -124,13 +138,42 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
       return response.data
     },
 
-    async replaceWarehouseCapabilities(warehouseId, request) {
-      const response = await transport.request<readonly WarehouseCapability[]>({
-        path: pathWithId(WAREHOUSE_CAPABILITIES_PATH, '{warehouseId}', warehouseId),
-        method: 'PUT',
+    async createWarehouseCapability(request) {
+      const response = await transport.request<WarehouseCapability>({
+        path: WAREHOUSE_CAPABILITY_PATH,
+        method: 'POST',
         body: request,
       })
       return response.data
+    },
+
+    async deleteWarehouseCapability(capabilityId) {
+      await transport.request({
+        path: pathWithId(WAREHOUSE_CAPABILITY_PATH, '{capabilityId}', capabilityId),
+        method: 'DELETE',
+      })
+    },
+
+    async addCapabilityOperation(capabilityId, operationType) {
+      await transport.request({
+        path: pathWithId(
+          WAREHOUSE_CAPABILITY_OPERATION_PATH,
+          '{capabilityId}',
+          capabilityId,
+        ).replace('{operationType}', encodeURIComponent(operationType)),
+        method: 'POST',
+      })
+    },
+
+    async removeCapabilityOperation(capabilityId, operationType) {
+      await transport.request({
+        path: pathWithId(
+          WAREHOUSE_CAPABILITY_OPERATION_PATH,
+          '{capabilityId}',
+          capabilityId,
+        ).replace('{operationType}', encodeURIComponent(operationType)),
+        method: 'DELETE',
+      })
     },
 
     async listWarehouseMaterialSettings(warehouseId, query) {
@@ -143,9 +186,18 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
       )
     },
 
-    async upsertWarehouseMaterialSetting(warehouseId, request) {
+    async createWarehouseMaterialSetting(request) {
       const response = await transport.request<WarehouseMaterialSetting>({
-        path: pathWithId(WAREHOUSE_MATERIAL_SETTINGS_PATH, '{warehouseId}', warehouseId),
+        path: '/warehouse-material-settings',
+        method: 'POST',
+        body: request,
+      })
+      return response.data
+    },
+
+    async updateWarehouseMaterialSetting(settingId, request: WarehouseMaterialSettingUpsertRequest & { warehouseId?: string }) {
+      const response = await transport.request<WarehouseMaterialSetting>({
+        path: pathWithId('/warehouse-material-settings/{settingId}', '{settingId}', settingId),
         method: 'PUT',
         body: request,
       })

@@ -66,21 +66,35 @@ export function normalizeApiError(errorResponse: {
     readonly message: string
     readonly details: unknown
     readonly request_id: string
+    readonly status?: number
+    readonly titleAr?: string
+    readonly traceId?: string
+    readonly fieldErrors?: unknown
+    readonly detailAr?: string
   }
+  readonly meta?: { readonly requestId: string; readonly timestampUtc: string }
 }): {
   readonly messageAr: string
   readonly code: string
+  readonly status: number
+  readonly titleAr: string | null
+  readonly detailAr: string | null
   readonly requestId: string
   readonly fieldErrors: ReadonlyArray<FieldError>
 } {
-  const code = errorResponse.error.code
+  const errorBody = errorResponse.error
+  const code = errorBody.code
   const messageAr = normalizeErrorMessage(code)
-  const requestId = errorResponse.error.request_id
-  const detailsRaw = errorResponse.error.details
+  // Prefer error-level requestId; fall back to meta.requestId
+  const requestId = errorBody.request_id ?? errorResponse.meta?.requestId ?? 'unknown'
+  const detailsRaw = errorBody.details
+  const fieldErrorsRaw = errorBody.fieldErrors
+  const status = errorBody.status ?? 0
+  const titleAr = errorBody.titleAr ?? null
+  const detailAr = errorBody.detailAr ?? null
 
-  // Narrow `unknown` details to `FieldError[]` only when the shape matches; otherwise keep as `unknown` (no crash, no false mapping).
-  const fieldErrors: ReadonlyArray<FieldError> = Array.isArray(detailsRaw)
-    ? detailsRaw
+  const fieldErrors: ReadonlyArray<FieldError> = Array.isArray(fieldErrorsRaw)
+    ? fieldErrorsRaw
         .filter(
           (d: unknown): d is { field?: string; message?: string; code?: string } =>
             typeof d === 'object' && d !== null && ('field' in d || 'message' in d || 'code' in d),
@@ -89,11 +103,24 @@ export function normalizeApiError(errorResponse: {
           type: 'server' as const,
           message: d.message ?? messageAr,
         }))
-    : []
+    : Array.isArray(detailsRaw)
+      ? detailsRaw
+          .filter(
+            (d: unknown): d is { field?: string; message?: string; code?: string } =>
+              typeof d === 'object' && d !== null && ('field' in d || 'message' in d || 'code' in d),
+          )
+          .map((d): FieldError => ({
+            type: 'server' as const,
+            message: d.message ?? messageAr,
+          }))
+      : []
 
   return {
     messageAr,
     code,
+    status,
+    titleAr,
+    detailAr,
     requestId,
     fieldErrors,
   }
@@ -106,6 +133,9 @@ export function normalizeApiError(errorResponse: {
 export interface NormalizedError {
   readonly messageAr: string
   readonly code: string
+  readonly status: number
+  readonly titleAr: string | null
+  readonly detailAr: string | null
   readonly requestId: string
   readonly fieldErrors: ReadonlyArray<FieldError>
 }

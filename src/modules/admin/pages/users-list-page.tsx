@@ -33,7 +33,7 @@ const userColumnHelper = createColumnHelper<typeof dataTableFeatures, UserSummar
  */
 function UsersListPage() {
   const { has } = usePermission()
-  const canManage = has('admin.user.manage')
+  const canManage = has('users:manage')
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [search, setSearch] = useState('')

@@ -2,14 +2,13 @@ import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it } from 'vitest'
 
-import { normalizeApiError } from '@/shared/services/api-error'
+import { normalizeApiError, type FieldError } from '@/shared/services/api-error'
 import { createApiClient } from '@/shared/services/api.client'
-import type { ProblemDetails } from '@/shared/types/generated/eiams-v1'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
 
-const problemFixture: ProblemDetails = {
+const problemFixture = {
   status: 422,
   code: 'validation.failed',
   titleAr: 'تعذر حفظ البيانات',
@@ -19,7 +18,7 @@ const problemFixture: ProblemDetails = {
     { field: 'nameAr', code: 'required', messageAr: 'الاسم العربي مطلوب.' },
     { field: 'nameAr', code: 'duplicate', messageAr: 'الاسم العربي مستخدم.' },
   ],
-}
+} as const
 
 function responseError(data: unknown, status: number): AxiosError<unknown> {
   const response: AxiosResponse<unknown> = {
@@ -41,7 +40,7 @@ function responseError(data: unknown, status: number): AxiosError<unknown> {
 
 describe('normalizeApiError', () => {
   it('returns the contract Arabic presentation and ordered field errors', () => {
-    expect(normalizeApiError(responseError(problemFixture, 422))).toEqual({
+    const expected: { kind: 'problem'; status: number; code: string; titleAr: string; detailAr: string | null; traceId: string; fieldErrors: readonly FieldError[] } = {
       kind: 'problem',
       status: 422,
       code: 'validation.failed',
@@ -49,7 +48,8 @@ describe('normalizeApiError', () => {
       detailAr: 'راجع الحقول المحددة ثم حاول مجدداً.',
       traceId: 'trace-422',
       fieldErrors: problemFixture.fieldErrors,
-    })
+    }
+    expect(normalizeApiError(responseError(problemFixture, 422))).toEqual(expected)
   })
 
   it('uses safe Arabic fallbacks without leaking malformed server payloads', () => {
@@ -139,11 +139,13 @@ describe('normalizeApiError', () => {
     expect(network).toMatchObject({
       kind: 'network',
       status: null,
+      code: null,
       titleAr: 'تعذر الاتصال بالخدمة',
     })
     expect(unknown).toMatchObject({
       kind: 'unexpected',
       status: null,
+      code: null,
       titleAr: 'حدث خطأ غير متوقع',
     })
     expect(JSON.stringify([network, unknown])).not.toContain('secret')

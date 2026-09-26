@@ -53,9 +53,6 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   warehouses: lazy(() => import('@/modules/warehouse/pages/warehouses-list-page')),
   warehouseDetail: lazy(() => import('@/modules/warehouse/pages/warehouse-detail-page')),
   inventoryBalances: lazy(() => import('@/modules/inventory/pages/inventory-balances-page')),
-  inventoryBalanceDetail: lazy(
-    () => import('@/modules/inventory/pages/inventory-balance-detail-page'),
-  ),
   inventoryMovements: lazy(() => import('@/modules/inventory/pages/stock-movements-page')),
   inventoryMovementDetail: lazy(
     () => import('@/modules/inventory/pages/stock-movement-detail-page'),

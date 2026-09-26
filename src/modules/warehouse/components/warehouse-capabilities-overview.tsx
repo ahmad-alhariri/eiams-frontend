@@ -45,7 +45,7 @@ export function WarehouseCapabilitiesOverview({ warehouseId }: { warehouseId: st
   }
 
   const capabilities = capabilitiesQuery.data ?? []
-  const canManage = has('warehouse.manage')
+  const canManage = has('warehouses:manage')
   const editor = canManage ? (
     <WarehouseCapabilitiesEditor warehouseId={warehouseId} capabilities={capabilities} />
   ) : null

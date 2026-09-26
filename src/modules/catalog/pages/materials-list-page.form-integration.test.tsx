@@ -25,7 +25,7 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 vi.mock('@/modules/auth/hooks/use-permission', () => ({
   usePermission: () => ({
-    has: (code: string) => permission.canManage && code === 'catalog.manage',
+    has: (code: string) => permission.canManage && code === 'materials:manage',
     hasAll: () => false,
     hasAny: () => false,
   }),
