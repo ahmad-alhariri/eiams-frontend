@@ -15,15 +15,18 @@ import {
   useMaterialsQuery,
   useUnitsOfMeasureQuery,
 } from '@/modules/catalog/hooks/use-catalog-queries'
+import { MATERIAL_KIND_LABELS } from '@/modules/catalog/constants/catalog-labels'
 import {
   toMaterialRequest,
   type MaterialFormValues,
 } from '@/modules/catalog/schemas/material.schemas'
-import {
-  MATERIAL_KIND_LABELS,
-  TRACKING_TYPE_LABELS,
-} from '@/modules/catalog/constants/catalog-labels'
-import type { ListMaterialsQuery } from '@/modules/catalog/types/catalog.types'
+import type {
+  ListMaterialsQuery,
+  Material,
+  RecordStatus,
+} from '@/modules/catalog/types/catalog.types'
+
+type MaterialKind = Material['materialKind']
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
@@ -35,12 +38,11 @@ import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { toast } from '@/shared/ui/toast-manager'
 import { pageRows } from '@/shared/utils/table-data'
-import type { Material, MaterialKind, RecordStatus } from '@/shared/types/generated/eiams-v1'
 
 const materialColumnHelper = createColumnHelper<typeof dataTableFeatures, Material>()
 
 function isMaterialKind(value: string | null): value is MaterialKind {
-  return value === 'Consumable' || value === 'Durable' || value === 'Asset'
+  return value === 'Consumable' || value === 'Asset'
 }
 
 function isRecordStatus(value: string | null): value is RecordStatus {
@@ -53,7 +55,7 @@ function isRecordStatus(value: string | null): value is RecordStatus {
  */
 function MaterialsListPage() {
   const { has } = usePermission()
-  const canManage = has('catalog.manage')
+  const canManage = has('materials:manage')
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [search, setSearch] = useState('')
@@ -65,7 +67,7 @@ function MaterialsListPage() {
   const materialsQueryInput = useMemo<ListMaterialsQuery>(
     () => ({
       // Table controls are one-based; EIAMS v1 list endpoints are zero-based.
-      pageIndex: currentPage - 1,
+      page: currentPage - 1,
       pageSize,
       ...(search === '' ? {} : { search }),
       ...(familyId === undefined ? {} : { familyId }),
@@ -154,23 +156,18 @@ function MaterialsListPage() {
           header: 'الرمز',
           cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
         }),
-        materialColumnHelper.accessor((material) => material.family.displayName, {
+        materialColumnHelper.accessor((material) => material.materialFamily.displayName, {
           id: 'family',
           header: 'العائلة',
         }),
-        materialColumnHelper.accessor((material) => material.baseUnit.displayName, {
-          id: 'baseUnit',
+        materialColumnHelper.accessor((material) => material.unit.displayName, {
+          id: 'unit',
           header: 'وحدة القياس',
         }),
         materialColumnHelper.accessor('materialKind', {
           id: 'materialKind',
           header: 'نوع الصنف',
           cell: ({ getValue }) => MATERIAL_KIND_LABELS[getValue()],
-        }),
-        materialColumnHelper.accessor('trackingType', {
-          id: 'trackingType',
-          header: 'التتبع',
-          cell: ({ getValue }) => TRACKING_TYPE_LABELS[getValue()],
         }),
         materialColumnHelper.accessor('requiresAssetNumber', {
           id: 'requiresAssetNumber',
@@ -221,8 +218,8 @@ function MaterialsListPage() {
               onValueChange={handleFamilyChange}
             >
               <SelectItem value="all">كل العائلات</SelectItem>
-              {familiesQuery.data?.map((family) => (
-                <SelectItem key={family.familyId} value={family.familyId}>
+              {(familiesQuery.data?.items ?? []).map((family) => (
+                <SelectItem key={family.materialFamilyId} value={family.materialFamilyId}>
                   {family.nameAr}
                 </SelectItem>
               ))}
@@ -235,7 +232,6 @@ function MaterialsListPage() {
             >
               <SelectItem value="all">كل الأنواع</SelectItem>
               <SelectItem value="Consumable">مستهلكة</SelectItem>
-              <SelectItem value="Durable">عهدة تشغيلية</SelectItem>
               <SelectItem value="Asset">أصل ثابت</SelectItem>
             </FilterSelect>
             <FilterSelect
@@ -286,8 +282,8 @@ function MaterialsListPage() {
       <MaterialFormDialog
         open={dialogMaterial !== undefined}
         material={dialogMaterial ?? null}
-        families={familiesQuery.data ?? []}
-        units={unitsQuery.data ?? []}
+        families={familiesQuery.data?.items ?? []}
+        units={unitsQuery.data?.items ?? []}
         isReferencesLoading={familiesQuery.isLoading || unitsQuery.isLoading}
         isReferencesError={familiesQuery.isError || unitsQuery.isError}
         isPending={createMutation.isPending || updateMutation.isPending}

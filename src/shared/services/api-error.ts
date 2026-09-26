@@ -1,6 +1,15 @@
 import axios from 'axios'
 
-import type { FieldError } from '@/shared/types/generated/eiams-v1'
+/** Handwritten field-error shape (replaces generated `FieldError` from `eiams-v1`).
+ *  Matches the backend validation-error detail shape consumed by `setFormServerErrors`
+ *  in `shared/forms/form.tsx`; kept local to the error normalization boundary so the
+ *  transport layer has no dependency on the frozen generated artifact.
+ */
+export interface FieldError {
+  readonly field: string
+  readonly code: string
+  readonly messageAr: string
+}
 
 export type ApiErrorKind = 'problem' | 'network' | 'unexpected'
 

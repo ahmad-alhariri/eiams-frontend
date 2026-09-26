@@ -47,14 +47,14 @@ const LIFECYCLE_ACTIONS: readonly LifecycleActionKind[] = [
 ]
 
 const ALL_DOCUMENT_CODES = [
-  'document.view',
-  'document.update',
-  'document.submit',
-  'document.post',
-  'document.reject',
-  'document.revise',
-  'document.cancel',
-  'document.reverse',
+  'warehouse-documents:view',
+  'warehouse-documents:edit',
+  'warehouse-documents:submit',
+  'warehouse-documents:post',
+  'warehouse-documents:reject',
+  'warehouse-documents:revise',
+  'warehouse-documents:cancel',
+  'warehouse-documents:reverse',
 ]
 
 const DROPZONE_LABEL_AR = 'اسحب وأفلت الملف هنا أو انقر للاختيار'
@@ -486,12 +486,12 @@ describe('composed canonical document lifecycle journey', () => {
 
     render(<DocumentDetailPage />, {
       wrapper: createJourneyWrapper([
-        'document.view',
-        'document.submit',
-        'document.post',
-        'document.reject',
-        'document.revise',
-        'document.cancel',
+        'warehouse-documents:view',
+        'warehouse-documents:submit',
+        'warehouse-documents:post',
+        'warehouse-documents:reject',
+        'warehouse-documents:revise',
+        'warehouse-documents:cancel',
       ]),
     })
 

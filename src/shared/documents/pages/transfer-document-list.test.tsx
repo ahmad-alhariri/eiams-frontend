@@ -86,7 +86,7 @@ describe('Transfer documents list (e17-t02)', () => {
     )
 
     render(<DocumentListPage />, {
-      wrapper: createTransferWrapper(['document.view', 'document.create']),
+      wrapper: createTransferWrapper(['warehouse-documents:view', 'warehouse-documents:create']),
     })
 
     expect(

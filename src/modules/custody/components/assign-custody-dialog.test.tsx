@@ -89,7 +89,7 @@ describe('AssignCustodyDialog (e19-t03)', () => {
     let postedBody: Record<string, unknown> | undefined
     let idempotencyKey: string | undefined
     server.use(
-      http.post(`${API_BASE_URL}/custodies/assign`, async ({ request }) => {
+      http.post(`${API_BASE_URL}/assets/${ASSET_ID}/custody-assignment`, async ({ request }) => {
         postedBody = (await request.json()) as Record<string, unknown>
         idempotencyKey = request.headers.get('Idempotency-Key') ?? undefined
         return HttpResponse.json(
@@ -120,7 +120,7 @@ describe('AssignCustodyDialog (e19-t03)', () => {
     useEmployeeHandler()
     let postedBody: Record<string, unknown> | undefined
     server.use(
-      http.post(`${API_BASE_URL}/custodies/assign`, async ({ request }) => {
+      http.post(`${API_BASE_URL}/assets/${ASSET_ID}/custody-assignment`, async ({ request }) => {
         postedBody = (await request.json()) as Record<string, unknown>
         return HttpResponse.json({}, { status: 201 })
       }),

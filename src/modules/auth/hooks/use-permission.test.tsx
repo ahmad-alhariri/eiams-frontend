@@ -13,18 +13,25 @@ import {
 } from '@/modules/auth/hooks/use-permission'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/auth.api-types'
 
 const sessionFixture: SessionResponse = {
   user: {
     userId: '10000000-0000-4000-8000-000000000001',
     username: 'warehouse.manager',
     displayName: 'مدير المستودع',
-    status: 'Active',
-    rowVersion: 1,
   },
-  permissionCodes: ['document.view', 'document.create', 'inventory.view', 'future.backend.code'],
-  availableScopes: [],
+  permissionCodes: [
+    'warehouse-documents:view',
+    'warehouse-documents:create',
+    'inventory:view',
+    'future.backend.code',
+  ],
+  activeScope: {
+    scopeType: 'Warehouse',
+    scopeId: '20000000-0000-4000-8000-000000000001',
+    displayName: 'المستودع المركزي',
+  },
   scopeState: 'Selected',
   activeRoles: [],
 }
@@ -40,19 +47,27 @@ function createQueryWrapper() {
 
 describe('permission predicates', () => {
   it('checks exact typed codes while ignoring unknown server-returned values', () => {
-    expect(hasPermission(sessionFixture.permissionCodes, 'document.view')).toBe(true)
-    expect(hasPermission(sessionFixture.permissionCodes, 'document.post')).toBe(false)
-    expect(hasPermission(['future.backend.code'], 'document.view')).toBe(false)
+    expect(hasPermission(sessionFixture.permissionCodes, 'warehouse-documents:view')).toBe(true)
+    expect(hasPermission(sessionFixture.permissionCodes, 'warehouse-documents:post')).toBe(false)
+    expect(hasPermission(['future.backend.code'], 'warehouse-documents:view')).toBe(false)
   })
 
   it('keeps all and any semantics distinct, including empty metadata', () => {
-    const permissions = ['document.view', 'document.create'] as const
+    const permissions = ['warehouse-documents:view', 'warehouse-documents:create'] as const
 
-    expect(hasAllPermissions(permissions, ['document.view', 'document.create'])).toBe(true)
-    expect(hasAllPermissions(permissions, ['document.view', 'document.post'])).toBe(false)
+    expect(
+      hasAllPermissions(permissions, ['warehouse-documents:view', 'warehouse-documents:create']),
+    ).toBe(true)
+    expect(
+      hasAllPermissions(permissions, ['warehouse-documents:view', 'warehouse-documents:post']),
+    ).toBe(false)
     expect(hasAllPermissions(permissions, [])).toBe(true)
-    expect(hasAnyPermission(permissions, ['document.post', 'document.create'])).toBe(true)
-    expect(hasAnyPermission(permissions, ['document.post', 'audit.view'])).toBe(false)
+    expect(
+      hasAnyPermission(permissions, ['warehouse-documents:post', 'warehouse-documents:create']),
+    ).toBe(true)
+    expect(hasAnyPermission(permissions, ['warehouse-documents:post', 'audit-logs:view'])).toBe(
+      false,
+    )
     expect(hasAnyPermission(permissions, [])).toBe(false)
   })
 
@@ -72,18 +87,20 @@ describe('usePermission', () => {
 
     const { result } = renderHook(() => usePermission(), { wrapper })
 
-    expect(result.current.has('document.view')).toBe(true)
-    expect(result.current.hasAll(['document.view', 'document.create'])).toBe(true)
-    expect(result.current.hasAny(['audit.view', 'inventory.view'])).toBe(true)
+    expect(result.current.has('warehouse-documents:view')).toBe(true)
+    expect(result.current.hasAll(['warehouse-documents:view', 'warehouse-documents:create'])).toBe(
+      true,
+    )
+    expect(result.current.hasAny(['audit-logs:view', 'inventory:view'])).toBe(true)
 
     client.setQueryData<SessionResponse>(authSessionQueryKey, {
       ...sessionFixture,
-      permissionCodes: ['audit.view'],
+      permissionCodes: ['audit-logs:view'],
     })
 
     await waitFor(() => {
-      expect(result.current.has('document.view')).toBe(false)
-      expect(result.current.has('audit.view')).toBe(true)
+      expect(result.current.has('warehouse-documents:view')).toBe(false)
+      expect(result.current.has('audit-logs:view')).toBe(true)
     })
   })
 
@@ -96,7 +113,7 @@ describe('usePermission', () => {
 
     client.setQueryData<SessionResponse>(authSessionQueryKey, {
       ...sessionFixture,
-      permissionCodes: ['document.view'],
+      permissionCodes: ['warehouse-documents:view'],
     })
 
     await waitFor(() => expect(result.current).toBe(false))

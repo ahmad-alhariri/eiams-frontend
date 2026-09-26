@@ -38,14 +38,14 @@ const WAREHOUSE_ID = fixtureUuid(30)
 const DOMAIN_ID = fixtureUuid(20)
 
 const ALL_DOCUMENT_CODES = [
-  'document.view',
-  'document.update',
-  'document.submit',
-  'document.post',
-  'document.reject',
-  'document.revise',
-  'document.cancel',
-  'document.reverse',
+  'warehouse-documents:view',
+  'warehouse-documents:edit',
+  'warehouse-documents:submit',
+  'warehouse-documents:post',
+  'warehouse-documents:reject',
+  'warehouse-documents:revise',
+  'warehouse-documents:cancel',
+  'warehouse-documents:reverse',
 ]
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
@@ -261,7 +261,7 @@ describe('useDocumentPolicyGate', () => {
     )
 
     const { result } = renderHook(() => useDocumentPolicyGate(DOCUMENT_ID), {
-      wrapper: createWrapper(['document.view']),
+      wrapper: createWrapper(['warehouse-documents:view']),
     })
 
     await waitFor(() => expect(result.current.policy).not.toBeNull())

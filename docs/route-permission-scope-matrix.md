@@ -50,43 +50,63 @@ UI must consume.
 
 ## Canonical permission vocabulary (v1)
 
-Naming convention: `resource.verb`, all lower case, ASCII. Verbs:
-`view`, `create`, `update`, `manage` (full CRUD on master data),
+**Canonical notation (Pkg A ratification): COLON form.** The backend is the
+authoritative source of permission codes; every code uses `resource:verb`
+(lowercase ASCII), and the frontend `src/config/permissions.ts` mirrors the
+backend verbatim. The `resource.verb` dotted form used below is retained only
+as the historical frontend draft and is superseded by the colon codes in the
+table. Verbs: `view`, `create`, `edit`, `manage` (master data / full CRUD),
 `submit`, `post`, `reject`, `revise`, `cancel`, `reverse` (document
-actions), `plan`, `enter`, `complete`, `close` (count), `assign`
-(custody).
+actions), `plan`, `enter-actual`, `complete`, `close`, `review` (count),
+`assign`/`manage` (custody).
 
 | Code | Primary scope | Meaning |
 | --- | --- | --- |
-| `catalog.view` | Enterprise | Read material domain/category/family/material/unit-of-measure. |
-| `catalog.manage` | Enterprise | Create/update/deactivate catalog entities. |
-| `organization.view` | Enterprise | Read sites, organizational units, employees, external parties/counterparts. |
-| `organization.manage` | Enterprise | Create/update/deactivate organization references and counterparts. |
-| `warehouse.view` | Any scope | Read warehouses, capabilities, material settings. |
-| `warehouse.manage` | Enterprise | Create/update warehouses, capability operations, material settings. |
-| `inventory.view` | Any scope | Read inventory balances and the stock-movement ledger. |
-| `document.view` | Any scope | Read documents: list/detail, lines, attachments, lifecycle history, policy. |
-| `document.create` | Document warehouse scope | Start a new document in a warehouse scope. |
-| `document.update` | Document warehouse scope | Edit Draft content (lines, petals, paper refs, attachments incl. signed copy). |
-| `document.submit` | Document warehouse scope | `Draft → Submitted`. |
-| `document.post` | Document warehouse scope | `Submitted → Posted` (generic) or `Draft → Posted` (adjustment); requires the signed-original gate. |
-| `document.reject` | Document warehouse scope | `Submitted → Rejected` (manager review). |
-| `document.revise` | Document warehouse scope | `Rejected → Draft` (restore editability). |
-| `document.cancel` | Document warehouse scope | `Draft/Submitted/Rejected → Cancelled` (pre-post). |
-| `document.reverse` | Document warehouse scope | `Posted → Reversed` via a compensating document; requires documented reason. |
-| `count.view` | Any scope | Read count sessions, lines, variance. |
-| `count.plan` | Count warehouse scope | Create a count session. |
-| `count.enter` | Count warehouse scope | Enter actual quantities/variance reasons on count lines. |
-| `count.complete` | Count warehouse scope | Mark the session `Completed`. |
-| `count.close` | Count warehouse scope | Review variances and close (`Closed`). |
-| `asset.view` | Any scope | Read asset registry/detail, derived status, movement history, custody timeline. |
-| `custody.assign` | Asset warehouse scope | Assign personal custody to an employee; transfer/return custody rows. |
-| `audit.view` | Any scope | Read the (redacted) audit log list and detail. |
-| `report.view` | Any scope | Read dashboards/KPIs/report pages. |
-| `admin.user.view` | Enterprise | Read user list/details. |
-| `admin.user.manage` | Enterprise | Create/update accounts and replace role-scope assignments. |
-| `admin.role.view` | Enterprise | Read roles and the permission catalog. |
-| `admin.role.manage` | Enterprise | Create/update roles and grant permissions. |
+| `materials:view` | Enterprise | Read material domain/category/family/material/unit-of-measure. |
+| `materials:manage` | Enterprise | Create/update/deactivate materials and catalog entities. |
+| `units-of-measure:view` | Enterprise | Read units of measure. |
+| `units-of-measure:manage` | Enterprise | Create/update units of measure. |
+| `material-domains:manage` | Enterprise | Create/update material domains. |
+| `material-categories:manage` | Enterprise | Create/update material categories. |
+| `material-families:manage` | Enterprise | Create/update material families. |
+| `organizations:view` | Enterprise | Read sites, organizational units, employees, external parties/counterparts. |
+| `organizations:manage` | Enterprise | Create/update organization references and counterparts. |
+| `sites:view` | Enterprise | Read sites. |
+| `sites:manage` | Enterprise | Create/update sites. |
+| `org-units:view` | Enterprise | Read organizational units. |
+| `org-units:manage` | Enterprise | Create/update organizational units. |
+| `employees:view` | Enterprise | Read employees. |
+| `employees:manage` | Enterprise | Create/update employees. |
+| `counterparts:view` | Enterprise | Read external parties/counterparts. |
+| `counterparts:manage` | Enterprise | Create/update external parties/counterparts. |
+| `warehouses:view` | Any scope | Read warehouses, capabilities, material settings. |
+| `warehouses:manage` | Enterprise | Create/update warehouses, capability operations, material settings. |
+| `warehouse-capabilities:manage` | Enterprise | Create/update warehouse capabilities. |
+| `warehouse-material-settings:manage` | Enterprise | Create/update warehouse material settings. |
+| `inventory:view` | Any scope | Read inventory balances and the stock-movement ledger. |
+| `warehouse-documents:view` | Any scope | Read documents: list/detail, lines, attachments, lifecycle history, policy. |
+| `warehouse-documents:create` | Document warehouse scope | Start a new document in a warehouse scope. |
+| `warehouse-documents:edit` | Document warehouse scope | Edit Draft content (lines, petals, paper refs, attachments incl. signed copy). |
+| `warehouse-documents:submit` | Document warehouse scope | `Draft → Submitted`. |
+| `warehouse-documents:post` | Document warehouse scope | `Submitted → Posted` (generic) or `Draft → Posted` (adjustment); requires the signed-original gate. |
+| `warehouse-documents:reject` | Document warehouse scope | `Submitted → Rejected` (manager review). |
+| `warehouse-documents:revise` | Document warehouse scope | `Rejected → Draft` (restore editability). |
+| `warehouse-documents:cancel` | Document warehouse scope | `Draft/Submitted/Rejected → Cancelled` (pre-post). |
+| `warehouse-documents:reverse` | Document warehouse scope | `Posted → Reversed` via a compensating document; requires documented reason. |
+| `inventory-counts:view` | Any scope | Read count sessions, lines, variance. |
+| `inventory-counts:plan` | Count warehouse scope | Create a count session. |
+| `inventory-counts:enter-actual` | Count warehouse scope | Enter actual quantities/variance reasons on count lines. |
+| `inventory-counts:complete` | Count warehouse scope | Mark the session `Completed`. |
+| `inventory-counts:close` | Count warehouse scope | Review variances and close (`Closed`). |
+| `assets:view` | Any scope | Read asset registry/detail, derived status, movement history, custody timeline. |
+| `custody:view` | Any scope | Read custody rows/timeline. |
+| `custody:manage` | Asset warehouse scope | Assign personal custody to an employee; transfer/return custody rows. |
+| `audit-logs:view` | Any scope | Read the (redacted) audit log list and detail. |
+| `reports:view` | Any scope | Read dashboards/KPIs/report pages. |
+| `users:view` | Enterprise | Read user list/details. |
+| `users:manage` | Enterprise | Create/update accounts and replace role-scope assignments. |
+| `roles:view` | Enterprise | Read roles and the permission catalog. |
+| `roles:manage` | Enterprise | Create/update roles and grant permissions. |
 
 Semantics notes:
 
@@ -177,10 +197,10 @@ administration UI can edit them; the matrix below is the v1 baseline):
 | Role code | Purpose | Permission codes |
 | --- | --- | --- |
 | `SYSTEM_ADMIN` | Full administration | All v1 codes. |
-| `DATA_MANAGER` | Master-data steward (enterprise) | `catalog.manage`, `catalog.view`, `organization.manage`, `organization.view`, `warehouse.manage`, `warehouse.view`, `admin.user.view`, `admin.role.view` + `admin.user.manage`, `admin.role.manage`. |
-| `WH_MGR` | Warehouse manager (can be granted at Warehouse, Site, or Enterprise scope) | All engine codes: `catalog.view`, `organization.view`, `warehouse.view`, `inventory.view`, `document.view/create/update/submit/post/reject/revise/cancel/reverse`, `count.view/plan/enter/complete/close`, `asset.view`, `custody.assign`, `report.view`. |
-| `WH_KEEPER` | Warehouse keeper | `catalog.view`, `organization.view`, `warehouse.view`, `inventory.view`, `document.view/create/update/submit/revise/cancel`, `count.view/enter`, `asset.view`, `custody.assign`, `report.view`. |
-| `AUDITOR` | Read-only auditor | `inventory.view`, `document.view`, `count.view`, `asset.view`, `audit.view`, `report.view` (+ `catalog.view`, `organization.view`, `warehouse.view` for context). |
+| `DATA_MANAGER` | Master-data steward (enterprise) | `materials:view`, `materials:manage`, `units-of-measure:view`, `units-of-measure:manage`, `material-domains:manage`, `material-categories:manage`, `material-families:manage`, `organizations:view`, `organizations:manage`, `sites:view`, `sites:manage`, `org-units:view`, `org-units:manage`, `employees:view`, `employees:manage`, `counterparts:view`, `counterparts:manage`, `warehouses:view`, `warehouses:manage`, `warehouse-capabilities:manage`, `warehouse-material-settings:manage`, `users:view`, `roles:view` + `users:manage`, `roles:manage`. |
+| `WH_MGR` | Warehouse manager (can be granted at Warehouse, Site, or Enterprise scope) | All engine codes: `materials:view`, `organizations:view`, `warehouses:view`, `inventory:view`, `warehouse-documents:view/create/edit/submit/post/reject/revise/cancel/reverse`, `inventory-counts:view/plan/enter-actual/complete/close`, `assets:view`, `custody:manage`, `reports:view`. |
+| `WH_KEEPER` | Warehouse keeper | `materials:view`, `organizations:view`, `warehouses:view`, `inventory:view`, `warehouse-documents:view/create/edit/submit/revise/cancel`, `inventory-counts:view/enter-actual`, `assets:view`, `custody:manage`, `reports:view`. |
+| `AUDITOR` | Read-only auditor | `inventory:view`, `warehouse-documents:view`, `inventory-counts:view`, `assets:view`, `audit-logs:view`, `reports:view` (+ `materials:view`, `organizations:view`, `warehouses:view` for context). |
 
 Notes:
 
@@ -247,6 +267,23 @@ Notes:
 | `e01.7` | Ratify codes, seeds, and guard vocabulary against the backend. |
 | `e24-t0x` | Integration: guard matrix, scope-switch re-eval, 403 vs 401, keepers vs managers on adjustment. |
 
+## Ratification note (Pkg A)
+
+Backend `resource:verb` COLON notation is canonical; both the frontend
+(`src/config/permissions.ts`) and this decision now use it verbatim. To align
+the verb sets, 13 backend codes were added so the frontend document lifecycle
+is fully covered. Resolved mappings (frontend dotted draft → backend colon):
+
+- `document.post` → `warehouse-documents:post`
+- `document.revise` → `warehouse-documents:revise`
+- `count.complete` / `count.close` → `inventory-counts:complete` / `inventory-counts:close`
+- `custody.assign` → `custody:manage`
+- The `:review` codes (`warehouse-documents:review`, `inventory-counts:review`)
+  were added on the backend and supersede the earlier frontend draft verbs;
+  they are part of the canonical set above.
+
+Status of D-RBAC-01 remains **Approved**.
+
 ## Rejected alternatives
 
 | Alternative | Reason rejected |
@@ -260,9 +297,10 @@ Notes:
 
 ## Explicitly owned remaining decisions
 
-- `permissionCodes` remain an open string array (D-AUTH-01) with the canonical
-  table above as the approved baseline; converting the array to a closed enum
-  is deferred to ratification.
+- `permissionCodes` remain an open string array at runtime (D-AUTH-01) with the
+  canonical colon table above as the approved baseline. The OpenAPI
+  `permissionCodes` schemas now carry the full colon `enum` as the v1
+  documentation/validation baseline; runtime arrays stay open per D-AUTH-01.
 - Backend seeds, actor-scope nuance (a keeper canceling own vs other's draft),
   and remaining .NET string parity: `e01.7` ratification.
 - The exact rendering of the Arabic denial pages (copy, recovery paths):

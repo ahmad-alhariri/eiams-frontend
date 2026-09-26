@@ -1,4 +1,4 @@
-import type { Site } from '@/shared/types/generated/eiams-v1'
+import type { Site } from '@/modules/organization/types/organization.api-types'
 
 import {
   createEntitySelectorAdapter,

@@ -79,7 +79,7 @@ export default function PendingCustodyListPage() {
   )
 
   const custodiesQuery = useCustodiesQuery(filters)
-  const canAssign = has('custody.assign')
+  const canAssign = has('custody:manage')
 
   const columns = useMemo(
     () =>

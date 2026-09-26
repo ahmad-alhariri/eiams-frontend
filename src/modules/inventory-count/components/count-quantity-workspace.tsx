@@ -39,7 +39,7 @@ export function CountQuantityWorkspace({
   countRowVersion: number
 }) {
   const can = usePermission()
-  const canEnter = can.has('count.enter')
+  const canEnter = can.has('inventory-counts:enter-actual')
   const linesQuery = useCountLines(countId, { pageIndex: 0, pageSize: 200 })
   const updateMutation = useUpdateCountLinesMutation(countId)
 

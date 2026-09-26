@@ -1,6 +1,6 @@
 import { PERMISSION_CODES } from '@/config/permissions'
 import type { AppEnvironment } from '@/config/env'
-import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse } from '@/modules/auth/types/auth.api-types'
 
 /**
  * Dev-only session fixture (transport boundary).
@@ -15,6 +15,9 @@ import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
  * The fixture grants the complete PERMISSION_CODES vocabulary under one
  * selected Enterprise scope. To test a restricted account, trim
  * `permissionCodes` or scope the session to a Site/Warehouse scope.
+ *
+ * D-SRS-01 singular session: required `activeScope`, `scopeState` of
+ * `Selected` only here — no `availableScopes`, no `SelectionRequired`.
  */
 
 const DEV_USER_ID = '00000000-0000-0000-0000-000000000001'
@@ -41,17 +44,8 @@ export function createDevSession(): AuthTokenResponse {
         userId: DEV_USER_ID,
         username: 'dev',
         displayName: 'مطور النظام',
-        status: 'Active',
-        rowVersion: 0,
       },
       activeRoles: [{ roleId: DEV_ROLE_ID, code: 'sysadmin', nameAr: 'مدير النظام' }],
-      availableScopes: [
-        {
-          scopeId: DEV_SCOPE_ID,
-          scopeType: 'Enterprise',
-          displayName: 'نطاق التطوير',
-        },
-      ],
       activeScope: {
         scopeId: DEV_SCOPE_ID,
         scopeType: 'Enterprise',

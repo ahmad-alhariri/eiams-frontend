@@ -3,17 +3,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { organizationService } from '@/modules/organization/services/organization.service'
 import { queryKeys } from '@/shared/services/query-keys'
-import type { ExternalPartyUpsertRequest } from '@/shared/types/generated/eiams-v1'
+import type { ExternalPartyUpsertRequest } from '@/modules/organization/types/organization.types'
 
 const ORGANIZATION_RESOURCE = 'organization'
 
 type UpdateExternalPartyVariables = {
   externalPartyId: string
   request: ExternalPartyUpsertRequest
-}
-
-function createIdempotencyKey(): string {
-  return crypto.randomUUID()
 }
 
 function useInvalidateExternalParties() {
@@ -53,10 +49,8 @@ export function useUpdateExternalPartyMutation() {
 export function useDeactivateExternalPartyMutation() {
   const invalidate = useInvalidateExternalParties()
   return useMutation({
-    mutationFn: (externalPartyId: string) =>
-      organizationService.deactivateExternalParty(externalPartyId, {
-        headers: { 'Idempotency-Key': createIdempotencyKey() },
-      }),
+    mutationFn: ({ externalPartyId, rowVersion }: { externalPartyId: string; rowVersion: number }) =>
+      organizationService.setExternalPartyStatus(externalPartyId, 'Inactive', rowVersion),
     onSuccess: invalidate,
   })
 }

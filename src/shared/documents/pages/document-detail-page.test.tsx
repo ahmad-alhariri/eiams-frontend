@@ -41,14 +41,14 @@ const API_BASE_URL = '/api/v1'
 const DOCUMENT_ID = '00000000-0000-4000-8000-0000000002bc'
 
 const ALL_DOCUMENT_CODES = [
-  'document.view',
-  'document.update',
-  'document.submit',
-  'document.post',
-  'document.reject',
-  'document.revise',
-  'document.cancel',
-  'document.reverse',
+  'warehouse-documents:view',
+  'warehouse-documents:edit',
+  'warehouse-documents:submit',
+  'warehouse-documents:post',
+  'warehouse-documents:reject',
+  'warehouse-documents:revise',
+  'warehouse-documents:cancel',
+  'warehouse-documents:reverse',
 ]
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
@@ -388,7 +388,7 @@ describe('DocumentDetailPage', () => {
     )
 
     render(<DocumentDetailPage />, {
-      wrapper: createWrapper(`/documents/opening/${DOCUMENT_ID}`, ['document.view']),
+      wrapper: createWrapper(`/documents/opening/${DOCUMENT_ID}`, ['warehouse-documents:view']),
     })
 
     await screen.findByRole('heading', { level: 1, name: /تفاصيل سند الفتح الافتتاحي/ })
@@ -602,7 +602,7 @@ describe('DocumentDetailPage', () => {
     )
 
     render(<DocumentDetailPage />, {
-      wrapper: createWrapper(`/documents/receiving/${DOCUMENT_ID}`, ['document.view']),
+      wrapper: createWrapper(`/documents/receiving/${DOCUMENT_ID}`, ['warehouse-documents:view']),
     })
 
     expect(

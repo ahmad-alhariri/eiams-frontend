@@ -31,7 +31,7 @@ function EmployeeDetailPage() {
   const submitFeedback = useSubmitFeedback()
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const employee = employeeQuery.data
-  const canManage = has('organization.manage')
+  const canManage = has('organizations:manage')
   const returnToEmployees = useCallback(
     () => navigate(ROUTE_PATHS.organizationEmployees),
     [navigate],

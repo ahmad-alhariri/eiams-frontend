@@ -6,6 +6,7 @@ import {
   materialFamilySchema,
   type MaterialFamilyFormValues,
 } from '@/modules/catalog/schemas/material-family.schemas'
+import type { MaterialCategory, MaterialFamily } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -20,10 +21,9 @@ import {
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { MaterialCategory, MaterialFamily } from '@/shared/types/generated/eiams-v1'
 
 const EMPTY_VALUES: MaterialFamilyFormValues = {
-  categoryId: '',
+  materialCategoryId: '',
   code: '',
   nameAr: '',
   status: 'Active',
@@ -63,7 +63,7 @@ export function MaterialFamilyFormDialog({
   useEffect(() => {
     if (!open) return
     form.reset({
-      categoryId: family?.category.id ?? '',
+      materialCategoryId: family?.materialCategory.id ?? '',
       code: family?.code ?? '',
       nameAr: family?.nameAr ?? '',
       status: family?.status ?? 'Active',
@@ -71,8 +71,12 @@ export function MaterialFamilyFormDialog({
   }, [family, form, open])
 
   const submit = async (values: MaterialFamilyFormValues) => {
-    if (!activeCategories.some((category) => category.categoryId === values.categoryId)) {
-      form.setError('categoryId', { message: 'اختر تصنيفاً نشطاً للعائلة.' })
+    if (
+      !activeCategories.some(
+        (category) => category.materialCategoryId === values.materialCategoryId,
+      )
+    ) {
+      form.setError('materialCategoryId', { message: 'اختر تصنيفاً نشطاً للعائلة.' })
       return
     }
 
@@ -82,7 +86,7 @@ export function MaterialFamilyFormDialog({
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['categoryId', 'code', 'nameAr', 'status'],
+        schemaKeys: ['materialCategoryId', 'code', 'nameAr', 'status'],
       })
     }
   }
@@ -165,7 +169,7 @@ export function MaterialFamilyFormDialog({
             </div>
             <FormField
               control={form.control}
-              name="categoryId"
+              name="materialCategoryId"
               render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>التصنيف</FormLabel>
@@ -177,15 +181,19 @@ export function MaterialFamilyFormDialog({
                     <FormControl>
                       <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
                         <SelectValue>
-                          {activeCategories.find((category) => category.categoryId === field.value)
-                            ?.nameAr ?? 'اختر التصنيف'}
+                          {activeCategories.find(
+                            (category) => category.materialCategoryId === field.value,
+                          )?.nameAr ?? 'اختر التصنيف'}
                         </SelectValue>
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {activeCategories.map((category) => (
-                        <SelectItem key={category.categoryId} value={category.categoryId}>
-                          {category.pathDisplay ?? category.nameAr}
+                        <SelectItem
+                          key={category.materialCategoryId}
+                          value={category.materialCategoryId}
+                        >
+                          {category.nameAr}
                         </SelectItem>
                       ))}
                     </SelectContent>

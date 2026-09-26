@@ -1,10 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
-import { useCallback, useMemo } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useCallback, useMemo, useSyncExternalStore } from 'react'
 
 import type { PermissionCode } from '@/config/permissions'
 import { ROUTE_METADATA, type RouteKey } from '@/config/routes'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/auth.api-types'
 
 export interface PermissionPredicates {
   has: (code: PermissionCode) => boolean
@@ -54,17 +54,25 @@ export function hasRoutePermission(permissionCodes: readonly string[], route: Ro
 }
 
 /**
- * Query-backed permission predicates for route, navigation, and action
- * visibility. This observer never fetches or caches a second session; the
- * application hydration flow owns the sole session query.
+ * Reads the cached session projection and re-renders this hook whenever the
+ * cache entry changes (see `useCachedSession` in route-guards for the same
+ * rationale and the TanStack-canonical pattern via `useSyncExternalStore`).
  */
 export function usePermission(): PermissionPredicates {
-  const { data: session } = useQuery<SessionResponse>({
-    queryKey: authSessionQueryKey,
-    queryFn: () => Promise.reject(new Error('Session hydration is owned by the application root.')),
-    enabled: false,
-    staleTime: Number.POSITIVE_INFINITY,
-  })
+  const queryClient = useQueryClient()
+  const subscribe = (onChange: () => void) =>
+    queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === 'updated' || event.type === 'added' || event.type === 'removed') {
+        const updatedKey = (event as { query: { queryKey: readonly unknown[] } }).query.queryKey
+        if (updatedKey[0] === authSessionQueryKey[0] && updatedKey[1] === authSessionQueryKey[1]) {
+          onChange()
+        }
+      }
+    })
+  const session = useSyncExternalStore(
+    subscribe,
+    () => queryClient.getQueryData<SessionResponse>(authSessionQueryKey),
+  )
 
   const effectivePermissions = useMemo(() => new Set(session?.permissionCodes ?? []), [session])
 

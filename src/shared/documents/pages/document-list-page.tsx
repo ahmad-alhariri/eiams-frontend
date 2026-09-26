@@ -197,7 +197,7 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
         title={ROUTE_METADATA[routeEntry.routeKey].labelAr}
         subtitle={`سجل سندات هذا النوع ضمن نطاق العمل الحالي، مع بحث نصي وتصفية حسب الحالة والمستودع.`}
         actions={
-          has('document.create') ? (
+          has('warehouse-documents:create') ? (
             <Button
               type="button"
               nativeButton={false}

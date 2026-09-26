@@ -1,5 +1,5 @@
 import { buildHierarchyForest, type HierarchyTreeNode } from '@/shared/ui/hierarchy-tree.model'
-import type { MaterialCategory } from '@/shared/types/generated/eiams-v1'
+import type { MaterialCategory } from '@/modules/catalog/types/catalog.types'
 
 export type MaterialCategoryTreeNode = {
   category: MaterialCategory
@@ -29,17 +29,17 @@ export function buildMaterialCategoryTree(
 ): MaterialCategoryDomainTree[] {
   const byDomain = new Map<string, MaterialCategory[]>()
   for (const category of categories) {
-    const domainCategories = byDomain.get(category.domain.id) ?? []
+    const domainCategories = byDomain.get(category.materialDomainId) ?? []
     domainCategories.push(category)
-    byDomain.set(category.domain.id, domainCategories)
+    byDomain.set(category.materialDomainId, domainCategories)
   }
 
   const domains = new Map<string, MaterialCategoryDomainTree>()
   for (const category of categories) {
-    if (!domains.has(category.domain.id)) {
-      domains.set(category.domain.id, {
-        domainId: category.domain.id,
-        domainName: category.domain.displayName,
+    if (!domains.has(category.materialDomainId)) {
+      domains.set(category.materialDomainId, {
+        domainId: category.materialDomainId,
+        domainName: category.materialDomain.displayName,
         nodes: [],
       })
     }
@@ -53,7 +53,7 @@ export function buildMaterialCategoryTree(
       ...toCategoryNodes(
         buildHierarchyForest(
           domainCategories,
-          (category) => category.categoryId,
+          (category) => category.materialCategoryId,
           (category) => category.parentCategoryId,
         ),
       ),
@@ -71,33 +71,30 @@ export function filterMaterialCategories(
   const normalizedSearch = search.trim().toLocaleLowerCase('ar')
   if (normalizedSearch === '') return categories
 
-  const categoriesById = new Map(categories.map((category) => [category.categoryId, category]))
+  const categoriesById = new Map(
+    categories.map((category) => [category.materialCategoryId, category]),
+  )
   const includedIds = new Set<string>()
 
   for (const category of categories) {
-    const matches = [
-      category.nameAr,
-      category.code,
-      category.pathDisplay,
-      category.domain.displayName,
-    ]
-      .filter((value): value is string => value !== undefined)
+    const matches = [category.nameAr, category.code, category.materialDomain.displayName]
+      .filter((value): value is string => value !== undefined && value !== null)
       .some((value) => value.toLocaleLowerCase('ar').includes(normalizedSearch))
 
     if (!matches) continue
 
     let current: MaterialCategory | undefined = category
     const pathIds = new Set<string>()
-    while (current !== undefined && !pathIds.has(current.categoryId)) {
-      includedIds.add(current.categoryId)
-      pathIds.add(current.categoryId)
+    while (current !== undefined && !pathIds.has(current.materialCategoryId)) {
+      includedIds.add(current.materialCategoryId)
+      pathIds.add(current.materialCategoryId)
 
-      const parentId: string | undefined = current.parentCategoryId
+      const parentId: string | null | undefined = current.parentCategoryId
       const parent: MaterialCategory | undefined =
-        parentId === undefined ? undefined : categoriesById.get(parentId)
-      current = parent?.domain.id === current.domain.id ? parent : undefined
+        parentId === undefined || parentId === null ? undefined : categoriesById.get(parentId)
+      current = parent?.materialDomainId === current.materialDomainId ? parent : undefined
     }
   }
 
-  return categories.filter((category) => includedIds.has(category.categoryId))
+  return categories.filter((category) => includedIds.has(category.materialCategoryId))
 }

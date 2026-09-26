@@ -126,7 +126,7 @@ function AssetDisposalFormInner({
     [createMutation, form, navigate],
   )
 
-  if (!has('document.create')) {
+  if (!has('warehouse-documents:create')) {
     return (
       <ContentCard title="غير مصرّح">
         <p role="alert" className="text-sm text-destructive">

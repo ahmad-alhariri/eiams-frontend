@@ -17,7 +17,7 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 }))
 vi.mock('@/modules/auth/hooks/use-permission', () => ({
   usePermission: () => ({
-    has: (code: string) => code === 'organization.manage' && permissions.canManage,
+    has: (code: string) => code === 'organizations:manage' && permissions.canManage,
   }),
 }))
 

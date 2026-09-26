@@ -1,4 +1,4 @@
-import { IconArchive, IconEdit, IconPlus } from '@tabler/icons-react'
+import { IconEdit, IconPlus } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
@@ -13,17 +13,16 @@ import {
   useUnitsOfMeasureQuery,
 } from '@/modules/catalog/hooks/use-catalog-queries'
 import {
-  toMaterialUnitConversionCreateRequest,
-  toMaterialUnitConversionUpdateRequest,
+  toMaterialUnitConversionRequest,
   type MaterialUnitConversionFormValues,
 } from '@/modules/catalog/schemas/material-unit-conversion.schemas'
+import type { Material, MaterialUnitConversion } from '@/modules/catalog/types/catalog.types'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { dataTableFeatures, DataTable } from '@/shared/ui/data-table'
 import { toast } from '@/shared/ui/toast-manager'
-import type { Material, MaterialUnitConversion } from '@/shared/types/generated/eiams-v1'
 
 const conversionColumnHelper = createColumnHelper<
   typeof dataTableFeatures,
@@ -37,7 +36,7 @@ const conversionColumnHelper = createColumnHelper<
  */
 export function MaterialUnitConversions({ material }: { material: Material }) {
   const { has } = usePermission()
-  const canManage = has('catalog.manage')
+  const canManage = has('materials:manage')
   const conversionsQuery = useMaterialUnitConversionsQuery(material.materialId)
   const unitsQuery = useUnitsOfMeasureQuery()
   const createMutation = useCreateMaterialUnitConversionMutation()
@@ -46,14 +45,16 @@ export function MaterialUnitConversions({ material }: { material: Material }) {
     MaterialUnitConversion | null | undefined
   >(undefined)
 
-  const activeFromUnitIds = useMemo(
+  const conversions = conversionsQuery.data?.items ?? []
+
+  const activeUnitIds = useMemo<ReadonlySet<string>>(
     () =>
       new Set(
-        (conversionsQuery.data ?? [])
+        conversions
           .filter((conversion) => conversion.status === 'Active')
-          .map((conversion) => conversion.fromUnit.id),
+          .map((conversion) => conversion.unit.id),
       ),
-    [conversionsQuery.data],
+    [conversions],
   )
   const openCreate = useCallback(() => setDialogConversion(null), [])
   const openEdit = useCallback(
@@ -71,20 +72,16 @@ export function MaterialUnitConversions({ material }: { material: Material }) {
         if (conversion === null) {
           await createMutation.mutateAsync({
             materialId: material.materialId,
-            request: toMaterialUnitConversionCreateRequest(values),
+            request: toMaterialUnitConversionRequest(values, material.unitId, null),
           })
           toast.success({ title: 'تمت إضافة وحدة بديلة للمادة.' })
         } else {
           await updateMutation.mutateAsync({
             materialId: material.materialId,
-            conversionId: conversion.conversionId,
-            request: toMaterialUnitConversionUpdateRequest(values, conversion),
+            conversionId: conversion.materialUnitConversionId,
+            request: toMaterialUnitConversionRequest(values, material.unitId, conversion),
           })
-          toast.success({
-            title: conversion.usedInPostedDocuments
-              ? 'تمت أرشفة التحويل المستخدم.'
-              : 'تم حفظ تعديلات التحويل.',
-          })
+          toast.success({ title: 'تم حفظ تعديلات التحويل.' })
         }
         setDialogConversion(undefined)
       } catch (error: unknown) {
@@ -96,89 +93,70 @@ export function MaterialUnitConversions({ material }: { material: Material }) {
         throw error
       }
     },
-    [createMutation, dialogConversion, material.materialId, updateMutation],
+    [createMutation, dialogConversion, material.materialId, material.unitId, updateMutation],
   )
 
   const columns = useMemo(
     () =>
       conversionColumnHelper.columns([
-        conversionColumnHelper.accessor((conversion) => conversion.fromUnit.displayName, {
-          id: 'fromUnit',
+        conversionColumnHelper.accessor((conversion) => conversion.unit.displayName, {
+          id: 'unit',
           header: 'الوحدة البديلة',
           cell: ({ getValue }) => (
             <span className="font-semibold text-foreground">{getValue()}</span>
           ),
         }),
-        conversionColumnHelper.accessor('factor', {
-          id: 'factor',
-          header: `عامل التحويل إلى ${material.baseUnit.displayName}`,
+        conversionColumnHelper.accessor('conversionFactor', {
+          id: 'conversionFactor',
+          header: `عامل التحويل إلى ${material.unit.displayName}`,
           cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
-        }),
-        conversionColumnHelper.accessor((conversion) => conversion.baseUnit.displayName, {
-          id: 'baseUnit',
-          header: 'وحدة الأساس',
         }),
         conversionColumnHelper.accessor('status', {
           id: 'status',
           header: 'الحالة',
           cell: ({ getValue }) => <StatusBadge entity="record" status={getValue()} />,
         }),
-        conversionColumnHelper.accessor('usedInPostedDocuments', {
-          id: 'historicalUse',
-          header: 'استخدام مرحّل',
-          cell: ({ getValue }) => (getValue() ? 'نعم — العامل محفوظ' : 'لا'),
-        }),
         ...(canManage
           ? [
               conversionColumnHelper.display({
                 id: 'actions',
                 header: 'إجراءات',
-                cell: ({ row }) => {
-                  const conversion = row.original
-                  if (conversion.status !== 'Active') return '—'
-                  const isUsed = conversion.usedInPostedDocuments
-                  return (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={
-                        isUsed
-                          ? `أرشفة تحويل ${conversion.fromUnit.displayName}`
-                          : `تعديل تحويل ${conversion.fromUnit.displayName}`
-                      }
-                      onClick={() => openEdit(conversion)}
-                    >
-                      {isUsed ? <IconArchive aria-hidden /> : <IconEdit aria-hidden />}
-                    </Button>
-                  )
-                },
+                cell: ({ row }) => (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`تعديل التحويل ${row.original.unit.displayName}`}
+                    onClick={() => openEdit(row.original)}
+                  >
+                    <IconEdit aria-hidden />
+                  </Button>
+                ),
               }),
             ]
           : []),
       ]),
-    [canManage, material.baseUnit.displayName, openEdit],
+    [canManage, material.unit.displayName, openEdit],
   )
 
-  const conversions = conversionsQuery.data
   return (
     <>
       <ContentCard
         title="الوحدات البديلة والتحويل"
-        description={`كل وحدة بديلة تتحول مباشرةً إلى وحدة أساس المادة (${material.baseUnit.displayName}) بعامل خاص بهذه المادة، ولا يوجد عامل عام لوحدة القياس.`}
+        description={`كل وحدة بديلة تتحول مباشرةً إلى وحدة أساس المادة (${material.unit.displayName}) بعامل خاص بهذه المادة، ولا يوجد عامل عام لوحدة القياس.`}
         action={
           canManage ? (
             <Button type="button" onClick={openCreate}>
               <IconPlus aria-hidden data-icon="inline-start" />
               إضافة وحدة بديلة
             </Button>
-          ) : undefined
+          ) : null
         }
       >
         <DataTable
           columns={columns}
           data={
-            conversions === undefined
+            conversionsQuery.data === undefined
               ? conversionsQuery.isError
                 ? null
                 : undefined
@@ -190,7 +168,7 @@ export function MaterialUnitConversions({ material }: { material: Material }) {
           errorTitle="تعذّر تحميل تحويلات وحدات المادة"
           errorMessage="تعذّر جلب الوحدات البديلة لهذه المادة. حاول مرة أخرى."
           emptyTitle="لا توجد وحدات بديلة"
-          emptyDescription={`تستخدم المادة حاليًا وحدة الأساس ${material.baseUnit.displayName} فقط.`}
+          emptyDescription={`تستخدم المادة حاليًا وحدة الأساس ${material.unit.displayName} فقط.`}
           emptyAction={
             canManage ? <Button onClick={openCreate}>إضافة وحدة بديلة</Button> : undefined
           }
@@ -200,8 +178,8 @@ export function MaterialUnitConversions({ material }: { material: Material }) {
         open={dialogConversion !== undefined}
         material={material}
         conversion={dialogConversion ?? null}
-        activeFromUnitIds={activeFromUnitIds}
-        units={unitsQuery.data ?? []}
+        activeUnitIds={activeUnitIds}
+        units={unitsQuery.data?.items ?? []}
         isUnitsLoading={unitsQuery.isLoading}
         isUnitsError={unitsQuery.isError}
         isPending={createMutation.isPending || updateMutation.isPending}

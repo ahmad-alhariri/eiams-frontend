@@ -33,8 +33,8 @@ function PageWrapper({ children }: PropsWithChildren) {
     authSessionQueryKey,
     createSession({
       permissionCodes: permissions.canManage
-        ? ['admin.role.view', 'admin.role.manage']
-        : ['admin.role.view'],
+        ? ['roles:view', 'roles:manage']
+        : ['roles:view'],
     }),
   )
   return (
@@ -55,10 +55,10 @@ afterEach(() => {
 
 describe('RolePermissionsPage', () => {
   it('keeps the contract catalog visible but hides replacement controls without admin.role.manage', async () => {
-    const role = createRole({ roleId: ROLE_ID, permissionCodes: ['admin.role.view'] })
-    const viewPermission = createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
+    const role = createRole({ roleId: ROLE_ID, permissionCodes: ['roles:view'] })
+    const viewPermission = createPermission({ code: 'roles:view', nameAr: 'عرض الأدوار' })
     const managePermission = createPermission({
-      code: 'admin.role.manage',
+      code: 'roles:manage',
       nameAr: 'إدارة الأدوار',
     })
     server.use(
@@ -83,12 +83,12 @@ describe('RolePermissionsPage', () => {
     const user = userEvent.setup()
     const role = createRole({
       roleId: ROLE_ID,
-      permissionCodes: ['admin.role.view'],
+      permissionCodes: ['roles:view'],
       rowVersion: 7,
     })
-    const viewPermission = createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
+    const viewPermission = createPermission({ code: 'roles:view', nameAr: 'عرض الأدوار' })
     const managePermission = createPermission({
-      code: 'admin.role.manage',
+      code: 'roles:manage',
       nameAr: 'إدارة الأدوار',
     })
     const receivedBodies: unknown[] = []
@@ -101,7 +101,7 @@ describe('RolePermissionsPage', () => {
         receivedBodies.push(await request.json())
         return HttpResponse.json({
           ...role,
-          permissionCodes: ['admin.role.view', 'admin.role.manage'],
+          permissionCodes: ['roles:view', 'roles:manage'],
         })
       }),
     )
@@ -121,7 +121,7 @@ describe('RolePermissionsPage', () => {
         {
           code: role.code,
           nameAr: role.nameAr,
-          permissionCodes: ['admin.role.view', 'admin.role.manage'],
+          permissionCodes: ['roles:view', 'roles:manage'],
           rowVersion: 7,
           status: role.status,
         },
@@ -132,10 +132,10 @@ describe('RolePermissionsPage', () => {
   it('keeps the selected matrix and maps a contract field error inline', async () => {
     permissions.canManage = true
     const user = userEvent.setup()
-    const role = createRole({ roleId: ROLE_ID, permissionCodes: ['admin.role.view'] })
-    const viewPermission = createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
+    const role = createRole({ roleId: ROLE_ID, permissionCodes: ['roles:view'] })
+    const viewPermission = createPermission({ code: 'roles:view', nameAr: 'عرض الأدوار' })
     const managePermission = createPermission({
-      code: 'admin.role.manage',
+      code: 'roles:manage',
       nameAr: 'إدارة الأدوار',
     })
     server.use(

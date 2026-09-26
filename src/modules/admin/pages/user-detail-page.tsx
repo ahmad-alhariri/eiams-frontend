@@ -7,17 +7,17 @@ import { useNavigate, useParams } from 'react-router'
 import { ROUTE_PATHS } from '@/config/routes'
 import { UserRoleScopesEditor } from '@/modules/admin/components/user-role-scopes-editor'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { useReplaceUserRoleScopesMutation } from '@/modules/admin/hooks/use-admin-mutations'
+import { useReplaceUserRoleScopeMutation } from '@/modules/admin/hooks/use-admin-mutations'
 import {
   useRolesQuery,
   useUserQuery,
-  useUserRoleScopesQuery,
+  useUserRoleScopeQuery,
 } from '@/modules/admin/hooks/use-admin-queries'
 import {
-  toReplaceRoleScopesRequest,
-  toUserRoleScopesFormValues,
-  userRoleScopesSchema,
-  type UserRoleScopesFormValues,
+  toReplaceRoleScopeRequest,
+  toUserRoleScopeFormValues,
+  userRoleScopeSchema,
+  type UserRoleScopeFormValues,
 } from '@/modules/admin/schemas/user-role-scopes.schemas'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
@@ -31,63 +31,65 @@ import { Button } from '@/shared/ui/button'
 import { toast } from '@/shared/ui/toast-manager'
 import { formatUuid } from '@/shared/utils/format'
 
+const ROLE_SCOPE_SCHEMA_KEYS = ['roleId', 'scopeType', 'scopeId'] as const
+
 /**
- * User role-scope assignments. The v1 contract replaces the entire assignment
- * set per user (PUT). The form preserves the user summary's server-owned row
- * version and validates only the UUID/scope shape authorized by OpenAPI.
+ * User role-scope assignment. The v1 contract replaces the user's single
+ * assignment per request (PUT role-scope, D-SRS-01): exactly one role and one
+ * scope, with no row version. The form validates only the singular shape.
  */
 function UserDetailPage() {
   const { userId } = useParams<{ userId: string }>()
   const navigate = useNavigate()
   const { has } = usePermission()
-  const canManage = has('admin.user.manage')
-  const canViewRoleCatalog = has('admin.role.view')
+  const canManage = has('users:manage')
+  const canViewRoleCatalog = has('roles:view')
   const canSelectRoles = canManage && canViewRoleCatalog
 
   const userQuery = useUserQuery(userId)
-  const roleScopesQuery = useUserRoleScopesQuery(userId)
+  const roleScopeQuery = useUserRoleScopeQuery(userId)
   const rolesQuery = useRolesQuery(canSelectRoles)
-  const replaceMutation = useReplaceUserRoleScopesMutation()
+  const replaceMutation = useReplaceUserRoleScopeMutation()
   const submitFeedback = useSubmitFeedback()
-  const form = useForm<UserRoleScopesFormValues>({
-    resolver: zodResolver(userRoleScopesSchema),
-    defaultValues: { assignments: [] },
+  const form = useForm<UserRoleScopeFormValues>({
+    resolver: zodResolver(userRoleScopeSchema),
+    defaultValues: { roleId: '', scopeType: 'Enterprise', scopeId: null },
   })
   useEffect(() => {
-    if (userQuery.data === undefined || roleScopesQuery.data === undefined) return
-    form.reset(toUserRoleScopesFormValues(userQuery.data, roleScopesQuery.data))
-  }, [form, roleScopesQuery.data, userQuery.data])
+    if (roleScopeQuery.data === undefined) return
+    form.reset(toUserRoleScopeFormValues(roleScopeQuery.data))
+  }, [form, roleScopeQuery.data])
 
   const roles = useMemo(() => {
-    const roleById = new Map(
-      (roleScopesQuery.data ?? []).map((roleScope) => [roleScope.role.roleId, roleScope.role]),
-    )
-    for (const role of rolesQuery.data ?? []) roleById.set(role.roleId, role)
-    return [...roleById.values()]
-  }, [roleScopesQuery.data, rolesQuery.data])
+    const catalog = (rolesQuery.data ?? []).map((role) => ({
+      roleId: role.roleId,
+      nameAr: role.nameAr,
+    }))
+    const current = roleScopeQuery.data?.role
+    if (current !== undefined && !catalog.some((role) => role.roleId === current.roleId)) {
+      catalog.unshift(current)
+    }
+    return catalog
+  }, [roleScopeQuery.data, rolesQuery.data])
   const isLoading =
-    userQuery.isLoading || roleScopesQuery.isLoading || (canSelectRoles && rolesQuery.isLoading)
+    userQuery.isLoading || roleScopeQuery.isLoading || (canSelectRoles && rolesQuery.isLoading)
 
-  const submit = async (values: UserRoleScopesFormValues) => {
+  const submit = async (values: UserRoleScopeFormValues) => {
     if (userId === undefined) return
     form.clearErrors()
     try {
       await submitFeedback(async () => {
         await replaceMutation.mutateAsync({
           userId,
-          request: toReplaceRoleScopesRequest(values),
+          request: toReplaceRoleScopeRequest(values),
         })
-        toast.success({ title: 'تم حفظ تعيينات أدوار المستخدم.' })
+        toast.success({ title: 'تم حفظ تعيين دور المستخدم.' })
       })
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['assignments', 'rowVersion'],
+        schemaKeys: [...ROLE_SCOPE_SCHEMA_KEYS],
       })
-      const firstFieldError = apiError.fieldErrors[0]
-      if (firstFieldError !== undefined) {
-        form.setError('assignments', { type: 'server', message: firstFieldError.messageAr })
-      }
       form.setError('root.serverError', {
         type: 'server',
         message: apiError.detailAr ?? apiError.titleAr,
@@ -97,7 +99,7 @@ function UserDetailPage() {
 
   const retryUserData = () => {
     void userQuery.refetch()
-    void roleScopesQuery.refetch()
+    void roleScopeQuery.refetch()
     if (canSelectRoles) void rolesQuery.refetch()
   }
 
@@ -105,7 +107,7 @@ function UserDetailPage() {
     <div dir="rtl" className="min-w-0">
       <PageHeader
         title="تفاصيل المستخدم"
-        subtitle="إدارة أدوار المستخدم ونطاقاتها ضمن نطاق العمل الحالي."
+        subtitle="إدارة دور المستخدم ونطاقه ضمن نطاق العمل الحالي."
         toolbar={
           <Button type="button" variant="outline" onClick={() => navigate(ROUTE_PATHS.adminUsers)}>
             <IconArrowRight aria-hidden data-icon="inline-start" />
@@ -118,10 +120,10 @@ function UserDetailPage() {
         <div className="flex justify-center py-16">
           <LoadingSpinner />
         </div>
-      ) : userQuery.isError || roleScopesQuery.isError || (canSelectRoles && rolesQuery.isError) ? (
+      ) : userQuery.isError || roleScopeQuery.isError || (canSelectRoles && rolesQuery.isError) ? (
         <ErrorState
-          title="تعذّر تحميل تعيينات المستخدم"
-          description="تعذّر جلب المستخدم وأدواره من الخادم. تحقق من الاتصال ثم أعد المحاولة."
+          title="تعذّر تحميل تعيين المستخدم"
+          description="تعذّر جلب المستخدم ودوره من الخادم. تحقق من الاتصال ثم أعد المحاولة."
           action={
             <Button type="button" variant="outline" onClick={retryUserData}>
               إعادة المحاولة

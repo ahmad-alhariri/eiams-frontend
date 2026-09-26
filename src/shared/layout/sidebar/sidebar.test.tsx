@@ -113,14 +113,14 @@ describe('Sidebar', () => {
   })
 
   it('filters the canonical manifest and shows the active scope from the session cache', async () => {
-    const { queryClient } = renderSessionSidebar(sessionWith(['warehouse.view']))
+    const { queryClient } = renderSessionSidebar(sessionWith(['warehouses:view']))
 
     expect(screen.getByRole('link', { name: 'المستودعات' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'سندات الاستلام' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('نطاق العمل الحالي: المستودع المركزي')).toBeInTheDocument()
 
     act(() => {
-      queryClient.setQueryData(authSessionQueryKey, sessionWith(['document.view']))
+      queryClient.setQueryData(authSessionQueryKey, sessionWith(['warehouse-documents:view']))
     })
 
     await waitFor(() => {
@@ -227,7 +227,7 @@ describe('Sidebar', () => {
 
   it('omits restricted items and their group when a holder denies a code', () => {
     const hasPermission = (codes: readonly string[]) =>
-      codes.every((code) => code !== 'document.view')
+      codes.every((code) => code !== 'warehouse-documents:view')
     renderSidebar(hasPermission)
 
     expect(screen.queryByRole('link', { name: /سندات الاستلام/ })).not.toBeInTheDocument()

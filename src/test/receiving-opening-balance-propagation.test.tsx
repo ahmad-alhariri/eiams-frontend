@@ -45,15 +45,12 @@ const receivingBalance = findSourceBalance(receiving)
 const openingBalance = findSourceBalance(opening)
 
 beforeAll(async () => {
-  // Warm the exact lazy routes in this cross-module journey so parallel suite
-  // transforms cannot outlive Testing Library's query timeout.
   await Promise.all([
     import('@/modules/receiving/pages/receiving-document-detail-page'),
     import('@/shared/documents/pages/document-detail-page'),
     import('@/modules/inventory/pages/stock-movements-page'),
     import('@/modules/inventory/pages/stock-movement-detail-page'),
     import('@/modules/inventory/pages/inventory-balances-page'),
-    import('@/modules/inventory/pages/inventory-balance-detail-page'),
   ])
 })
 
@@ -127,12 +124,6 @@ describe('receiving and opening balance propagation', () => {
       sortBy: 'WarehouseDisplayName',
       sortDirection: 'Ascending',
     })
-
-    await navigate(router, balanceDetailPath(receivingBalance))
-    await expectBalanceDetail(receivingBalance, '٢')
-
-    await navigate(router, balanceDetailPath(openingBalance))
-    await expectBalanceDetail(openingBalance, '٩')
   })
 
   it('refetches document, movement, and balance reads under a distinct scope cache key', async () => {
@@ -166,8 +157,7 @@ describe('receiving and opening balance propagation', () => {
           return HttpResponse.json(
             responseScope === 'enterprise' ? receivingMovement : warehouseMovement,
           )
-        },
-      ),
+        }),
       http.get(`${environment.apiBaseUrl}/inventory/balances/${receivingBalance.balanceId}`, () => {
         requestCounts.balance += 1
         return HttpResponse.json(
@@ -237,7 +227,7 @@ function readOnlySession(): SessionResponse {
       status: 'Active',
       rowVersion: 1,
     },
-    permissionCodes: ['document.view', 'inventory.view'],
+    permissionCodes: ['warehouse-documents:view', 'inventory:view'],
     availableScopes: [
       {
         scopeType: 'Enterprise',
@@ -260,7 +250,6 @@ function renderJourney(initialEntry: string) {
       toRouteObject('inventoryMovements'),
       toRouteObject('inventoryMovementDetail'),
       toRouteObject('inventoryBalances'),
-      toRouteObject('inventoryBalanceDetail'),
     ],
     { initialEntries: [initialEntry] },
   )
@@ -376,10 +365,6 @@ function movementDetailPath(movement: StockMovement) {
   return ROUTE_PATHS.inventoryMovementDetail.replace(':movementId', movement.movementId)
 }
 
-function balanceDetailPath(balance: InventoryBalance) {
-  return ROUTE_PATHS.inventoryBalanceDetail.replace(':balanceId', balance.balanceId)
-}
-
 async function navigate(router: ReturnType<typeof createMemoryRouter>, path: string) {
   await act(async () => {
     await router.navigate(path)
@@ -398,11 +383,4 @@ async function expectMovementDetail(
   expect(screen.getByText(movement.documentId)).toBeInTheDocument()
   expect(screen.getByText(movement.documentLineId)).toBeInTheDocument()
   expect(screen.getByText(movement.movementId)).toBeInTheDocument()
-}
-
-async function expectBalanceDetail(balance: InventoryBalance, formattedQuantity: string) {
-  expect(await screen.findByRole('heading', { name: 'تفاصيل الرصيد' })).toBeInTheDocument()
-  expect(screen.getByText(balance.material.displayName)).toBeInTheDocument()
-  expect(screen.getByText(formattedQuantity)).toBeInTheDocument()
-  expect(screen.getByText(balance.balanceId.slice(0, 8) + '…')).toBeInTheDocument()
 }

@@ -22,7 +22,7 @@ export default function CustodyDetailPage() {
   console.log('CUSTODY DETAIL MOUNT, id:', custodyId, 'status:', rowQuery.status)
   const row = rowQuery.data
   const { has } = usePermission()
-  const canTransfer = has('custody.assign') && row?.status === 'Active'
+  const canTransfer = has('custody:manage') && row?.status === 'Active'
 
   return (
     <div dir="rtl" className="min-w-0">

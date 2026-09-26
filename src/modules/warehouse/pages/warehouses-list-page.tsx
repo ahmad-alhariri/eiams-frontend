@@ -28,7 +28,7 @@ import { Button } from '@/shared/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { toast } from '@/shared/ui/toast-manager'
 import { pageRows } from '@/shared/utils/table-data'
-import type { RecordStatus, Warehouse } from '@/shared/types/generated/eiams-v1'
+import type { RecordStatus, Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 
 const warehouseColumnHelper = createColumnHelper<typeof dataTableFeatures, Warehouse>()
 
@@ -43,7 +43,7 @@ function isRecordStatus(value: string | null): value is RecordStatus {
  */
 function WarehousesListPage() {
   const { has } = usePermission()
-  const canManage = has('warehouse.manage')
+  const canManage = has('warehouses:manage')
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [search, setSearch] = useState('')
@@ -54,7 +54,7 @@ function WarehousesListPage() {
   const warehousesQueryInput = useMemo<ListWarehousesQuery>(
     () => ({
       // DataTable controls are 1-based; EIAMS v1 list endpoints are 0-based.
-      pageIndex: currentPage - 1,
+      page: currentPage - 1,
       pageSize,
       ...(search === '' ? {} : { search }),
       ...(siteId === undefined ? {} : { siteId }),
@@ -63,7 +63,7 @@ function WarehousesListPage() {
     [currentPage, pageSize, search, siteId, status],
   )
   const warehousesQuery = useWarehousesQuery(warehousesQueryInput)
-  const sitesQuery = useSitesQuery({ pageIndex: 0, pageSize: 200, status: 'Active' })
+  const sitesQuery = useSitesQuery({ page: 0, pageSize: 200, status: 'Active' })
   const createMutation = useCreateWarehouseMutation()
   const updateMutation = useUpdateWarehouseMutation()
   const submitFeedback = useSubmitFeedback()

@@ -1,66 +1,42 @@
 import type { ComponentPropsWithoutRef } from 'react'
 
 import { useActiveCounterpartOptions } from '@/modules/organization/hooks/use-counterpart-lookups'
-import type {
-  CounterpartReference,
-  CounterpartSearchOptions,
-} from '@/modules/organization/types/counterpart-lookup.types'
-import type { CounterpartOption } from '@/shared/types/generated/eiams-v1'
-import { AsyncSelect } from '@/shared/ui/async-select'
+import {
+  AsyncSelect,
+  type AsyncSelectProps,
+  type AsyncSelectOption,
+} from '@/shared/ui/async-select'
+import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
+import type { CounterpartReference } from '@/modules/organization/types/counterpart-lookup.types'
+import type { IssueRecipientType } from '@/modules/issue/schemas/issue-info.schema'
 
-export interface CounterpartSelectProps extends CounterpartSearchOptions {
+export interface CounterpartSelectProps {
   value?: string | null
-  onValueChange: (
-    reference: CounterpartReference | null,
-    counterpart: CounterpartOption | undefined,
-  ) => void
+  onValueChange: (reference: CounterpartReference | null, option: ExternalParty | undefined) => void
+  name?: string
   disabled?: boolean
   readOnly?: boolean
-  /**
-   * Standard attributes forwarded to the inner combobox input (id, aria-*)
-   * so RHF/Form-bridge sections can associate labels and describedby hints
-   * without forking this selector.
-   */
+  placeholder?: string
+  type?: IssueRecipientType
   inputProps?: ComponentPropsWithoutRef<'input'>
 }
 
-/**
- * Active-only, scope-aware selector for recipient and holder form fields.
- * It deliberately has no create action: ExternalParty administration belongs
- * to the dedicated Organization reference-data flow.
- */
-export function CounterpartSelect({
-  value,
-  onValueChange,
-  type,
-  siteId,
-  disabled = false,
-  readOnly = false,
-  inputProps,
-}: CounterpartSelectProps) {
-  const counterpartSelector = useActiveCounterpartOptions({
-    ...(type === undefined ? {} : { type }),
-    ...(siteId === undefined ? {} : { siteId }),
-  })
+export function CounterpartSelect(props: CounterpartSelectProps) {
+  const { loadOptions } = useActiveCounterpartOptions()
 
-  return (
-    <AsyncSelect
-      {...(value === undefined ? {} : { value })}
-      loadOptions={counterpartSelector.loadOptions}
-      onValueChange={(nextValue, option) =>
-        onValueChange(
-          nextValue === null || option?.payload === undefined
-            ? null
-            : { type: option.payload.type, id: option.payload.id },
-          option?.payload,
-        )
-      }
-      disabled={disabled}
-      readOnly={readOnly}
-      {...(inputProps === undefined ? {} : { inputProps })}
-      placeholder="ابحث عن جهة مستلمة أو حائزة..."
-      emptyMessage="لا توجد جهات نشطة مطابقة ضمن نطاقك."
-      errorMessage="تعذر البحث عن الجهات المتاحة ضمن نطاقك."
-    />
-  )
+  const asyncSelectProps = {
+    value: props.value,
+    onValueChange: (value: string | null, option: AsyncSelectOption<ExternalParty> | undefined) => {
+      const reference: CounterpartReference | null =
+        value !== null ? { type: 'ExternalParty', id: value } : null
+      props.onValueChange(reference, option?.payload)
+    },
+    loadOptions,
+    placeholder: props.placeholder ?? 'اختر جهة خارجية',
+    disabled: props.disabled,
+    readOnly: props.readOnly,
+    inputProps: props.inputProps,
+  } as AsyncSelectProps<ExternalParty>
+
+  return <AsyncSelect<ExternalParty> {...asyncSelectProps} />
 }

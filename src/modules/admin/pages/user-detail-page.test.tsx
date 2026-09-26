@@ -3,15 +3,21 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
+import { setOrganizationService } from '@/modules/organization/services/organization.service'
+import { setWarehouseService } from '@/modules/warehouse/services/warehouse.service'
+import { createAxiosTransport } from '@/shared/api/axios-transport'
+import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
   createRole,
   createSession,
+  createSite,
   createUserRoleScope,
   createUserSummary,
+  createWarehouse,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
@@ -25,10 +31,41 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 }))
 
 const API_BASE_URL = '/api/v1'
+const ABSOLUTE_API_BASE_URL = 'http://localhost/api/v1'
 const USER_ID = '00000000-0000-4000-8000-000000000099'
 const SITE_ID = '00000000-0000-4000-8000-000000000071'
 const ROLE_A = createRole({ roleId: '00000000-0000-4000-8000-0000000000a1', nameAr: 'مدير النظام' })
 const ROLE_B = createRole({ roleId: '00000000-0000-4000-8000-0000000000b2', nameAr: 'مدقق' })
+const SITE = createSite({ siteId: SITE_ID, nameAr: 'المقر الرئيسي' })
+const WAREHOUSE = createWarehouse({
+  warehouseId: '00000000-0000-4000-8000-000000000072',
+  nameAr: 'المستودع المركزي',
+})
+
+const bundles: ApiClientBundle[] = []
+
+function envelope<T>(data: T) {
+  return {
+    success: true as const,
+    data,
+    pagination: {
+      page: 1,
+      pageSize: 10,
+      totalItems: Array.isArray(data) ? data.length : 1,
+      totalPages: 1,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    },
+    meta: { requestId: 'test-req-1', timestampUtc: '2026-09-15T12:00:00.000Z' },
+  }
+}
+
+beforeAll(() => {
+  const bundle = createApiClient({ baseURL: ABSOLUTE_API_BASE_URL })
+  bundles.push(bundle)
+  setOrganizationService(createAxiosTransport(bundle.client))
+  setWarehouseService(createAxiosTransport(bundle.client))
+})
 
 function PageWrapper({ children }: PropsWithChildren) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -36,9 +73,9 @@ function PageWrapper({ children }: PropsWithChildren) {
     authSessionQueryKey,
     createSession({
       permissionCodes: [
-        'admin.user.view',
-        ...(permissions.canManage ? ['admin.user.manage'] : []),
-        ...(permissions.canViewRoles ? ['admin.role.view'] : []),
+        'users:view',
+        ...(permissions.canManage ? ['users:manage'] : []),
+        ...(permissions.canViewRoles ? ['roles:view'] : []),
       ],
     }),
   )
@@ -54,7 +91,7 @@ function PageWrapper({ children }: PropsWithChildren) {
   )
 }
 
-function seedRoleScopes() {
+function seedRoleScope() {
   server.use(
     http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
       HttpResponse.json(
@@ -66,17 +103,23 @@ function seedRoleScopes() {
         }),
       ),
     ),
-    http.get(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, () =>
-      HttpResponse.json([
-        createUserRoleScope({
-          role: createRole({ roleId: ROLE_A.roleId, nameAr: 'مدير النظام' }),
-          scope: { scopeType: 'Enterprise', scopeId: null, displayName: 'المؤسسة' },
-        }),
-      ]),
+    http.get(`${API_BASE_URL}/admin/users/${USER_ID}/role-scope`, () =>
+      HttpResponse.json({
+        role: { roleId: ROLE_A.roleId, nameAr: 'مدير النظام' },
+        scope: { scopeType: 'Enterprise', scopeId: null, displayName: 'المؤسسة' },
+      }),
     ),
     http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([ROLE_A, ROLE_B])),
+    http.get(`${ABSOLUTE_API_BASE_URL}/sites`, () => HttpResponse.json(envelope([SITE]))),
+    http.get(`${ABSOLUTE_API_BASE_URL}/warehouses`, () => HttpResponse.json(envelope([WAREHOUSE]))),
   )
 }
+
+afterAll(() => {
+  for (const bundle of bundles.splice(0)) {
+    bundle.dispose()
+  }
+})
 
 afterEach(() => {
   activeScope.key = { kind: 'enterprise' }
@@ -85,23 +128,17 @@ afterEach(() => {
 })
 
 describe('UserDetailPage', () => {
-  it('lists the user role-scopes and replaces the full assignment set on save', async () => {
+  it('loads the singular assignment and replaces it on save', async () => {
     const user = userEvent.setup()
     const receivedBodies: unknown[] = []
-    seedRoleScopes()
+    seedRoleScope()
     server.use(
-      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, async ({ request }) => {
+      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scope`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json([
-          createUserRoleScope({
-            role: createRole({ roleId: ROLE_A.roleId, nameAr: 'مدير النظام' }),
-            scope: { scopeType: 'Enterprise', scopeId: null, displayName: 'المؤسسة' },
-          }),
-          createUserRoleScope({
-            role: createRole({ roleId: ROLE_B.roleId, nameAr: 'مدقق' }),
-            scope: { scopeType: 'Site', scopeId: 'site-1', displayName: 'موقع' },
-          }),
-        ])
+        return HttpResponse.json({
+          role: { roleId: ROLE_B.roleId, nameAr: 'مدقق' },
+          scope: { scopeType: 'Enterprise', scopeId: null, displayName: 'المؤسسة' },
+        })
       }),
     )
 
@@ -109,64 +146,107 @@ describe('UserDetailPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'تفاصيل المستخدم' })).toBeInTheDocument()
 
-    // The seeded Enterprise assignment for ROLE_A is loaded. The role name only
-    // renders inside the Radix Select content (mounted on open), so open the
-    // existing role select to confirm the assignment's role.
+    // The seeded Enterprise assignment for ROLE_A is loaded; the role name
+    // renders inside the Radix Select content once opened.
     const comboboxes = await screen.findAllByRole('combobox')
     await user.click(comboboxes[0]!)
     expect(await screen.findByText('مدير النظام')).toBeInTheDocument()
-    await user.keyboard('{Escape}')
+    const roleBOption = await screen.findByRole('option', { name: 'مدقق' })
+    await user.click(roleBOption)
 
-    // Add a second assignment for ROLE_B scoped to a Site.
-    await user.click(screen.getByRole('button', { name: 'إضافة تعيين' }))
-    // Each assignment row renders two selects (role, then scope). After adding,
-    // comboboxes are [role0, scope0, role1, scope1]; the new row's role select
-    // is the second-to-last combobox and its scope select is the last.
-    const combos = await screen.findAllByRole('combobox')
-    const newRoleSelect = combos.at(-2)!
-    await user.click(newRoleSelect)
-    const roleOptions = await screen.findAllByRole('option')
-    const roleBOption = roleOptions.find((option) => (option.textContent ?? '').includes('مدقق'))
-    expect(roleBOption).toBeDefined()
-    await user.click(roleBOption!)
-    const scopeSelects = screen.getAllByRole('combobox')
-    const newScopeSelect = scopeSelects.at(-1)!
-    await user.click(newScopeSelect)
-    const scopeOptions = await screen.findAllByRole('option')
-    const siteOption = scopeOptions.find((option) => (option.textContent ?? '').includes('موقع'))
-    expect(siteOption).toBeDefined()
-    await user.click(siteOption!)
-    const scopeInputs = screen.getAllByRole('textbox', { name: 'معرّف النطاق' })
-    await user.type(scopeInputs.at(-1)!, SITE_ID)
-
-    await user.click(screen.getByRole('button', { name: 'حفظ التعيينات' }))
+    await user.click(screen.getByRole('button', { name: 'حفظ التعيين' }))
 
     await waitFor(() =>
       expect(receivedBodies).toEqual([
-        {
-          assignments: [
-            { roleId: ROLE_A.roleId, scopeId: null, scopeType: 'Enterprise' },
-            { roleId: ROLE_B.roleId, scopeId: SITE_ID, scopeType: 'Site' },
-          ],
-          rowVersion: 7,
-        },
+        { roleId: ROLE_B.roleId, scopeType: 'Enterprise', scopeId: null },
       ]),
     )
-    // The mutation settled (button returns to its idle, enabled state) — the
-    // PUT replaced the full assignment set with ROLE_B + Site as asserted above.
-    const saveButton = await screen.findByRole('button', { name: 'حفظ التعيينات' })
+    const saveButton = await screen.findByRole('button', { name: 'حفظ التعيين' })
     expect(saveButton).toBeEnabled()
   })
 
-  it('blocks incomplete assignments with Arabic inline validation', async () => {
+  it('selects a Site scope through the Arabic async picker', async () => {
     const user = userEvent.setup()
-    seedRoleScopes()
+    const receivedBodies: unknown[] = []
+    seedRoleScope()
+    server.use(
+      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scope`, async ({ request }) => {
+        receivedBodies.push(await request.json())
+        return HttpResponse.json(
+          createUserRoleScope({
+            role: createRole({ roleId: ROLE_A.roleId, nameAr: 'مدير النظام' }),
+            scope: { scopeType: 'Site', scopeId: SITE_ID, displayName: 'المقر الرئيسي' },
+          }),
+        )
+      }),
+    )
+
     render(<UserDetailPage />, { wrapper: PageWrapper })
 
-    await user.click(await screen.findByRole('button', { name: 'إضافة تعيين' }))
-    await user.click(screen.getByRole('button', { name: 'حفظ التعيينات' }))
+    const comboboxes = await screen.findAllByRole('combobox')
+    // Second combobox is the scope-type select: switch Enterprise to Site.
+    await user.click(comboboxes[1]!)
+    await user.click(await screen.findByRole('option', { name: 'موقع' }))
 
-    expect(await screen.findByText('يجب اختيار دور صالح.')).toBeInTheDocument()
+    // Saving without a site selection is blocked with Arabic inline validation.
+    await user.click(screen.getByRole('button', { name: 'حفظ التعيين' }))
+    expect(await screen.findByText('يجب إدخال معرّف نطاق صالح.')).toBeInTheDocument()
+    expect(receivedBodies).toHaveLength(0)
+
+    // Pick the site through the async search picker, then save. The matched
+    // query is highlighted with <mark>, so options are queried by role.
+    await user.click(screen.getByRole('combobox', { name: 'الموقع' }))
+    await user.type(screen.getByRole('combobox', { name: 'الموقع' }), 'المقر')
+    await user.click(await screen.findByRole('option', { name: 'المقر الرئيسي' }))
+
+    await user.click(screen.getByRole('button', { name: 'حفظ التعيين' }))
+
+    await waitFor(() =>
+      expect(receivedBodies).toEqual([
+        { roleId: ROLE_A.roleId, scopeType: 'Site', scopeId: SITE_ID },
+      ]),
+    )
+  })
+
+  it('clears the scope selection when switching back to Enterprise', async () => {
+    const user = userEvent.setup()
+    const receivedBodies: unknown[] = []
+    seedRoleScope()
+    server.use(
+      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scope`, async ({ request }) => {
+        receivedBodies.push(await request.json())
+        return HttpResponse.json({
+          role: { roleId: ROLE_A.roleId, nameAr: 'مدير النظام' },
+          scope: { scopeType: 'Enterprise', scopeId: null, displayName: 'المؤسسة' },
+        })
+      }),
+    )
+
+    render(<UserDetailPage />, { wrapper: PageWrapper })
+
+    const comboboxes = await screen.findAllByRole('combobox')
+    await user.click(comboboxes[1]!)
+    await user.click(await screen.findByRole('option', { name: 'مستودع' }))
+
+    await user.click(screen.getByRole('combobox', { name: 'المستودع' }))
+    await user.type(screen.getByRole('combobox', { name: 'المستودع' }), 'المركزي')
+    await user.click(await screen.findByRole('option', { name: 'المستودع المركزي' }))
+
+    // Switching back to Enterprise drops the warehouse pick: no picker, null scope.
+    const scopeCombobox = await screen.findByRole('combobox', { name: 'النطاق' })
+    await user.click(scopeCombobox)
+    await user.click(await screen.findByRole('option', { name: 'المؤسسة' }))
+    expect(
+      screen.getByText('يشمل هذا التعيين المؤسسة بالكامل ولا يتطلب اختيار موقع أو مستودع.'),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'حفظ التعيين' }))
+
+    await waitFor(() =>
+      expect(receivedBodies).toEqual([
+        { roleId: ROLE_A.roleId, scopeType: 'Enterprise', scopeId: null },
+      ]),
+    )
   })
 
   it.each([
@@ -179,7 +259,7 @@ describe('UserDetailPage', () => {
       let roleCatalogRequests = 0
       permissions.canManage = canManage
       permissions.canViewRoles = canViewRoles
-      seedRoleScopes()
+      seedRoleScope()
       server.use(
         http.get(`${API_BASE_URL}/admin/roles`, () => {
           roleCatalogRequests += 1
@@ -191,30 +271,17 @@ describe('UserDetailPage', () => {
 
       expect(await screen.findByText('مدير النظام')).toBeInTheDocument()
       await waitFor(() => expect(roleCatalogRequests).toBe(0))
-      expect(screen.queryByRole('button', { name: 'إضافة تعيين' })).not.toBeInTheDocument()
       if (canManage) {
-        expect(screen.getByRole('button', { name: 'حفظ التعيينات' })).toBeInTheDocument()
-        expect(
-          screen.getByText(/تتطلب إضافة دور أو تغييره صلاحية عرض الأدوار/u),
-        ).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'حفظ التعيين' })).toBeInTheDocument()
+        expect(screen.getByText(/يتطلب تغيير الدور صلاحية عرض الأدوار/u)).toBeInTheDocument()
       } else {
-        expect(screen.queryByRole('button', { name: 'حفظ التعيينات' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'حفظ التعيين' })).not.toBeInTheDocument()
         expect(screen.getByText(/عرض للقراءة فقط/u)).toBeInTheDocument()
       }
     },
   )
 
   it.each([
-    {
-      status: 409,
-      body: {
-        status: 409,
-        code: 'admin.user_conflict',
-        titleAr: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
-        traceId: 'trace-conflict',
-      },
-      expected: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
-    },
     {
       status: 422,
       body: {
@@ -224,7 +291,7 @@ describe('UserDetailPage', () => {
         traceId: 'trace-validation',
         fieldErrors: [
           {
-            field: 'assignments',
+            field: 'scopeId',
             code: 'invalid_scope',
             messageAr: 'يتعذر إسناد الدور إلى النطاق المحدد.',
           },
@@ -232,28 +299,38 @@ describe('UserDetailPage', () => {
       },
       expected: 'يتعذر إسناد الدور إلى النطاق المحدد.',
     },
+    {
+      status: 500,
+      body: {
+        status: 500,
+        code: 'admin.unexpected',
+        titleAr: 'حدث خطأ غير متوقع. حاول مجدداً.',
+        traceId: 'trace-unexpected',
+      },
+      expected: 'حدث خطأ غير متوقع. حاول مجدداً.',
+    },
   ])('renders Arabic mutation feedback for HTTP $status', async ({ status, body, expected }) => {
     const user = userEvent.setup()
-    seedRoleScopes()
+    seedRoleScope()
     server.use(
-      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, () =>
+      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scope`, () =>
         HttpResponse.json(body, { status }),
       ),
     )
     render(<UserDetailPage />, { wrapper: PageWrapper })
 
-    await user.click(await screen.findByRole('button', { name: 'حفظ التعيينات' }))
+    await user.click(await screen.findByRole('button', { name: 'حفظ التعيين' }))
 
     expect(await screen.findByText(expected)).toBeInTheDocument()
   })
 
-  it('renders an actionable Arabic error state when the role-scopes request fails', async () => {
+  it('renders an actionable Arabic error state when the role-scope request fails', async () => {
     server.use(
       http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
         HttpResponse.json(createUserSummary({ userId: USER_ID, rowVersion: 7 })),
       ),
       http.get(
-        `${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`,
+        `${API_BASE_URL}/admin/users/${USER_ID}/role-scope`,
         () => new HttpResponse(null, { status: 500 }),
       ),
       http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([ROLE_A])),
@@ -262,7 +339,7 @@ describe('UserDetailPage', () => {
     render(<UserDetailPage />, { wrapper: PageWrapper })
 
     expect(
-      await screen.findByRole('heading', { name: 'تعذّر تحميل تعيينات المستخدم' }),
+      await screen.findByRole('heading', { name: 'تعذّر تحميل تعيين المستخدم' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'إعادة المحاولة' })).toBeInTheDocument()
   })

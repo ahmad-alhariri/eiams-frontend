@@ -1,21 +1,18 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router'
 
 import { RouteAccessGuard } from '@/modules/auth/components/route-guards'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { createActiveScopeContext } from '@/modules/auth/services/active-scope-context'
-import { createAuthService } from '@/modules/auth/services/auth.service'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { DocumentPolicy, SessionResponse } from '@/shared/types/generated/eiams-v1'
-import { server } from '@/test/msw/server'
+import type { DocumentPolicy } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/auth.api-types'
 
 const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = '20000000-0000-4000-8000-000000000001'
@@ -29,17 +26,15 @@ const warehouseScope = {
   warehouseId: WAREHOUSE_ID,
 }
 
+/** D-SRS-01 singular-session fixture (handwritten contract). */
 function selectedSession(permissionCodes: readonly string[]): SessionResponse {
   return {
     user: {
       userId: '10000000-0000-4000-8000-000000000001',
       username: 'warehouse.keeper',
       displayName: 'أمين المستودع',
-      status: 'Active',
-      rowVersion: 1,
     },
     permissionCodes,
-    availableScopes: [warehouseScope],
     activeScope: warehouseScope,
     scopeState: 'Selected',
     activeRoles: [],
@@ -82,7 +77,7 @@ function InventoryWithDocumentAction({ onExecute }: { onExecute: () => void }) {
       <LifecycleActionBar
         policy={postPolicy}
         busyAction={null}
-        disabled={!has('document.post')}
+        disabled={!has('warehouse-documents:post')}
         onExecute={onExecute}
       />
     </section>
@@ -104,7 +99,7 @@ describe('RBAC route and action separation', () => {
   it('keeps an allowed route visible while disabling a policy-enabled action without its separate permission', async () => {
     const queryClient = createQueryClient()
     const onExecute = vi.fn()
-    queryClient.setQueryData(authSessionQueryKey, selectedSession(['inventory.view']))
+    queryClient.setQueryData(authSessionQueryKey, selectedSession(['inventory:view']))
     useAuthSessionStore.setState({ status: 'authenticated' })
 
     render(
@@ -132,25 +127,27 @@ describe('RBAC route and action separation', () => {
     expect(onExecute).not.toHaveBeenCalled()
   })
 
-  it('re-evaluates the route from the server-returned permission set after an MSW-backed scope switch', async () => {
+  /**
+   * Under D-SRS-01 the user cannot switch scopes from the client; the only
+   * legitimate permission change is the server-returned session after an
+   * admin updates the user's role-scope assignment. This test verifies the
+   * route re-evaluates from the new server-returned session.
+   *
+   * `usePermission` reads the cached session through an observer whose
+   * queryFn is intentionally disabled (`enabled: false`); the application
+   * hydration flow owns session writes via `setQueryData`, not via fetch.
+   * The test mirrors that path: the admin updates the user's role-scope
+   * server-side, the client receives the new session (e.g. via a future
+   * SSE/polling channel that writes to the cache), and the UI re-evaluates.
+   */
+  it('re-evaluates the route from the server-returned session after a server-side permission change', async () => {
     const bundle = createApiClient({ baseURL: API_BASE_URL })
     bundles.push(bundle)
     const queryClient = createQueryClient()
-    const context = createActiveScopeContext({
-      authService: createAuthService(bundle.client),
-      queryClient,
-    })
     const onExecute = vi.fn()
-    const nextSession = selectedSession(['document.post'])
+    const nextSession = selectedSession(['warehouse-documents:post', 'inventory:view'])
 
-    server.use(
-      http.put(`${API_BASE_URL}/auth/active-scope`, async ({ request }) => {
-        expect(await request.json()).toEqual({ scopeType: 'Warehouse', scopeId: WAREHOUSE_ID })
-        return HttpResponse.json(nextSession)
-      }),
-    )
-
-    queryClient.setQueryData(authSessionQueryKey, selectedSession(['inventory.view']))
+    queryClient.setQueryData(authSessionQueryKey, selectedSession(['inventory:view']))
     useAuthSessionStore.setState({ status: 'authenticated' })
 
     render(
@@ -173,13 +170,17 @@ describe('RBAC route and action separation', () => {
     expect(screen.getByText('أرصدة المخزون')).toBeInTheDocument()
 
     await act(async () => {
-      await context.switchScope({ scopeType: 'Warehouse', scopeId: WAREHOUSE_ID })
+      // Admin updated the user's role-scope server-side; the application
+      // hydration flow (or a future real-time channel) writes the new
+      // session into the cache.
+      queryClient.setQueryData(authSessionQueryKey, nextSession)
     })
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'ليست لديك صلاحية الوصول' })).toBeInTheDocument()
+      expect(screen.getByRole('region', { name: 'محتوى أرصدة المخزون' })).toBeInTheDocument()
     })
-    expect(screen.queryByText('أرصدة المخزون')).not.toBeInTheDocument()
+    const post = screen.getByRole('button', { name: 'ترحيل' })
+    expect(post).not.toBeDisabled()
     expect(useAuthSessionStore.getState().status).toBe('authenticated')
   })
 })

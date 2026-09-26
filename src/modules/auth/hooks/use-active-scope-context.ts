@@ -1,16 +1,27 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 
-import { activeScopeContext } from '@/modules/auth/services/active-scope-runtime'
-import { authService } from '@/modules/auth/services/auth.service'
-import { selectedScope } from '@/modules/auth/services/active-scope-context'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
+import { authService } from '@/modules/auth/services/auth.service'
+import { selectedScope, toScopeCacheKey } from '@/modules/auth/services/scope-query'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
+import type { ScopeCacheKey } from '@/shared/services/query-keys'
+
+export interface ActiveScopeContext {
+  activeScope: ReturnType<typeof selectedScope>
+  activeScopeCacheKey: ScopeCacheKey | undefined
+}
 
 /**
- * Reads the sole cached server session and exposes its active scope transition.
- * Scope selection UI and permission/route decisions compose this hook later.
+ * Reads the sole server-selected active scope from the cached session.
+ *
+ * The backend exposes exactly one persistent `UserRoleScope` per user
+ * (D-SRS-01, D-RBAC-02). The session has a single required activeScope —
+ * there is no `availableScopes` collection, no `SelectionRequired` state,
+ * and no client-driven scope switch. This hook is therefore purely
+ * read-only: it consumes the authoritative server session and exposes its
+ * active scope plus the shared scope-cache key for downstream queries.
  */
-export function useActiveScopeContext() {
+export function useActiveScopeContext(): ActiveScopeContext {
   const authStatus = useAuthSessionStore((state) => state.status)
   const sessionQuery = useQuery({
     queryKey: authSessionQueryKey,
@@ -18,16 +29,9 @@ export function useActiveScopeContext() {
     enabled: authStatus === 'authenticated',
     staleTime: Number.POSITIVE_INFINITY,
   })
-  const switchMutation = useMutation({ mutationFn: activeScopeContext.switchScope })
-  const activeScope = selectedScope(sessionQuery.data)
 
-  return {
-    ...sessionQuery,
-    activeScope,
-    activeScopeCacheKey:
-      activeScope === undefined ? undefined : activeScopeContext.getActiveScopeCacheKey(),
-    switchScope: switchMutation.mutateAsync,
-    isSwitchingScope: switchMutation.isPending,
-    switchError: switchMutation.error,
-  }
+  const activeScope = selectedScope(sessionQuery.data)
+  const activeScopeCacheKey = activeScope === undefined ? undefined : toScopeCacheKey(activeScope)
+
+  return { activeScope, activeScopeCacheKey }
 }

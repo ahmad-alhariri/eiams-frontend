@@ -1,8 +1,7 @@
 import { useCallback } from 'react'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCounterpartSelector } from '@/modules/organization/selectors/counterpart-selector'
 import { counterpartLookupService } from '@/modules/organization/services/counterpart-lookup.service'
 import type {
@@ -25,14 +24,12 @@ export const counterpartLookupQueryKeys = {
 
 function createWriteSearchQuery(
   search: string,
-  options: CounterpartSearchOptions,
+  options: CounterpartSearchOptions = {},
 ): SearchCounterpartsQuery {
   return {
-    // List endpoints are 0-based; write lookups always read the first page.
     pageIndex: 0,
     pageSize: WRITE_PAGE_SIZE,
     search,
-    ...(options.type === undefined ? {} : { type: options.type }),
     ...(options.siteId === undefined ? {} : { siteId: options.siteId }),
   }
 }
@@ -59,8 +56,7 @@ export function useHistoricalCounterpartQuery(reference: CounterpartReference | 
       scope === undefined || reference === undefined
         ? queryKeys.public(COUNTERPART_RESOURCE, 'resolve', reference)
         : counterpartLookupQueryKeys.resolve(scope, reference),
-    queryFn: () =>
-      counterpartLookupService.resolveCounterpart(reference ?? { type: 'Employee', id: '' }),
+    queryFn: () => counterpartLookupService.resolveCounterpart(reference?.id ?? ''),
     enabled: scope !== undefined && reference !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -76,21 +72,16 @@ export function useActiveCounterpartOptions(options: CounterpartSearchOptions = 
   const queryClient = useQueryClient()
   const loadCounterparts = useCallback(
     async (search: string) => {
-      if (scope === undefined) {
-        return []
-      }
-
+      if (scope === undefined) return []
       const query = createWriteSearchQuery(search, options)
       const page = await queryClient.fetchQuery({
         queryKey: counterpartLookupQueryKeys.search(scope, query),
         queryFn: () => counterpartLookupService.searchCounterparts(query),
         staleTime: MASTER_DATA_STALE_TIME,
       })
-
-      return page.items.filter((counterpart) => counterpart.status === 'Active')
+      return page.filter((cp: { status: 'Active' | 'Inactive' }) => cp.status === 'Active')
     },
     [options, queryClient, scope],
   )
-
   return useCounterpartSelector(loadCounterparts)
 }

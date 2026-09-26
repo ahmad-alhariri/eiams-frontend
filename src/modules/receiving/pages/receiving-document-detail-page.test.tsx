@@ -28,14 +28,14 @@ const DOCUMENT_ID = fixtureUuid(200)
 const DETAIL_PATH = ROUTE_PATHS.documentReceivingDetail.replace(':documentId', DOCUMENT_ID)
 
 const ALL_DOCUMENT_CODES = [
-  'document.view',
-  'document.update',
-  'document.submit',
-  'document.post',
-  'document.reject',
-  'document.revise',
-  'document.cancel',
-  'document.reverse',
+  'warehouse-documents:view',
+  'warehouse-documents:edit',
+  'warehouse-documents:submit',
+  'warehouse-documents:post',
+  'warehouse-documents:reject',
+  'warehouse-documents:revise',
+  'warehouse-documents:cancel',
+  'warehouse-documents:reverse',
 ]
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {

@@ -28,7 +28,7 @@ import {
   useRoleQuery,
   useRolesQuery,
   useUserQuery,
-  useUserRoleScopesQuery,
+  useUserRoleScopeQuery,
   useUsersQuery,
 } from './use-admin-queries'
 
@@ -73,14 +73,14 @@ describe('admin query hooks', () => {
       'users',
       query,
     ])
-    expect(adminQueryKeys.userRoleScopes(scope, 'user-1')).toEqual([
+    expect(adminQueryKeys.userRoleScope(scope, 'user-1')).toEqual([
       'scoped',
       'enterprise',
       null,
       'admin',
       'users',
       'user-1',
-      'role-scopes',
+      'role-scope',
     ])
   })
 
@@ -88,7 +88,7 @@ describe('admin query hooks', () => {
     const permission = createPermission()
     const role = createRole()
     const user = createUserSummary()
-    const assignment = createUserRoleScope({ userId: user.userId, role })
+    const seeded = createUserRoleScope({ userId: user.userId, role })
 
     server.use(
       http.get(`${API_BASE_URL}/admin/permissions`, () => HttpResponse.json([permission])),
@@ -96,8 +96,8 @@ describe('admin query hooks', () => {
       http.get(`${API_BASE_URL}/admin/roles/${role.roleId}`, () => HttpResponse.json(role)),
       http.get(`${API_BASE_URL}/admin/users`, () => HttpResponse.json(createPage([user]))),
       http.get(`${API_BASE_URL}/admin/users/${user.userId}`, () => HttpResponse.json(user)),
-      http.get(`${API_BASE_URL}/admin/users/${user.userId}/role-scopes`, () =>
-        HttpResponse.json([assignment]),
+      http.get(`${API_BASE_URL}/admin/users/${user.userId}/role-scope`, () =>
+        HttpResponse.json({ role: seeded.role, scope: seeded.scope }),
       ),
     )
 
@@ -106,7 +106,7 @@ describe('admin query hooks', () => {
     const roleDetail = renderHook(() => useRoleQuery(role.roleId), { wrapper: createWrapper() })
     const users = renderHook(() => useUsersQuery({ search: 'مدير' }), { wrapper: createWrapper() })
     const userDetail = renderHook(() => useUserQuery(user.userId), { wrapper: createWrapper() })
-    const assignments = renderHook(() => useUserRoleScopesQuery(user.userId), {
+    const assignment = renderHook(() => useUserRoleScopeQuery(user.userId), {
       wrapper: createWrapper(),
     })
 
@@ -116,7 +116,7 @@ describe('admin query hooks', () => {
       expect(roleDetail.result.current.isSuccess).toBe(true)
       expect(users.result.current.isSuccess).toBe(true)
       expect(userDetail.result.current.isSuccess).toBe(true)
-      expect(assignments.result.current.isSuccess).toBe(true)
+      expect(assignment.result.current.isSuccess).toBe(true)
     })
 
     expect(permissions.result.current.data).toEqual([permission])
@@ -124,7 +124,7 @@ describe('admin query hooks', () => {
     expect(roleDetail.result.current.data).toEqual(role)
     expect(users.result.current.data?.items).toEqual([user])
     expect(userDetail.result.current.data).toEqual(user)
-    expect(assignments.result.current.data).toEqual([assignment])
+    expect(assignment.result.current.data).toEqual({ role: seeded.role, scope: seeded.scope })
   })
 
   it('does not request administration data before a server-selected scope exists', async () => {

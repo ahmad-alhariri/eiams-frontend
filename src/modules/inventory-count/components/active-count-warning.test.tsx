@@ -51,7 +51,7 @@ describe('ActiveCountWarning (e20-t09)', () => {
       ),
     )
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(authSessionQueryKey, sessionWith(['count.view', 'count.plan']))
+    client.setQueryData(authSessionQueryKey, sessionWith(['inventory-counts:view', 'inventory-counts:plan']))
     render(
       <QueryClientProvider client={client}>
         <ActiveCountWarning warehouseId={WAREHOUSE_ID} />
@@ -72,7 +72,7 @@ describe('ActiveCountWarning (e20-t09)', () => {
       ),
     )
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(authSessionQueryKey, sessionWith(['count.view', 'count.plan']))
+    client.setQueryData(authSessionQueryKey, sessionWith(['inventory-counts:view', 'inventory-counts:plan']))
     const { container } = render(
       <QueryClientProvider client={client}>
         <ActiveCountWarning warehouseId={WAREHOUSE_ID} />
@@ -86,7 +86,7 @@ describe('ActiveCountWarning (e20-t09)', () => {
 
   it('renders nothing before a warehouse is selected', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(authSessionQueryKey, sessionWith(['count.view', 'count.plan']))
+    client.setQueryData(authSessionQueryKey, sessionWith(['inventory-counts:view', 'inventory-counts:plan']))
     const { container } = render(
       <QueryClientProvider client={client}>
         <ActiveCountWarning warehouseId="" />

@@ -20,7 +20,6 @@ describe('Lazy route registry', () => {
     expect(getWiredRouteKeys()).toContain('catalogMaterialDetail')
     expect(getWiredRouteKeys()).toContain('warehouses')
     expect(getWiredRouteKeys()).toContain('inventoryBalances')
-    expect(getWiredRouteKeys()).toContain('inventoryBalanceDetail')
     expect(getWiredRouteKeys()).toContain('inventoryMovements')
     expect(getWiredRouteKeys()).toContain('inventoryMovementDetail')
     expect(getWiredRouteKeys()).toContain('adminUsers')

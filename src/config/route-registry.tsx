@@ -53,9 +53,6 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   warehouses: lazy(() => import('@/modules/warehouse/pages/warehouses-list-page')),
   warehouseDetail: lazy(() => import('@/modules/warehouse/pages/warehouse-detail-page')),
   inventoryBalances: lazy(() => import('@/modules/inventory/pages/inventory-balances-page')),
-  inventoryBalanceDetail: lazy(
-    () => import('@/modules/inventory/pages/inventory-balance-detail-page'),
-  ),
   inventoryMovements: lazy(() => import('@/modules/inventory/pages/stock-movements-page')),
   inventoryMovementDetail: lazy(
     () => import('@/modules/inventory/pages/stock-movement-detail-page'),
@@ -95,7 +92,7 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   custodyActive: lazy(() => import('@/modules/custody/pages/active-custody-list-page')),
   custodyDetail: lazy(() => import('@/modules/custody/pages/custody-detail-page')),
   audit: lazy(() => import('@/modules/audit/pages/audit-log-explorer-page')),
-  reports: routePlaceholderPage,
+  reports: lazy(() => import('@/modules/reports/pages/reports-page')),
   adminUsers: lazy(() => import('@/modules/admin/pages/users-list-page')),
   adminUserDetail: lazy(() => import('@/modules/admin/pages/user-detail-page')),
   adminRoles: lazy(() => import('@/modules/admin/pages/roles-catalog-page')),

@@ -12,7 +12,7 @@ describe('MSW test server baseline', () => {
         status: 'Active',
         rowVersion: 1,
       },
-      permissionCodes: ['document.view'],
+      permissionCodes: ['warehouse-documents:view'],
       availableScopes: [{ scopeType: 'Enterprise', scopeId: null, displayName: 'الهيئة' }],
       scopeState: 'Selected',
       activeRoles: [{ roleId: 'r-1', code: 'AUDITOR', nameAr: 'مدقق' }],

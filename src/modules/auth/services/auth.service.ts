@@ -5,19 +5,24 @@ import type {
   AuthTokenResponse,
   LoginRequest,
   SessionResponse,
-  SetActiveScopeRequest,
-  paths,
-} from '@/shared/types/generated/eiams-v1'
+  SetActiveScopeOverrideRequest,
+} from '@/modules/auth/types/auth.api-types'
 
-const AUTH_LOGIN_PATH = '/auth/login' satisfies keyof paths
-const AUTH_LOGOUT_PATH = '/auth/logout' satisfies keyof paths
-const AUTH_SESSION_PATH = '/auth/session' satisfies keyof paths
-const AUTH_ACTIVE_SCOPE_PATH = '/auth/active-scope' satisfies keyof paths
+const AUTH_LOGIN_PATH = '/auth/login'
+const AUTH_LOGOUT_PATH = '/auth/logout'
+const AUTH_SESSION_PATH = '/auth/session'
+const AUTH_ACTIVE_SCOPE_PATH = '/auth/active-scope'
 
 export interface AuthService {
   login: (request: LoginRequest) => Promise<AuthTokenResponse>
   getSession: () => Promise<SessionResponse>
-  setActiveScope: (request: SetActiveScopeRequest) => Promise<SessionResponse>
+  /**
+   * Authorized admin override only (D-INT-01 § authorized administration
+   * override: audited impersonation or debugging workflow). NOT an
+   * ordinary-user scope switcher — no ordinary UI calls it. Always
+   * returns the recomputed authoritative session.
+   */
+  setActiveScope: (request: SetActiveScopeOverrideRequest) => Promise<SessionResponse>
   logout: () => Promise<void>
 }
 

@@ -34,22 +34,22 @@ const DETAIL_PATH = ROUTE_PATHS.documentReceivingDetail.replace(':documentId', D
 const SIGNED_ORIGINAL_ALERT = 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.'
 
 const ALL_DOCUMENT_CODES = [
-  'document.view',
-  'document.update',
-  'document.submit',
-  'document.post',
-  'document.reject',
-  'document.revise',
-  'document.cancel',
-  'document.reverse',
+  'warehouse-documents:view',
+  'warehouse-documents:edit',
+  'warehouse-documents:submit',
+  'warehouse-documents:post',
+  'warehouse-documents:reject',
+  'warehouse-documents:revise',
+  'warehouse-documents:cancel',
+  'warehouse-documents:reverse',
 ]
 
 /** WH_KEEPER-style session: can create/submit/cancel but never post or reject. */
 const KEEPER_DOCUMENT_CODES = [
-  'document.view',
-  'document.create',
-  'document.submit',
-  'document.cancel',
+  'warehouse-documents:view',
+  'warehouse-documents:create',
+  'warehouse-documents:submit',
+  'warehouse-documents:cancel',
 ]
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {

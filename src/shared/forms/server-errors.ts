@@ -1,10 +1,9 @@
 import type { FieldPath, FieldValues, UseFormReturn } from 'react-hook-form'
 
-import type { FieldError } from '@/shared/types/generated/eiams-v1'
+import type { FieldError } from '@/shared/services/api-error'
 
-/**
- * Flattens contract FieldError payloads into a field → Arabic message map
- * keyed by `error.field`. Later entries for the same field win.
+/** Flattens contract FieldError payloads into a field → Arabic message map
+ *  keyed by `error.field`. Later entries for the same field win.
  */
 export function fieldErrorsToMap(
   errors: readonly FieldError[] | null | undefined,
@@ -24,12 +23,11 @@ export interface SetFormServerErrorsOptions {
   schemaKeys?: readonly string[]
 }
 
-/**
- * Applies contract FieldError payloads to a React Hook Form instance as
- * inline Arabic messages via `form.setError`. Keys outside the known key
- * set (own keys of the values object, or the optional `schemaKeys`
- * allow-list) are skipped so dynamic server payloads cannot inject unknown
- * fields.
+/** Applies contract FieldError payloads to a React Hook Form instance as
+ *  inline Arabic messages via `form.setError`. Keys outside the known key
+ *  set (own keys of the values object, or the optional `schemaKeys`
+ *  allow-list) are skipped so dynamic server payloads cannot inject unknown
+ *  fields.
  */
 export function setFormServerErrors<TValues extends FieldValues>(
   form: UseFormReturn<TValues>,

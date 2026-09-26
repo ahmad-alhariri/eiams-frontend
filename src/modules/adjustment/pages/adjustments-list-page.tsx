@@ -154,7 +154,7 @@ export default function AdjustmentsListPage() {
         title={ROUTE_METADATA.adjustments.labelAr}
         subtitle="جميع سندات التسوية والإعدام ضمن نطاق العمل الحالي، مع بحث وتصفية تُنفَّذ في الخادم."
         actions={
-          has('document.create') ? (
+          has('warehouse-documents:create') ? (
             <div className="flex flex-wrap items-center gap-3">
               <Link
                 className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground"
@@ -237,7 +237,7 @@ export default function AdjustmentsListPage() {
           errorMessage="تعذّر جلب قائمة سندات التسوية. حاول مرة أخرى."
           emptyTitle="لا توجد سندات تسوية"
           emptyDescription={
-            has('document.create')
+            has('warehouse-documents:create')
               ? 'ابدأ بإنشاء سند تسوية جديد من زر الإضافة.'
               : 'لم يتم العثور على سندات تسوية.'
           }

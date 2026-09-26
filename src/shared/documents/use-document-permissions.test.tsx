@@ -14,7 +14,7 @@ import {
 
 /** Mutable session-scope mock; tests swap the effective permissionCodes. */
 const activeSession = vi.hoisted(() => ({
-  permissionCodes: ['document.view'] as readonly string[],
+  permissionCodes: ['warehouse-documents:view'] as readonly string[],
 }))
 
 const ALL_ACTIONS: readonly DocumentActionType[] = [
@@ -55,28 +55,28 @@ function createQueryWrapper() {
 }
 
 afterEach(() => {
-  activeSession.permissionCodes = ['document.view']
+  activeSession.permissionCodes = ['warehouse-documents:view']
 })
 
 describe('document action → permission mapping', () => {
   it('covers every DocumentActionType with the backend permission vocabulary', () => {
     expect(Object.keys(ACTION_PERMISSION_CODES)).toEqual(ALL_ACTIONS)
 
-    expect(getActionPermissionCode('Submit')).toBe('document.submit')
-    expect(getActionPermissionCode('Post')).toBe('document.post')
-    expect(getActionPermissionCode('Reject')).toBe('document.reject')
-    expect(getActionPermissionCode('Revise')).toBe('document.revise')
-    expect(getActionPermissionCode('Cancel')).toBe('document.cancel')
-    expect(getActionPermissionCode('Reverse')).toBe('document.reverse')
-    expect(getActionPermissionCode('Edit')).toBe('document.update')
-    expect(getActionPermissionCode('UploadAttachment')).toBe('document.update')
-    expect(getActionPermissionCode('DeleteAttachment')).toBe('document.update')
+    expect(getActionPermissionCode('Submit')).toBe('warehouse-documents:submit')
+    expect(getActionPermissionCode('Post')).toBe('warehouse-documents:post')
+    expect(getActionPermissionCode('Reject')).toBe('warehouse-documents:reject')
+    expect(getActionPermissionCode('Revise')).toBe('warehouse-documents:revise')
+    expect(getActionPermissionCode('Cancel')).toBe('warehouse-documents:cancel')
+    expect(getActionPermissionCode('Reverse')).toBe('warehouse-documents:reverse')
+    expect(getActionPermissionCode('Edit')).toBe('warehouse-documents:edit')
+    expect(getActionPermissionCode('UploadAttachment')).toBe('warehouse-documents:edit')
+    expect(getActionPermissionCode('DeleteAttachment')).toBe('warehouse-documents:edit')
   })
 })
 
 describe('useDocumentLifecyclePermissions', () => {
   it('permits an action only under its mapped code', () => {
-    activeSession.permissionCodes = ['document.view', 'document.submit']
+    activeSession.permissionCodes = ['warehouse-documents:view', 'warehouse-documents:submit']
 
     const { result } = renderHook(() => useDocumentLifecyclePermissions(), {
       wrapper: createQueryWrapper().wrapper,
@@ -93,7 +93,7 @@ describe('useDocumentLifecyclePermissions', () => {
   })
 
   it('denies every action when the session lacks document.view', () => {
-    activeSession.permissionCodes = ['document.submit', 'document.post', 'document.update']
+    activeSession.permissionCodes = ['warehouse-documents:submit', 'warehouse-documents:post', 'warehouse-documents:edit']
 
     const { result } = renderHook(() => useDocumentLifecyclePermissions(), {
       wrapper: createQueryWrapper().wrapper,
@@ -108,10 +108,10 @@ describe('useDocumentLifecyclePermissions', () => {
 
   it('derives permittedActions from the effective document.* set', () => {
     activeSession.permissionCodes = [
-      'document.view',
-      'document.update',
-      'document.cancel',
-      'document.reverse',
+      'warehouse-documents:view',
+      'warehouse-documents:edit',
+      'warehouse-documents:cancel',
+      'warehouse-documents:reverse',
     ]
 
     const { result } = renderHook(() => useDocumentLifecyclePermissions(), {
@@ -130,13 +130,13 @@ describe('useDocumentLifecyclePermissions', () => {
   })
 
   it('flips the gates when the active session scope changes', async () => {
-    activeSession.permissionCodes = ['document.view', 'document.post']
+    activeSession.permissionCodes = ['warehouse-documents:view', 'warehouse-documents:post']
     const { client, wrapper } = createQueryWrapper()
 
     const { result } = renderHook(() => useDocumentLifecyclePermissions(), { wrapper })
     expect(result.current.isActionPermitted('Post')).toBe(true)
 
-    activeSession.permissionCodes = ['document.view']
+    activeSession.permissionCodes = ['warehouse-documents:view']
     client.setQueryData(authSessionQueryKey, sessionWith(activeSession.permissionCodes))
 
     await waitFor(() => {

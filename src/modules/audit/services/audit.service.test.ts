@@ -1,17 +1,10 @@
 import axios from 'axios'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
-
-import {
-  createAuditLog,
-  createAuditLogEntry,
-  createPage,
-  createProblemDetails,
-} from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 import { createAuditService } from './audit.service'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { normalizeError } from '@/shared/services/api.client'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 
 const API_BASE_URL = '/api/v1'
@@ -24,27 +17,41 @@ function setupService() {
 }
 
 afterEach(() => {
-  for (const bundle of bundles.splice(0)) bundle.dispose()
+  for (const bundle of bundles.splice(0)) {
+    bundle.dispose()
+  }
 })
 
 describe('AuditService', () => {
   it('forwards supported list filters while retaining headers only in client projections', async () => {
     const service = setupService()
-    const auditLog = createAuditLog({
+    const auditLog = {
+      auditLogId: '00000000-0000-4000-8000-0000000000c8',
+      entityId: '00000000-0000-4000-8000-0000000000c8',
+      entityType: 'WarehouseDocument',
+      entityDisplay: 'سند تجريبي',
+      action: 'Update',
+      occurredAt: '2026-08-15T10:00:00.000Z',
+      occurredBy: { id: '00000000-0000-4000-8000-00000000000a', displayName: 'مدقق تجريبي' },
+      summaryAr: 'تم تحديث السند.',
       entries: [
-        createAuditLogEntry({
-          newValue: 'new secret',
-          oldValue: 'old secret',
-          redacted: true,
-        }),
+        {
+          entryId: '00000000-0000-4000-8000-0000000000d0',
+          fieldName: 'status',
+          oldValue: 'Draft',
+          newValue: 'Submitted',
+          redacted: false,
+          redactionReasonAr: null,
+        },
       ],
-    })
+      traceId: 'audit-trace-1',
+    }
     let requestedQuery = ''
 
     server.use(
       http.get(`${API_BASE_URL}/audit-logs`, ({ request }) => {
         requestedQuery = new URL(request.url).search
-        return HttpResponse.json(createPage([auditLog]))
+        return HttpResponse.json({ items: [auditLog], meta: { page: 1, pageIndex: 1, pageSize: 25, itemCount: 1, totalItems: 1, totalCount: 1, totalPages: 1, hasPreviousPage: false, hasNextPage: false } })
       }),
     )
 
@@ -66,31 +73,43 @@ describe('AuditService', () => {
 
   it('removes malformed raw values from redacted detail entries before callers can cache them', async () => {
     const service = setupService()
-    const auditLog = createAuditLog({
+    const auditLog = {
+      auditLogId: '00000000-0000-4000-8000-0000000000c8',
+      entityId: '00000000-0000-4000-8000-0000000000c8',
+      entityType: 'WarehouseDocument',
+      entityDisplay: 'سند تجريبي',
+      action: 'Update',
+      occurredAt: '2026-08-15T10:00:00.000Z',
+      occurredBy: { id: '00000000-0000-4000-8000-00000000000a', displayName: 'مدقق تجريبي' },
+      summaryAr: 'تم تحديث السند.',
       entries: [
-        createAuditLogEntry({
+        {
           entryId: 'redacted-entry',
-          newValue: 'new secret',
+          fieldName: 'secret',
           oldValue: 'old secret',
+          newValue: 'new secret',
           redacted: true,
           redactionReasonAr: 'بيانات حساسة',
-        }),
-        createAuditLogEntry({
+        },
+        {
           entryId: 'visible-entry',
-          newValue: 'Submitted',
+          fieldName: 'status',
           oldValue: 'Draft',
+          newValue: 'Submitted',
           redacted: false,
-        }),
+          redactionReasonAr: null,
+        },
       ],
-    })
+      traceId: 'audit-trace-2',
+    }
 
     server.use(
-      http.get(`${API_BASE_URL}/audit-logs/${auditLog.auditLogId}`, () =>
+      http.get(`${API_BASE_URL}/audit-logs/00000000-0000-4000-8000-0000000000c8`, () =>
         HttpResponse.json(auditLog),
       ),
     )
 
-    const detail = await service.getAuditLog(auditLog.auditLogId)
+    const detail = await service.getAuditLog('00000000-0000-4000-8000-0000000000c8')
     const hiddenEntry = detail.entries[0]
 
     expect(hiddenEntry).toMatchObject({
@@ -105,23 +124,25 @@ describe('AuditService', () => {
 
   it('encodes audit identifiers and preserves server errors for Arabic presentation handling', async () => {
     const service = setupService()
-    const problem = createProblemDetails({
-      code: 'audit.log.not_found',
-      detailAr: 'تعذر العثور على سجل التدقيق.',
-      status: 404,
-      titleAr: 'سجل التدقيق غير موجود',
-    })
 
     server.use(
       http.get(`${API_BASE_URL}/audit-logs/id%2F1`, () =>
-        HttpResponse.json(problem, { status: 404 }),
+        HttpResponse.json(
+          {
+            status: 404,
+            code: 'audit.log.not_found',
+            titleAr: 'سجل التدقيق غير موجود',
+            detailAr: 'تعذر العثور على سجل التدقيق.',
+          },
+          { status: 404 },
+        ),
       ),
     )
 
     const error = await service.getAuditLog('id/1').catch((reason: unknown) => reason)
 
     expect(axios.isAxiosError(error)).toBe(true)
-    expect(normalizeApiError(error)).toMatchObject({
+    expect(normalizeError(error)).toMatchObject({
       code: 'audit.log.not_found',
       detailAr: 'تعذر العثور على سجل التدقيق.',
       status: 404,

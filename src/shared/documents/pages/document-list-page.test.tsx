@@ -242,7 +242,7 @@ describe('DocumentListPage', () => {
     )
 
     render(<DocumentListPage />, {
-      wrapper: createWrapper('/documents/receiving', ['document.view', 'document.create']),
+      wrapper: createWrapper('/documents/receiving', ['warehouse-documents:view', 'warehouse-documents:create']),
     })
 
     await screen.findByRole('heading', { level: 1, name: 'سندات الاستلام' })
@@ -260,7 +260,7 @@ describe('DocumentListPage', () => {
     )
 
     render(<DocumentListPage />, {
-      wrapper: createWrapper('/documents/receiving', ['document.view']),
+      wrapper: createWrapper('/documents/receiving', ['warehouse-documents:view']),
     })
 
     await screen.findByRole('heading', { level: 1, name: 'سندات الاستلام' })

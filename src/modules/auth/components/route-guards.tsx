@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
-import { IconLockAccess, IconRoute, IconShieldLock } from '@tabler/icons-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { IconLockAccess, IconShieldLock } from '@tabler/icons-react'
+import { useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { Link, Navigate } from 'react-router'
 
@@ -20,19 +21,26 @@ type RouteAccessGuardProps = RouteGuardProps & {
 }
 
 /**
- * Observes the single query-backed session projection without triggering a
- * second hydration request. The application root owns hydration; guards only
- * decide what may render once its lifecycle outcome is known.
+ * Reads the cached session projection and re-renders this component whenever
+ * the cache entry changes (e.g. after `setQueryData` from `installLogin` or
+ * `hydrate`). `useQuery({enabled: false})` does NOT subscribe to cache
+ * mutations because the observer is disabled, and `getQueryData` alone does
+ * not trigger re-renders. The TanStack-canonical pattern is to subscribe to
+ * the QueryCache via `subscribe`; we wrap that in `useSyncExternalStore` so
+ * React treats the cache entry as the source of truth for re-rendering.
  */
 function useCachedSession(): SessionResponse | undefined {
-  const { data } = useQuery<SessionResponse>({
-    queryKey: authSessionQueryKey,
-    queryFn: () => Promise.reject(new Error('Session hydration is owned by the application root.')),
-    enabled: false,
-    staleTime: Number.POSITIVE_INFINITY,
-  })
-
-  return data
+  const queryClient = useQueryClient()
+  const subscribe = (onChange: () => void) =>
+    queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === 'updated' || event.type === 'added' || event.type === 'removed') {
+        const updatedKey = (event as { query: { queryKey: readonly unknown[] } }).query.queryKey
+        if (updatedKey[0] === authSessionQueryKey[0] && updatedKey[1] === authSessionQueryKey[1]) {
+          onChange()
+        }
+      }
+    })
+  return useSyncExternalStore(subscribe, () => queryClient.getQueryData<SessionResponse>(authSessionQueryKey))
 }
 
 function AuthLoadingBoundary() {
@@ -43,16 +51,16 @@ function AuthLoadingBoundary() {
   )
 }
 
-function ScopeGate({ unavailable }: { unavailable: boolean }) {
-  const title = unavailable ? 'لا يتوفر نطاق عمل' : 'اختيار نطاق العمل مطلوب'
+function NoAccessScreen({ unavailable }: { unavailable: boolean }) {
+  const title = unavailable ? 'لا يتوفر نطاق عمل' : 'لا توجد صلاحية للوصول'
   const description = unavailable
     ? 'لا توجد صلاحيات نطاق فعّالة مرتبطة بحسابك حالياً. تواصل مع مسؤول النظام للمساعدة.'
-    : 'يلزم اختيار نطاق العمل المعتمد قبل الوصول إلى صفحات النظام.'
+    : 'حسابك لا يملك النطاق أو الصلاحية اللازمة للوصول إلى النظام.'
 
   return (
     <main
       dir="rtl"
-      aria-labelledby="scope-gate-title"
+      aria-labelledby="no-access-title"
       className="flex min-h-dvh items-center justify-center bg-background p-4 sm:p-8"
     >
       <section className="w-full max-w-lg rounded-2xl border border-border bg-popover p-8 text-center shadow-modal sm:p-10">
@@ -60,25 +68,61 @@ function ScopeGate({ unavailable }: { unavailable: boolean }) {
           className="mx-auto flex size-14 items-center justify-center rounded-full bg-muted text-primary"
           aria-hidden
         >
-          {unavailable ? <IconLockAccess className="size-7" /> : <IconRoute className="size-7" />}
+          <IconLockAccess className="size-7" />
         </span>
-        <h1 id="scope-gate-title" className="mt-5 text-2xl font-bold text-foreground">
+        <h1 id="no-access-title" className="mt-5 text-2xl font-bold text-foreground">
           {title}
         </h1>
         <p className="mt-3 leading-7 text-muted-foreground">{description}</p>
-        {!unavailable ? (
-          <p className="mt-5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-6 text-foreground">
-            ستتوفر قائمة النطاقات المصرّح بها في هذه الصفحة.
-          </p>
-        ) : null}
       </section>
     </main>
   )
 }
 
 /**
+ * D-SRS-01 singular-session guard.
+ *
+ * The backend exposes exactly one persistent `UserRoleScope` per user and one
+ * required activeScope on the session. There is no `availableScopes`
+ * collection, no `SelectionRequired` state, and no client scope switch.
+ * An authenticated session is therefore either:
+ *
+ *   - present with a scope → render the protected route;
+ *   - present with no scope (server-detected Unavailable) → render the
+ *     no-access screen;
+ *   - absent → either continue loading or redirect to /login.
+ */
+function hasActiveScope(session: SessionResponse | undefined): boolean {
+  return session !== undefined && session.activeScope !== undefined
+}
+
+function RequireSelectedScope({ children }: RouteGuardProps) {
+  const status = useAuthSessionStore((state) => state.status)
+  const session = useCachedSession()
+
+  if (status === 'initializing') {
+    return <AuthLoadingBoundary />
+  }
+
+  if (status === 'unauthenticated') {
+    return <Navigate to={ROUTE_PATHS.login} replace />
+  }
+
+  if (!session) {
+    return <AuthLoadingBoundary />
+  }
+
+  if (!hasActiveScope(session)) {
+    return <NoAccessScreen unavailable />
+  }
+
+  return <>{children}</>
+}
+
+/**
  * Keeps public login content out of the app shell while hydration is pending
- * and sends already-authenticated users to the right contract-backed gate.
+ * and sends already-authenticated users to the dashboard or the no-access
+ * screen based on the singular session shape.
  */
 function AnonymousRoute({ children }: RouteGuardProps) {
   const status = useAuthSessionStore((state) => state.status)
@@ -96,74 +140,14 @@ function AnonymousRoute({ children }: RouteGuardProps) {
     return <AuthLoadingBoundary />
   }
 
-  if (session.scopeState === 'SelectionRequired') {
-    return <Navigate to={ROUTE_PATHS.scopeSelect} replace />
-  }
-
-  if (session.scopeState === 'Unavailable') {
+  if (!hasActiveScope(session)) {
     return <Navigate to={ROUTE_PATHS.noAccess} replace />
   }
 
   return <Navigate to={ROUTE_PATHS.dashboard} replace />
 }
 
-/** Blocks all feature routes until an authenticated session has an active scope. */
-function RequireSelectedScope({ children }: RouteGuardProps) {
-  const status = useAuthSessionStore((state) => state.status)
-  const session = useCachedSession()
-
-  if (status === 'initializing') {
-    return <AuthLoadingBoundary />
-  }
-
-  if (status === 'unauthenticated') {
-    return <Navigate to={ROUTE_PATHS.login} replace />
-  }
-
-  if (!session) {
-    return <AuthLoadingBoundary />
-  }
-
-  if (session.scopeState === 'SelectionRequired') {
-    return <Navigate to={ROUTE_PATHS.scopeSelect} replace />
-  }
-
-  if (session.scopeState === 'Unavailable') {
-    return <Navigate to={ROUTE_PATHS.noAccess} replace />
-  }
-
-  return <>{children}</>
-}
-
-/** Presents the minimal authenticated scope-selection gate, without owning selection UI. */
-function ScopeSelectionRoute() {
-  const status = useAuthSessionStore((state) => state.status)
-  const session = useCachedSession()
-
-  if (status === 'initializing') {
-    return <AuthLoadingBoundary />
-  }
-
-  if (status === 'unauthenticated') {
-    return <Navigate to={ROUTE_PATHS.login} replace />
-  }
-
-  if (!session) {
-    return <AuthLoadingBoundary />
-  }
-
-  if (session.scopeState === 'Unavailable') {
-    return <Navigate to={ROUTE_PATHS.noAccess} replace />
-  }
-
-  if (session.scopeState === 'Selected') {
-    return <Navigate to={ROUTE_PATHS.dashboard} replace />
-  }
-
-  return <ScopeGate unavailable={false} />
-}
-
-/** Presents the contact-administrator state for an authenticated user without scope access. */
+/** Renders the no-access screen for an authenticated user without scope access. */
 function NoAccessRoute() {
   const status = useAuthSessionStore((state) => state.status)
   const session = useCachedSession()
@@ -176,19 +160,11 @@ function NoAccessRoute() {
     return <Navigate to={ROUTE_PATHS.login} replace />
   }
 
-  if (!session) {
-    return <AuthLoadingBoundary />
+  if (!session || !hasActiveScope(session)) {
+    return <NoAccessScreen unavailable />
   }
 
-  if (session.scopeState === 'SelectionRequired') {
-    return <Navigate to={ROUTE_PATHS.scopeSelect} replace />
-  }
-
-  if (session.scopeState === 'Selected') {
-    return <Navigate to={ROUTE_PATHS.dashboard} replace />
-  }
-
-  return <ScopeGate unavailable />
+  return <Navigate to={ROUTE_PATHS.dashboard} replace />
 }
 
 function PermissionDenied() {
@@ -234,5 +210,4 @@ export {
   NoAccessRoute,
   RequireSelectedScope,
   RouteAccessGuard,
-  ScopeSelectionRoute,
 }

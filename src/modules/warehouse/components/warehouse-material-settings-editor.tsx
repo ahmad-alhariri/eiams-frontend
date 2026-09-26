@@ -3,13 +3,12 @@ import { useEffect, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 
 import { useMaterialSelector } from '@/shared/selectors/adapters/material-selector'
-import { catalogService } from '@/modules/catalog/services/catalog.service'
-import { useUpsertWarehouseMaterialSettingMutation } from '@/modules/warehouse/hooks/use-warehouse-mutations'
 import {
   toWarehouseMaterialSettingRequest,
   warehouseMaterialSettingSchema,
   type WarehouseMaterialSettingFormValues,
 } from '@/modules/warehouse/schemas/warehouse-material-settings.schemas'
+import { useUpsertWarehouseMaterialSettingMutation } from '@/modules/warehouse/hooks/use-warehouse-mutations'
 import {
   Form,
   FormControl,
@@ -37,7 +36,8 @@ import {
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { toast } from '@/shared/ui/toast-manager'
-import type { Material, WarehouseMaterialSetting } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseMaterialSetting } from '@/modules/warehouse/types/warehouse.api-types'
+import { catalogService } from '@/modules/catalog/services/catalog.service'
 
 const EMPTY_VALUES: WarehouseMaterialSettingFormValues = {
   materialId: '',
@@ -52,15 +52,10 @@ export interface MaterialPickerControlProps {
   disabled: boolean
   setting: WarehouseMaterialSetting | null
   materialLabel: string
-  onValueChange: (value: string | null, option: AsyncSelectOption<Material> | undefined) => void
-  loadOptions: (query: string) => Promise<AsyncSelectOption<Material>[]>
+  onValueChange: (value: string | null, option: AsyncSelectOption | undefined) => void
+  loadOptions: (query: string) => Promise<AsyncSelectOption[]>
 }
 
-/**
- * The material field control. In edit mode the material is immutable, so a
- * disabled input shows the name instead of a search box (the AsyncSelect
- * would otherwise display the raw material id until an option matches).
- */
 function MaterialPickerControl({
   value,
   readOnly,
@@ -100,20 +95,12 @@ function MaterialPickerControl({
 
 export interface WarehouseMaterialSettingsEditorProps {
   warehouseId: string
-  /** All current settings; used to keep one row per material and its row version. */
   settings: readonly WarehouseMaterialSetting[]
-  /** The row being edited, or null for a new setting. */
   setting: WarehouseMaterialSetting | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-/**
- * Creates or updates one per-warehouse material setting (min/max thresholds).
- * Material choices are searched server-side and limited to active materials
- * not already configured (except the row being edited). The server remains
- * authoritative for scope, duplicate material, and concurrency checks.
- */
 export function WarehouseMaterialSettingsEditor({
   warehouseId,
   settings,
@@ -131,21 +118,20 @@ export function WarehouseMaterialSettingsEditor({
   const watchedMaterialId = useWatch({ control: form.control, name: 'materialId' })
   const [materialLabel, setMaterialLabel] = useState(setting?.material.displayName ?? '')
   const [previousSetting, setPreviousSetting] = useState(setting)
-  // React-documented "adjusting state during render" pattern: keeps the label
-  // in sync when the dialog target (setting) changes, without effects.
-  if (setting?.settingId !== previousSetting?.settingId) {
+
+  if (setting !== null && setting.material.id !== previousSetting?.material.id) {
     setPreviousSetting(setting)
-    setMaterialLabel(setting === null ? '' : setting.material.displayName)
+    setMaterialLabel(setting.material.displayName)
   }
 
   const materialSelector = useMaterialSelector(async (query) => {
     const configuredIds = new Set(
       settings
-        .filter((item) => item.settingId !== setting?.settingId)
-        .map((item) => item.material.id),
+        .filter((item: WarehouseMaterialSetting) => item.materialId !== setting?.materialId)
+        .map((item: WarehouseMaterialSetting) => item.materialId),
     )
     const page = await catalogService.listMaterials({
-      pageIndex: 0,
+      page: 0,
       pageSize: 10,
       status: 'Active',
       ...(query.trim() === '' ? {} : { search: query.trim() }),
@@ -180,10 +166,9 @@ export function WarehouseMaterialSettingsEditor({
 
     try {
       await submitFeedback(async () => {
-        await upsertMutation.mutateAsync({
-          warehouseId,
-          request: toWarehouseMaterialSettingRequest(values, setting),
-        })
+        await upsertMutation.mutateAsync(
+          toWarehouseMaterialSettingRequest(values, setting),
+        )
         onOpenChange(false)
         toast.success({
           title: setting === null ? 'تمت إضافة إعداد المادة.' : 'تم حفظ تعديل إعداد المادة.',

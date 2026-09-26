@@ -1,10 +1,15 @@
 import type {
+  AuthTokenResponse,
+  EffectiveRole,
+  ScopeContext,
+  SessionResponse,
+} from '@/modules/auth/types/auth.api-types'
+import type {
   ActionAvailability,
   Asset,
   AssetCustody,
   AuditLog,
   AuditLogEntry,
-  AuthTokenResponse,
   DocumentActionResult,
   DocumentActionType,
   DocumentAttachment,
@@ -14,7 +19,6 @@ import type {
   DocumentStatus,
   Employee,
   ExternalParty,
-  EffectiveRole,
   FieldError,
   InventoryBalance,
   LifecycleActorSnapshot,
@@ -31,8 +35,6 @@ import type {
   ProblemDetails,
   Permission,
   Role,
-  ScopeContext,
-  SessionResponse,
   Site,
   StockMovement,
   OrganizationalUnit,
@@ -40,10 +42,12 @@ import type {
   UserSummary,
   UserRoleScope,
   Warehouse,
-  WarehouseCapability,
   WarehouseDocument,
-  WarehouseMaterialSetting,
 } from '@/shared/types/generated/eiams-v1'
+import type {
+  WarehouseCapability,
+  WarehouseMaterialSetting,
+} from '@/modules/warehouse/types/warehouse.api-types'
 
 /** Contract-backed fixture helpers for MSW tests.
  *
@@ -105,7 +109,7 @@ export function createNamedReference(
   overrides: FixtureOverrides<NamedReference> = {},
 ): NamedReference {
   return withOverrides(
-    { id: fixtureUuid(1), displayName: 'مرجع تجريبي', code: 'REF-001', status: 'Active' },
+    { id: fixtureUuid(1), displayName: 'مرجع تجريبي', code: 'REF-001' },
     overrides,
   )
 }
@@ -155,7 +159,7 @@ export function createPermission(overrides: FixtureOverrides<Permission> = {}): 
   return withOverrides(
     {
       permissionId: fixtureUuid(13),
-      code: 'admin.user.view',
+      code: 'users:view',
       nameAr: 'عرض المستخدمين',
       descriptionAr: 'عرض دليل حسابات المستخدمين.',
     },
@@ -169,7 +173,7 @@ export function createRole(overrides: FixtureOverrides<Role> = {}): Role {
       roleId: fixtureUuid(14),
       code: 'SYSTEM_ADMIN',
       nameAr: 'مدير النظام',
-      permissionCodes: ['admin.user.view', 'admin.user.manage'],
+      permissionCodes: ['users:view', 'users:manage'],
       rowVersion: 1,
       status: 'Active',
     },
@@ -215,9 +219,8 @@ export function createSession(overrides: FixtureOverrides<SessionResponse> = {})
   const activeScope = createScopeContext()
   return withOverrides(
     {
-      user: createUserSummary(),
-      permissionCodes: ['document.view'],
-      availableScopes: [activeScope],
+      user: { userId: fixtureUuid(10), username: 'fixture.user', displayName: 'مستخدم تجريبي' },
+      permissionCodes: ['warehouse-documents:view'],
       activeScope,
       scopeState: 'Selected',
       activeRoles: [createEffectiveRole()],
@@ -264,7 +267,6 @@ export function createMaterialCategory(
       code: 'IT-HW',
       domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
       nameAr: 'الأجهزة',
-      pathDisplay: 'تقنية المعلومات / الأجهزة',
       rowVersion: 1,
       status: 'Active',
     },
@@ -279,8 +281,8 @@ export function createMaterialFamily(
     {
       familyId: fixtureUuid(22),
       code: 'IT-HW-PC',
-      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
       category: createNamedReference({ id: fixtureUuid(21), displayName: 'الأجهزة' }),
+      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
       nameAr: 'الحواسيب',
       rowVersion: 1,
       status: 'Active',
@@ -297,7 +299,7 @@ export function createUnitOfMeasure(
       unitId: fixtureUuid(23),
       code: 'EA',
       nameAr: 'قطعة',
-      symbolAr: 'قطعة',
+      symbolAr: 'EA',
       rowVersion: 1,
       status: 'Active',
     },
@@ -312,11 +314,11 @@ export function createMaterial(overrides: FixtureOverrides<Material> = {}): Mate
       code: 'IT-HW-PC-001',
       nameAr: 'حاسوب مكتبي',
       descriptionAr: 'مادة تجريبية',
-      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
-      category: createNamedReference({ id: fixtureUuid(21), displayName: 'الأجهزة' }),
-      family: createNamedReference({ id: fixtureUuid(22), displayName: 'الحواسيب' }),
       baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة', code: 'EA' }),
-      materialKind: 'Durable',
+      category: createNamedReference({ id: fixtureUuid(21), displayName: 'الأجهزة' }),
+      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
+      family: createNamedReference({ id: fixtureUuid(22), displayName: 'الحواسيب' }),
+      materialKind: 'Consumable',
       requiresAssetNumber: false,
       trackingType: 'Quantity',
       rowVersion: 1,
@@ -331,14 +333,14 @@ export function createMaterialUnitConversion(
 ): MaterialUnitConversion {
   return withOverrides(
     {
-      baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة', code: 'EA' }),
       conversionId: fixtureUuid(25),
-      factor: '12',
-      fromUnit: createNamedReference({ id: fixtureUuid(26), displayName: 'كرتونة', code: 'CTN' }),
       material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
+      baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة', code: 'EA' }),
+      fromUnit: createNamedReference({ id: fixtureUuid(26), displayName: 'كرتونة', code: 'CTN' }),
+      factor: '12',
+      usedInPostedDocuments: false,
       rowVersion: 1,
       status: 'Active',
-      usedInPostedDocuments: false,
     },
     overrides,
   )
@@ -364,8 +366,8 @@ export function createWarehouseCapability(
 ): WarehouseCapability {
   return withOverrides(
     {
-      capabilityId: fixtureUuid(32),
       warehouseId: fixtureUuid(30),
+      domainId: fixtureUuid(20),
       domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
       operations: ['Receiving', 'Issue'],
       rowVersion: 1,
@@ -379,8 +381,8 @@ export function createWarehouseMaterialSetting(
 ): WarehouseMaterialSetting {
   return withOverrides(
     {
-      settingId: fixtureUuid(33),
       warehouseId: fixtureUuid(30),
+      materialId: fixtureUuid(24),
       material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
       minQuantity: 2,
       maxQuantity: 10,

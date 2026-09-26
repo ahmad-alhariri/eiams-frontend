@@ -47,7 +47,7 @@ snapshot. `pageIndex` is zero-based; `pageSize` is 1–200 (default 25 under
 
 | Consumer / downstream Bead | Contracted read and response | Allowed query parameters | Explicit v1 behavior | Status |
 | --- | --- | --- | --- | --- |
-| Dashboard response surface; `e23-t02`, `e23-t03` | `GET /reports/dashboard` (`getDashboardReport`) → `DashboardReport { generatedAt, kpis, movementTrend, assetStatusDistribution }`; `KpiValue { code, labelAr, value, unitAr?, changePercent? }`; `DashboardSeriesPoint { label, value }` | `siteId`, `warehouseId`, `dateFrom`, `dateTo` | Render returned Arabic labels and values only. No card vocabulary, formula, percentage baseline, date-boundary, time-zone, chart bucket, or empty-series meaning is inferred. | **Blocked** by `eiams-frontend-4kd7`. |
+| Dashboard response surface; `e23-t02`, `e23-t03` | `GET /reports/dashboard` (`getDashboardReport`) → `DashboardReport { generatedAt, kpis, movementTrend, assetStatusDistribution }`; `KpiValue { code, labelAr, value, unitAr?, changePercent? }`; `DashboardSeriesPoint { label, value }` | `siteId`, `warehouseId`, `dateFrom`, `dateTo` | Ratified vocabulary: D-RPT-02 (`docs/dashboard-kpi-semantics-decision.md`) and `contracts/openapi/eiams-v1.kpi-vocabulary.json`. 11 KPI codes (5 period, 6 snapshot) with full semantics, series bucket definitions, null/zero treatment, and changePercent formula. | **Allowed now** (D-RPT-02 ratified by `eiams-frontend-4kd7`). |
 | Recent activity and low-stock attention; `e23-t04` | Existing audit header list/detail from `D-AUD-02`, and existing inventory balance projection from `D-INV-READ-01`; no dashboard-alert schema exists | Only the parameters declared on the consumed audit/inventory operations | A page may present separate, clearly labelled server projections only when the user also has the constituent `audit.view` or `inventory.view` permission. It must not combine them into a new alert score, derive lifecycle history, or claim a new report aggregate. Low stock is only returned `lowStock.state = Low`; audit content stays redacted. | Allowed as separately permission-gated composition; any new aggregate/alert feed needs a new contract Bead. |
 | Inventory balance report; `e23-t05` | `GET /reports/inventory` (`getInventoryReport`) → `InventoryBalancePage` | `pageIndex`, `pageSize`, `warehouseId`, `search` | The server owns balances and page total. It may render returned low-stock/read provenance fields, but no undocumented filter/sort or client reconciliation is added. | Allowed now. |
 | Stock movement report; `e23-t06` | No `/reports/movements` operation. Use the existing generated inventory movement ledger read already governed by `D-INV-READ-01`, not an invented report endpoint. | Exactly the existing movement operation’s declared filter/sort/page parameters | Render immutable, signed, server-returned movement rows and provenance. Do not group, total, rename events, or locally reverse a ledger. | Allowed only as the existing ledger projection; a distinct aggregate/movement-report API requires a new decision. |
@@ -92,10 +92,7 @@ snapshot. `pageIndex` is zero-based; `pageSize` is 1–200 (default 25 under
    calendar default, or inclusive/exclusive boundaries. The UI exposes only
    matrix-listed parameters. All table filtering/sorting/searching remains
    server-side and filtered totals come from the server `PageMeta`.
-4. **Export and print.** Until `eiams-frontend-opv2` is resolved, no output
-   button is rendered. A printed screen, client-built file, or merged pages
-   cannot be represented as an official report. `e23-t10` owns implementation
-   only after the approved contract identifies the permitted behavior.
+4. **Export and print.** Ratified by `D-RPT-03` (`docs/report-export-print-contract-decision.md`). Server-generated PDF and CSV export with scope enforcement, audit logging, and formal PDF layout. Informal `window.print()` button permitted as UX convenience on report tables (not dashboard); clearly labeled as unofficial. `e23-t10` implementation is now unblocked.
 5. **Arabic, RTL, and accessibility.** Use `PageHeader`, `ContentCard`,
    `DataTableServer`, `StatusBadge`, `EmptyState`, `ErrorState`, and shared
    formatting utilities before creating report-specific infrastructure. Use
@@ -146,7 +143,7 @@ page implementation.
 | `eiams-frontend-e23-t07` | Keep asset and custody projections separate and server-derived. |
 | `eiams-frontend-e23-t08` | Keep counts and adjustments as separately contracted projections; do not calculate variance/report totals. |
 | `eiams-frontend-e23-t09` | Consume only document-report filters/projection and server lifecycle truth. |
-| `eiams-frontend-e23-t10` | Remains blocked on `opv2`; no placeholder export/print behavior. |
+| `eiams-frontend-e23-t10` | Export/print implementation: `reports-export.service.ts`, `ExportButton` component, MSW handlers, informal print button. Unblocked by D-RPT-03. Backend export endpoint required. |
 | `eiams-frontend-e23-t11` | Verify the matrix's server-state, RTL/a11y, error, scope, and blocker rules once implementations exist. |
 | `eiams-frontend-e01.7` | Ratify all report additions and semantic compatibility against backend/Apidog before production integration. |
 
@@ -164,11 +161,11 @@ page implementation.
 
 ## Explicit external gaps and blockers
 
-| Gap | Blocking Bead | Consumers blocked | Required external resolution |
-| --- | --- | --- | --- |
-| KPI codes/formulas, series buckets, date/time semantics, zero/null/no-data, percentage baseline, and Arabic semantic labels | `eiams-frontend-4kd7` | `e23-t02`, `e23-t03` | Product plus backend/API approval and a versioned OpenAPI/provenance update or incorporated approved decision. |
-| Export/print resource model, output scope/completeness, format, printable Arabic RTL layout, async/error/provenance/accessibility behavior | `eiams-frontend-opv2` | `e23-t10` | Product plus backend/API approval and versioned contract/decision evidence. |
-| Production equivalence of the provisional report contract | `eiams-frontend-e01.7` | Production integration and release controls | Backend implementation and authoritative Apidog export ratification; it is not a reason to handwrite a frontend adapter. |
+|| Gap | Blocking Bead | Consumers blocked | Required external resolution | Status |
+|| --- | --- | --- | --- | --- |
+| KPI codes/formulas, series buckets, date/time semantics, zero/null/no-data, percentage baseline, and Arabic semantic labels | ~~`eiams-frontend-4kd7`~~ | ~~`e23-t02`, `e23-t03`~~ | Product plus backend/API approval and a versioned OpenAPI/provenance update or incorporated approved decision. | ✅ **Resolved — D-RPT-02 ratified 2026-09-25** (`docs/dashboard-kpi-semantics-decision.md` + `contracts/openapi/eiams-v1.kpi-vocabulary.json`). `e23-t02` and `e23-t03` are now unblocked. |
+| Export/print resource model, output scope/completeness, format, printable Arabic RTL layout, async/error/provenance/accessibility behavior | ~~`eiams-frontend-opv2`~~ | ~~`e23-t10`~~ | Product plus backend/API approval and versioned contract/decision evidence. | ✅ **Resolved — D-RPT-03 ratified 2026-09-25** (`docs/report-export-print-contract-decision.md`). `e23-t10` is now unblocked. Backend must implement `GET /reports/{type}/export` per D-RPT-03 §3. |
+| Production equivalence of the provisional report contract | `eiams-frontend-e01.7` | Production integration and release controls | Backend implementation and authoritative Apidog export ratification; it is not a reason to handwrite a frontend adapter. | Open |
 
 The unresolved gaps are intentionally represented as Beads dependencies. They
 are not defaults for page authors to fill in later.

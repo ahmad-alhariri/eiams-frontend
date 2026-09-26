@@ -154,7 +154,7 @@ describe('AdjustmentsListPage (e21-t02)', () => {
         status: 'Posted',
       }),
     ])
-    renderPage(['document.view'])
+    renderPage(['warehouse-documents:view'])
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'سندات التسوية' }),
@@ -170,7 +170,7 @@ describe('AdjustmentsListPage (e21-t02)', () => {
 
   it('offers the create CTA to a manager with document.create', async () => {
     useAdjustmentsHandler([])
-    renderPage(['document.view', 'document.create'])
+    renderPage(['warehouse-documents:view', 'warehouse-documents:create'])
 
     await screen.findByRole('heading', { level: 1, name: 'سندات التسوية' })
     const cta = screen.getByRole('link', { name: 'سند تسوية جديد' })
@@ -179,7 +179,7 @@ describe('AdjustmentsListPage (e21-t02)', () => {
 
   it('hides the create CTA without document.create (keeper view)', async () => {
     useAdjustmentsHandler([])
-    renderPage(['document.view'])
+    renderPage(['warehouse-documents:view'])
 
     await screen.findByRole('heading', { level: 1, name: 'سندات التسوية' })
     expect(screen.queryByRole('link', { name: 'سند تسوية جديد' })).toBeNull()
@@ -187,7 +187,7 @@ describe('AdjustmentsListPage (e21-t02)', () => {
 
   it('refetches with the selected purpose filter as a query param', async () => {
     useAdjustmentsHandler([])
-    renderPage(['document.view'])
+    renderPage(['warehouse-documents:view'])
 
     await screen.findByRole('heading', { level: 1, name: 'سندات التسوية' })
 
@@ -200,7 +200,7 @@ describe('AdjustmentsListPage (e21-t02)', () => {
 
   it('shows the empty state message when no adjustments exist', async () => {
     useAdjustmentsHandler([])
-    renderPage(['document.view'])
+    renderPage(['warehouse-documents:view'])
 
     expect(await screen.findByText('لا توجد سندات تسوية')).toBeInTheDocument()
   })
@@ -211,7 +211,7 @@ describe('AdjustmentsListPage (e21-t02)', () => {
         HttpResponse.json({ title: 'Server Error' }, { status: 500 }),
       ),
     )
-    renderPage(['document.view'])
+    renderPage(['warehouse-documents:view'])
 
     expect(await screen.findByText('تعذّر تحميل سندات التسوية')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'إعادة المحاولة' })).toBeInTheDocument()

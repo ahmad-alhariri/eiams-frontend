@@ -341,7 +341,7 @@ function StockMovementsPage() {
       >
         <DataTableServer
           columns={columns}
-          data={pageRows(page, movementsQuery.isError)}
+          data={pageRows(page, movementsQuery.isError) as StockMovement[] | null | undefined}
           isLoading={movementsQuery.isLoading}
           isError={movementsQuery.isError}
           onRetry={() => void movementsQuery.refetch()}

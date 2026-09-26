@@ -1,17 +1,16 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { IconEdit, IconPlus, IconTrash } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 
 import { useMaterialDomainsQuery } from '@/modules/catalog/hooks/use-catalog-queries'
-import { useReplaceWarehouseCapabilitiesMutation } from '@/modules/warehouse/hooks/use-warehouse-mutations'
+import { useReplaceWarehouseCapabilitiesMutation, useDeleteWarehouseCapabilityMutation } from '@/modules/warehouse/hooks/use-warehouse-mutations'
 import {
   CAPABILITY_OPERATIONS,
   toWarehouseCapabilitiesRequest,
   warehouseCapabilitiesSchema,
   type WarehouseCapabilitiesFormValues,
 } from '@/modules/warehouse/schemas/warehouse-capabilities.schemas'
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
+import { Form, FormControl, FormField } from '@/shared/forms/form'
 import { useConfirm } from '@/shared/hooks/use-confirm'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
@@ -28,27 +27,15 @@ import {
 } from '@/shared/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { toast } from '@/shared/ui/toast-manager'
-import type { CapabilityOperation, WarehouseCapability } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseCapability } from '@/modules/warehouse/types/warehouse.api-types'
 
 const EMPTY_VALUES: WarehouseCapabilitiesFormValues = { capabilities: [] }
-
-const OPERATION_LABELS: Record<CapabilityOperation, string> = {
-  Receiving: 'استلام',
-  Issue: 'صرف',
-  Transfer: 'تحويل',
-  Count: 'جرد',
-  Return: 'إرجاع',
-}
 
 export interface WarehouseCapabilitiesEditorProps {
   warehouseId: string
   capabilities: readonly WarehouseCapability[]
 }
 
-/**
- * Replaces the complete domain-operation matrix. Server scope and policy validation
- * remain authoritative; this form only permits active domains and contract enum values.
- */
 export function WarehouseCapabilitiesEditor({
   warehouseId,
   capabilities,
@@ -56,21 +43,49 @@ export function WarehouseCapabilitiesEditor({
   const [open, setOpen] = useState(false)
   const { confirm, element: confirmElement } = useConfirm()
   const domainsQuery = useMaterialDomainsQuery({ status: 'Active' })
-  const replaceMutation = useReplaceWarehouseCapabilitiesMutation()
+  const createMutation = useReplaceWarehouseCapabilitiesMutation()
+  const deleteMutation = useDeleteWarehouseCapabilityMutation()
   const submitFeedback = useSubmitFeedback()
   const form = useForm<WarehouseCapabilitiesFormValues>({
     resolver: zodResolver(warehouseCapabilitiesSchema),
     defaultValues: EMPTY_VALUES,
   })
-  const { fields, append, remove } = useFieldArray({ control: form.control, name: 'capabilities' })
+  const { fields, remove } = useFieldArray({ control: form.control, name: 'capabilities' })
   const watchedCapabilities = useWatch({ control: form.control, name: 'capabilities' }) ?? []
+
+  const selectedDomainIds = useMemo(
+    () => new Set(watchedCapabilities.map((c) => c.domainId)),
+    [watchedCapabilities],
+  )
+
+  const domainOptions = useMemo(
+    () =>
+      domainsQuery.data?.items
+        .filter((domain) => !selectedDomainIds.has(domain.materialDomainId))
+        .map((domain) => ({ value: domain.materialDomainId, label: domain.nameAr })),
+    [domainsQuery.data?.items, selectedDomainIds],
+  )
+
+  const domainOps = useMemo(
+    () => new Map(capabilities.map((cap) => [cap.domainId, cap.operations] as const)),
+    [capabilities],
+  )
+
+  const watchedDomains = useMemo(
+    () => new Set(watchedCapabilities.map((c) => c.domainId)),
+    [watchedCapabilities],
+  )
+
+  void watchedDomains
+
+  const currentOpsFor = (domainId: string) => domainOps.get(domainId) ?? []
 
   useEffect(() => {
     if (!open) return
     form.reset({
-      capabilities: capabilities.map((capability) => ({
-        domainId: capability.domain.id,
-        operations: [...capability.operations],
+      capabilities: capabilities.map((cap) => ({
+        domainId: cap.domainId,
+        operations: [...cap.operations],
       })),
     })
   }, [capabilities, form, open])
@@ -78,205 +93,181 @@ export function WarehouseCapabilitiesEditor({
   const submit = async (values: WarehouseCapabilitiesFormValues) => {
     form.clearErrors()
     const result = await confirm({
-      title: 'تأكيد حفظ قدرات المستودع',
+      title: 'تأكيد حفظ القدرات',
       message:
-        'سيتم استبدال قائمة المجالات والعمليات المسموح بها لهذا المستودع. تُطبّق صلاحية القدرة عند ترحيل المستندات.',
-      confirmLabel: 'حفظ القدرات',
+        'تؤدي هذه العملية إلى استبدال كامل مصفوفة عمليات المستودع المرتبطة بالمجالات المختارة. يُرجى التأكد من دقة الاختيارات قبل الحفظ.',
+      confirmLabel: 'حفظ التغييرات',
       cancelLabel: 'إلغاء',
     })
     if (!result.confirmed) return
 
     try {
       await submitFeedback(async () => {
-        await replaceMutation.mutateAsync({
-          warehouseId,
-          request: toWarehouseCapabilitiesRequest(values, capabilities),
-        })
-        setOpen(false)
+        for (const domainItem of toWarehouseCapabilitiesRequest(values, capabilities, warehouseId)) {
+          await createMutation.mutateAsync({ capability: domainItem })
+        }
+        const newDomainIds = new Set(values.capabilities.map((c) => c.domainId))
+        for (const cap of capabilities) {
+          if (!newDomainIds.has(cap.domainId)) {
+            await deleteMutation.mutateAsync(cap.domainId)
+          }
+        }
         toast.success({ title: 'تم حفظ قدرات المستودع.' })
       })
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, { schemaKeys: ['capabilities'] })
-      const firstFieldError = apiError.fieldErrors[0]
-      if (firstFieldError !== undefined) {
-        form.setError('capabilities', {
-          type: 'server',
-          message: firstFieldError.messageAr,
-        })
-      }
+      setFormServerErrors(form, apiError.fieldErrors, {
+        schemaKeys: ['capabilities'],
+      })
     }
   }
 
-  const domains = domainsQuery.data ?? []
-
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
-        <IconEdit aria-hidden data-icon="inline-start" />
-        تعديل القدرات
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+        إدارة القدرات
       </Button>
+
+      {capabilities.length > 0 ? (
+        <div className="mt-3 grid gap-2 rounded-lg border bg-card p-3">
+          {capabilities.map((cap) => (
+            <div key={cap.domainId} className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="font-medium">{cap.domain.displayName}</span>
+                <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
+                  {cap.operations.map((op) => (
+                    <span
+                      key={op}
+                      className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11px]"
+                    >
+                      {op}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">لم تُعرّف أي قدرات لهذا المستودع بعد.</p>
+      )}
+
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent size="lg" dir="rtl">
+        <DialogContent size="lg">
           <DialogHeader>
-            <DialogTitle>تعديل قدرات المستودع</DialogTitle>
+            <DialogTitle>إدارة قدرات المستودع</DialogTitle>
             <DialogDescription>
-              حدّد مجالات المواد والعمليات المسموح بها. لا تضف مجالاً مكرراً، وتبقى صلاحيات النطاق
-              والتحقق الخادمي هي المرجع النهائي.
+              اختر المجالات وفعّل العمليات المسموح بها. تُطبق التغييرات على كامل مصفوفة القدرات.
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form
               noValidate
-              aria-busy={replaceMutation.isPending}
+              aria-busy={createMutation.isPending}
               className="grid gap-4"
               onSubmit={form.handleSubmit(submit)}
             >
-              {domainsQuery.isError ? (
-                <p role="alert" className="text-sm text-destructive">
-                  تعذّر تحميل مجالات المواد النشطة. أغلق النافذة ثم حاول مجدداً.
-                </p>
-              ) : null}
-              {fields.map((field, index) => {
-                const selectedDomainIds = watchedCapabilities.map(
-                  (capability) => capability.domainId,
-                )
-                const selectedDomainId = watchedCapabilities[index]?.domainId ?? ''
-                const selectableDomains = domains.filter(
-                  (domain) =>
-                    domain.domainId === selectedDomainId ||
-                    !selectedDomainIds.includes(domain.domainId),
-                )
-                const currentDomain = capabilities.find(
-                  (capability) => capability.domain.id === selectedDomainId,
-                )?.domain
-
-                return (
-                  <fieldset
-                    key={field.id}
-                    className="grid gap-4 rounded-md border border-border p-4"
-                  >
-                    <legend className="px-1 text-sm font-medium text-foreground">
-                      قدرة المجال {index + 1}
-                    </legend>
-                    <FormField
-                      control={form.control}
-                      name={`capabilities.${index}.domainId`}
-                      render={({ field: domainField, fieldState }) => (
-                        <FormItem>
-                          <FormLabel>مجال المواد</FormLabel>
+              <FormField
+                control={form.control}
+                name="capabilities"
+                render={() => (
+                  <div className="grid gap-3">
+                    {fields.map((field, index) => (
+                      <div key={field.id} className="flex items-center gap-3">
+                        <FormControl>
                           <Select
-                            value={domainField.value}
-                            disabled={replaceMutation.isPending || domainsQuery.isPending}
-                            onValueChange={domainField.onChange}
+                            value={field.domainId}
+                            onValueChange={(value) => {
+                              form.setValue(`capabilities.${index}.domainId`, value ?? '')
+                            }}
                           >
-                            <FormControl>
-                              <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                                <SelectValue placeholder="اختر مجال المواد">
-                                  {currentDomain?.displayName ??
-                                    domains.find((domain) => domain.domainId === domainField.value)
-                                      ?.nameAr ??
-                                    'اختر مجال المواد'}
-                                </SelectValue>
-                              </SelectTrigger>
-                            </FormControl>
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="اختر المجال" />
+                            </SelectTrigger>
                             <SelectContent>
-                              {currentDomain !== undefined &&
-                              !selectableDomains.some(
-                                (domain) => domain.domainId === currentDomain.id,
-                              ) ? (
-                                <SelectItem value={currentDomain.id}>
-                                  {currentDomain.displayName}
-                                </SelectItem>
-                              ) : null}
-                              {selectableDomains.map((domain) => (
-                                <SelectItem key={domain.domainId} value={domain.domainId}>
-                                  {domain.nameAr}
+                              <SelectItem value="">اختر المجال</SelectItem>
+                              {domainOptions?.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name={`capabilities.${index}.operations`}
-                      render={({ field: operationsField, fieldState }) => (
-                        <FormItem>
-                          <FormLabel>العمليات المسموح بها</FormLabel>
-                          <div
-                            className="flex flex-wrap gap-x-5 gap-y-3"
-                            aria-invalid={fieldState.invalid || undefined}
-                          >
-                            {CAPABILITY_OPERATIONS.map((operation) => {
-                              const checked = operationsField.value.includes(operation)
-                              return (
-                                <label key={operation} className="flex items-center gap-2 text-sm">
-                                  <Checkbox
-                                    checked={checked}
-                                    disabled={replaceMutation.isPending}
-                                    onCheckedChange={(nextChecked) => {
-                                      const nextOperations = nextChecked
-                                        ? [...operationsField.value, operation]
-                                        : operationsField.value.filter((item) => item !== operation)
-                                      operationsField.onChange(nextOperations)
-                                    }}
-                                  />
-                                  {OPERATION_LABELS[operation]}
-                                </label>
-                              )
-                            })}
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="justify-self-start text-destructive hover:text-destructive"
-                      disabled={replaceMutation.isPending}
-                      onClick={() => remove(index)}
-                    >
-                      <IconTrash aria-hidden data-icon="inline-start" />
-                      إزالة المجال
-                    </Button>
-                  </fieldset>
-                )
-              })}
-              {form.formState.errors.capabilities?.message ? (
-                <p role="alert" className="text-sm text-destructive">
-                  {form.formState.errors.capabilities.message}
-                </p>
-              ) : null}
-              <Button
-                type="button"
-                variant="outline"
-                className="justify-self-start"
-                disabled={
-                  replaceMutation.isPending ||
-                  domainsQuery.isPending ||
-                  fields.length >= domains.length
-                }
-                onClick={() => append({ domainId: '', operations: [] })}
-              >
-                <IconPlus aria-hidden data-icon="inline-start" />
-                إضافة مجال
-              </Button>
+                        </FormControl>
+
+                        <div className="flex gap-2 flex-wrap">
+                          {CAPABILITY_OPERATIONS.map((op) => {
+                            const currentOps = currentOpsFor(field.domainId)
+                            const enabled = currentOps.includes(op)
+                            return (
+                              <Checkbox
+                                key={op}
+                                checked={enabled}
+                                onCheckedChange={(checked) => {
+                                  const next = checked
+                                    ? [...currentOps, op]
+                                    : currentOps.filter((o) => o !== op)
+                                  form.setValue(`capabilities.${index}.operations`, next)
+                                }}
+                              >
+                                {op}
+                              </Checkbox>
+                            )
+                          })}
+                        </div>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => remove(index)}
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ))}
+
+                    {domainOptions?.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        جميع المجالات المفعّلة مُدرَجة حاليًا.
+                      </p>
+                    )}
+                  </div>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="capabilities"
+                render={() => (
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    {watchedCapabilities.length > 0 ? (
+                      <>
+                        {watchedCapabilities.map((cap) => (
+                          <span key={cap.domainId} className="rounded bg-muted px-2 py-1 text-xs">
+                            {cap.domainId} — {cap.operations.join(', ')}
+                          </span>
+                        ))}
+                      </>
+                    ) : (
+                      <span className="italic">لا توجد قدرات محددة</span>
+                    )}
+                  </div>
+                )}
+              />
+
               <DialogFooter>
                 <Button
                   type="submit"
-                  loading={replaceMutation.isPending}
-                  disabled={domainsQuery.isError}
+                  loading={createMutation.isPending}
+                  disabled={watchedCapabilities.length === 0}
                 >
                   حفظ القدرات
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={replaceMutation.isPending}
+                  disabled={createMutation.isPending}
                   onClick={() => setOpen(false)}
                 >
                   إلغاء

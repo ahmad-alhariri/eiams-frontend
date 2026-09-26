@@ -21,11 +21,11 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 const API_BASE_URL = '/api/v1'
 const ROLE_ID = '00000000-0000-4000-8000-000000000014'
 
-const viewPermission = () => createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
+const viewPermission = () => createPermission({ code: 'roles:view', nameAr: 'عرض الأدوار' })
 const managePermission = () =>
   createPermission({
     permissionId: '00000000-0000-4000-8000-0000000000d1',
-    code: 'admin.role.manage',
+    code: 'roles:manage',
     nameAr: 'إدارة الأدوار',
     descriptionAr: null,
   })
@@ -59,7 +59,7 @@ describe('RolePermissionDialog', () => {
     const user = userEvent.setup()
     const role = createRole({
       roleId: ROLE_ID,
-      permissionCodes: ['admin.role.view'],
+      permissionCodes: ['roles:view'],
       rowVersion: 7,
     })
     const receivedBodies: unknown[] = []
@@ -72,7 +72,7 @@ describe('RolePermissionDialog', () => {
         receivedBodies.push(await request.json())
         return HttpResponse.json({
           ...role,
-          permissionCodes: ['admin.role.view', 'admin.role.manage'],
+          permissionCodes: ['roles:view', 'roles:manage'],
           rowVersion: 8,
         })
       }),
@@ -99,7 +99,7 @@ describe('RolePermissionDialog', () => {
         {
           code: role.code,
           nameAr: role.nameAr,
-          permissionCodes: ['admin.role.view', 'admin.role.manage'],
+          permissionCodes: ['roles:view', 'roles:manage'],
           rowVersion: 7,
           status: role.status,
         },
@@ -112,7 +112,7 @@ describe('RolePermissionDialog', () => {
     const user = userEvent.setup()
     const role = createRole({
       roleId: ROLE_ID,
-      permissionCodes: ['admin.role.view', 'admin.role.manage'],
+      permissionCodes: ['roles:view', 'roles:manage'],
       rowVersion: 3,
     })
     const receivedBodies: unknown[] = []
@@ -123,7 +123,7 @@ describe('RolePermissionDialog', () => {
       ),
       http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json({ ...role, permissionCodes: ['admin.role.view'], rowVersion: 4 })
+        return HttpResponse.json({ ...role, permissionCodes: ['roles:view'], rowVersion: 4 })
       }),
     )
 
@@ -139,7 +139,7 @@ describe('RolePermissionDialog', () => {
         {
           code: role.code,
           nameAr: role.nameAr,
-          permissionCodes: ['admin.role.view'],
+          permissionCodes: ['roles:view'],
           rowVersion: 3,
           status: role.status,
         },
@@ -187,7 +187,7 @@ describe('RolePermissionDialog', () => {
     expect(await screen.findByText('لا توجد صلاحيات متاحة في الكتالوج الحالي.')).toBeInTheDocument()
     unmount()
 
-    const role = createRole({ roleId: ROLE_ID, permissionCodes: ['admin.role.view'] })
+    const role = createRole({ roleId: ROLE_ID, permissionCodes: ['roles:view'] })
     server.use(
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
         HttpResponse.json([viewPermission(), managePermission()]),

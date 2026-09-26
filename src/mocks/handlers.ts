@@ -10,16 +10,23 @@ import {
   transitionInventoryCount,
 } from '@/mocks/inventory-count-state'
 import { getDb, nextFixtureUuid } from '@/mocks/db'
+import type { ReplaceRoleScopeRequest } from '@/modules/admin/types/admin.api-types'
 import { createDevSession } from '@/shared/services/dev-session'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import {
+  createAsset,
+  createAssetCustody,
   createDocumentAttachment,
+  createDocumentPolicy,
+  createInventoryBalance,
   createLifecycleEvent,
   createMaterialUnitConversion,
   createNamedReference,
   createPolicyBlocker,
+  createWarehouseDocument,
   createWarehouseMaterialSetting,
   deriveLifecycleEvents,
+  fixtureUuid,
 } from '@/test/msw/factories'
 import {
   applyDocumentAction,
@@ -56,7 +63,6 @@ import type {
   PageMeta,
   ProblemDetails,
   ReasonedDocumentActionRequest,
-  ReplaceRoleScopesRequest,
   Role,
   RoleUpsertRequest,
   SetActiveScopeRequest,
@@ -70,13 +76,15 @@ import type {
   UserSummary,
   UserUpsertRequest,
   VersionOnlyDocumentActionRequest,
-  WarehouseCapabilityUpsertRequest,
   WarehouseDocument,
   WarehouseDocumentDraftRequest,
-  WarehouseMaterialSetting,
-  WarehouseMaterialSettingUpsertRequest,
   WarehouseUpsertRequest,
 } from '@/shared/types/generated/eiams-v1'
+import type {
+  WarehouseCapabilityUpsertRequest,
+  WarehouseMaterialSetting,
+  WarehouseMaterialSettingUpsertRequest,
+} from '@/modules/warehouse/types/warehouse.api-types'
 
 /**
  * Contract-derived handlers for the development mock API.
@@ -626,6 +634,8 @@ function sortMovements(
     )
   })
 }
+
+const FIXTURE_TIMESTAMP = '2026-01-01T00:00:00.000Z'
 
 export const mockApiHandlers: readonly HttpHandler[] = [
   // --- Catalog: domains -----------------------------------------------------
@@ -1457,8 +1467,8 @@ export const mockApiHandlers: readonly HttpHandler[] = [
           capability.warehouseId === warehouseId && capability.domain.id === item.domainId,
       )
       return {
-        capabilityId: existing?.capabilityId ?? nextFixtureUuid(),
         warehouseId,
+        domainId: item.domainId,
         domain: {
           id: item.domainId,
           displayName: db.domains.find((domain) => domain.domainId === item.domainId)?.nameAr ?? '',
@@ -1521,8 +1531,8 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       )
       if (existing === undefined) {
         const created = createWarehouseMaterialSetting({
-          settingId: nextFixtureUuid(),
           warehouseId,
+          materialId: body.materialId,
           material: namedMaterial,
           minQuantity: body.minQuantity ?? null,
           maxQuantity: body.maxQuantity ?? null,
@@ -2056,36 +2066,25 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     db.roles.push(role)
     return HttpResponse.json(role, { status: 201 })
   }),
-  http.get(`${AUTH_PREFIX}/admin/users/:userId/role-scopes`, async ({ params }) => {
+  http.get(`${AUTH_PREFIX}/admin/users/:userId/role-scope`, async ({ params }) => {
     await delay(120)
-    const scopes = getDb().userRoleScopes.filter((item) => item.userId === String(params['userId']))
-    return HttpResponse.json(scopes)
+    const scope = getDb().userRoleScopes.find((item) => item.userId === String(params['userId']))
+    if (scope === undefined) return notFound()
+    return HttpResponse.json(scope)
   }),
-  http.put(`${AUTH_PREFIX}/admin/users/:userId/role-scopes`, async ({ params, request }) => {
+  http.put(`${AUTH_PREFIX}/admin/users/:userId/role-scope`, async ({ params, request }) => {
     await delay(120)
     const db = getDb()
     const userId = String(params['userId'])
-    const body = (await request.json()) as ReplaceRoleScopesRequest
+    const body = (await request.json()) as ReplaceRoleScopeRequest
     const userIndex = db.users.findIndex((user) => user.userId === userId)
     if (userIndex === -1) return notFound()
-    const currentUser = db.users[userIndex]!
-    if (body.rowVersion !== currentUser.rowVersion) {
-      return HttpResponse.json(
-        {
-          status: 409,
-          code: 'admin.user_conflict',
-          titleAr: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
-          traceId: 'dev-admin-role-scope-conflict',
-        },
-        { status: 409 },
-      )
-    }
-    const roleByCode = new Map(db.roles.map((role) => [role.roleId, role]))
-    const next: UserRoleScope[] = body.assignments.map((assignment) => ({
+    const roleById = new Map(db.roles.map((role) => [role.roleId, role]))
+    const next: UserRoleScope = {
       userRoleScopeId: nextFixtureUuid(),
       userId,
-      role: roleByCode.get(assignment.roleId) ?? {
-        roleId: assignment.roleId,
+      role: roleById.get(body.roleId) ?? {
+        roleId: body.roleId,
         code: '',
         nameAr: '',
         permissionCodes: [],
@@ -2093,18 +2092,17 @@ export const mockApiHandlers: readonly HttpHandler[] = [
         status: 'Active',
       },
       scope: {
-        scopeType: assignment.scopeType,
-        scopeId: assignment.scopeId,
+        scopeType: body.scopeType,
+        scopeId: body.scopeType === 'Enterprise' ? null : body.scopeId,
         displayName:
-          assignment.scopeType === 'Enterprise'
+          body.scopeType === 'Enterprise'
             ? 'الهيئة العامة للرقابة والتفتيش'
-            : (db.warehouses.find((warehouse) => warehouse.warehouseId === assignment.scopeId)
-                ?.nameAr ?? ''),
+            : (db.sites.find((site) => site.siteId === body.scopeId)?.nameAr ??
+              db.warehouses.find((warehouse) => warehouse.warehouseId === body.scopeId)?.nameAr ??
+              ''),
       },
-      rowVersion: 1,
-    }))
+    }
     db.userRoleScopes = db.userRoleScopes.filter((item) => item.userId !== userId).concat(next)
-    db.users[userIndex] = { ...currentUser, rowVersion: currentUser.rowVersion + 1 }
     return HttpResponse.json(next)
   }),
 
@@ -2691,5 +2689,242 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     }
     void body
     return HttpResponse.json(findInventoryCount(countId))
+  }),
+
+  // --- Reports: inventory ---------------------------------------------------
+  // GET /reports/inventory — server-paged inventory balance report.
+  // Only the documented filters (D-RPT-01) are forwarded.
+  http.get('/reports/inventory', async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const search = url.searchParams.get('search')?.trim() ?? ''
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '10')
+    const all = Array.from({ length: 12 }, (_, i) =>
+      createInventoryBalance({
+        balanceId: fixtureUuid(40 + i),
+        material: createNamedReference({ id: fixtureUuid(24 + i), displayName: `مادة ${i + 1}` }),
+        warehouse: createNamedReference({
+          id: fixtureUuid(30 + (i % 2)),
+          displayName: i % 2 === 0 ? 'المستودع المركزي' : 'مستودع الفرع',
+        }),
+        quantity: 10 + i,
+        lowStock: { state: i % 3 === 0 ? 'Low' : 'Sufficient', thresholdQuantity: 5 },
+      }),
+    )
+    const filtered = all.filter((row) => {
+      const matchesSearch =
+        search === '' ||
+        row.material.displayName.includes(search) ||
+        row.warehouse.displayName.includes(search)
+      const matchesWarehouse = warehouseId === null || row.warehouse.id === warehouseId
+      return matchesSearch && matchesWarehouse
+    })
+    const start = pageIndex * pageSize
+    const items = filtered.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      },
+    })
+  }),
+
+  // --- Reports: assets -------------------------------------------------------
+  // GET /reports/assets — server-paged asset report; custody shown inline
+  // (no client join, per D-RPT-01).
+  http.get('/reports/assets', async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const warehouseId = url.searchParams.get('warehouseId')
+    const search = url.searchParams.get('search')?.trim() ?? ''
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '10')
+    const all = Array.from({ length: 10 }, (_, i) =>
+      createAsset({
+        assetId: fixtureUuid(50 + i),
+        assetNumber: `AST-2026-${String(i + 1).padStart(4, '0')}`,
+        serialNumber: `SN-${String(100000 + i)}`,
+        derivedStatus: (['InStock', 'Issued', 'InCustody', 'Disposed'] as const)[i % 4]!,
+        currentCustody:
+          i % 2 === 0
+            ? createAssetCustody({
+                custodyId: fixtureUuid(51 + i),
+                holder: {
+                  displayName: `الجهة المكَلَّفة ${i + 1}`,
+                  id: fixtureUuid(20 + i),
+                  secondaryLabelAr: null,
+                  status: 'Active',
+                  type: 'OrganizationalUnit',
+                },
+              })
+            : undefined,
+      }),
+    )
+    const filtered = all.filter((row) => {
+      const matchesStatus = status === null || row.derivedStatus === status
+      const matchesWarehouse =
+        warehouseId === null || (row.currentWarehouse?.id ?? null) === warehouseId
+      const matchesSearch =
+        search === '' ||
+        row.assetNumber.includes(search) ||
+        (row.serialNumber ?? '').includes(search) ||
+        row.material.displayName.includes(search)
+      return matchesStatus && matchesWarehouse && matchesSearch
+    })
+    const start = pageIndex * pageSize
+    const items = filtered.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      },
+    })
+  }),
+
+  // --- Reports: count-adjustments ------------------------------------------
+  // GET /reports/count-adjustments — server-paged adjustment document list.
+  http.get('/reports/count-adjustments', async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '10')
+    const purposes: InventoryAdjustment['purpose'][] = [
+      'CountVariance',
+      'DirectCorrection',
+      'Disposal',
+    ]
+    const statuses: InventoryAdjustment['status'][] = ['Draft', 'Posted', 'Reversed']
+    const all = Array.from({ length: 8 }, (_, i) => {
+      const warehouseRef = createNamedReference({
+        id: fixtureUuid(30 + (i % 2)),
+        displayName: 'المستودع المركزي',
+      })
+      const adjustment: InventoryAdjustment = {
+        adjustmentId: fixtureUuid(150 + i),
+        documentId: fixtureUuid(160 + i),
+        documentReference: `ADJ-2026-${String(i + 1).padStart(4, '0')}`,
+        purpose: purposes[i % purposes.length]!,
+        status: statuses[i % statuses.length]!,
+        reason: `سبب التسوية ${i + 1}`,
+        countReference: i % 2 === 0 ? `CNT-2026-${String(i + 1).padStart(4, '0')}` : null,
+        warehouse: warehouseRef,
+        createdAt: FIXTURE_TIMESTAMP,
+        createdBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مستخدم تجريبي' }),
+        postedAt: i % 2 === 0 ? FIXTURE_TIMESTAMP : null,
+        lines: [],
+        policy: createDocumentPolicy({
+          documentId: fixtureUuid(160 + i),
+          documentStatus: statuses[i % statuses.length]!,
+          rowVersion: 1,
+        }),
+        rowVersion: 1,
+        attachments: [],
+      }
+      return adjustment
+    })
+    const filtered = all.filter((row) => warehouseId === null || row.warehouse.id === warehouseId)
+    const start = pageIndex * pageSize
+    const items = filtered.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      },
+    })
+  }),
+
+  // --- Reports: documents --------------------------------------------------
+  // GET /reports/documents — server-paged operational document list.
+  http.get('/reports/documents', async ({ request }) => {
+    await delay(120)
+    const url = new URL(request.url)
+    const warehouseId = url.searchParams.get('warehouseId')
+    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '10')
+    const all = Array.from({ length: 9 }, (_, i) =>
+      createWarehouseDocument({
+        documentId: fixtureUuid(160 + i),
+        systemReferenceNumber: `DOC-2026-${String(i + 1).padStart(4, '0')}`,
+        paperDocumentNumber: String(100 + i),
+        paperDocumentYear: 2026,
+        documentType: (['Receiving', 'Issue', 'Transfer'] as const)[i % 3]!,
+      }),
+    )
+    const filtered = all.filter((row) => warehouseId === null || row.warehouse.id === warehouseId)
+    const start = pageIndex * pageSize
+    const items = filtered.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      meta: {
+        pageIndex,
+        pageSize,
+        totalItems: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      },
+    })
+  }),
+
+  // GET /reports/dashboard — KPI cards + trend/distribution series (D-RPT-02).
+  // Returns realistic fixture data matching the vocabulary in:
+  // - docs/dashboard-kpi-semantics-decision.md
+  // - contracts/openapi/eiams-v1.kpi-vocabulary.json
+  http.get('/reports/dashboard', async ({ request }) => {
+    await delay(180)
+    const url = new URL(request.url)
+    // siteId and warehouseId are accepted but do not filter fixtures (the
+    // mock db is not relational); in real usage the server filters.
+    const _siteId = url.searchParams.get('siteId')
+    const _warehouseId = url.searchParams.get('warehouseId')
+    void _siteId; void _warehouseId
+
+    const kpis = [
+      { code: 'total_balance_items', labelAr: 'إجمالي أرصدة المواد', value: 2847, unitAr: 'عنصر', changePercent: 3.2 },
+      { code: 'total_stock_quantity', labelAr: 'إجمالي الكمية بالمخزون', value: 141920, unitAr: 'وحدة', changePercent: -1.4 },
+      { code: 'active_assets', labelAr: 'الأصول النشطة', value: 412, unitAr: 'أصل', changePercent: 0.0 },
+      { code: 'documents_posted', labelAr: 'المستندات المرحّلة', value: 38, unitAr: 'مستند', changePercent: 12.1 },
+      { code: 'movements_this_period', labelAr: 'الحركات في الفترة', value: 127, unitAr: 'حركة', changePercent: -5.7 },
+      { code: 'pending_documents', labelAr: 'المستندات المعلقة', value: 7, unitAr: 'مستند', changePercent: 40.0 },
+      { code: 'low_stock_items', labelAr: 'المواد قرب النفاد', value: 23, unitAr: 'عنصر', changePercent: 15.0 },
+      { code: 'open_custodies', labelAr: 'التكليفات النشطة', value: 19, unitAr: 'تكليف', changePercent: -5.0 },
+    ] as const satisfies { code: string; labelAr: string; value: number; unitAr: string; changePercent: number }[]
+
+    // movementTrend: daily buckets for the selected date range.
+    // Per D-RPT-02 §4: 1 point per day, label is Arabic date string.
+    const movementTrend = [
+      { label: '١ محرّم', value: 12 },
+      { label: '٥ محرّم', value: 18 },
+      { label: '١٠ محرّم', value: 9 },
+      { label: '١٥ محرّم', value: 22 },
+      { label: '٢٠ محرّم', value: 15 },
+      { label: '٢٥ محرّم', value: 11 },
+    ] as const satisfies { label: string; value: number }[]
+
+    // assetStatusDistribution: one point per derived asset status.
+    const assetStatusDistribution = [
+      { label: 'نشط', value: 412 },
+      { label: 'قيد الصيانة', value: 28 },
+      { label: 'موقوف', value: 14 },
+      { label: 'جاهز للتسليم', value: 7 },
+    ] as const satisfies { label: string; value: number }[]
+
+    return HttpResponse.json({
+      generatedAt: new Date().toISOString(),
+      kpis,
+      movementTrend,
+      assetStatusDistribution,
+    })
   }),
 ]

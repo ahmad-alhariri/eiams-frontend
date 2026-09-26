@@ -8,29 +8,43 @@ import {
   NoAccessRoute,
   RequireSelectedScope,
   RouteAccessGuard,
-  ScopeSelectionRoute,
 } from '@/modules/auth/components/route-guards'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import type { AuthSessionStatus } from '@/modules/auth/store/auth-session.store'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/auth.api-types'
 
+/**
+ * D-SRS-01 singular-session fixtures (handwritten contract: required
+ * `activeScope`, `scopeState` of `Selected` | `Unavailable` only — no
+ * `availableScopes`, no `SelectionRequired`).
+ */
 const selectedSession: SessionResponse = {
   user: {
     userId: '10000000-0000-4000-8000-000000000001',
     username: 'warehouse.manager',
     displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
   },
-  permissionCodes: ['inventory.view'],
-  availableScopes: [],
+  permissionCodes: ['inventory:view'],
   scopeState: 'Selected',
+  activeScope: {
+    scopeType: 'Warehouse',
+    scopeId: '20000000-0000-4000-8000-000000000001',
+    warehouseId: '20000000-0000-4000-8000-000000000001',
+    siteId: '30000000-0000-4000-8000-000000000001',
+    displayName: 'المستودع المركزي',
+  },
   activeRoles: [],
 }
 
-function withScopeState(scopeState: SessionResponse['scopeState']): SessionResponse {
-  return { ...selectedSession, scopeState }
+const sessionWithoutScope: SessionResponse = {
+  ...selectedSession,
+  // Server-detected invalid assignment: the required `activeScope` still
+  // identifies the sole assigned context, but `scopeState` is Unavailable
+  // and the server returns no usable permissions. The guards render the
+  // contact-administrator no-access screen for this state.
+  scopeState: 'Unavailable',
+  permissionCodes: [],
 }
 
 function renderRoutes({
@@ -62,7 +76,6 @@ function renderRoutes({
               </AnonymousRoute>
             }
           />
-          <Route path="/session/scope" element={<ScopeSelectionRoute />} />
           <Route path="/session/no-access" element={<NoAccessRoute />} />
           <Route
             path="/protected"
@@ -93,7 +106,7 @@ afterEach(() => {
   })
 })
 
-describe('authentication route guards', () => {
+describe('authentication route guards (D-SRS-01 singular session)', () => {
   it('holds protected content behind a neutral Arabic loading boundary during hydration', () => {
     renderRoutes({ status: 'initializing' })
 
@@ -108,21 +121,23 @@ describe('authentication route guards', () => {
     expect(screen.queryByText('محتوى محمي')).not.toBeInTheDocument()
   })
 
-  it('redirects authenticated users without a selected scope to the scope gate', () => {
-    renderRoutes({ status: 'authenticated', session: withScopeState('SelectionRequired') })
-
-    expect(screen.getByRole('heading', { name: 'اختيار نطاق العمل مطلوب' })).toBeInTheDocument()
-    expect(screen.queryByText('محتوى محمي')).not.toBeInTheDocument()
-  })
-
-  it('redirects authenticated users with no effective scope to the contact-administrator state', () => {
-    renderRoutes({ status: 'authenticated', session: withScopeState('Unavailable') })
+  it('renders the contact-administrator state for an authenticated session without a scope', () => {
+    renderRoutes({ status: 'authenticated', session: sessionWithoutScope })
 
     expect(screen.getByRole('heading', { name: 'لا يتوفر نطاق عمل' })).toBeInTheDocument()
+    expect(screen.getByText(/تواصل مع مسؤول النظام/u)).toBeInTheDocument()
     expect(screen.queryByText('محتوى محمي')).not.toBeInTheDocument()
   })
 
-  it('renders selected-scope content and keeps permission denial separate from logout', () => {
+  it('renders protected content directly for a Selected session with no selection gate', () => {
+    renderRoutes({ status: 'authenticated', session: selectedSession })
+
+    expect(screen.getByText('محتوى محمي')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'لا يتوفر نطاق عمل' })).not.toBeInTheDocument()
+  })
+
+  it('renders permission denial and keeps the session authenticated', () => {
     renderRoutes({
       initialPath: '/inventory',
       status: 'authenticated',

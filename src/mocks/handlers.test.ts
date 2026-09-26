@@ -528,17 +528,17 @@ describe('mock API handlers', () => {
       ]),
     )
     expect(roles.find((role) => role.code === 'SYSTEM_ADMIN')?.permissionCodes).toContain(
-      'admin.role.view',
+      'roles:view',
     )
     expect(permissions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: 'admin.role.view',
+          code: 'roles:view',
           nameAr: 'عرض الأدوار',
         }),
       ]),
     )
-    expect(permissions.map((permission) => permission.code)).toContain('custody.assign')
+    expect(permissions.map((permission) => permission.code)).toContain('custody:manage')
     expect(permissions.map((permission) => permission.code)).not.toContain('custody.view')
   })
 
@@ -549,7 +549,7 @@ describe('mock API handlers', () => {
     const update = {
       code: role.code,
       nameAr: role.nameAr,
-      permissionCodes: ['audit.view', 'custody.assign'],
+      permissionCodes: ['audit-logs:view', 'custody:manage'],
       rowVersion: role.rowVersion,
       status: role.status,
     }
@@ -583,7 +583,7 @@ describe('mock API handlers', () => {
     expect(searched.items.map((user) => user.username)).toEqual(['admin.ahmad'])
   })
 
-  it('replaces user role scopes with the current user version and rejects a stale version', async () => {
+  it('replaces the single user role scope with the singular assignment payload', async () => {
     const db = getDb()
     const currentScope = db.userRoleScopes[0]
     if (currentScope === undefined) throw new Error('User role-scope seed is incomplete.')
@@ -591,26 +591,32 @@ describe('mock API handlers', () => {
     if (currentUser === undefined) throw new Error('User seed is incomplete.')
 
     const request = {
-      assignments: [
-        {
-          roleId: currentScope.role.roleId,
-          scopeType: currentScope.scope.scopeType,
-          scopeId: currentScope.scope.scopeId,
-        },
-      ],
-      rowVersion: currentUser.rowVersion,
+      roleId: currentScope.role.roleId,
+      scopeType: currentScope.scope.scopeType,
+      scopeId: currentScope.scope.scopeId,
     }
 
-    await expect(
-      apiClient.put(`/admin/users/${currentUser.userId}/role-scopes`, request),
-    ).resolves.toMatchObject({ status: 200 })
-    expect(getDb().users.find((user) => user.userId === currentUser.userId)?.rowVersion).toBe(
-      currentUser.rowVersion + 1,
+    const { data: stored } = await apiClient.put(
+      `/admin/users/${currentUser.userId}/role-scope`,
+      request,
     )
+    expect(stored).toMatchObject({
+      userId: currentUser.userId,
+      role: { roleId: currentScope.role.roleId },
+      scope: {
+        scopeType: currentScope.scope.scopeType,
+        scopeId: currentScope.scope.scopeId,
+      },
+    })
+    expect(
+      getDb().userRoleScopes.filter((item) => item.userId === currentUser.userId),
+    ).toHaveLength(1)
 
-    await expect(
-      apiClient.put(`/admin/users/${currentUser.userId}/role-scopes`, request),
-    ).rejects.toMatchObject({ response: { status: 409 } })
+    const { data: fetched } = await apiClient.get(`/admin/users/${currentUser.userId}/role-scope`)
+    expect(fetched).toMatchObject({
+      role: { roleId: currentScope.role.roleId },
+      scope: { scopeType: currentScope.scope.scopeType },
+    })
   })
 
   it('serves immutable audit headers in fixed reverse chronology with a stable id tie-break', async () => {

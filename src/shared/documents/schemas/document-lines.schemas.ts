@@ -1,12 +1,8 @@
 import { z } from 'zod'
 
 import { formatNumber } from '@/shared/utils/format'
-import type {
-  AssetInput,
-  DocumentLineInput,
-  DocumentType,
-  Material,
-} from '@/shared/types/generated/eiams-v1'
+import type { AssetInput, DocumentLineInput, DocumentType } from '@/shared/types/generated/eiams-v1'
+import type { Material } from '@/modules/catalog/types/catalog.types'
 
 /**
  * Document-line capture schemas and draft mappings for the shared document
@@ -169,8 +165,8 @@ export function balanceHintAr(
 }
 
 /** quantity × factor, the D-UOM-01 draft preview shown to the keeper. */
-export function deriveBaseQuantity(quantity: number, factor: string): number {
-  return quantity * Number.parseFloat(factor)
+export function deriveBaseQuantity(quantity: number, factor: number): number {
+  return quantity * factor
 }
 
 /**

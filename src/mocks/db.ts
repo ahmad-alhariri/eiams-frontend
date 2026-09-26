@@ -30,6 +30,10 @@ import {
 } from '@/test/msw/factories'
 import { seedInventoryCounts } from '@/mocks/inventory-count-state'
 import type {
+  WarehouseCapability,
+  WarehouseMaterialSetting,
+} from '@/modules/warehouse/types/warehouse.api-types'
+import type {
   Asset,
   AuditLog,
   DocumentLifecycleEvent,
@@ -51,9 +55,7 @@ import type {
   UserRoleScope,
   UserSummary,
   Warehouse,
-  WarehouseCapability,
   WarehouseDocument,
-  WarehouseMaterialSetting,
 } from '@/shared/types/generated/eiams-v1'
 
 /**
@@ -865,52 +867,52 @@ function buildSeed(): MockDatabase {
   // generated types. Static read projections for dev UI verification.
   const permissions = [
     createPermission({
-      code: 'admin.user.view',
+      code: 'users:view',
       nameAr: 'عرض المستخدمين',
       descriptionAr: 'عرض دليل حسابات المستخدمين.',
     }),
     createPermission({
-      code: 'admin.user.manage',
+      code: 'users:manage',
       nameAr: 'إدارة المستخدمين',
       descriptionAr: 'إنشاء وتعديل حسابات المستخدمين وتغيير حالتها.',
     }),
     createPermission({
-      code: 'admin.role.view',
+      code: 'roles:view',
       nameAr: 'عرض الأدوار',
       descriptionAr: 'عرض دليل أدوار النظام وصلاحياتها.',
     }),
     createPermission({
-      code: 'admin.role.manage',
+      code: 'roles:manage',
       nameAr: 'إدارة الأدوار',
       descriptionAr: 'إنشاء وتعديل الأدوار وإسناد الصلاحيات إليها.',
     }),
     createPermission({
-      code: 'audit.view',
+      code: 'audit-logs:view',
       nameAr: 'عرض سجل التدقيق',
       descriptionAr: 'عرض سجل التدقيق للقراءة فقط.',
     }),
     createPermission({
-      code: 'document.view',
+      code: 'warehouse-documents:view',
       nameAr: 'عرض المستندات',
       descriptionAr: 'عرض مستندات المستودعات.',
     }),
     createPermission({
-      code: 'document.post',
+      code: 'warehouse-documents:post',
       nameAr: 'ترحيل المستندات',
       descriptionAr: 'ترحيل مستندات المستودعات المعتمدة.',
     }),
     createPermission({
-      code: 'inventory.view',
+      code: 'inventory:view',
       nameAr: 'عرض المخزون',
       descriptionAr: 'عرض أرصدة المخزون والمواد.',
     }),
     createPermission({
-      code: 'asset.view',
+      code: 'assets:view',
       nameAr: 'عرض الأصول',
       descriptionAr: 'عرض سجل الأصول الثابتة.',
     }),
     createPermission({
-      code: 'custody.assign',
+      code: 'custody:manage',
       nameAr: 'إسناد العهدة',
       descriptionAr: 'إسناد العهدة الشخصية ونقلها وإعادتها.',
     }),
@@ -921,16 +923,16 @@ function buildSeed(): MockDatabase {
     code: 'SYSTEM_ADMIN',
     nameAr: 'مدير النظام',
     permissionCodes: [
-      'admin.user.view',
-      'admin.user.manage',
-      'admin.role.view',
-      'admin.role.manage',
-      'audit.view',
-      'document.view',
-      'document.post',
-      'inventory.view',
-      'asset.view',
-      'custody.assign',
+      'users:view',
+      'users:manage',
+      'roles:view',
+      'roles:manage',
+      'audit-logs:view',
+      'warehouse-documents:view',
+      'warehouse-documents:post',
+      'inventory:view',
+      'assets:view',
+      'custody:manage',
     ],
     rowVersion: 1,
     status: 'Active',
@@ -940,11 +942,11 @@ function buildSeed(): MockDatabase {
     code: 'AUDITOR',
     nameAr: 'مدقق',
     permissionCodes: [
-      'audit.view',
-      'document.view',
-      'inventory.view',
-      'asset.view',
-      'custody.assign',
+      'audit-logs:view',
+      'warehouse-documents:view',
+      'inventory:view',
+      'assets:view',
+      'custody:manage',
     ],
     rowVersion: 1,
     status: 'Active',
@@ -953,7 +955,7 @@ function buildSeed(): MockDatabase {
     roleId: fixtureUuid(303),
     code: 'WAREHOUSE_KEEPER',
     nameAr: 'أمين مستودع',
-    permissionCodes: ['document.view', 'document.post', 'inventory.view'],
+    permissionCodes: ['warehouse-documents:view', 'warehouse-documents:post', 'inventory:view'],
     rowVersion: 1,
     status: 'Active',
   })
@@ -1294,15 +1296,15 @@ function buildSeed(): MockDatabase {
     warehouses: [centralWarehouse, branchWarehouse],
     warehouseCapabilities: [
       createWarehouseCapability({
-        capabilityId: fixtureUuid(130),
         warehouseId: centralWarehouse.warehouseId,
+        domainId: itDomain.domainId,
         domain: { id: itDomain.domainId, displayName: itDomain.nameAr },
         operations: ['Receiving', 'Issue', 'Transfer', 'Return'],
         rowVersion: 1,
       }),
       createWarehouseCapability({
-        capabilityId: fixtureUuid(131),
         warehouseId: centralWarehouse.warehouseId,
+        domainId: financeDomain.domainId,
         domain: { id: financeDomain.domainId, displayName: financeDomain.nameAr },
         operations: ['Receiving'],
         rowVersion: 1,
@@ -1310,8 +1312,8 @@ function buildSeed(): MockDatabase {
     ],
     warehouseMaterialSettings: [
       createWarehouseMaterialSetting({
-        settingId: fixtureUuid(140),
         warehouseId: centralWarehouse.warehouseId,
+        materialId: fixtureUuid(62),
         material: { id: fixtureUuid(62), displayName: 'حبر أسود' },
         minQuantity: 2,
         maxQuantity: 10,

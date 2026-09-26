@@ -48,7 +48,7 @@ function RolePermissionsPage() {
     defaultValues: EMPTY_VALUES,
   })
   const role = roleQuery.data
-  const canManage = has('admin.role.manage')
+  const canManage = has('roles:manage')
   const returnToRoles = () => navigate(ROUTE_PATHS.adminRoles)
 
   useEffect(() => {

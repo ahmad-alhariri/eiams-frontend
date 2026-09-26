@@ -6,45 +6,45 @@ describe('Permission vocabulary (D-RBAC-01)', () => {
   it('exposes exactly the 29 v1 codes from the matrix', () => {
     expect(PERMISSION_CODES).toHaveLength(29)
     expect(PERMISSION_CODES).toEqual([
-      'catalog.view',
-      'catalog.manage',
-      'organization.view',
-      'organization.manage',
-      'warehouse.view',
-      'warehouse.manage',
-      'inventory.view',
-      'document.view',
-      'document.create',
-      'document.update',
-      'document.submit',
-      'document.post',
-      'document.reject',
-      'document.revise',
-      'document.cancel',
-      'document.reverse',
-      'count.view',
-      'count.plan',
-      'count.enter',
-      'count.complete',
-      'count.close',
-      'asset.view',
-      'custody.assign',
-      'audit.view',
-      'report.view',
-      'admin.user.view',
-      'admin.user.manage',
-      'admin.role.view',
-      'admin.role.manage',
+      'materials:view',
+      'materials:manage',
+      'organizations:view',
+      'organizations:manage',
+      'warehouses:view',
+      'warehouses:manage',
+      'inventory:view',
+      'warehouse-documents:view',
+      'warehouse-documents:create',
+      'warehouse-documents:edit',
+      'warehouse-documents:submit',
+      'warehouse-documents:post',
+      'warehouse-documents:reject',
+      'warehouse-documents:revise',
+      'warehouse-documents:cancel',
+      'warehouse-documents:reverse',
+      'inventory-counts:view',
+      'inventory-counts:plan',
+      'inventory-counts:enter-actual',
+      'inventory-counts:complete',
+      'inventory-counts:close',
+      'assets:view',
+      'custody:manage',
+      'audit-logs:view',
+      'reports:view',
+      'users:view',
+      'users:manage',
+      'roles:view',
+      'roles:manage',
     ])
   })
 
   it('is a const tuple usable as a literal type', () => {
-    const code: PermissionCode = 'document.post'
-    expect(code).toBe('document.post')
+    const code: PermissionCode = 'warehouse-documents:post'
+    expect(code).toBe('warehouse-documents:post')
   })
 
   it('narrows only known codes', () => {
-    expect(isPermissionCode('inventory.view')).toBe(true)
+    expect(isPermissionCode('inventory:view')).toBe(true)
     expect(isPermissionCode('inventory.delete')).toBe(false)
     expect(isPermissionCode('')).toBe(false)
   })

@@ -41,7 +41,7 @@ function RolesCatalogPage() {
   const rolesQuery = useRolesQuery()
   const permissionsQuery = usePermissionsQuery()
   const { has } = usePermission()
-  const canManage = has('admin.role.manage')
+  const canManage = has('roles:manage')
   const [dialogRole, setDialogRole] = useState<Role | null>(null)
 
   const openMatrix = useCallback((role: Role) => setDialogRole(role), [])

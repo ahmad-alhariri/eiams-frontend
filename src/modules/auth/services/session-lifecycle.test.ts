@@ -10,7 +10,7 @@ import { createAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { createQueryClient } from '@/shared/services/query.client'
 import { queryKeys } from '@/shared/services/query-keys'
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/auth.api-types'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -20,12 +20,14 @@ const sessionFixture: SessionResponse = {
     userId: '10000000-0000-4000-8000-000000000001',
     username: 'warehouse.keeper',
     displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
   },
-  permissionCodes: ['document.create'],
-  availableScopes: [],
-  scopeState: 'SelectionRequired',
+  permissionCodes: ['warehouse-documents:create'],
+  activeScope: {
+    scopeType: 'Warehouse',
+    scopeId: '20000000-0000-4000-8000-000000000001',
+    displayName: 'المستودع المركزي',
+  },
+  scopeState: 'Selected',
   activeRoles: [],
 }
 
@@ -69,6 +71,7 @@ describe('auth session lifecycle', () => {
         refreshCredentials = request.credentials
         return HttpResponse.json(tokenResponse)
       }),
+      http.get(`${API_BASE_URL}/auth/session`, () => HttpResponse.json(sessionFixture)),
     )
 
     await expect(lifecycle.hydrate()).resolves.toEqual(sessionFixture)
@@ -84,6 +87,7 @@ describe('auth session lifecycle', () => {
 
     server.use(
       http.post(`${API_BASE_URL}/auth/refresh`, () => HttpResponse.json(tokenResponse)),
+      http.get(`${API_BASE_URL}/auth/session`, () => HttpResponse.json(sessionFixture)),
       http.post(`${API_BASE_URL}/auth/logout`, ({ request }) => {
         authorization = request.headers.get('Authorization')
         return new HttpResponse(null, { status: 204 })
@@ -109,6 +113,7 @@ describe('auth session lifecycle', () => {
 
     server.use(
       http.post(`${API_BASE_URL}/auth/refresh`, () => HttpResponse.json(tokenResponse)),
+      http.get(`${API_BASE_URL}/auth/session`, () => HttpResponse.json(sessionFixture)),
       http.post(`${API_BASE_URL}/auth/logout`, () => HttpResponse.error()),
     )
 
@@ -135,6 +140,7 @@ describe('auth session lifecycle', () => {
 
     server.use(
       http.post(`${API_BASE_URL}/auth/refresh`, () => HttpResponse.json(tokenResponse)),
+      http.get(`${API_BASE_URL}/auth/session`, () => HttpResponse.json(sessionFixture)),
       http.get(`${API_BASE_URL}/inventory/balances`, () => new HttpResponse(null, { status: 401 })),
     )
 

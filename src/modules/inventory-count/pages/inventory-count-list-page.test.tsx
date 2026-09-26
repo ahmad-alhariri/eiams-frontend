@@ -89,7 +89,7 @@ function renderPage(permissionCodes: readonly string[]) {
 describe('InventoryCountListPage (e20-t02)', () => {
   it('renders count sessions with Arabic type/scope labels and a detail link', async () => {
     useCountHandlers()
-    renderPage(['count.view'])
+    renderPage(['inventory-counts:view'])
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'جلسات الجرد' }),
@@ -103,7 +103,7 @@ describe('InventoryCountListPage (e20-t02)', () => {
 
   it('offers the create CTA to a user with count.plan', async () => {
     useCountHandlers()
-    renderPage(['count.view', 'count.plan'])
+    renderPage(['inventory-counts:view', 'inventory-counts:plan'])
 
     await screen.findByRole('heading', { level: 1, name: 'جلسات الجرد' })
     const cta = screen.getByRole('link', { name: 'جلسة جرد جديدة' })
@@ -112,7 +112,7 @@ describe('InventoryCountListPage (e20-t02)', () => {
 
   it('hides the create CTA without count.plan', async () => {
     useCountHandlers()
-    renderPage(['count.view'])
+    renderPage(['inventory-counts:view'])
 
     await screen.findByRole('heading', { level: 1, name: 'جلسات الجرد' })
     expect(screen.queryByRole('link', { name: 'جلسة جرد جديدة' })).toBeNull()

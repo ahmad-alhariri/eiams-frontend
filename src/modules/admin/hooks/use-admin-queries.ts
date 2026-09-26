@@ -18,8 +18,8 @@ export const adminQueryKeys = {
     queryKeys.scoped(scope, ADMIN_RESOURCE, 'users', query),
   user: (scope: ScopeCacheKey, userId: string) =>
     queryKeys.scoped(scope, ADMIN_RESOURCE, 'users', userId),
-  userRoleScopes: (scope: ScopeCacheKey, userId: string) =>
-    queryKeys.scoped(scope, ADMIN_RESOURCE, 'users', userId, 'role-scopes'),
+  userRoleScope: (scope: ScopeCacheKey, userId: string) =>
+    queryKeys.scoped(scope, ADMIN_RESOURCE, 'users', userId, 'role-scope'),
 }
 
 function useActiveScopeCacheKey() {
@@ -90,14 +90,14 @@ export function useUserQuery(userId: string | undefined) {
   })
 }
 
-export function useUserRoleScopesQuery(userId: string | undefined) {
+export function useUserRoleScopeQuery(userId: string | undefined) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
     queryKey:
       scope === undefined || userId === undefined
-        ? queryKeys.public(ADMIN_RESOURCE, 'users', userId, 'role-scopes')
-        : adminQueryKeys.userRoleScopes(scope, userId),
-    queryFn: () => adminService.getUserRoleScopes(userId ?? ''),
+        ? queryKeys.public(ADMIN_RESOURCE, 'users', userId, 'role-scope')
+        : adminQueryKeys.userRoleScope(scope, userId),
+    queryFn: () => adminService.getUserRoleScope(userId ?? ''),
     enabled: scope !== undefined && userId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })

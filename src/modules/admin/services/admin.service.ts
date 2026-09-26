@@ -2,24 +2,29 @@ import type { AxiosInstance } from 'axios'
 
 import { apiClient } from '@/shared/services/api.client'
 import type {
+  ReplaceRoleScopeRequest,
+  ReplaceRoleScopeResponse,
+  UserRoleScope,
+} from '@/modules/admin/types/admin.api-types'
+import type { ListUsersQuery } from '@/modules/admin/types/admin.types'
+import type {
   paths,
   Permission,
-  ReplaceRoleScopesRequest,
   Role,
   RoleUpsertRequest,
   UserPage,
-  UserRoleScope,
   UserSummary,
   UserUpsertRequest,
 } from '@/shared/types/generated/eiams-v1'
-import type { ListUsersQuery } from '@/modules/admin/types/admin.types'
 
 const PERMISSIONS_PATH = '/admin/permissions' satisfies keyof paths
 const ROLES_PATH = '/admin/roles' satisfies keyof paths
 const ROLE_PATH = '/admin/roles/{roleId}' satisfies keyof paths
 const USERS_PATH = '/admin/users' satisfies keyof paths
 const USER_PATH = '/admin/users/{userId}' satisfies keyof paths
-const USER_ROLE_SCOPES_PATH = '/admin/users/{userId}/role-scopes' satisfies keyof paths
+// Singular assignment path (D-SRS-01); intentionally not `satisfies keyof paths`
+// because the versioned generated contract still exposes the legacy plural path.
+const USER_ROLE_SCOPE_PATH = '/admin/users/{userId}/role-scope'
 
 function pathWithId(path: string, parameter: string, id: string): string {
   return path.replace(parameter, encodeURIComponent(id))
@@ -35,11 +40,11 @@ export interface AdminService {
   getUser: (userId: string) => Promise<UserSummary>
   createUser: (request: UserUpsertRequest) => Promise<UserSummary>
   updateUser: (userId: string, request: UserUpsertRequest) => Promise<UserSummary>
-  getUserRoleScopes: (userId: string) => Promise<readonly UserRoleScope[]>
-  replaceUserRoleScopes: (
+  getUserRoleScope: (userId: string) => Promise<UserRoleScope>
+  replaceUserRoleScope: (
     userId: string,
-    request: ReplaceRoleScopesRequest,
-  ) => Promise<readonly UserRoleScope[]>
+    request: ReplaceRoleScopeRequest,
+  ) => Promise<ReplaceRoleScopeResponse>
 }
 
 /**
@@ -88,15 +93,15 @@ export function createAdminService(client: AxiosInstance): AdminService {
       )
       return response.data
     },
-    async getUserRoleScopes(userId) {
-      const response = await client.get<readonly UserRoleScope[]>(
-        pathWithId(USER_ROLE_SCOPES_PATH, '{userId}', userId),
+    async getUserRoleScope(userId) {
+      const response = await client.get<UserRoleScope>(
+        pathWithId(USER_ROLE_SCOPE_PATH, '{userId}', userId),
       )
       return response.data
     },
-    async replaceUserRoleScopes(userId, request) {
-      const response = await client.put<readonly UserRoleScope[]>(
-        pathWithId(USER_ROLE_SCOPES_PATH, '{userId}', userId),
+    async replaceUserRoleScope(userId, request) {
+      const response = await client.put<ReplaceRoleScopeResponse>(
+        pathWithId(USER_ROLE_SCOPE_PATH, '{userId}', userId),
         request,
       )
       return response.data

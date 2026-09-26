@@ -27,9 +27,12 @@ const packageManifest = JSON.parse(packageJsonRaw) as PackageManifest
 const componentsConfig = JSON.parse(componentsJsonRaw) as ComponentsConfig
 
 const requiredScripts = [
-  'api:types:check',
-  'api:types:dry',
-  'api:types:generate',
+  // The OpenAPI generator scripts (api:types:generate / api:types:check /
+  // api:types:dry) are intentionally NOT required: per ADR-0001 (D-INT-02) the
+  // generated artifact at src/shared/types/generated/eiams-v1.ts is frozen
+  // migration scaffolding, not part of the active CI gate. The scripts still
+  // exist for whhu.13 writers and whhu.5 retirement; they are intentionally
+  // absent from this required list.
   'dev',
   'build',
   'lint',
@@ -52,7 +55,7 @@ describe('foundation reproducibility', () => {
     }
 
     expect(packageManifest.scripts?.['quality']).toBe(
-      'pnpm run api:types:check && pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run test && pnpm run build',
+      'pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run test && pnpm run build',
     )
   })
 

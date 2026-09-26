@@ -112,7 +112,7 @@ export default function InventoryCountListPage() {
         title={ROUTE_METADATA.counts.labelAr}
         subtitle="جميع جلسات الجرد ضمن نطاق العمل الحالي مع حالتها ونطاقها وفروقاتها."
         actions={
-          has('count.plan') ? (
+          has('inventory-counts:plan') ? (
             <Link
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
               to={ROUTE_PATHS.countNew}
@@ -158,7 +158,7 @@ export default function InventoryCountListPage() {
           errorMessage="تعذّر جلب قائمة الجلسات. حاول مرة أخرى."
           emptyTitle="لا توجد جلسات جرد"
           emptyDescription={
-            has('count.plan')
+            has('inventory-counts:plan')
               ? 'ابدأ بإنشاء جلسة جرد جديدة من زر الإضافة.'
               : 'لم يتم العثور على جلسات جرد.'
           }
