@@ -471,21 +471,33 @@ export function DocumentDetailBody({
     signedOriginalSatisfied: document.policy.signedOriginalSatisfied,
     blockers: document.policy.blockers,
   }
+  // Defence-in-depth gate: the routed page wires the session predicate; the
+  // body defaults to the bar's backwards-compatible "render every presented
+  // action" contract when composed standalone (gallery/tests).
+  const permitAllActions = useCallback(() => true, [])
+  const permitAction = isActionPermitted ?? permitAllActions
+
   // The mutable window (D-ATT-01) is the Draft status only — including the
   // post-Revise Draft. Outside it the panel stays read-only even when real
   // mutation props are wired; the shared helper is the single source of truth.
+  //
+  // A Draft is necessary but not sufficient: uploading or removing a draft
+  // attachment is `document.update` (D-ATT-01 §"Upload/delete controls are
+  // rendered only inside the mutable window AND only for users with
+  // document.update"). `UploadAttachment` already maps to that code in
+  // use-document-permissions, so reusing the same predicate keeps one gate for
+  // both surfaces. `AttachmentPanel` treats read-only as *hidden* controls,
+  // which is the presentation D-LIFE-01 requires for a permission denial
+  // (a state/policy block is what disables, and the panel has no such state).
   const attachmentsReadOnly =
-    attachmentMutationProps === undefined || !isDocumentMutable(document.documentStatus)
+    attachmentMutationProps === undefined ||
+    !isDocumentMutable(document.documentStatus) ||
+    !permitAction('UploadAttachment')
 
   // Surfaced read-only state (D-ATT-01): a muted note under the action bar
   // explains why the document cannot be edited once it leaves Draft. `null`
   // for a mutable Draft — the note only renders for read-only statuses.
   const readOnlyReasonAr = documentReadOnlyReasonAr(document.documentStatus)
-
-  // Defence-in-depth gate: the routed page wires the session predicate; the
-  // body defaults to the bar's backwards-compatible "render every presented
-  // action" contract when composed standalone (gallery/tests).
-  const permitAllActions = useCallback(() => true, [])
 
   const backLabel = `العودة إلى ${ROUTE_METADATA[listRouteKey].labelAr}`
 
@@ -596,7 +608,7 @@ export function DocumentDetailBody({
             policy={policy}
             busyAction={busyAction}
             onExecute={handleExecute}
-            isActionPermitted={isActionPermitted ?? permitAllActions}
+            isActionPermitted={permitAction}
           />
         )}
         {readOnlyReasonAr !== null ? (

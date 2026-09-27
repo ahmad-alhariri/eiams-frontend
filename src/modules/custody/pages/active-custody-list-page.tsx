@@ -5,8 +5,6 @@ import { Link } from 'react-router'
 import { useCustodiesQuery } from '@/modules/custody/hooks/use-custody-queries'
 import type { ListCustodiesQuery } from '@/modules/custody/types/custody.types'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
-import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { ASSET_DERIVED_STATUS_LABELS_AR } from '@/modules/asset/asset-status-labels'
 import type { CustodyStatus } from '@/shared/types/generated/eiams-v1'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
@@ -57,7 +55,6 @@ export default function ActiveCustodyListPage() {
   const { page, pageSize, setPage, setPageSize } = useServerPagination()
   const [status, setStatus] = useState<CustodyStatus | undefined>()
   const [search, setSearch] = useState('')
-  const { has } = usePermission()
 
   const filters = useMemo<ListCustodiesQuery>(
     () => ({
@@ -140,10 +137,6 @@ export default function ActiveCustodyListPage() {
       ]),
     [],
   )
-
-  void has
-  void CUSTODY_STATUS_LABELS_AR
-  void ASSET_DERIVED_STATUS_LABELS_AR
 
   return (
     <div dir="rtl" className="min-w-0">
