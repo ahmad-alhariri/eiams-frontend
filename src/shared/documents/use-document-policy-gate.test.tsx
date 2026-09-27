@@ -132,6 +132,7 @@ describe('useDocumentPolicyGate', () => {
       gate: 'balance',
       status: 'blocked',
       messageAr: 'الكمية المطلوبة (٢٥) تتجاوز الرصيد المتاح (١٢) للمادة «ورق تصوير A4».',
+      blockerCode: null,
     })
 
     const before = policyRequests

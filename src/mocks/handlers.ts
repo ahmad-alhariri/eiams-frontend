@@ -2208,14 +2208,14 @@ export const mockApiHandlers: readonly HttpHandler[] = [
               confirmationRequired: true,
               presentation: 'Disabled',
               reasonAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
-              reasonCode: 'SignedOriginalRequired',
+              reasonCode: 'document.signed_original_missing',
               reasonRequired: false,
             },
           ],
           advisories: [],
           blockers: [
             createPolicyBlocker({
-              code: 'SignedOriginalRequired',
+              code: 'document.signed_original_missing',
               messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
             }),
           ],
@@ -2364,6 +2364,26 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       )
     }
 
+    // e24-t07: two contract-legal policy states the UI must handle but which no
+    // other mock path can express, so QA could not verify them on screen.
+    // Both are opt-in via the request body and leave the default dev flow
+    // untouched.
+    //   simulateSoftFreeze        → an ActiveSoftFreeze advisory is attached
+    //   simulateEnabledWithBlocker → Post is presented Enabled while an
+    //                              unrelated business-policy blocker is
+    //                              present (the bar must then leave Post
+    //                              enabled and still list the blocker)
+    const simulateSoftFreeze =
+      (body as { simulateSoftFreeze?: boolean }).simulateSoftFreeze === true
+    const simulateEnabledWithBlocker =
+      (body as { simulateEnabledWithBlocker?: boolean }).simulateEnabledWithBlocker === true
+
+    const unrelatedBlocker = createPolicyBlocker({
+      code: 'warehouse.capability_changed',
+      field: null,
+      messageAr: 'تغيّرت قدرة المستودع، راجع سجل القدرات.',
+    })
+
     const adjustment: InventoryAdjustment = {
       adjustmentId,
       countReference: body.countId ? `EIAMS-CNT-LINKED` : null,
@@ -2382,29 +2402,54 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       })),
       policy: {
         actions: [
-          {
-            action: 'Post',
-            allowed: false,
-            confirmationRequired: true,
-            presentation: 'Disabled',
-            reasonAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
-            reasonCode: 'SignedOriginalRequired',
-            reasonRequired: false,
-          },
+          simulateEnabledWithBlocker
+            ? {
+                action: 'Post',
+                allowed: true,
+                confirmationRequired: true,
+                presentation: 'Enabled',
+                reasonAr: null,
+                reasonCode: null,
+                reasonRequired: false,
+              }
+            : {
+                action: 'Post',
+                allowed: false,
+                confirmationRequired: true,
+                presentation: 'Disabled',
+                reasonAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+                reasonCode: 'document.signed_original_missing',
+                reasonRequired: false,
+              },
         ],
-        advisories: [],
-        blockers: [
-          createPolicyBlocker({
-            code: 'SignedOriginalRequired',
-            messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
-          }),
-        ],
+        advisories: simulateSoftFreeze
+          ? [
+              {
+                code: 'ActiveSoftFreeze',
+                severity: 'Warning',
+                messageAr: 'هناك جرد نشط يغطي نطاق هذا المستودع.',
+                countId: '523e4567-e89b-42d3-a456-4266141740c1',
+                countReference: 'EIAMS-CNT-2026-0114',
+                overlapState: 'Provisional',
+                scopeSummaryAr: 'المستودع المركزي',
+                warehouseId: body.warehouseId,
+              },
+            ]
+          : [],
+        blockers: simulateEnabledWithBlocker
+          ? [unrelatedBlocker]
+          : [
+              createPolicyBlocker({
+                code: 'document.signed_original_missing',
+                messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+              }),
+            ],
         documentId,
         documentStatus: 'Draft',
         evaluatedAt: now,
         policyKind: 'Adjustment',
         rowVersion: 0,
-        signedOriginalSatisfied: false,
+        signedOriginalSatisfied: simulateEnabledWithBlocker,
       },
       postedAt: null,
       purpose: body.purpose,
@@ -2479,7 +2524,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     if (!row.policy.signedOriginalSatisfied) {
       return HttpResponse.json(
         {
-          code: 'SignedOriginalRequired',
+          code: 'document.signed_original_missing',
           messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
         },
         { status: 422 },

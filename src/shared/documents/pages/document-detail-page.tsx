@@ -170,18 +170,30 @@ const EMPTY_CAPABILITY_EVALUATIONS: readonly CapabilityEvaluation[] = []
 /**
  * Client-side preflight summary (e12-t12) rendered above the lifecycle action
  * bar. Blocked gates render as Arabic destructive alerts; unknown gates render
- * as muted notes. Server blockers already rendered by the bar are deduped by
- * message text, and SoftFreeze advisories stay exclusively with the bar
- * (warnings only — never rendered here).
+ * as muted notes. SoftFreeze advisories stay exclusively with the bar (warnings
+ * only — never rendered here).
+ *
+ * e24-t07: a gate that restates a blocker the server already renders is
+ * suppressed **by blocker code** whenever the gate resolved one, so reworded
+ * server copy can no longer make a single failure appear twice. Gates with no
+ * server code of their own (balance, capability) fall back to matching the
+ * Arabic message, which remains the only signal they carry.
  */
 function PreflightSummary({ preflight }: { preflight: DocumentPreflight | null }) {
   if (preflight === null) {
     return null
   }
+  const blockerCodes = new Set(preflight.blockers.map((blocker) => blocker.code))
   const blockerMessages = new Set(preflight.blockers.map((blocker) => blocker.messageAr))
-  const visibleGates = preflight.gates.filter(
-    (gate) => gate.messageAr !== null && !blockerMessages.has(gate.messageAr),
-  )
+  const visibleGates = preflight.gates.filter((gate) => {
+    if (gate.messageAr === null) {
+      return false
+    }
+    if (gate.blockerCode !== null) {
+      return !blockerCodes.has(gate.blockerCode)
+    }
+    return !blockerMessages.has(gate.messageAr)
+  })
   if (visibleGates.length === 0) {
     return null
   }

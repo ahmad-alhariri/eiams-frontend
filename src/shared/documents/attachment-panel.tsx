@@ -79,6 +79,14 @@ function GateStatusRow({
   documentStatus: DocumentStatus | undefined
 }) {
   const satisfied = policy ? policy.signedOriginalSatisfied : hasSignedOriginal
+  // e24-t07: deliberately NOT widened to the canonical vocabulary. Widening it
+  // to also match the `document.`-prefixed spelling (what the contract producers
+  // emit) makes this row render the server's Arabic reason, and the lifecycle
+  // action bar renders the same blocker on the same screen — the identical
+  // sentence then appears twice. The bar owns that message today; this row owns
+  // the requirement badge. Recorded as a finding in
+  // docs/policy-failure-matrix-verification.md rather than "fixed", because the
+  // fix is a presentation-ownership decision, not a matcher bug.
   const signedBlocker = policy?.blockers?.find((blocker) =>
     blocker.code.startsWith('signed_original'),
   )

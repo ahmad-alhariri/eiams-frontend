@@ -4,9 +4,12 @@ import { getDb, resetMockDatabase } from '@/mocks/db'
 import { mockApiHandlers } from '@/mocks/handlers'
 import { apiClient } from '@/shared/services/api.client'
 import { createDevSession } from '@/shared/services/dev-session'
-import type { AssetPage } from '@/shared/types/generated/eiams-v1'
+import type { AssetPage, DocumentPolicy } from '@/shared/types/generated/eiams-v1'
 import { createStockMovement, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+
+/** The policy slice the adjustment handlers project onto a created draft. */
+type AdjustmentPolicySlice = DocumentPolicy
 
 /**
  * Verifies the dev mock API against the contract shapes it claims to serve:
@@ -853,6 +856,84 @@ describe('mock API handlers', () => {
       apiClient.get('/inventory/balances/00000000-0000-4000-8000-00000000ffff'),
     ).rejects.toMatchObject({
       response: { status: 404 },
+    })
+  })
+
+  // e24-t07 — the two policy states the adjustment action bar must handle but
+  // that no other mock path could express, so that the bar's behaviour could be
+  // verified in a browser rather than only in component tests.
+  describe('adjustment policy simulation (e24-t07)', () => {
+    const WAREHOUSE_ID = '823e4567-e89b-42d3-a456-426614174008'
+
+    function draft(overrides: Record<string, unknown> = {}) {
+      return {
+        warehouseId: WAREHOUSE_ID,
+        purpose: 'DirectCorrection',
+        reason: 'اختبار',
+        lines: [
+          {
+            materialId: '423e4567-e89b-42d3-a456-426614174004',
+            quantityDelta: -3,
+            reason: 'عجز',
+          },
+        ],
+        ...overrides,
+      }
+    }
+
+    it('blocks Post by default and serves the canonical blocker code', async () => {
+      const { data } = await apiClient.post<{ policy: AdjustmentPolicySlice }>(
+        '/adjustments',
+        draft(),
+      )
+
+      expect(data.policy.signedOriginalSatisfied).toBe(false)
+      expect(data.policy.actions[0]?.presentation).toBe('Disabled')
+      expect(data.policy.actions[0]?.allowed).toBe(false)
+      expect(data.policy.blockers.map((blocker) => blocker.code)).toEqual([
+        'document.signed_original_missing',
+      ])
+      // Canonical vocabulary, never the mock's former PascalCase invention.
+      expect(data.policy.blockers[0]?.code).not.toBe('SignedOriginalRequired')
+    })
+
+    it('attaches an ActiveSoftFreeze advisory only when asked', async () => {
+      const { data } = await apiClient.post<{ policy: AdjustmentPolicySlice }>(
+        '/adjustments',
+        draft({ simulateSoftFreeze: true }),
+      )
+
+      expect(data.policy.advisories).toHaveLength(1)
+      expect(data.policy.advisories[0]?.code).toBe('ActiveSoftFreeze')
+      expect(data.policy.advisories[0]?.severity).toBe('Warning')
+      expect(data.policy.advisories[0]?.countReference).toBeTruthy()
+      // A SoftFreeze is a warning and must not become a block.
+      expect(data.policy.blockers.map((blocker) => blocker.code)).toEqual([
+        'document.signed_original_missing',
+      ])
+    })
+
+    it('presents Post Enabled alongside an unrelated blocker when asked', async () => {
+      const { data } = await apiClient.post<{ policy: AdjustmentPolicySlice }>(
+        '/adjustments',
+        draft({ simulateEnabledWithBlocker: true }),
+      )
+
+      expect(data.policy.actions[0]?.presentation).toBe('Enabled')
+      expect(data.policy.actions[0]?.allowed).toBe(true)
+      // The blocker is present but is not a signed-original one, so the gate row
+      // does not claim the requirement is unmet.
+      expect(data.policy.signedOriginalSatisfied).toBe(true)
+      expect(data.policy.blockers).toHaveLength(1)
+      expect(data.policy.blockers[0]?.code).toBe('warehouse.capability_changed')
+    })
+
+    it('leaves the default dev flow unchanged when no flag is sent', async () => {
+      const { data } = await apiClient.post<{ policy: AdjustmentPolicySlice }>(
+        '/adjustments',
+        draft(),
+      )
+      expect(data.policy.advisories).toEqual([])
     })
   })
 })

@@ -39,6 +39,7 @@ describe('evaluateBalanceGate', () => {
       gate: 'balance',
       status: 'blocked',
       messageAr: 'الكمية المطلوبة (٢٥) تتجاوز الرصيد المتاح (١٢) للمادة «ورق تصوير A4».',
+      blockerCode: null,
     })
   })
 
@@ -48,6 +49,7 @@ describe('evaluateBalanceGate', () => {
         gate: 'balance',
         status: 'blocked',
         messageAr: 'الكمية المطلوبة (٤٠) تتجاوز الرصيد المتاح (٣٠) للمادة «ورق تصوير A4».',
+        blockerCode: null,
       },
     )
   })
@@ -57,6 +59,7 @@ describe('evaluateBalanceGate', () => {
       gate: 'balance',
       status: 'unknown',
       messageAr: 'لا يتوفر رصيد حي للمادة «ورق تصوير A4» حالياً.',
+      blockerCode: null,
     })
   })
 
@@ -65,6 +68,7 @@ describe('evaluateBalanceGate', () => {
       gate: 'balance',
       status: 'pass',
       messageAr: null,
+      blockerCode: null,
     })
   })
 
@@ -75,6 +79,7 @@ describe('evaluateBalanceGate', () => {
       gate: 'balance',
       status: 'pass',
       messageAr: null,
+      blockerCode: null,
     })
   })
 })
@@ -85,6 +90,7 @@ describe('signedOriginalGate', () => {
       gate: 'signedOriginal',
       status: 'unknown',
       messageAr: 'بانتظار تقييم سياسة الخادم للنسخة الموقعة...',
+      blockerCode: null,
     })
   })
 
@@ -93,6 +99,7 @@ describe('signedOriginalGate', () => {
       gate: 'signedOriginal',
       status: 'pass',
       messageAr: null,
+      blockerCode: null,
     })
   })
 
@@ -107,6 +114,9 @@ describe('signedOriginalGate', () => {
       gate: 'signedOriginal',
       status: 'blocked',
       messageAr: 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
+      // e24-t07: the matched server code is surfaced so a consumer can dedupe
+      // by code rather than by Arabic text.
+      blockerCode: 'document.signed_original_missing',
     })
   })
 
@@ -121,6 +131,7 @@ describe('signedOriginalGate', () => {
       gate: 'signedOriginal',
       status: 'blocked',
       messageAr: 'النسخة الموقعة الحالية غير صالحة.',
+      blockerCode: 'signed_original_invalid',
     })
   })
 
@@ -129,6 +140,7 @@ describe('signedOriginalGate', () => {
       gate: 'signedOriginal',
       status: 'blocked',
       messageAr: 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.',
+      blockerCode: null,
     })
   })
 
@@ -138,6 +150,7 @@ describe('signedOriginalGate', () => {
         gate: 'signedOriginal',
         status: 'pass',
         messageAr: null,
+        blockerCode: null,
       })
     }
   })
@@ -148,6 +161,7 @@ describe('signedOriginalGate', () => {
         gate: 'signedOriginal',
         status: 'blocked',
         messageAr: 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.',
+        blockerCode: null,
       })
     }
   })
@@ -160,7 +174,7 @@ describe('evaluateCapabilityGate', () => {
   it('is not applicable (pass) when the document type has no capability operation', () => {
     expect(
       evaluateCapabilityGate([line({ materialDomainId: DOMAIN_ID })], capability, undefined),
-    ).toEqual({ gate: 'capability', status: 'pass', messageAr: null })
+    ).toEqual({ gate: 'capability', status: 'pass', messageAr: null, blockerCode: null })
   })
 
   it('skips lines without a material domain with an unknown non-blocking gate', () => {
@@ -169,6 +183,7 @@ describe('evaluateCapabilityGate', () => {
         gate: 'capability',
         status: 'unknown',
         messageAr: null,
+        blockerCode: null,
       },
     )
   })
@@ -187,6 +202,7 @@ describe('evaluateCapabilityGate', () => {
       gate: 'capability',
       status: 'blocked',
       messageAr: 'المستودع لا يمتلك قدرة "صرف" لمجال "تقنية المعلومات".',
+      blockerCode: null,
     })
   })
 
@@ -198,13 +214,14 @@ describe('evaluateCapabilityGate', () => {
       gate: 'capability',
       status: 'unknown',
       messageAr: 'لم يكتمل بعد تقييم قدرة المستودع لمجال هذه المادة.',
+      blockerCode: null,
     })
   })
 
   it('passes when every participating domain supports the operation', () => {
     expect(
       evaluateCapabilityGate([line({ materialDomainId: DOMAIN_ID })], capability, 'Issue'),
-    ).toEqual({ gate: 'capability', status: 'pass', messageAr: null })
+    ).toEqual({ gate: 'capability', status: 'pass', messageAr: null, blockerCode: null })
   })
 })
 
@@ -242,7 +259,7 @@ describe('evaluateDocumentPreflight', () => {
     expect(evaluateDocumentPreflight(input()).status).toBe('warn')
     expect(
       evaluateDocumentPreflight(input()).gates.find((gate) => gate.gate === 'capability'),
-    ).toEqual({ gate: 'capability', status: 'unknown', messageAr: null })
+    ).toEqual({ gate: 'capability', status: 'unknown', messageAr: null, blockerCode: null })
   })
 
   it('is clear when every gate passes including a supported capability', () => {

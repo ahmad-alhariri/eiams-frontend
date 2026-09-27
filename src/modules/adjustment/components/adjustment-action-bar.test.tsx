@@ -88,6 +88,7 @@ function Harness({
   purpose,
   actions,
   blockers = [],
+  advisories = [],
   permissions = ['document.view', 'document.post', 'document.reverse'],
 }: {
   status: 'Draft' | 'Posted' | 'Reversed'
@@ -100,6 +101,12 @@ function Harness({
     reasonRequired?: boolean
   }>
   blockers?: ReadonlyArray<{ code: string; messageAr: string }>
+  advisories?: ReadonlyArray<{
+    code: string
+    messageAr: string
+    countReference?: string | null
+    scopeSummaryAr?: string | null
+  }>
   permissions?: string[]
 }) {
   const client = new QueryClient({
@@ -115,6 +122,7 @@ function Harness({
         rowVersion={7}
         actions={actions}
         blockers={blockers}
+        advisories={advisories}
       />
     </QueryClientProvider>
   )
@@ -168,7 +176,7 @@ describe('AdjustmentActionBar (e21-t06)', () => {
         actions={BLOCKED_POST}
         blockers={[
           {
-            code: 'SignedOriginalRequired',
+            code: 'document.signed_original_missing',
             messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
           },
         ]}
@@ -213,6 +221,7 @@ describe('AdjustmentActionBar (e21-t06)', () => {
           rowVersion={1}
           actions={ENABLED_POST}
           blockers={[]}
+          advisories={[]}
         />
       </QueryClientProvider>,
     )

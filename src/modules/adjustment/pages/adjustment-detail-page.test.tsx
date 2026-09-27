@@ -66,14 +66,14 @@ function draftFixture(): InventoryAdjustment {
           confirmationRequired: true,
           presentation: 'Disabled',
           reasonAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
-          reasonCode: 'SignedOriginalRequired',
+          reasonCode: 'document.signed_original_missing',
           reasonRequired: false,
         },
       ],
       advisories: [],
       blockers: [
         {
-          code: 'SignedOriginalRequired',
+          code: 'document.signed_original_missing',
           field: null,
           messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
         },

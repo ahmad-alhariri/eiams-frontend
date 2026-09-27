@@ -100,6 +100,7 @@ export default function AdjustmentDetailPage() {
           rowVersion={adjustment.rowVersion}
           actions={adjustment.policy.actions}
           blockers={adjustment.policy.blockers}
+          advisories={adjustment.policy.advisories}
         />
 
         <ContentCard title="بنود الفروقات">

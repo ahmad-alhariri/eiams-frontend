@@ -16,8 +16,10 @@ import { Button } from '@/shared/ui/button'
  *
  * - Post renders only when the policy presents it AND the manager holds the
  *   posting permission; disabled with the server's Arabic reason while the
- *   SignedOriginal prerequisite is unmet.
+ *   SignedOriginal prerequisite is unmet. The server presentation is the sole
+ *   gate — a blocker is surfaced, never treated as a local disable signal.
  * - Reverse never renders for a disposal adjustment (terminal state).
+ * - Server advisories render as muted notes and never gate an action (e24-t07).
  * - The server remains authoritative: every click fires the idempotent
  *   mutation and surfaces the Arabic failure envelope on rejection.
  */
@@ -28,6 +30,7 @@ export function AdjustmentActionBar({
   rowVersion,
   actions,
   blockers,
+  advisories,
 }: {
   adjustmentId: string
   status: 'Draft' | 'Posted' | 'Reversed'
@@ -44,6 +47,17 @@ export function AdjustmentActionBar({
   }>
   /** Server blockers (SignedOriginal etc.) echoed under the bar. */
   blockers: ReadonlyArray<{ code: string; messageAr: string }>
+  /**
+   * Server policy advisories (e24-t07). Advisory codes are the ONLY codes in the
+   * v1 contract, so an ActiveSoftFreeze warning silently disappeared on the
+   * adjustment surface. They render as muted notes and never gate an action.
+   */
+  advisories: ReadonlyArray<{
+    code: string
+    messageAr: string
+    countReference?: string | null
+    scopeSummaryAr?: string | null
+  }>
 }) {
   const { has } = usePermission()
   const postAction = usePostAdjustmentAction(adjustmentId)
@@ -67,7 +81,12 @@ export function AdjustmentActionBar({
     reverseAvailability !== undefined &&
     reverseAvailability.presentation !== 'Hidden'
 
-  const postBlockedByServer = blockers.length > 0
+  // e24-t07: a blocker is *displayed*, never used as a local gate. The server
+  // owns whether an action is available (`presentation` / `allowed`); deriving
+  // "blocked" from `blockers.length > 0` disabled Post even when the server
+  // presented it as Enabled, diverging from the shared LifecycleActionBar for an
+  // identical policy payload.
+  const hasBlockers = blockers.length > 0
 
   if (!canSeePost && !canSeeReverse && status !== 'Draft' && status !== 'Posted') {
     return null
@@ -75,7 +94,7 @@ export function AdjustmentActionBar({
 
   return (
     <div data-slot="adjustment-action-bar" className="grid gap-3">
-      {postBlockedByServer ? (
+      {hasBlockers ? (
         <div role="alert" className="flex flex-col gap-1 rounded-md bg-destructive/5 px-3 py-2">
           {blockers.map((blocker) => (
             <p key={blocker.code} className="text-sm font-medium text-destructive">
@@ -85,12 +104,34 @@ export function AdjustmentActionBar({
         </div>
       ) : null}
 
+      {advisories.length > 0 ? (
+        <div
+          data-slot="adjustment-advisories"
+          className="flex flex-col gap-1 rounded-md bg-muted/40 px-3 py-2"
+        >
+          {advisories.map((advisory) => (
+            <p
+              key={advisory.code}
+              data-slot="policy-advisory-row"
+              className="text-sm text-muted-foreground"
+            >
+              {advisory.messageAr}
+              {advisory.scopeSummaryAr ? ` — ${advisory.scopeSummaryAr}` : ''}
+              {advisory.countReference ? ` (مرجع: ${advisory.countReference})` : ''}
+            </p>
+          ))}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-3">
         {canSeePost ? (
           <Button
             type="button"
-            disabled={
-              postBlockedByServer || postAvailability?.allowed === false || postAction.isPending
+            disabled={postAvailability?.allowed === false || postAction.isPending}
+            title={
+              postAvailability?.allowed === false
+                ? (postAvailability.reasonAr ?? undefined)
+                : undefined
             }
             onClick={() => postAction.mutate({ rowVersion })}
           >

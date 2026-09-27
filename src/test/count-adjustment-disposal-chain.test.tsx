@@ -131,7 +131,7 @@ function draftOf(value: InventoryAdjustment, signed = true): InventoryAdjustment
         ? []
         : [
             {
-              code: 'SignedOriginalRequired',
+              code: 'document.signed_original_missing',
               messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
             },
           ],
