@@ -60,14 +60,18 @@ const countLineColumns = countLineColumnHelper.columns([
   countLineColumnHelper.accessor('difference', {
     id: 'difference',
     header: 'الفرق',
-    // Straight from the server read model. An unentered line has no
-    // difference to show; kc7v forbids inventing one.
-    cell: ({ getValue }) => {
-      const difference = getValue()
-      const isUnentered = difference === null || difference === undefined
+    // Straight from the server read model, but an unentered line is never
+    // presented as a zero difference: kc7v forbids treating null as zero,
+    // because the snapshot 0 simply reflects that nothing was counted.
+    cell: ({ row }) => {
+      const line = row.original
+      if (line.actualQuantity == null) {
+        return <span className="ltr text-muted-foreground">—</span>
+      }
+      const difference = line.difference
       return (
-        <span className={`ltr ${!isUnentered && difference !== 0 ? 'text-destructive' : ''}`}>
-          {isUnentered ? '—' : difference > 0 ? `+${difference}` : difference}
+        <span className={`ltr ${difference !== 0 ? 'text-destructive' : ''}`}>
+          {difference > 0 ? `+${difference}` : difference}
         </span>
       )
     },

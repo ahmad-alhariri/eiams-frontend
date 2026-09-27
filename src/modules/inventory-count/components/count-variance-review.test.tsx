@@ -329,13 +329,19 @@ describe('CountVarianceReview mixed session (ef78)', () => {
     expect(screen.getByText(/ذات فرق:/)).toHaveTextContent('2')
     expect(screen.getByText(/دون سبب:/)).toHaveTextContent('1')
 
-    // The unentered line shows an em dash in both its actual and difference
-    // cells, never the -40 a naive `actual - snapshot` (or `null =>
-    // -snapshot`) would produce.
+    // The unentered line shows an em dash in its actual, difference and reason
+    // cells — never the -40 a naive `actual - snapshot` (or `null =>
+    // -snapshot`) would produce, and never the server's incidental `0`, which
+    // would present "nothing counted" as "counted and matching".
     const unenteredRow = screen.getByText('ورق تصوير A4').closest('tr')!
-    expect(within(unenteredRow).getAllByText('—').length).toBeGreaterThanOrEqual(1)
-    expect(within(unenteredRow).queryByText('-40')).not.toBeInTheDocument()
-    expect(within(unenteredRow).getByText('لم تُدخل الكمية بعد')).toBeInTheDocument()
+    const unenteredCells = [...unenteredRow.querySelectorAll('td')].map((td) =>
+      td.textContent.trim(),
+    )
+    expect(unenteredCells[2]).toBe('—')
+    expect(unenteredCells[3]).toBe('—')
+    expect(unenteredCells[4]).toBe('—')
+    expect(unenteredCells[5]).toBe('لم تُدخل الكمية بعد')
+    expect(unenteredRow.textContent).not.toContain('-40')
 
     // Entered lines show exactly the server's difference.
     const varianceRow = screen.getByText('طابعة ليزر').closest('tr')!
