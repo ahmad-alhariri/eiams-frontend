@@ -399,6 +399,16 @@ export interface DocumentDetailBodyProps extends DocumentDetailPageProps {
     ((action: DocumentActionType, reason?: string) => void | Promise<void>) | undefined
   petalSlot?: ReactNode
   policy: DocumentPolicy | null
+  /**
+   * Present only when the policy read itself FAILED and no policy is available
+   * (e24-t09 / SAD.md §"Resilience", D-AUD-02 rule 6). `policy: null` alone
+   * cannot distinguish "still loading" from "the read failed", so the routed
+   * page reports the failure here and this body replaces the action surface
+   * with a retryable Arabic error instead of an unexplained pending note.
+   * Absent for standalone compositions (gallery/tests) that pass no policy at
+   * all — those keep the original pending presentation.
+   */
+  policyFailure?: { onRetry: () => void } | undefined
   timelineSlot?: ReactNode
 }
 
@@ -420,6 +430,7 @@ export function DocumentDetailBody({
   onExecuteAction,
   petalSlot,
   policy,
+  policyFailure,
   timelineSlot,
 }: DocumentDetailBodyProps) {
   const [busyAction, setBusyAction] = useState<string | null>(null)
@@ -613,7 +624,22 @@ export function DocumentDetailBody({
         description="إجراءات الدورة المتاحة وفق تقييم السياسة الصادر من الخادم، مع المعرقلات والتنبيهات."
       >
         <PreflightSummary preflight={preflight} />
-        {policy === null ? (
+        {policyFailure !== undefined ? (
+          // Partial failure modeled independently (SAD.md:230, D-AUD-02 rule 6):
+          // the document above rendered fine, so only this policy-dependent
+          // surface degrades — and it degrades loudly, with a retry, instead of
+          // leaving the user on a permanently "awaiting policy" note.
+          <ErrorState
+            className="min-h-40"
+            title="تعذّر تحميل سياسة السند"
+            description="تعذّر جلب تقييم إجراءات دورة حياة السند من الخادم، لذلك لا تُعرض الإجراءات الآن. بيانات السند أعلاه صحيحة. تحقق من الاتصال ثم أعد المحاولة."
+            action={
+              <Button type="button" variant="outline" size="sm" onClick={policyFailure.onRetry}>
+                إعادة المحاولة
+              </Button>
+            }
+          />
+        ) : policy === null ? (
           <p className="text-sm text-muted-foreground">بانتظار تقييم سياسة المستند من الخادم...</p>
         ) : (
           <LifecycleActionBar
@@ -690,6 +716,24 @@ function DocumentDetailPage({
   // is recreated every render, so only the function enters the action deps.
   const { reportConflict } = conflictRecovery
   const attachmentManager = useDocumentAttachmentManager(documentId ?? null)
+
+  // F-1 (e24-t09, SAD.md:230 / D-AUD-02 rule 6): the detail and policy reads
+  // are two independent queries, so they must degrade independently.
+  // `policyQuery.data ?? null` collapses "still loading" and "the read failed"
+  // into the same `null`, which made ONE failed policy read render a fully
+  // loaded document whose entire lifecycle action surface silently vanished
+  // behind a permanent "awaiting policy evaluation" note — no Arabic reason,
+  // no error, no retry. It fails CLOSED (no action is ever wrongly enabled),
+  // so this is a recovery/UX/a11y defect, not a privilege-escalation hole.
+  // Only a FAILED read with no cached policy reports the failure; a failed
+  // background refetch over already-cached policy data keeps rendering the
+  // bar from the server's last authoritative evaluation. The retry closes over
+  // the live query object rather than a memoized refetch, so it always
+  // refetches the current key.
+  const policyFailure =
+    policyQuery.isError && policyQuery.data === undefined
+      ? { onRetry: () => void policyQuery.refetch() }
+      : undefined
 
   const submitMutation = useSubmitDocumentMutation(documentId ?? null)
   const postMutation = usePostDocumentMutation(documentId ?? null)
@@ -834,6 +878,7 @@ function DocumentDetailPage({
         isActionPermitted={(action) => policyGate.decision(action).presentation !== 'Hidden'}
         listRouteKey={routeEntry.listRouteKey}
         policy={policyQuery.data ?? null}
+        policyFailure={policyFailure}
         attachmentMutationProps={{
           pendingUploads: attachmentManager.pendingUploads,
           onUpload: attachmentManager.onUpload,
