@@ -13,8 +13,9 @@ declines to be an authorization authority.
   a user holds exactly one role at exactly one assigned scope.
 - **Authorization policy v1** (SYSTEM tree
   `docs/integration/rbac-authorization-policy-v1-draft.md` §3): the approved
-  effective permission sets. This is the newest human decision and **supersedes**
-  the role rows still present in the repository copy of the matrix.
+effective permission sets. This is the newest human decision and **supersedes**
+the role rows in the matrix. Those rows have since been reconciled — see *Two
+role rows reconciled with the approved policy* below.
 - **Legacy → dotted mapping** (SYSTEM tree
   `docs/integration/rbac-legacy-to-dotted-mapping-v1.md`): role conversion and the
   explicit policy choices behind it.
@@ -91,19 +92,37 @@ growth will not break them, but a real regression — a keeper gaining
 | DATA_MANAGER is deferred | Declared deferred, has no grant row, and is not silently granted anything |
 | Navigation mirrors the routes | No nav item is shown to a role that cannot reach it, and none is hidden from a role that can |
 
-### Two supersessions worth flagging
+### Two role rows reconciled with the approved policy
 
-The role rows still in the repository copy of `route-permission-scope-matrix.md`
-are stale relative to the approved policy. Where they disagree, this suite
-encodes the **approved** position:
+**Correction (2026-09-27, `e24-t07`).** This section originally claimed the role
+rows in `route-permission-scope-matrix.md` were *stale* and that this suite
+contradicted the repository. That was wrong, and the error is worth recording.
 
-1. SYSTEM_ADMIN is **not** "all v1 codes" — it holds 10 structural codes at
-   Enterprise only, with no `audit.view` and no `report.view`.
-2. `DATA_MANAGER` is **not** one of five seeded roles — it is deferred for v1.
+The branch was cut from `codex/e24-t05`, which was two commits behind `origin/main`.
+Commit `5cf7492` had already added the D-RBAC-02 and D-WH-01 addenda to this
+file, and those addenda **do** make Enterprise supervisory — so the
+`WH_MGR`-at-Enterprise contradiction this suite appeared to expose had already
+been resolved on `main`. The file this slice read was a stale working-tree copy,
+and `main` was never checked.
 
-The stale rows should be brought into line with the approved policy; this slice
-deliberately did not edit that document, since the SYSTEM tree's policy is the
-governing artifact and the divergence is better resolved there.
+What is actually true, and what was done:
+
+1. `SYSTEM_ADMIN` is **not** "all v1 codes" — it holds 10 structural codes at
+   Enterprise only, with no `audit.view` and no `report.view`. No ratified
+   addendum revisited this row, so it was genuinely still wrong on `main`. The
+   role seed table has now been corrected, and the row is flagged as awaiting
+   owner ratification because the source policy is itself marked *partially
+   approved*.
+2. `DATA_MANAGER` is **not** a seeded v1 role — it is deferred. Also still wrong
+   on `main`, also now corrected, and likewise flagged for ratification.
+3. **D-RBAC-03** (Site scope is oversight only, approved 2026-09-13) was never
+   present in this file at all. It existed only in the system repository's copy.
+   This suite has always encoded it correctly, and it is now **cited** in the
+   matrix rather than copied — see that file's *Provenance and authority*
+   section.
+
+The test expectations in this suite were correct throughout and did not change.
+Only the diagnosis and the citations were wrong, and both are now fixed.
 
 ## Manual verification
 
