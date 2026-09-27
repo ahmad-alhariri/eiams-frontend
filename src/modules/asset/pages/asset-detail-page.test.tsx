@@ -1,5 +1,5 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -63,8 +63,7 @@ function useDetailHandlers() {
   )
 }
 
-function renderPage() {
-  const client = createQueryClient()
+function renderPage(client: QueryClient = createQueryClient()) {
   function Wrapper({ children }: PropsWithChildren) {
     return (
       <MemoryRouter initialEntries={[`/assets/${ASSET_ID}`]}>
@@ -77,6 +76,15 @@ function renderPage() {
     )
   }
   return render(<AssetDetailPage />, { wrapper: Wrapper })
+}
+
+/**
+ * `retry: false` so a deliberately failing read settles in one attempt. The
+ * production `createQueryClient()` retries once with the default backoff, which
+ * would leave the failure pending for ~1s of real time.
+ */
+function createDeterministicClient(): QueryClient {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } })
 }
 
 describe('AssetDetailPage (e18-t03)', () => {
@@ -202,5 +210,82 @@ describe('AssetDetailPage (e18-t03)', () => {
 
     await screen.findByText(/الحائز: مديرية المعلوماتية/)
     expect(screen.queryByText('نهاية العهدة:')).not.toBeInTheDocument()
+  })
+
+  // e24-t10 / B4. The custody read, the empty read, and the failed read were
+  // one ternary, so a FAILED read rendered "لا توجد عهدة مسجّلة لهذا الأصل" —
+  // a claim that the asset has no custodian at all, which the server never
+  // made, with no retry. The sibling page already reports the same failed read
+  // correctly; this suite pins that the two surfaces agree.
+  it('reports a failed custody read as an error with a retry, never as "no custody"', async () => {
+    let custodyRequests = 0
+    let custodyShouldFail = true
+    server.use(
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
+        HttpResponse.json(
+          createAssetFixture({
+            assetId: ASSET_ID,
+            assetNumber: 'AST-2024-C01',
+            derivedStatus: 'InCustody',
+            material: { id: fixtureUuid(61), displayName: 'حاسوب مكتبي' },
+          }),
+        ),
+      ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () => {
+        custodyRequests += 1
+        if (custodyShouldFail) {
+          return new HttpResponse(null, { status: 500 })
+        }
+        return HttpResponse.json([
+          createAssetCustody({
+            custodyId: fixtureUuid(54),
+            assetId: ASSET_ID,
+            assetNumber: 'AST-2024-C01',
+            custodyKind: 'Operational',
+            status: 'Active',
+            holder: {
+              displayName: 'مديرية المعلوماتية',
+              id: fixtureUuid(20),
+              secondaryLabelAr: null,
+              status: 'Active' as const,
+              type: 'OrganizationalUnit' as const,
+            },
+            fromTs: '2026-08-24T08:00:00.000Z',
+            toTs: null,
+          }),
+        ])
+      }),
+    )
+    renderPage(createDeterministicClient())
+
+    // The asset itself loaded fine, so only the custody surface degrades.
+    expect(await screen.findByText('AST-2024-C01')).toBeInTheDocument()
+    const error = (await screen.findByText('تعذّر تحميل سجل العهدة')).closest<HTMLElement>(
+      '[data-slot="error-state"]',
+    )!
+    expect(error).toHaveAttribute('role', 'alert')
+    // The false claim about the asset's custody is gone.
+    expect(screen.queryByText('لا توجد عهدة مسجّلة لهذا الأصل.')).not.toBeInTheDocument()
+
+    custodyShouldFail = false
+    fireEvent.click(within(error).getByRole('button', { name: 'إعادة المحاولة' }))
+
+    expect(await screen.findByText(/الحائز: مديرية المعلوماتية/)).toBeInTheDocument()
+    expect(screen.queryByText('تعذّر تحميل سجل العهدة')).not.toBeInTheDocument()
+    expect(custodyRequests).toBeGreaterThan(1)
+  })
+
+  it('uses the shared retry Button, not a hand-rolled element, for the asset read failure', async () => {
+    server.use(
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () => new HttpResponse(null, { status: 500 })),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () => HttpResponse.json([])),
+    )
+    const { container } = renderPage(createDeterministicClient())
+
+    const retry = await screen.findByRole('button', { name: 'إعادة المحاولة' })
+    expect(retry).toHaveAttribute('data-slot', 'button')
+    expect(retry.className).toContain('h-8')
+    // The hand-rolled element was a raw <button> with no design-system slot.
+    expect(container.querySelector('button:not([data-slot="button"])')).toBeNull()
   })
 })

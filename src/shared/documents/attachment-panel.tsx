@@ -53,6 +53,14 @@ export type AttachmentPanelProps = {
   isUploading: boolean
   /** Arabic error text from the parent's failed upload mutation. */
   uploadError?: string | null
+  /**
+   * Arabic error text from the parent's failed delete mutation. A delete
+   * targets an already-stored row, not a pending one, so it has no row to
+   * render inside; the panel surfaces it as its own `role="alert"` region
+   * (e24-t10 / B1). Without this prop a 403/409/network delete failure left the
+   * screen unchanged and said nothing at all.
+   */
+  deleteError?: string | null
   /** DocumentPolicy slice for the signed-original gate row (display only). */
   policy?: AttachmentPanelPolicy | null
   /** Current document status; when posting is no longer possible the gate
@@ -357,6 +365,7 @@ function AttachmentPanel({
   onCancelPending,
   isUploading,
   uploadError,
+  deleteError,
   policy,
   documentStatus,
   readOnly = false,
@@ -456,6 +465,17 @@ function AttachmentPanel({
         onRetry={(pending) => onUpload([pending.file], pending.attachmentType)}
         onCancel={onCancelPending}
       />
+
+      {deleteError ? (
+        <p
+          role="alert"
+          data-slot="attachment-delete-error"
+          data-testid="attachment-delete-error"
+          className="text-sm text-destructive"
+        >
+          {deleteError}
+        </p>
+      ) : null}
 
       {confirmElement}
     </div>

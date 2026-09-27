@@ -206,11 +206,14 @@ browser test can observe, and none of it is claimed here.
   `retry: 1`, so a real failing policy read takes two attempts and about a
   second before it settles. The *behaviour* under test is the same, but the
   timing a user sees is not what the test clock shows.
-- **No browser QA was performed** for this slice. The Arabic copy, the RTL
-  layout of the new `ErrorState` inside the lifecycle card, and the
-  `min-h-40` sizing were verified only through Testing Library queries. The
-  page previously rendered no `ErrorState` inside a `ContentCard`, so its visual
-  weight inside that card is worth one rendered pass before closure.
+- **Browser QA has since been performed** for this slice — see the *Browser QA*
+  section above (11 checks, all PASS). An earlier revision of this file carried a
+  "no browser QA was performed" bullet that contradicted its own QA table; the
+  bullet was stale text from before the pass and has been corrected. The
+  `ErrorState`-inside-`ContentCard` visual concern it raised is now resolved:
+  the in-card rendering, the `min-h-40` override against the component's
+  `min-h-64` default, the `role="alert"` announcement, the visible focus ring,
+  and layout at 1440/768/390 were all confirmed on a rendered page.
 
 ## Deliberately not implemented
 

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -227,5 +227,53 @@ describe('TransferDocumentFormPage (e17-t04/t05/t06)', () => {
     const transferInfo = postedBody?.['transferInfo'] as Record<string, unknown>
     expect(transferInfo['destinationWarehouseId']).toBe(DESTINATION_WAREHOUSE_ID)
     expect(transferInfo['destinationWarehouseName']).toBe('مستودع الفرع الشمالي')
+  }, 40000)
+
+  // e24-t10 / B3. A failed per-line balance read used to be mapped to "no stock
+  // held" (null), so the form printed a factually false statement about
+  // inventory — "الكمية المطلوبة … تتجاوز الرصيد المتاح في المستودع المصدر (0)"
+  // — with no error and no retry. It must instead say the read failed, block
+  // Save, and recover into the real over-balance check once the read succeeds.
+  it('reports a failed balance read honestly, blocks Save, and recovers on retry', async () => {
+    useHandlers()
+    let balanceShouldFail = true
+    server.use(
+      http.get(`${API_BASE_URL}/inventory/balances`, () =>
+        balanceShouldFail
+          ? new HttpResponse(null, { status: 500 })
+          : HttpResponse.json(createPage([])),
+      ),
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('سند تحويل جديد')
+    await fillHeader(user)
+    await fillLine(user)
+    // Deliberately over the seeded 100 balance, so a successful read below must
+    // produce the genuine over-balance block.
+    const quantity = screen.getByLabelText('الكمية')
+    await user.clear(quantity)
+    await user.type(quantity, '150')
+
+    const failure = await screen.findByTestId('balance-read-error')
+    expect(failure).toHaveAttribute('role', 'alert')
+    expect(failure).toHaveTextContent('تعذّر جلب الأرصدة المتاحة. أعد المحاولة قبل الحفظ.')
+    // The false claim about inventory is gone.
+    expect(screen.queryByText(/تتجاوز الرصيد المتاح/)).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('الرصيد المتاح في المستودع المصدر (0)')
+    // Fail CLOSED: an unverified balance never reaches persistence.
+    expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeDisabled()
+    expect(postedBody).toBeUndefined()
+
+    // Retrying re-reads the balances; the recovered read then produces the
+    // REAL block for the same line (AGENTS.md rule 3 is not weakened).
+    balanceShouldFail = false
+    await user.click(within(failure).getByRole('button', { name: 'إعادة المحاولة' }))
+
+    expect(await screen.findByText(/تتجاوز الرصيد المتاح في المستودع المصدر/)).toBeInTheDocument()
+    expect(screen.queryByTestId('balance-read-error')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeDisabled()
+    expect(postedBody).toBeUndefined()
   }, 40000)
 })

@@ -60,12 +60,24 @@ import { formatDate, formatDateTime, formatNumber, toArabicDigits } from '@/shar
 
 /**
  * Mutation props the attachment panel needs, surfaced as an OPTIONAL page
- * prop: t10/t11 wire the real upload/delete mutations here. Until then the
- * panel renders its read-only presentation (server attachments + policy gate).
+ * prop: the routed page wires the real upload/delete manager (t06). Until then
+ * the panel renders its read-only presentation (server attachments + policy
+ * gate).
+ *
+ * `deleteError` is part of this `Pick` (e24-t10 / B1): the manager already
+ * produced it, but the page's `Pick` — the narrower of the two prop types — was
+ * dropping it on the floor, so a failed delete produced no user-visible
+ * feedback whatsoever.
  */
 export type DocumentDetailAttachmentMutationProps = Pick<
   AttachmentPanelProps,
-  'pendingUploads' | 'onUpload' | 'onRemove' | 'onCancelPending' | 'isUploading' | 'uploadError'
+  | 'pendingUploads'
+  | 'onUpload'
+  | 'onRemove'
+  | 'onCancelPending'
+  | 'isUploading'
+  | 'uploadError'
+  | 'deleteError'
 >
 
 export interface DocumentDetailPageProps {
@@ -613,6 +625,7 @@ export function DocumentDetailBody({
           onCancelPending={attachmentMutationProps?.onCancelPending ?? NOOP_CANCEL_PENDING}
           isUploading={attachmentMutationProps?.isUploading ?? false}
           uploadError={attachmentMutationProps?.uploadError ?? null}
+          deleteError={attachmentMutationProps?.deleteError ?? null}
           policy={attachmentPolicy}
           documentStatus={document.documentStatus}
           readOnly={attachmentsReadOnly}
@@ -886,6 +899,7 @@ function DocumentDetailPage({
           onCancelPending: attachmentManager.onCancelPending,
           isUploading: attachmentManager.isUploading,
           uploadError: attachmentManager.uploadError,
+          deleteError: attachmentManager.deleteError,
         }}
         linesSlot={linesSlot}
         onExecuteAction={handleExecuteAction}

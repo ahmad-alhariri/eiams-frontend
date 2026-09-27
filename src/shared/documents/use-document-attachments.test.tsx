@@ -254,12 +254,18 @@ describe('useDocumentAttachmentManager', () => {
     expect(deletes).toBe(0)
   })
 
-  it('exposes the Arabic delete error on a 409 and keeps the attachment', async () => {
+  // e24-t10 / B2: the manager used to keep only `titleAr` and never refetched
+  // on a 409. It now keeps the server's `detailAr` and, on a conflict only,
+  // invalidates the scoped detail branch so the panel stops describing a
+  // document the server has already changed.
+  it('exposes the server Arabic detail on a 409, keeps the attachment, and refetches the detail', async () => {
     const store = { document: makeDraftDocument([signedAttachment()]) }
+    let detailRequests = 0
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(store.document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
+        detailRequests += 1
+        return HttpResponse.json(store.document)
+      }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
         ({ request }) => {
@@ -285,13 +291,88 @@ describe('useDocumentAttachmentManager', () => {
       wrapper: createWrapper(),
     })
     await waitFor(() => expect(result.current.attachments).toHaveLength(1))
+    const before = detailRequests
 
     act(() => result.current.onRemove(result.current.attachments[0]!))
 
     await waitFor(() =>
-      expect(result.current.deleteError).toBe('تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.'),
+      expect(result.current.deleteError).toBe('تعذر تنفيذ الإجراء: المستند عدَّله مستخدم آخر.'),
     )
     expect(result.current.attachments).toHaveLength(1)
+    // D-LIFE-01 rule 6: the cached document was stale, so it is refetched.
+    await waitFor(() => expect(detailRequests).toBeGreaterThan(before))
+  })
+
+  it('falls back to the problem title when the failure carries no Arabic detail', async () => {
+    const store = { document: makeDraftDocument([signedAttachment()]) }
+    let detailRequests = 0
+    server.use(
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
+        detailRequests += 1
+        return HttpResponse.json(store.document)
+      }),
+      http.delete(
+        `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
+        () =>
+          HttpResponse.json(
+            {
+              code: 'attachment.forbidden',
+              status: 403,
+              titleAr: 'لا تملك الصلاحية اللازمة لتنفيذ هذا الإجراء.',
+              detailAr: null,
+              traceId: 'fixture-trace-id',
+            },
+            { status: 403 },
+          ),
+      ),
+    )
+
+    const { result } = renderHook(() => useDocumentAttachmentManager(DOCUMENT_ID), {
+      wrapper: createWrapper(),
+    })
+    await waitFor(() => expect(result.current.attachments).toHaveLength(1))
+    const before = detailRequests
+
+    act(() => result.current.onRemove(result.current.attachments[0]!))
+
+    await waitFor(() =>
+      expect(result.current.deleteError).toBe('لا تملك الصلاحية اللازمة لتنفيذ هذا الإجراء.'),
+    )
+    // A 403 says nothing about document freshness, so it must not refetch.
+    expect(detailRequests).toBe(before)
+  })
+
+  it('surfaces the server Arabic detail of a failed upload, not the generic title', async () => {
+    const store = { document: makeDraftDocument() }
+    server.use(
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+        HttpResponse.json(store.document),
+      ),
+      http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () =>
+        HttpResponse.json(
+          {
+            code: 'attachment.signed_original_conflict',
+            status: 409,
+            titleAr: 'تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.',
+            detailAr: 'لا يمكن رفع نسخة موقعة بينما السند بحالة مسودة معدَّلة.',
+            traceId: 'fixture-trace-id',
+          },
+          { status: 409 },
+        ),
+      ),
+    )
+
+    const { result } = renderHook(() => useDocumentAttachmentManager(DOCUMENT_ID), {
+      wrapper: createWrapper(),
+    })
+    await waitFor(() => expect(result.current.readOnly).toBe(false))
+
+    act(() => result.current.onUpload([makeFile('signed.pdf')], 'SignedOriginal'))
+
+    await waitFor(() => expect(result.current.uploadError).not.toBeNull())
+    expect(result.current.uploadError).toBe(
+      'لا يمكن رفع نسخة موقعة بينما السند بحالة مسودة معدَّلة.',
+    )
   })
 
   it('renders a zero-network manager for a null documentId', async () => {

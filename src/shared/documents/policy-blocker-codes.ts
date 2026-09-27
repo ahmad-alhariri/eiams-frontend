@@ -16,8 +16,26 @@
  *
  * `document-policy-gates.ts` already matched bare *and* namespaced codes, but
  * `attachment-panel.tsx` matched only the bare form, so a server blocker served
- * under the namespaced vocabulary never surfaced its Arabic message. That is the
- * defect this module removes by giving every consumer one exported predicate.
+ * under the namespaced vocabulary never surfaced its Arabic message.
+ *
+ * ## Current state (read this before relying on the paragraph above)
+ *
+ * This module is the canonical predicate, but **not every consumer has been
+ * migrated to it**. An earlier version of this header stated that it "removes
+ * the defect by giving every consumer one exported predicate", which was not
+ * true. As of the `e24-t10` integration review:
+ *
+ * - `attachment-panel.tsx` still matches with its own narrow
+ *   `startsWith('signed_original')` and does NOT call this predicate.
+ * - `document-policy-gates.ts` keeps a private copy of the same predicate.
+ * - `lifecycle-action-bar.tsx` and `adjustment-action-bar.tsx` render
+ *   `policy.blockers` unfiltered and do not drop duplicates, contrary to a
+ *   claim this header used to make.
+ * - `isSignedOriginalBlocker` has no production call site — only its own test.
+ *
+ * Migrating the consumers, and deciding which action bar owns duplicate
+ * suppression, is tracked by `eiams-frontend-n31q`. Do not assume the migration
+ * has happened.
  *
  * ## Matching policy
  *
