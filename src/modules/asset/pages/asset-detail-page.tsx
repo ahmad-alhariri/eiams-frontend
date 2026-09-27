@@ -14,6 +14,7 @@ import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
+import { formatDateTime } from '@/shared/utils/format'
 
 /**
  * Asset detail page (e18-t03): contract spine of one asset with the
@@ -130,8 +131,17 @@ function CustodySection({ assetId }: { assetId: string }) {
                 الحائز: {entry.holder.displayName}
               </span>
               <span className="text-xs text-muted-foreground" dir="ltr">
-                {entry.fromTs}
+                {formatDateTime(entry.fromTs)}
               </span>
+              {/* e24-t08: a closed custody row's end time is the only record of
+                  when the asset came back. The custody timeline page already
+                  shows it; omitting it here made the two surfaces of the same
+                  append-only data disagree. */}
+              {entry.status === 'Closed' && entry.toTs ? (
+                <span className="text-xs text-muted-foreground">
+                  نهاية العهدة: <span dir="ltr">{formatDateTime(entry.toTs)}</span>
+                </span>
+              ) : null}
             </li>
           ))}
         </ol>

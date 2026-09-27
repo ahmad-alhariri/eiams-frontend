@@ -2,6 +2,7 @@ import type {
   ActionAvailability,
   Asset,
   AssetCustody,
+  AssetMovement,
   AuditLog,
   AuditLogEntry,
   AuthTokenResponse,
@@ -553,6 +554,32 @@ export function createAssetCustody(overrides: FixtureOverrides<AssetCustody> = {
       status: 'Active',
       subjectType: 'Asset',
       toTs: null,
+    },
+    overrides,
+  )
+}
+
+/**
+ * Immutable asset-movement ledger read model (e18-t05). Same standing as
+ * `createStockMovement`: a standalone provenance projection that never derives
+ * an asset status or mutates a document. Defaults describe a receipt into a
+ * warehouse, so an issue/return/disposal row only has to override `eventType`
+ * and the warehouse references it actually moved between.
+ */
+export function createAssetMovement(
+  overrides: FixtureOverrides<AssetMovement> = {},
+): AssetMovement {
+  return withOverrides(
+    {
+      assetId: fixtureUuid(50),
+      documentId: fixtureUuid(150),
+      documentLineId: fixtureUuid(160),
+      documentReference: 'EIAMS-RCV-2026-0001',
+      eventType: 'Received',
+      movementId: fixtureUuid(52),
+      occurredAt: FIXTURE_TIMESTAMP,
+      occurredBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مدير المستودع' }),
+      toWarehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
     },
     overrides,
   )

@@ -12,6 +12,7 @@ import {
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { createQueryClient } from '@/shared/services/query.client'
+import { formatDateTime } from '@/shared/utils/format'
 
 import AssetDetailPage from './asset-detail-page'
 
@@ -114,5 +115,92 @@ describe('AssetDetailPage (e18-t03)', () => {
     renderPage()
 
     expect(await screen.findByText('لا توجد عهدة مسجّلة لهذا الأصل.')).toBeInTheDocument()
+  })
+
+  // e24-t08: this page is the second surface rendering the same append-only
+  // custody data as /assets/:assetId/custody. It rendered `fromTs` as a raw ISO
+  // string and never rendered `toTs`, so the two surfaces of one immutable
+  // ledger disagreed. Browser QA on the dev mock caught the raw ISO string.
+  it('formats custody timestamps and shows a closed row end time', async () => {
+    const fromTs = '2026-08-24T08:00:00.000Z'
+    const toTs = '2026-09-02T11:30:00.000Z'
+    server.use(
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
+        HttpResponse.json(
+          createAssetFixture({
+            assetId: ASSET_ID,
+            derivedStatus: 'InCustody',
+            material: { id: fixtureUuid(61), displayName: 'حاسوب مكتبي' },
+          }),
+        ),
+      ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () =>
+        HttpResponse.json([
+          createAssetCustody({
+            custodyId: fixtureUuid(52),
+            assetId: ASSET_ID,
+            assetNumber: 'AST-2024-C01',
+            custodyKind: 'Operational',
+            status: 'Closed',
+            holder: {
+              displayName: 'مديرية المعلوماتية',
+              id: fixtureUuid(20),
+              secondaryLabelAr: null,
+              status: 'Active' as const,
+              type: 'OrganizationalUnit' as const,
+            },
+            fromTs,
+            toTs,
+          }),
+        ]),
+      ),
+    )
+    renderPage()
+
+    await screen.findByText(/الحائز: مديرية المعلوماتية/)
+
+    expect(screen.getByText(formatDateTime(fromTs))).toBeInTheDocument()
+    expect(screen.getByText('نهاية العهدة:')).toBeInTheDocument()
+    expect(screen.getByText(formatDateTime(toTs))).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain(fromTs)
+    expect(document.body.textContent).not.toContain(toTs)
+  })
+
+  it('omits the end time for an open custody row', async () => {
+    server.use(
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
+        HttpResponse.json(
+          createAssetFixture({
+            assetId: ASSET_ID,
+            derivedStatus: 'InCustody',
+            material: { id: fixtureUuid(61), displayName: 'حاسوب مكتبي' },
+          }),
+        ),
+      ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () =>
+        HttpResponse.json([
+          createAssetCustody({
+            custodyId: fixtureUuid(53),
+            assetId: ASSET_ID,
+            assetNumber: 'AST-2024-C01',
+            custodyKind: 'Operational',
+            status: 'Active',
+            holder: {
+              displayName: 'مديرية المعلوماتية',
+              id: fixtureUuid(20),
+              secondaryLabelAr: null,
+              status: 'Active' as const,
+              type: 'OrganizationalUnit' as const,
+            },
+            fromTs: '2026-08-24T08:00:00.000Z',
+            toTs: null,
+          }),
+        ]),
+      ),
+    )
+    renderPage()
+
+    await screen.findByText(/الحائز: مديرية المعلوماتية/)
+    expect(screen.queryByText('نهاية العهدة:')).not.toBeInTheDocument()
   })
 })

@@ -129,7 +129,9 @@ describe('issue custody and return chain', () => {
     expect(returnedAssetRow).not.toBeNull()
     expect(within(issuedAssetRow as HTMLElement).getByText('صرف')).toBeInTheDocument()
     expect(within(returnedAssetRow as HTMLElement).getByText('إرجاع')).toBeInTheDocument()
-    expect(assetMovementQueries.at(-1)).toMatchObject({ pageIndex: '0', pageSize: '20' })
+    // The movement ledger now shares the app-wide server pagination, so the
+    // page size is the shared default (10), not the former hardcoded 20.
+    expect(assetMovementQueries.at(-1)).toMatchObject({ pageIndex: '0', pageSize: '10' })
 
     await navigate(router, returnDetailPath())
 

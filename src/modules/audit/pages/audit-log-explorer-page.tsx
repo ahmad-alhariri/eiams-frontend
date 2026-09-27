@@ -272,7 +272,12 @@ function AuditLogExplorerPageImpl() {
 export default function AuditLogExplorerPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const auditLogId = searchParams.get('auditLogId') ?? undefined
+  // `?auditLogId=` (present but blank) means "no detail requested". Read as
+  // absent so the detail query stays disabled instead of requesting
+  // `GET /audit-logs/` and rendering a not-found error for a parameter the user
+  // never filled in.
+  const requestedAuditLogId = searchParams.get('auditLogId')?.trim()
+  const auditLogId = requestedAuditLogId ? requestedAuditLogId : undefined
 
   if (auditLogId !== undefined) {
     return <AuditDetail auditLogId={auditLogId} onBack={() => navigate(ROUTE_PATHS.audit)} />

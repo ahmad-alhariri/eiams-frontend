@@ -4,6 +4,8 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { pageRows } from '@/shared/utils/table-data'
+import { useServerPagination } from '@/shared/hooks/use-server-pagination'
+import { formatDateTime } from '@/shared/utils/format'
 import type { AssetMovement } from '@/shared/types/generated/eiams-v1'
 import { useAssetMovementsQuery } from '@/modules/asset/hooks/use-asset-queries'
 import { ASSET_MOVEMENT_TYPE_LABELS_AR } from '@/modules/asset/asset-movement-labels'
@@ -21,7 +23,11 @@ const columnHelper = createColumnHelper<typeof dataTableFeatures, AssetMovement>
  * mutation affordances.
  */
 export function AssetMovementLedger({ assetId }: AssetMovementLedgerProps) {
-  const movementsQuery = useAssetMovementsQuery(assetId, { pageIndex: 0, pageSize: 20 })
+  const { page: currentPage, pageSize, setPage, setPageSize } = useServerPagination()
+  const movementsQuery = useAssetMovementsQuery(assetId, {
+    pageIndex: currentPage - 1,
+    pageSize,
+  })
 
   const columns = useMemo(
     () =>
@@ -58,11 +64,7 @@ export function AssetMovementLedger({ assetId }: AssetMovementLedgerProps) {
         columnHelper.accessor('occurredAt', {
           id: 'occurredAt',
           header: 'تاريخ الحدث',
-          cell: ({ getValue }) => (
-            <span dir="ltr" className="text-sm">
-              {getValue()}
-            </span>
-          ),
+          cell: ({ getValue }) => <span dir="ltr">{formatDateTime(getValue())}</span>,
         }),
       ]),
     [],
@@ -79,12 +81,12 @@ export function AssetMovementLedger({ assetId }: AssetMovementLedgerProps) {
       errorMessage="تعذّر جلب سجل حركات هذا الأصل. حاول مرة أخرى."
       emptyTitle="لا توجد حركات"
       emptyDescription="لم تُسجَّل أي حركات لهذا الأصل بعد."
-      page={1}
-      pageSize={20}
+      page={currentPage}
+      pageSize={pageSize}
       totalCount={movementsQuery.data?.meta.totalItems}
       totalPages={Math.max(movementsQuery.data?.meta.totalPages ?? 1, 1)}
-      onPageChange={() => {}}
-      onPageSizeChange={() => {}}
+      onPageChange={setPage}
+      onPageSizeChange={setPageSize}
     />
   )
 }
