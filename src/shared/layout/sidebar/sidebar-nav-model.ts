@@ -25,6 +25,7 @@ import {
   IconUserCheck,
   IconUserCog,
   IconUserShare,
+  IconUserShield,
   IconUsers,
 } from '@tabler/icons-react'
 
@@ -117,6 +118,7 @@ export const SIDEBAR_NAV_GROUPS: readonly SidebarNavGroup[] = [
     items: [
       { routeKey: 'assets', icon: IconArchive },
       { routeKey: 'custodyPending', icon: IconUserCheck },
+      { routeKey: 'custodyActive', icon: IconUserShield },
     ],
   },
   {
