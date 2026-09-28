@@ -1,8 +1,8 @@
 {
   "contractId": "eiams-v1",
-  "contractVersion": "1.0.0-provisional.8",
-  "snapshotSha256": "b4c1c4c3f2a28e3417e5524bf5bf7ec2b740d4ba385f517b38f47befb6d5cab7",
-  "reportedAt": "2026-08-21T15:59:53.722Z",
+  "contractVersion": "1.0.0-provisional.9",
+  "snapshotSha256": "3c8b65ed6d8c2da8382657b8bf4b8e7d7f291ca270aa4e3d824d4be57fc64070",
+  "reportedAt": "2026-09-28T11:26:24.020Z",
   "tooling": {
     "redoclyCli": "2.46.0",
     "openapiTypescript": "7.13.0"
@@ -10,12 +10,12 @@
   "results": {
     "checksum matches provenance": {
       "status": "pass",
-      "expected": "b4c1c4c3f2a28e3417e5524bf5bf7ec2b740d4ba385f517b38f47befb6d5cab7",
-      "actual": "b4c1c4c3f2a28e3417e5524bf5bf7ec2b740d4ba385f517b38f47befb6d5cab7"
+      "expected": "3c8b65ed6d8c2da8382657b8bf4b8e7d7f291ca270aa4e3d824d4be57fc64070",
+      "actual": "3c8b65ed6d8c2da8382657b8bf4b8e7d7f291ca270aa4e3d824d4be57fc64070"
     },
     "reference audit": {
       "status": "pass",
-      "refCount": 982,
+      "refCount": 984,
       "missing": 0
     },
     "duplicate operationIds": {
@@ -40,8 +40,8 @@
     },
     "deterministic type generation": {
       "status": "pass",
-      "lines": 5895,
-      "byteHash": "77d96f02fdc87e91254ac689a2c667716c5fe6460659acc0d6664685986c93a7"
+      "lines": 5899,
+      "byteHash": "1579b2d8484f2f0b2a1a16d2c96b2f56a036b8d8069b44163b313f483e8e8379"
     }
   },
   "note": "Pre-ratification validation battery. Ratification itself requires the backend/API owner review recorded by Beads eiams-frontend-e01.7."

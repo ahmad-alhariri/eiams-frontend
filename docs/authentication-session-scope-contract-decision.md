@@ -2,10 +2,55 @@
 
 **Status:** Approved frontend and provisional API contract decision  
 **Decision ID:** D-AUTH-01  
-**Version:** 1.0.1  
-**Beads:** `eiams-frontend-e01-t03`  
+**Version:** 1.1.0  
+**Beads:** `eiams-frontend-e01-t03`, `eiams-frontend-7ipk.1` (cardinality amendment)  
 **Decision date:** 2026-08-09  
-**Amended:** 2026-08-11 (`eiams-frontend-e01.8`)
+**Amended:** 2026-08-11 (`eiams-frontend-e01.8`); 2026-09-01 (`eiams-frontend-7ipk.1`, D-SRS-01)
+
+## Amendment 1.1.0 — D-SRS-01 supersedes multi-scope cardinality (2026-09-01)
+
+**Read this section before any part of this document that describes more than one
+assignable scope.** The single-role / single-scope decision
+`docs/single-role-single-scope-assignment-decision.md` (D-SRS-01, ratified
+`eiams-frontend-7ipk.1`) narrows the assignment model, and the parts of this
+document listed below are **superseded**.
+
+D-SRS-01 governs where they conflict: one EIAMS user has exactly one persistent
+role at exactly one scope.
+
+### Superseded by D-SRS-01
+
+| Location in this document | Superseded text | Governing replacement |
+| --- | --- | --- |
+| "Session projection" | `availableScopes` collection | Not part of the v1 session. |
+| "Session projection" and "Scope resolution" | `scopeState` includes `SelectionRequired` | `Selected` while the sole assignment is valid; `Unavailable` only when the server detects it invalid. |
+| "Token and session lifecycle" | `PUT /auth/active-scope` row | No user-selectable scope in v1; the sole assignment determines `activeScope`. |
+| "Scope resolution and switching" items 3 and 6-7 | "With more than one, no scope is selected until the user chooses one"; the whole scope-switching and switch-failure sequence | The server selects the user's sole assignment. The browser never chooses among scopes. |
+| "Frontend state boundaries" and "Until hydration finishes" | the `SelectionRequired` scope-selection gate | `Unavailable` renders the Arabic contact-administrator state only. |
+
+### Explicitly unchanged
+
+Token transport, the rotating `HttpOnly` refresh cookie, the single-flight
+refresh adapter, `401`/`403` semantics, the rule that the server authorizes every
+request, the permission vocabulary, and hierarchy-derived effective permissions
+all remain exactly as written below. D-SRS-01 changes **assignment cardinality
+and client scope choice only**. A Site-assigned role still confers its effective
+permissions over that site's warehouses; the user still holds one assignment.
+
+`Unavailable` is retained solely as a defensive server state for an assignment
+that is inactive or invalid. It is never a durable zero-assignment account and
+never permission to create one.
+
+### Contract consequence
+
+The generated surface is not yet conformant: the provisional OpenAPI still
+publishes `availableScopes`, `ScopeState = "Selected" | "SelectionRequired" |
+"Unavailable"`, `PUT /auth/active-scope`, and an array-shaped
+`ReplaceRoleScopesRequest`. **Do not adapt to it in the browser.** Regeneration
+is owned by `eiams-frontend-whhu.11` and ratified by `eiams-frontend-e01.7`, per
+D-SRS-01: "No handwritten frontend adapter may conceal a different backend
+behavior." Frontend work that depends on the conformant surface is tracked by
+`eiams-frontend-7ipk.4` and is blocked until those land.
 
 ## Decision
 
