@@ -15,10 +15,10 @@ const ALLOW_ALL = () => true
 const DENY_ALL = () => false
 
 describe('Sidebar nav model', () => {
-  it('exposes 12 groups and 27 items', () => {
-    expect(SIDEBAR_NAV_GROUPS).toHaveLength(12)
-    expect(SIDEBAR_NAV_ITEM_COUNT).toBe(27)
-    expect(SIDEBAR_NAV_GROUP_IDS).toHaveLength(12)
+  it('exposes 13 groups and 29 items', () => {
+    expect(SIDEBAR_NAV_GROUPS).toHaveLength(13)
+    expect(SIDEBAR_NAV_ITEM_COUNT).toBe(29)
+    expect(SIDEBAR_NAV_GROUP_IDS).toHaveLength(13)
   })
 
   it('references only declared list routes and resolves their labels from the route table', () => {
@@ -74,8 +74,8 @@ describe('Sidebar nav model', () => {
 describe('filterSidebarNav', () => {
   it('keeps everything when all permissions are granted', () => {
     const filtered = filterSidebarNav(SIDEBAR_NAV_GROUPS, ALLOW_ALL)
-    expect(filtered).toHaveLength(12)
-    expect(filtered.reduce((sum, g) => sum + g.items.length, 0)).toBe(27)
+    expect(filtered).toHaveLength(13)
+    expect(filtered.reduce((sum, g) => sum + g.items.length, 0)).toBe(29)
   })
 
   it('requires every listed code for "all" mode', () => {

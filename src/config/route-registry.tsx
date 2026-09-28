@@ -32,6 +32,8 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   login: lazy(() => import('@/modules/auth/pages/login-page')),
   notFound: lazy(() => import('@/app/pages/not-found-page')),
   dashboard: routePlaceholderPage,
+  profile: routePlaceholderPage,
+  settings: routePlaceholderPage,
   catalogDomains: lazy(() => import('@/modules/catalog/pages/material-domains-page')),
   catalogCategories: lazy(() => import('@/modules/catalog/pages/material-categories-page')),
   catalogFamilies: lazy(() => import('@/modules/catalog/pages/material-families-page')),

@@ -17,6 +17,9 @@ export const ROUTE_PATHS = {
   noAccess: '/session/no-access',
   /** Dashboard. */
   dashboard: '/',
+  /** Session account pages (ui-design 4.2 dropdown; declared, placeholder content). */
+  profile: '/profile',
+  settings: '/settings',
   /** Catalog. */
   catalogDomains: '/catalog/domains',
   catalogCategories: '/catalog/categories',
@@ -91,6 +94,7 @@ export type RouteKey = keyof typeof ROUTE_PATHS
 export type RouteGroup =
   | 'auth'
   | 'dashboard'
+  | 'account'
   | 'catalog'
   | 'organization'
   | 'warehouses'
@@ -123,6 +127,34 @@ export interface RouteMeta {
 
 type RouteMetaMap = Record<RouteKey, RouteMeta>
 
+/**
+ * "Any operational view" capability set (D-RBAC-01). Extracted from the
+ * dashboard's inline list so it has one named definition. It deliberately
+ * excludes the admin structural codes, so a SYSTEM_ADMIN still needs one
+ * operational read (they hold `catalog.view`) to reach these surfaces.
+ *
+ * It is applied to the dashboard and to the per-user account pages alike. The
+ * account pages could arguably be reachable by a fully-revoked session, but the
+ * repository's convention — asserted in `routes.test.ts`, in the RBAC
+ * route-guard matrix, and in the sidebar nav model — is that EVERY protected
+ * route declares guard metadata, and inventing an exception here would either
+ * weaken that convention or require a new concept for no real benefit: the
+ * pages are placeholders, and the property that genuinely matters is that
+ * SIGNING OUT is not permission-gated. It is not: `SessionUserMenu` renders on
+ * authentication, so a user whose permissions were fully revoked can still end
+ * their session. See `docs/sign-out-verification.md`.
+ */
+const OPERATIONAL_VIEW_CODES = [
+  'catalog.view',
+  'organization.view',
+  'warehouse.view',
+  'inventory.view',
+  'document.view',
+  'count.view',
+  'asset.view',
+  'report.view',
+] as const satisfies readonly PermissionCode[]
+
 export const ROUTE_METADATA: RouteMetaMap = {
   login: { labelAr: 'تسجيل الدخول', group: 'auth', public: true },
   scopeSelect: { labelAr: 'اختيار نطاق العمل', group: 'auth', public: true },
@@ -131,16 +163,23 @@ export const ROUTE_METADATA: RouteMetaMap = {
   dashboard: {
     labelAr: 'لوحة المعلومات',
     group: 'dashboard',
-    permissionAny: [
-      'catalog.view',
-      'organization.view',
-      'warehouse.view',
-      'inventory.view',
-      'document.view',
-      'count.view',
-      'asset.view',
-      'report.view',
-    ],
+    permissionAny: OPERATIONAL_VIEW_CODES,
+  },
+
+  // Permission-gated like every other protected route — see the note on
+  // OPERATIONAL_VIEW_CODES above. The user menu that links to these is NOT
+  // permission-gated, so a revoked session can always sign out.
+  profile: {
+    labelAr: 'الملف الشخصي',
+    group: 'account',
+    permissionAny: OPERATIONAL_VIEW_CODES,
+    parent: 'dashboard',
+  },
+  settings: {
+    labelAr: 'الإعدادات',
+    group: 'account',
+    permissionAny: OPERATIONAL_VIEW_CODES,
+    parent: 'dashboard',
   },
 
   catalogDomains: {

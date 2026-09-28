@@ -67,6 +67,16 @@ describe('AppHeader', () => {
     expect(screen.getByText('أمين مستودع')).toBeInTheDocument()
   })
 
+  it('composes an injected user menu in place of the static identity block', () => {
+    const user: HeaderUser = { displayName: 'أحمد الحريري', roleName: 'أمين مستودع' }
+    renderHeader({ user, userMenu: <span data-testid="user-menu">قائمة المستخدم</span> })
+
+    expect(screen.getByTestId('user-menu')).toHaveTextContent('قائمة المستخدم')
+    // One identity source only: the injected auth composition replaces the
+    // static block when both are supplied.
+    expect(document.querySelector('[data-slot="app-header-user"]')).toBeNull()
+  })
+
   it('keeps the collapse label consistent with the store', () => {
     renderHeader()
 

@@ -13,19 +13,21 @@ import type { HasPermission } from '@/shared/layout/sidebar/sidebar-nav-model'
  * forest sidebar on the inline-end (right) side, ivory main content, footer.
  * The header chrome (brand, bell, user block) and the sidebar render
  * immediately; lazy page chunks suspend under the main Suspense boundary.
- * Auth-driven bits (user identity, scope) land with e06.
+ * Session-driven chrome is injected by the router (`scopeSwitcher`,
+ * `userMenu`) so the frame itself never reads session state.
  */
 type AppLayoutProps = {
   /** Test-only override; production navigation reads the hydrated session. */
   hasPermission?: HasPermission | undefined
   scopeSwitcher?: ReactNode
+  userMenu?: ReactNode
 }
 
-function AppLayout({ hasPermission, scopeSwitcher }: AppLayoutProps) {
+function AppLayout({ hasPermission, scopeSwitcher, userMenu }: AppLayoutProps) {
   return (
     <div className="flex min-h-svh flex-col bg-ivory text-foreground" dir="rtl">
       <AppChromeBoundary label="الشريط العلوي">
-        <AppHeader breadcrumb={<Breadcrumbs />} scopeSwitcher={scopeSwitcher} />
+        <AppHeader breadcrumb={<Breadcrumbs />} scopeSwitcher={scopeSwitcher} userMenu={userMenu} />
       </AppChromeBoundary>
       <div className="flex flex-1 items-stretch">
         <AppChromeBoundary label="القائمة الجانبية">
