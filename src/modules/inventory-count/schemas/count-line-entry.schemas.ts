@@ -142,37 +142,79 @@ export function countDirtyLineIndexes(
 }
 
 /**
- * The batched `updateInventoryCountLines` payload for the current page: only
- * rows the operator changed AND that carry a usable counted quantity are sent,
- * so a partially entered page is still savable and resumable.
+ * Why a row the operator changed cannot be sent in this save.
+ *
+ * Both cases used to fail silently, in a single `toCountLineUpdateRequest`
+ * projection that this function replaces. A blank or unparseable quantity was
+ * `flatMap`-ed away while still counting toward `dirtyCount`, so a page could
+ * report a successful save and then go on claiming unsaved changes. A line with
+ * no server-supplied `rowVersion` was sent as `0`, and
+ * `UpdateCountLineInput.rowVersion` declares `"minimum": 1` — a payload the
+ * contract guarantees it will reject with 422.
  */
-export function toCountLineUpdateRequest(
+export type CountLineSaveBlock =
+  /** The quantity is blank or not a valid decimal, so there is no actual to record. */
+  | { readonly index: number; readonly kind: 'no-quantity' }
+  /** The server supplied no `rowVersion` for this line, so a versioned update cannot be built. */
+  | { readonly index: number; readonly kind: 'missing-row-version' }
+
+export interface CountLineSavePlan {
+  /** The batch to send. May be empty when every changed row is blocked. */
+  readonly request: UpdateCountLinesRequest
+  /** Rows the operator changed that this save cannot carry, in row order. */
+  readonly blocked: readonly CountLineSaveBlock[]
+}
+
+/**
+ * Plans the batched `updateInventoryCountLines` payload for the current page,
+ * and reports the changed rows it cannot carry.
+ *
+ * Only rows the operator actually changed are considered, so a partially
+ * entered page stays savable and resumable. A changed row that cannot be sent
+ * is **reported rather than dropped**: the caller can then tell the operator
+ * that their change did not travel, instead of the page silently disagreeing
+ * with itself.
+ *
+ * The batch and the block list are produced together on purpose — "which rows
+ * are in this save" and "which changed rows are not" must never disagree, and a
+ * separate projection for each is how they did.
+ */
+export function planCountLineSaves(
   countRowVersion: number,
   lines: readonly InventoryCountLine[],
   values: CountLineEntryFormValues,
-): UpdateCountLinesRequest {
-  const payload = countDirtyLineIndexes(lines, values.lines).flatMap((index) => {
+): CountLineSavePlan {
+  const payload: NonNullable<UpdateCountLinesRequest['lines']>[number][] = []
+  const blocked: CountLineSaveBlock[] = []
+
+  for (const index of countDirtyLineIndexes(lines, values.lines)) {
     const line = lines[index]
     const draft = values.lines[index]
     if (line === undefined || draft === undefined) {
-      return []
+      continue
     }
     const entered = parseActualQuantity(draft.actualQuantity)
     if (entered.status !== 'counted') {
-      return []
+      blocked.push({ index, kind: 'no-quantity' })
+      continue
+    }
+    // `InventoryCountLine.rowVersion` is optional in the contract, and
+    // `UpdateCountLineInput.rowVersion` has `"minimum": 1`. Sending the previous
+    // `?? 0` fallback therefore built a request that could only ever 422.
+    if (line.rowVersion === undefined) {
+      blocked.push({ index, kind: 'missing-row-version' })
+      continue
     }
     const reason = draft.reason.trim()
-    return [
-      {
-        countLineId: line.countLineId,
-        actualQuantity: entered.value,
-        rowVersion: line.rowVersion ?? 0,
-        ...(reason === '' ? {} : { reason }),
-      },
-    ]
-  })
+    payload.push({
+      countLineId: line.countLineId,
+      actualQuantity: entered.value,
+      rowVersion: line.rowVersion,
+      ...(reason === '' ? {} : { reason }),
+    })
+  }
 
-  return { countRowVersion, lines: payload }
+  return { request: { countRowVersion, lines: payload }, blocked }
 }
 
 /**

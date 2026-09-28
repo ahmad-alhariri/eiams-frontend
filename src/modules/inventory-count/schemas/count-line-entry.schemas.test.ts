@@ -9,7 +9,7 @@ import {
   parseActualQuantity,
   toCountLineDraftValues,
   toCountLineEntryFormValues,
-  toCountLineUpdateRequest,
+  planCountLineSaves,
 } from './count-line-entry.schemas'
 import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
 
@@ -141,13 +141,13 @@ describe('countDirtyLineIndexes', () => {
   })
 })
 
-describe('toCountLineUpdateRequest', () => {
+describe('planCountLineSaves', () => {
   it('sends only changed rows with their server row version', () => {
     const lines = [
       line({ countLineId: 'L1' }),
       line({ countLineId: 'L2', actualQuantity: 4, rowVersion: 9, difference: -6 }),
     ]
-    const request = toCountLineUpdateRequest(7, lines, {
+    const { request, blocked } = planCountLineSaves(7, lines, {
       lines: [
         { actualQuantity: '3', reason: 'نقص' },
         { actualQuantity: '4', reason: '' },
@@ -158,23 +158,38 @@ describe('toCountLineUpdateRequest', () => {
     expect(request.lines).toEqual([
       { countLineId: 'L1', actualQuantity: 3, rowVersion: 4, reason: 'نقص' },
     ])
+    expect(blocked).toEqual([])
   })
 
   it('omits an empty reason rather than sending a blank string', () => {
-    const request = toCountLineUpdateRequest(1, [line()], {
+    const { request } = planCountLineSaves(1, [line()], {
       lines: [{ actualQuantity: '3', reason: '   ' }],
     })
     expect(request.lines[0]).toEqual({ countLineId: 'L1', actualQuantity: 3, rowVersion: 4 })
   })
 
-  it('skips a changed row whose quantity is not usable yet (partial entry)', () => {
-    const request = toCountLineUpdateRequest(1, [line()], {
+  it('blocks, rather than silently drops, a changed row whose quantity is not usable yet', () => {
+    const { request, blocked } = planCountLineSaves(1, [line()], {
       lines: [{ actualQuantity: '-1', reason: '' }],
     })
     expect(request.lines).toEqual([])
+    expect(blocked).toEqual([{ index: 0, kind: 'no-quantity' }])
   })
 
-  it('defaults a missing line rowVersion to 0', () => {
+  it('blocks, rather than drops, a changed row the operator left blank', () => {
+    const lines = [line({ countLineId: 'L1', actualQuantity: 5, rowVersion: 2 })]
+    const { request, blocked } = planCountLineSaves(1, lines, {
+      lines: [{ actualQuantity: '', reason: 'تصحيح' }],
+    })
+    expect(request.lines).toEqual([])
+    expect(blocked).toEqual([{ index: 0, kind: 'no-quantity' }])
+  })
+
+  // Replaces the previous case `defaults a missing line rowVersion to 0`. That
+  // behaviour sent a value the contract cannot accept:
+  // `UpdateCountLineInput.rowVersion` declares `"minimum": 1`, so a 0 could only
+  // ever draw a 422. The row is now reported as blocked instead.
+  it('blocks a line the server gave no rowVersion, instead of sending a contract-invalid 0', () => {
     const withoutRowVersion: InventoryCountLine = {
       countLineId: 'L9',
       material: { id: 'm9', displayName: 'مادة' },
@@ -182,10 +197,51 @@ describe('toCountLineUpdateRequest', () => {
       actualQuantity: null,
       difference: 0,
     }
-    const request = toCountLineUpdateRequest(1, [withoutRowVersion], {
+    const { request, blocked } = planCountLineSaves(1, [withoutRowVersion], {
       lines: [{ actualQuantity: '3', reason: '' }],
     })
-    expect(request.lines[0]?.rowVersion).toBe(0)
+    expect(request.lines).toEqual([])
+    expect(blocked).toEqual([{ index: 0, kind: 'missing-row-version' }])
+    // Belt and braces: nothing in the batch may carry a sub-minimum version.
+    for (const entry of request.lines) {
+      expect(entry.rowVersion).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  it('keeps sendable and blocked rows separate within one page', () => {
+    const noVersionLine: InventoryCountLine = {
+      countLineId: 'L3',
+      material: { id: 'm3', displayName: 'مادة' },
+      snapshotQuantity: 3,
+      actualQuantity: null,
+      difference: 0,
+    }
+    const lines = [
+      line({ countLineId: 'L1', rowVersion: 4 }),
+      line({ countLineId: 'L2', rowVersion: 5, actualQuantity: 2 }),
+      noVersionLine,
+    ]
+    const { request, blocked } = planCountLineSaves(5, lines, {
+      lines: [
+        { actualQuantity: '3', reason: '' }, // L1 changed, sendable
+        { actualQuantity: '', reason: '' }, // L2 changed, blank -> blocked
+        { actualQuantity: '9', reason: '' }, // L3 changed, no version -> blocked
+      ],
+    })
+    expect(request.lines).toEqual([{ countLineId: 'L1', actualQuantity: 3, rowVersion: 4 }])
+    expect(blocked).toEqual([
+      { index: 1, kind: 'no-quantity' },
+      { index: 2, kind: 'missing-row-version' },
+    ])
+  })
+
+  it('produces an empty batch and an empty block list when nothing changed', () => {
+    const lines = [line({ countLineId: 'L1', actualQuantity: 3, rowVersion: 4 })]
+    const { request, blocked } = planCountLineSaves(1, lines, {
+      lines: [{ actualQuantity: '3', reason: '' }],
+    })
+    expect(request.lines).toEqual([])
+    expect(blocked).toEqual([])
   })
 })
 

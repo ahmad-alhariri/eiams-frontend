@@ -123,6 +123,19 @@ function usePagedLinesHandlers(seed: readonly TestLine[]) {
       }
       return HttpResponse.json({ items: [], meta: emptyMeta(0, FIRST_PAGE_SIZE, store.length) })
     }),
+    // The workspace observes the count header as well as its lines, so the
+    // conflict-recovery path can reload the session rowVersion
+    // (eiams-frontend-3wv1). MSW runs with `onUnhandledRequest: 'error'`, so
+    // every workspace test has to serve it.
+    http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}`, () =>
+      HttpResponse.json({
+        countId: COUNT_ID,
+        countNumber: 'CNT-1',
+        countStatus: 'InProgress',
+        rowVersion: 1,
+        warehouse: { id: 'w1', displayName: 'مستودع' },
+      }),
+    ),
   )
 }
 
@@ -424,6 +437,265 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
     usePagedLinesHandlers(twoLines)
     await user.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
     expect(await screen.findByText('مادة 1')).toBeInTheDocument()
+  }, 40000)
+})
+describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () => {
+  const threeLines: TestLine[] = [
+    { ...bulkLine(1), material: { id: 'm1', displayName: 'حاسوب مكتبي' }, snapshotQuantity: 25 },
+    { ...bulkLine(2), material: { id: 'm2', displayName: 'طابعة ليزر' }, snapshotQuantity: 2 },
+    { ...bulkLine(3), material: { id: 'm3', displayName: 'شاشة' }, snapshotQuantity: 7 },
+  ]
+
+  /**
+   * Serves the page read and answers every batch PUT with a 409, counting the
+   * attempts. The 409 body deliberately carries no per-line attribution, which is
+   * what the real contract provides.
+   */
+  function useConflictingSaveHandlers(seed: readonly TestLine[], attemptLog: number[]) {
+    const store = seed.map((entry) => ({ ...entry }))
+    server.use(
+      http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
+        const url = new URL(request.url)
+        const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+        const pageSize = Number(url.searchParams.get('pageSize') ?? String(FIRST_PAGE_SIZE))
+        const start = pageIndex * pageSize
+        return HttpResponse.json({
+          items: store.slice(start, start + pageSize),
+          meta: {
+            pageIndex,
+            pageSize,
+            totalItems: store.length,
+            totalPages: Math.max(1, Math.ceil(store.length / pageSize)),
+          },
+        })
+      }),
+      http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}`, () =>
+        HttpResponse.json({
+          countId: COUNT_ID,
+          countNumber: 'CNT-1',
+          countStatus: 'InProgress',
+          rowVersion: 2,
+          warehouse: { id: 'w1', displayName: 'مستودع' },
+        }),
+      ),
+      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () => {
+        attemptLog.push(Date.now())
+        // A conflict means the server rejected the save against its own current
+        // state, which in practice means its rows have moved on. The fixture
+        // therefore shifts a row's actual quantity, so any refetch that happens
+        // after the 409 returns data that DIFFERS from what the operator is
+        // looking at.
+        //
+        // This is what makes the draft-preservation assertions discriminating.
+        // If the server echoed identical data, react-hook-form's values-driven
+        // reset would short-circuit on `deepEqual` and no reset would fire, so
+        // the test would pass even with an error-path invalidation in place —
+        // that is, it would prove nothing.
+        for (const entry of store) {
+          entry.actualQuantity = (entry.actualQuantity ?? entry.snapshotQuantity) + 1
+          entry.difference = entry.actualQuantity - entry.snapshotQuantity
+          entry.rowVersion += 1
+        }
+        return HttpResponse.json(
+          { status: 409, code: 'state.conflict', titleAr: 'تغيرت البيانات', traceId: 't-1' },
+          { status: 409, headers: { 'Content-Type': 'application/problem+json' } },
+        )
+      }),
+    )
+  }
+
+  it('keeps every unsaved entry on screen when the save is rejected with a conflict', async () => {
+    // NON-VACUITY: verified by reintroducing `onError: invalidate` on
+    // `useUpdateCountLinesMutation`, which makes this case and the
+    // decline-the-reload case below fail. The fixture deliberately shifts the
+    // server's rows on the 409 for exactly this reason — a refetch that echoed
+    // identical data would let react-hook-form's values-reset short-circuit on
+    // `deepEqual`, and the assertions would pass with the defect in place.
+    const attempts: number[] = []
+    useConflictingSaveHandlers(threeLines, attempts)
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('حاسوب مكتبي')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '23')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ طابعة ليزر'), '1')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ شاشة'), '9')
+
+    await user.click(screen.getByRole('button', { name: 'حفظ (٣)' }))
+
+    // The core regression: the operator's work survives a 409.
+    expect(await screen.findByRole('alertdialog', { name: /تعارض على بنود الجرد/ })).toBeTruthy()
+    expect(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي')).toHaveValue(23)
+    expect(screen.getByLabelText('الكمية الفعلية لـ طابعة ليزر')).toHaveValue(1)
+    expect(screen.getByLabelText('الكمية الفعلية لـ شاشة')).toHaveValue(9)
+  }, 40000)
+
+  it('does not retry the rejected batch on its own', async () => {
+    const attempts: number[] = []
+    useConflictingSaveHandlers(threeLines, attempts)
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('حاسوب مكتبي')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '23')
+    await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
+
+    await screen.findByRole('alertdialog', { name: /تعارض على بنود الجرد/ })
+    // Give any accidental retry a chance to fire before asserting the count.
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(attempts).toHaveLength(1)
+  }, 40000)
+
+  it('says nothing about which rows were saved, because the 409 does not say', async () => {
+    const attempts: number[] = []
+    useConflictingSaveHandlers(threeLines, attempts)
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('حاسوب مكتبي')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '23')
+    await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
+
+    const dialog = await screen.findByRole('alertdialog')
+    const copy = dialog.textContent ?? ''
+    // The response carries no per-line attribution, so any "N of M saved" style
+    // claim would be fabricated.
+    expect(copy).not.toMatch(/حُفظت?\s+\d/)
+    expect(copy).not.toMatch(/تم حفظ/)
+    expect(copy).toContain('أي البنود حُفظت') // the response does not say which rows saved
+  }, 40000)
+
+  it('keeps the operator on their entries when they decline the reload', async () => {
+    const attempts: number[] = []
+    useConflictingSaveHandlers(threeLines, attempts)
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('حاسوب مكتبي')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '23')
+    await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
+
+    await screen.findByRole('alertdialog')
+    await user.click(screen.getByRole('button', { name: 'البقاء على القيم الحالية' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+    })
+    expect(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي')).toHaveValue(23)
+  }, 40000)
+
+  it('reports a changed row it cannot send instead of dropping it silently', async () => {
+    // `L2` has no server rowVersion, so no versioned update can be built for it.
+    const noVersionLine: TestLine = {
+      countLineId: 'L2',
+      material: { id: 'm2', displayName: 'طابعة ليزر' },
+      snapshotQuantity: 2,
+      actualQuantity: null,
+      difference: 0,
+      rowVersion: undefined as unknown as number,
+    }
+    usePagedLinesHandlers([
+      { ...bulkLine(1), material: { id: 'm1', displayName: 'حاسوب مكتبي' }, snapshotQuantity: 25 },
+      noVersionLine,
+    ])
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('طابعة ليزر')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ طابعة ليزر'), '4')
+
+    // The row counts as changed, so the page must admit it is not travelling.
+    expect(await screen.findByText(/لن يُرسل مع الحفظ/)).toBeInTheDocument()
+    expect(screen.getByText(/لم يوفّر إصداراً لهذا البند/)).toBeInTheDocument()
+    // Nothing sendable, so there is nothing to save.
+    expect(screen.getByRole('button', { name: 'حفظ (٠)' })).toBeDisabled()
+  }, 40000)
+
+  it('reports a changed row whose quantity was left blank, rather than claiming nothing changed', async () => {
+    usePagedLinesHandlers([
+      { ...bulkLine(1), material: { id: 'm1', displayName: 'حاسوب مكتبي' }, snapshotQuantity: 25 },
+      {
+        ...bulkLine(2),
+        material: { id: 'm2', displayName: 'طابعة ليزر' },
+        snapshotQuantity: 2,
+        actualQuantity: 5,
+      },
+    ])
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('طابعة ليزر')
+    // Clearing a previously counted quantity is a real change (it un-counts the
+    // row) but carries no actual, so it cannot be sent.
+    await user.clear(screen.getByLabelText('الكمية الفعلية لـ طابعة ليزر'))
+
+    expect(await screen.findByText(/تغييرات غير محفوظة في هذه الصفحة/)).toBeInTheDocument()
+    expect(screen.getByText(/لن يُرسل مع الحفظ/)).toBeInTheDocument()
+  }, 40000)
+
+  it("keeps a blocked row's entry and its warning after a successful save (browser-QA D1)", async () => {
+    // Regression for a defect browser QA found: the honest "will not be sent"
+    // warning was accurate only until the next successful save, at which point
+    // the reseed adopted the server's UNCHANGED value for the blocked row,
+    // erasing the operator's entry and then reporting the page as having no
+    // unsaved changes — the UI asserting an entry was saved when it had neither
+    // been sent nor retained.
+    const noVersionLine: TestLine = {
+      countLineId: 'L2',
+      material: { id: 'm2', displayName: 'طابعة ليزر' },
+      snapshotQuantity: 2,
+      actualQuantity: null,
+      difference: 0,
+      rowVersion: undefined as unknown as number,
+    }
+    usePagedLinesHandlers([
+      { ...bulkLine(1), material: { id: 'm1', displayName: 'حاسوب مكتبي' }, snapshotQuantity: 25 },
+      noVersionLine,
+    ])
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('طابعة ليزر')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '20')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ طابعة ليزر'), '9')
+
+    // Only the sendable row travels.
+    await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
+    await waitFor(() => {
+      expect(savedBody).toBeDefined()
+    })
+    expect(savedBody?.lines).toHaveLength(1)
+
+    // The blocked entry must survive the reseed, stay dirty, and keep being
+    // reported as unsent.
+    await waitFor(() => {
+      expect(screen.getByText(/تغييرات غير محفوظة في هذه الصفحة/)).toBeInTheDocument()
+    })
+    expect(screen.getByLabelText('الكمية الفعلية لـ طابعة ليزر')).toHaveValue(9)
+    expect(screen.getByText(/لن يُرسل مع الحفظ/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'حفظ (٠)' })).toBeDisabled()
+  }, 40000)
+
+  it('no longer advises a page refresh, which would discard the entries', async () => {
+    usePagedLinesHandlers(threeLines)
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('حاسوب مكتبي')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '23')
+    // A non-conflict failure, so the inline (non-dialog) branch is the one shown.
+    server.use(
+      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
+        HttpResponse.json({ status: 500 }, { status: 500 }),
+      ),
+    )
+    await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
+
+    const alert = await screen.findByText(/تعذّر حفظ بنود الجرد/)
+    expect(alert.textContent).not.toContain('حدّث الصفحة')
+    expect(alert.textContent).toContain('لم تُضِع ما أدخلته')
+    // And the entry is still there, which is what that copy now promises.
+    expect(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي')).toHaveValue(23)
   }, 40000)
 })
 

@@ -169,6 +169,26 @@ export function useStartCountMutation(countId: string) {
 }
 
 /** Batches actual-quantity entry onto count lines (`count.enter`). */
+/**
+ * Saves the batch of changed count lines.
+ *
+ * There is deliberately **no `onError` invalidation** here, and that absence is
+ * load-bearing rather than an oversight. The quantity-entry workspace feeds the
+ * loaded page to react-hook-form through the `values` prop, and react-hook-form
+ * treats a deep-unequal `values` change as a full reset. Invalidating on the
+ * error path would therefore reload the lines — including on a `409`, which is
+ * the case where keeping the operator's work matters most — and silently
+ * discard every quantity they had typed, immediately after the toast told them
+ * to try again.
+ *
+ * A `409` is surfaced instead through `isConflictError(error)` at the call
+ * boundary, which hands it to `useCountConflictRecovery`. That refetches the
+ * authoritative count and lines only when the operator explicitly asks for the
+ * newer version. The save is never retried automatically: this operation
+ * accepts no `Idempotency-Key` (unlike its `/start`, `/complete` and `/close`
+ * siblings), so a retry cannot be made safe, and
+ * `docs/feature-service-composition-standard.md:90-91` forbids it.
+ */
 export function useUpdateCountLinesMutation(countId: string) {
   const invalidate = useCountInvalidation()
   return useMutation({
