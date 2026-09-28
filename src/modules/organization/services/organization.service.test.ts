@@ -13,6 +13,9 @@ import {
   createSite,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
+
+const IDEMPOTENCY_KEY = '7dd1d219-2ca2-4f38-a3c4-57f6df9cee55'
 
 const API_BASE_URL = '/api/v1'
 const bundles: ApiClientBundle[] = []
@@ -237,18 +240,21 @@ describe('OrganizationService', () => {
       http.post(
         `${API_BASE_URL}/external-parties/${externalParty.externalPartyId}/deactivate`,
         ({ request }) => {
-          idempotencyKey = request.headers.get('Idempotency-Key')
+          idempotencyKey = request.headers.get(IDEMPOTENCY_KEY_HEADER)
           return HttpResponse.json({ ...externalParty, status: 'Inactive' })
         },
       ),
     )
 
+    // The service owns the header (eiams-frontend-xlfs): the caller passes a
+    // plain key and `withIdempotencyKey` attaches it. The observable HTTP
+    // behaviour is unchanged — only the ownership moved out of the call site,
+    // where a feature-local header literal bypassed the shared retry-safety
+    // contract.
     await expect(
-      service.deactivateExternalParty(externalParty.externalPartyId, {
-        headers: { 'Idempotency-Key': '7dd1d219-2ca2-4f38-a3c4-57f6df9cee55' },
-      }),
+      service.deactivateExternalParty(externalParty.externalPartyId, IDEMPOTENCY_KEY),
     ).resolves.toMatchObject({ status: 'Inactive' })
-    expect(idempotencyKey).toBe('7dd1d219-2ca2-4f38-a3c4-57f6df9cee55')
+    expect(idempotencyKey).toBe(IDEMPOTENCY_KEY)
   })
 
   it('leaves contract errors for the shared Arabic error normalizer', async () => {

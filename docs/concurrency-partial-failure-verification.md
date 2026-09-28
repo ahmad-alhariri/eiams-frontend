@@ -50,12 +50,23 @@ partially apply it, and may not append a guessed event to fill the gap.
 > — `docs/document-lifecycle-history-contract-decision.md:226-227` (D-LIFE-01
 > UI rules, rule 6)
 
-> "1. Create `createIdempotentRequest()` once when the user starts the action.
-> 2. Pass its `config` to Axios and retain that same object/key for an explicit
-> retry of the same action after an uncertain transport outcome.
-> 3. Start a distinct user action with a new idempotency context. Do not add a
-> global Axios retry interceptor for these mutations."
-> — `docs/feature-service-composition-standard.md:97-101`
+> "1. The **hook** creates the key with `createIdempotencyKey()` once when the
+> user starts the action, and holds it so an explicit retry of the same action
+> reuses the same key. Start a distinct user action with a new key, and clear
+> the held key only on success.
+> 2. The **service** owns the transport and attaches the header with
+> `withIdempotencyKey(idempotencyKey)`. A feature must never write the
+> `Idempotency-Key` header itself.
+> 3. Do not add a global Axios retry interceptor for these mutations."
+> — `docs/feature-service-composition-standard.md` (retry-sensitive mutations)
+
+This rule was **amended** after `eiams-frontend-xlfs`. It previously read
+"Create `createIdempotentRequest()` once… Pass its `config` to Axios", which
+describes a single object flowing from the hook into Axios. A hook cannot hand an
+Axios config to a service — the service is the only holder of the client — so
+`createIdempotentRequest()` had **zero production call sites** while a test
+asserted it existed. The F-2 fix below already used the correct two-part shape;
+the rule was the thing that was wrong, and the test was pinning the error.
 
 > "On a contract `409`, use `isConflictError(error)` only to select the
 > feature's documented recovery: discard stale transient UI and refetch its

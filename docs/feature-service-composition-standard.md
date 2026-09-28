@@ -94,11 +94,24 @@ may assume a particular recovery or retry it automatically.
 
 For an operation whose generated OpenAPI parameters require `Idempotency-Key`:
 
-1. Create `createIdempotentRequest()` once when the user starts the action.
-2. Pass its `config` to Axios and retain that same object/key for an explicit
-   retry of the same action after an uncertain transport outcome.
-3. Start a distinct user action with a new idempotency context. Do not add a
-   global Axios retry interceptor for these mutations.
+1. The **hook** creates the key with `createIdempotencyKey()` once when the user
+   starts the action, and holds it (a `useRef` is the established pattern) so an
+   explicit retry of the same action reuses the same key. Start a distinct user
+   action with a new key, and clear the held key only on success.
+2. The **service** owns the transport and attaches the header with
+   `withIdempotencyKey(idempotencyKey)`. A feature must never write the
+   `Idempotency-Key` header itself: a feature-local header literal bypasses the
+   shared retry-safety contract, which is why the service-purity rules forbid
+   the literal.
+3. Do not add a global Axios retry interceptor for these mutations.
+
+The split matters. A hook cannot hand an Axios config to a service — the service
+is the only thing that holds the client — so the key and the header are attached
+at different layers by design. The previous wording described a single
+`createIdempotentRequest()` object flowing from the hook into Axios; no such
+helper is reachable from that position, which is why it accumulated zero
+production call sites while a test asserted it existed
+(eiams-frontend-xlfs).
 
 For mutable aggregates, pass the current server-provided `rowVersion` in the
 request body/query as required by that operation. `withRowVersion(payload,

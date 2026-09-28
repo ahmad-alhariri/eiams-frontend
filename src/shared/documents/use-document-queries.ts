@@ -9,7 +9,8 @@ import {
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 
-const DOCUMENT_RESOURCE = 'document'
+/** Exported so key predicates elsewhere derive their prefix from the factory's own vocabulary. */
+export const DOCUMENT_RESOURCE = 'document'
 const EMPTY_FILTERS = {} as const
 
 /** Contract-derived, stable list filters for the shared document query model. */

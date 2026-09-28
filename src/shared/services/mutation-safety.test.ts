@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   IDEMPOTENCY_KEY_HEADER,
   createIdempotencyKey,
-  createIdempotentRequest,
   isConflictError,
   withIdempotencyKey,
   withRowVersion,
@@ -58,22 +57,6 @@ describe('mutation safety helpers', () => {
 
     expect(request.idempotencyKey).toBe(IDEMPOTENCY_KEY)
     expect(observedKeys).toEqual([IDEMPOTENCY_KEY, IDEMPOTENCY_KEY])
-  })
-
-  it('generates a new context only when a separate action starts', () => {
-    const randomUUID = vi
-      .spyOn(crypto, 'randomUUID')
-      .mockReturnValueOnce('7f5b16bc-3eb2-4c54-995f-a03342c441b9')
-      .mockReturnValueOnce('077683c4-f5d5-433d-8f52-5c7fd98f542e')
-
-    const first = createIdempotentRequest()
-    const second = createIdempotentRequest()
-
-    expect(first.idempotencyKey).not.toBe(second.idempotencyKey)
-    expect(first.config.headers).toEqual({ [IDEMPOTENCY_KEY_HEADER]: first.idempotencyKey })
-    expect(second.config.headers).toEqual({ [IDEMPOTENCY_KEY_HEADER]: second.idempotencyKey })
-
-    randomUUID.mockRestore()
   })
 
   it('copies the returned row version into action payloads without changing the original data', () => {

@@ -14,13 +14,14 @@ import type {
   AssetPage,
   InventoryAdjustment,
   InventoryAdjustmentPage,
+  paths,
 } from '@/shared/types/generated/eiams-v1'
 
-const ADJUSTMENTS_PATH = '/adjustments'
-const ADJUSTMENT_PATH = '/adjustments/{adjustmentId}'
-const ADJUSTMENT_POST_PATH = '/adjustments/{adjustmentId}/post'
-const ADJUSTMENT_REVERSE_PATH = '/adjustments/{adjustmentId}/reverse'
-const DISPOSAL_ELIGIBLE_ASSETS_PATH = '/adjustments/disposal-eligible-assets'
+const ADJUSTMENTS_PATH = '/adjustments' satisfies keyof paths
+const ADJUSTMENT_PATH = '/adjustments/{adjustmentId}' satisfies keyof paths
+const ADJUSTMENT_POST_PATH = '/adjustments/{adjustmentId}/post' satisfies keyof paths
+const ADJUSTMENT_REVERSE_PATH = '/adjustments/{adjustmentId}/reverse' satisfies keyof paths
+const DISPOSAL_ELIGIBLE_ASSETS_PATH = '/adjustments/disposal-eligible-assets' satisfies keyof paths
 
 function pathWithAdjustmentId(path: string, adjustmentId: string): string {
   return path.replace('{adjustmentId}', encodeURIComponent(adjustmentId))

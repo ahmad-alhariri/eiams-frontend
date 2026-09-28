@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { adjustmentService } from '@/modules/adjustment/services/adjustment.service'
 import { normalizeApiError } from '@/shared/services/api-error'
+import { invalidateScopedQueries } from '@/shared/services/query-keys'
 import {
   createIdempotencyKey,
   isConflictError,
@@ -57,19 +58,16 @@ function useInvalidateAdjustmentScope() {
   const { activeScopeCacheKey } = useActiveScopeContext()
   return () => {
     if (activeScopeCacheKey === undefined) return
-    void queryClient.invalidateQueries({
-      queryKey: [
-        'scoped',
-        activeScopeCacheKey.kind,
-        'id' in activeScopeCacheKey ? activeScopeCacheKey.id : null,
-      ],
-    })
+    // The shared helper, not a hand-derived `['scoped', kind, id]` array. A
+    // hand-rolled copy can silently diverge from `queryKeys.scoped`'s shape and
+    // then match nothing, which is the failure filed as eiams-frontend-jkel
+    // (eiams-frontend-xlfs).
+    void invalidateScopedQueries(queryClient, activeScopeCacheKey)
   }
 }
 
 /** Posts a Draft adjustment (`POST /adjustments/{id}/post`, idempotent). */
 export function usePostAdjustmentAction(adjustmentId: string | null) {
-  const queryClient = useQueryClient()
   const invalidate = useInvalidateAdjustmentScope()
   // One retry-safe idempotency context for this action. Minted on the first
   // execution, kept across a failure, cleared only on success.
@@ -89,9 +87,12 @@ export function usePostAdjustmentAction(adjustmentId: string | null) {
     onSuccess: (result) => {
       idempotencyKeyRef.current = null
       toast.success({ title: 'تم ترحيل سند التسوية بنجاح' })
-      // Authoritative post result: cache the posted adjustment so the detail
-      // view reflects terminal state without waiting for refetch.
-      queryClient.invalidateQueries({ queryKey: ['scoped'] })
+      // The scoped invalidation below already covers every count, asset and
+      // custody read in this scope, which is what the removed blanket
+      // `['scoped']` call was doing. Keeping both was redundant and over-broad
+      // (a bare namespace fragment that matches every scoped key regardless of
+      // scope) — see docs/immutable-ledgers-audit-verification.md, recorded but
+      // not fixed there (eiams-frontend-xlfs).
       void result
       invalidate()
     },

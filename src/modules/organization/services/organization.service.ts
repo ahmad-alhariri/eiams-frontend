@@ -1,4 +1,4 @@
-import type { AxiosInstance, AxiosRequestConfig } from 'axios'
+import type { AxiosInstance } from 'axios'
 
 import type {
   Employee,
@@ -16,6 +16,7 @@ import type {
   SiteUpsertRequest,
 } from '@/shared/types/generated/eiams-v1'
 import { apiClient } from '@/shared/services/api.client'
+import { withIdempotencyKey } from '@/shared/services/mutation-safety'
 import type {
   ListEmployeesQuery,
   ListExternalPartiesQuery,
@@ -65,7 +66,7 @@ export interface OrganizationService {
   ) => Promise<ExternalParty>
   deactivateExternalParty: (
     externalPartyId: string,
-    config: AxiosRequestConfig,
+    idempotencyKey: string,
   ) => Promise<ExternalParty>
 }
 
@@ -158,11 +159,13 @@ export function createOrganizationService(client: AxiosInstance): OrganizationSe
       )
       return response.data
     },
-    async deactivateExternalParty(externalPartyId, config) {
+    async deactivateExternalParty(externalPartyId, idempotencyKey) {
       const response = await client.post<ExternalParty>(
         pathWithId(DEACTIVATE_EXTERNAL_PARTY_PATH, '{externalPartyId}', externalPartyId),
         undefined,
-        config,
+        // The service owns the Idempotency-Key header, so no caller can attach
+        // it by hand and bypass the shared retry-safety contract.
+        withIdempotencyKey(idempotencyKey).config,
       )
       return response.data
     },

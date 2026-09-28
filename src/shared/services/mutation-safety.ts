@@ -36,14 +36,6 @@ export function withIdempotencyKey(idempotencyKey: IdempotencyKey): IdempotentRe
 }
 
 /**
- * Starts a retry-safe action with one immutable idempotency key. Reuse the
- * returned request object when retrying after an uncertain transport outcome.
- */
-export function createIdempotentRequest(): IdempotentRequest {
-  return withIdempotencyKey(createIdempotencyKey())
-}
-
-/**
  * Copies an authoritative version into a mutable-action payload. This helper
  * never increments, derives, or persists the version; the server owns all
  * optimistic-concurrency decisions.

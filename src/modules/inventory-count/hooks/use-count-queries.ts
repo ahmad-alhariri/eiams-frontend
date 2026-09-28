@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
@@ -9,7 +10,7 @@ import {
   type UpdateCountLinesRequest,
 } from '@/modules/inventory-count/types/inventory-count.types'
 import { countService } from '@/modules/inventory-count/services/count.service'
-import { createIdempotencyKey } from '@/shared/services/mutation-safety'
+import { createIdempotencyKey, type IdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
@@ -149,13 +150,27 @@ export function useAllCountLinesQuery(countId: string | undefined | null) {
   })
 }
 
-/** Plans a new count session (`count.plan`). Navigates on success at the page. */
+/**
+ * Plans a new count session (`count.plan`). Navigates on success at the page.
+ *
+ * The idempotency key is minted once per user-approved execution and held in a
+ * ref, so an explicit retry after an uncertain outcome reuses the SAME key. A
+ * key minted as a call argument is fresh on every invocation, so a retry the
+ * operator makes after a lost response is indistinguishable to the server from a
+ * second plan (eiams-frontend-xlfs).
+ */
 export function usePlanCountMutation() {
   const invalidate = useCountInvalidation()
+  const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
   return useMutation({
-    mutationFn: (request: InventoryCountPlanRequest) =>
-      countService.planCount(request, createIdempotencyKey()),
-    onSuccess: invalidate,
+    mutationFn: (request: InventoryCountPlanRequest) => {
+      idempotencyKeyRef.current ??= createIdempotencyKey()
+      return countService.planCount(request, idempotencyKeyRef.current)
+    },
+    onSuccess: () => {
+      idempotencyKeyRef.current = null
+      invalidate()
+    },
   })
 }
 
@@ -197,13 +212,19 @@ export function useUpdateCountLinesMutation(countId: string) {
   })
 }
 
-/** Marks the session Completed (`count.complete`, idempotent). */
+/** Marks the session Completed (`count.complete`, idempotent). Retry-safe key, as in `usePlanCountMutation`. */
 export function useCompleteCountMutation(countId: string) {
   const invalidate = useCountInvalidation()
+  const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
   return useMutation({
-    mutationFn: (rowVersion: number) =>
-      countService.completeCount(countId, rowVersion, createIdempotencyKey()),
-    onSuccess: invalidate,
+    mutationFn: (rowVersion: number) => {
+      idempotencyKeyRef.current ??= createIdempotencyKey()
+      return countService.completeCount(countId, rowVersion, idempotencyKeyRef.current)
+    },
+    onSuccess: () => {
+      idempotencyKeyRef.current = null
+      invalidate()
+    },
   })
 }
 
