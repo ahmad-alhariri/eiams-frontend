@@ -21,14 +21,20 @@ const DEV_USER_ID = '00000000-0000-0000-0000-000000000001'
 const DEV_ROLE_ID = '00000000-0000-0000-0000-000000000002'
 const DEV_SCOPE_ID = '00000000-0000-0000-0000-000000000003'
 
-/** Route to the real /auth/refresh endpoint unless explicitly disabled. */
+/**
+ * Whether the fixture session may answer `/auth/refresh`.
+ *
+ * The flag is opt-in and defaults to OFF (RESOLUTION-040). Defaulting it on
+ * meant a developer could read a fixture-authenticated UI as proof that real
+ * login, refresh, authorization and session hydration work, which is the exact
+ * false evidence R-040 exists to prevent. `environment.authBypass` is already
+ * validated and production-checked by `@/config/env`, so this stays a plain
+ * read of the shared profile rather than a second, weaker source of truth.
+ */
 export function isDevAuthBypassEnabled(
-  environment: Pick<AppEnvironment, 'mode'>,
-  rawEnv: Record<string, unknown>,
+  environment: Pick<AppEnvironment, 'mode' | 'authBypass'>,
 ): boolean {
-  return (
-    environment.mode === 'development' && String(rawEnv['VITE_AUTH_BYPASS'] ?? 'true') !== 'false'
-  )
+  return environment.mode === 'development' && environment.authBypass
 }
 
 export function createDevSession(): AuthTokenResponse {

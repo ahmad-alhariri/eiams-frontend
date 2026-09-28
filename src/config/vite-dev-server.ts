@@ -13,7 +13,7 @@
  * Vite's Node configuration context.
  */
 
-export const DEFAULT_DEV_API_PROXY_TARGET = 'http://localhost:8080'
+export const DEFAULT_DEV_API_PROXY_TARGET = 'http://localhost:5000'
 
 export const DEFAULT_API_BASE_URL = '/api/v1'
 

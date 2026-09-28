@@ -1,6 +1,7 @@
 import type { AxiosInstance } from 'axios'
 
 import { apiClient } from '@/shared/services/api.client'
+import { toWirePaginationParams } from '@/shared/api/pagination'
 import type { IdempotentRequest } from '@/shared/services/mutation-safety'
 import type {
   DocumentActionResult,
@@ -45,6 +46,8 @@ function reasonedAction(rowVersion: number, reason: string): ReasonedDocumentAct
 /**
  * Builds axios params with conditional spreads so optional filters never leak
  * `undefined` keys onto the wire, keeping the request exactOptional-safe.
+ * Page conversion is delegated to the shared boundary so the one-based UI
+ * model and the zero-based wire index are converted in one place.
  */
 function toQueryParams(query: ListWarehouseDocumentsQuery) {
   return {
@@ -52,8 +55,7 @@ function toQueryParams(query: ListWarehouseDocumentsQuery) {
     ...(query.dateTo === undefined ? {} : { dateTo: query.dateTo }),
     ...(query.documentStatus === undefined ? {} : { documentStatus: query.documentStatus }),
     ...(query.documentType === undefined ? {} : { documentType: query.documentType }),
-    ...(query.pageIndex === undefined ? {} : { pageIndex: query.pageIndex }),
-    ...(query.pageSize === undefined ? {} : { pageSize: query.pageSize }),
+    ...toWirePaginationParams(query),
     ...(query.search === undefined ? {} : { search: query.search }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
   }

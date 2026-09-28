@@ -66,10 +66,40 @@ publish the singular replacement endpoint `GET`/`PUT
 /api/v1/admin/users/{userId}/role-scope` (singular `role-scope`, not plural
 `role-scopes`) with its singular replacement request/response shape and
 validation/error semantics: the request carries exactly one assignment
-(`roleId`, `scopeType`, `scopeId`), with no `assignments` collection and no
-`rowVersion`, and the response is the stored singular assignment projection.
+(`roleId`, `scopeType`, `scopeId`) plus the required optimistic-concurrency
+`expectedRowVersion`, with no `assignments` collection, and the response is the
+complete stored singular assignment projection including its new `rowVersion`.
 An `assignments` collection is not part of the accepted v1 contract. No
 handwritten frontend adapter may conceal a different backend behavior.
+
+### Amendment 1.1.0 — `expectedRowVersion` is required (owner ruling 2026-09-28)
+
+The original text of this decision stated the request carries "no
+`rowVersion`". **That clause is superseded.** `expectedRowVersion` is a required
+field, and a stale replacement returns `409 Conflict` after which the frontend
+reloads the authoritative assignment and requires review rather than replaying a
+stale save.
+
+Two later owner-approved sources require it, and this amendment aligns the
+decision with them rather than the reverse:
+
+- `target-contract-baseline.md` (RESOLUTION-001/013/016) defines
+  `ReplaceUserRoleScopeRequest` as `roleId`, `scopeType`, `scopeId`, and
+  `expectedRowVersion: positive version`, and applies `expectedRowVersion` as the
+  uniform rule to every versioned write in the aggregate.
+- `CONFLICT-RESOLUTION-REVIEW-REPORT.md` §4.3 (2026-09-21) states the correct
+  shape as singular GET, atomic PUT replacement, no DELETE for the sole
+  assignment, no independent grant, **add `expectedRowVersion`**, and return the
+  full assignment after success rather than an identifier only.
+
+The original omission was a genuine defect, not a preference: the backend binds
+request bodies with `additionalProperties: false`, so *omitting* the field
+rejects the request. Beads `eiams-frontend-7ipk.2` and `.3` carried acceptance
+criteria requiring "no unsupported `rowVersion` field" and must be corrected to
+require `expectedRowVersion`.
+
+`OrganizationalUnit` remains confirmed as **not** an assignable scope; the three
+scope types Enterprise, Site and Warehouse stand.
 
 ## Frontend prevention and Arabic scope selection
 

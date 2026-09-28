@@ -1,12 +1,23 @@
 import { Outlet } from 'react-router'
 import type { ReactNode } from 'react'
 
+import { environment } from '@/config/env'
 import { AppChromeBoundary } from '@/shared/layout/app-chrome-boundary'
 import { Sidebar } from '@/shared/layout/sidebar/sidebar'
 import { AppHeader } from '@/shared/layout/header/app-header'
 import { Breadcrumbs } from '@/shared/layout/header/breadcrumb'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
+import { UiSandboxNotice, type UiSandboxFixture } from '@/shared/ui/ui-sandbox-notice'
 import type { HasPermission } from '@/shared/layout/sidebar/sidebar-nav-model'
+
+/**
+ * Active development fixtures, derived from the validated profile. Kept beside
+ * the notice that renders it so the mapping stays in one place.
+ */
+const SANDBOX_FIXTURES: readonly UiSandboxFixture[] = [
+  ...(environment.enableApiMocks ? (['mocks'] as const) : []),
+  ...(environment.authBypass ? (['authBypass'] as const) : []),
+]
 
 /**
  * Responsive RTL app frame (ui-design.md 4.1): forest header bar on top, the
@@ -15,6 +26,10 @@ import type { HasPermission } from '@/shared/layout/sidebar/sidebar-nav-model'
  * immediately; lazy page chunks suspend under the main Suspense boundary.
  * Session-driven chrome is injected by the router (`scopeSwitcher`,
  * `userMenu`) so the frame itself never reads session state.
+ *
+ * The sandbox notice is the one exception: RESOLUTION-040 requires a
+ * fixture-backed session to be visibly marked, and it must be unmissable above
+ * the header rather than buried in a page.
  */
 type AppLayoutProps = {
   /** Test-only override; production navigation reads the hydrated session. */
@@ -26,6 +41,7 @@ type AppLayoutProps = {
 function AppLayout({ hasPermission, scopeSwitcher, userMenu }: AppLayoutProps) {
   return (
     <div className="flex min-h-svh flex-col bg-ivory text-foreground" dir="rtl">
+      <UiSandboxNotice fixtures={SANDBOX_FIXTURES} />
       <AppChromeBoundary label="الشريط العلوي">
         <AppHeader breadcrumb={<Breadcrumbs />} scopeSwitcher={scopeSwitcher} userMenu={userMenu} />
       </AppChromeBoundary>

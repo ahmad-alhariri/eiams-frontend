@@ -7,6 +7,7 @@ import type {
   UpdateAdjustmentRequest,
 } from '@/modules/adjustment/types/adjustment.types'
 import { apiClient } from '@/shared/services/api.client'
+import { toWirePaginationParams } from '@/shared/api/pagination'
 import { withIdempotencyKey } from '@/shared/services/mutation-safety'
 import type {
   AdjustmentPostResult,
@@ -28,14 +29,14 @@ function pathWithAdjustmentId(path: string, adjustmentId: string): string {
 }
 
 /**
- * Builds axios params with conditional spreads so optional filters never leak
- * `undefined` keys onto the wire, keeping the request exactOptional-safe
- * (mirrors the shared document transport).
+ * Builds axios params so optional filters never leak `undefined` keys onto the
+ * wire, keeping the request exactOptional-safe (mirrors the shared document
+ * transport). Page conversion is delegated to the shared boundary so the
+ * one-based UI model and the zero-based wire index are converted in one place.
  */
 function toListParams(query: Readonly<ListAdjustmentsQuery>) {
   return {
-    ...(query.pageIndex === undefined ? {} : { pageIndex: query.pageIndex }),
-    ...(query.pageSize === undefined ? {} : { pageSize: query.pageSize }),
+    ...toWirePaginationParams(query),
     ...(query.purpose === undefined ? {} : { purpose: query.purpose }),
     ...(query.status === undefined ? {} : { status: query.status }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
@@ -44,8 +45,7 @@ function toListParams(query: Readonly<ListAdjustmentsQuery>) {
 
 function toDisposalEligibleParams(query: Readonly<ListDisposalEligibleAssetsQuery>) {
   return {
-    ...(query.pageIndex === undefined ? {} : { pageIndex: query.pageIndex }),
-    ...(query.pageSize === undefined ? {} : { pageSize: query.pageSize }),
+    ...toWirePaginationParams(query),
     ...(query.search === undefined ? {} : { search: query.search }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
   }

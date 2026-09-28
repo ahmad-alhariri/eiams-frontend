@@ -190,7 +190,7 @@ export function createApiClient({
   }
 }
 
-const useDevSession = isDevAuthBypassEnabled(environment, import.meta.env)
+const useDevSession = isDevAuthBypassEnabled(environment)
 
 if (useDevSession) {
   console.info('[dev] Auth bypass active — /auth/refresh is served by a fixture session')

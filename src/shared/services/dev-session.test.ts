@@ -19,16 +19,16 @@ describe('Dev session fixture (auth bypass)', () => {
     expect(session.user.displayName).toBe('مطور النظام')
   })
 
-  it('enables bypass only in the development mode by default', () => {
-    expect(isDevAuthBypassEnabled({ mode: 'development' }, {})).toBe(true)
-    expect(isDevAuthBypassEnabled({ mode: 'test' }, {})).toBe(false)
-    expect(isDevAuthBypassEnabled({ mode: 'production' }, {})).toBe(false)
+  it('is opt-in: an unset profile never enables the bypass', () => {
+    // RESOLUTION-040: the fixture used to default ON, which let a
+    // fixture-authenticated UI be read as proof that real login, refresh,
+    // authorization and session hydration work.
+    expect(isDevAuthBypassEnabled({ mode: 'development', authBypass: false })).toBe(false)
   })
 
-  it('honors an explicit VITE_AUTH_BYPASS=false off-switch', () => {
-    expect(isDevAuthBypassEnabled({ mode: 'development' }, { VITE_AUTH_BYPASS: 'false' })).toBe(
-      false,
-    )
-    expect(isDevAuthBypassEnabled({ mode: 'development' }, { VITE_AUTH_BYPASS: 'true' })).toBe(true)
+  it('enables the bypass only in development and only when explicitly requested', () => {
+    expect(isDevAuthBypassEnabled({ mode: 'development', authBypass: true })).toBe(true)
+    expect(isDevAuthBypassEnabled({ mode: 'test', authBypass: true })).toBe(false)
+    expect(isDevAuthBypassEnabled({ mode: 'production', authBypass: true })).toBe(false)
   })
 })
