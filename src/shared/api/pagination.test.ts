@@ -1,67 +1,104 @@
+/**
+ * Pagination request-boundary tests.
+ *
+ * REWRITTEN 2026-09-30. The previous version asserted `pageIndex: 0` for UI page 1.
+ * That test passed, and it was wrong: it encoded the defect it existed to catch.
+ *
+ * Two independent errors had to be fixed together, and the old test covered neither:
+ *
+ *  1. WRONG PARAMETER NAME. It asserted the presence of `pageIndex`. The backend binds
+ *     `Page` (`PaginationQueryParameters.cs:9-13`, `[Range(1, MaximumPage)]`,
+ *     `DefaultPage = 1`). ASP.NET Core query binding is case-insensitive but NOT
+ *     name-agnostic, so `pageIndex` matched no property and was silently discarded.
+ *     Measured against the live API on 2026-09-29: `pageIndex=0`, `=1` and `=2` each
+ *     returned `pagination.page=1`, while `page=1`, `2`, `99` each returned their own
+ *     page. Every next-page control was inoperable, silently.
+ *
+ *  2. WRONG BASE. The zero-based index came from the provisional OpenAPI snapshot, which
+ *     `docs/adr/0001-handwritten-contracts-for-direct-backend-integration.md` supersedes.
+ *
+ * Zero-based `pageIndex` REMAINS the correct UI view-model, because TanStack Table's
+ * `pageIndex` is zero-based by definition. So the boundary is: zero-based in, one-based
+ * out, under the name the server binds.
+ */
 import { describe, expect, it } from 'vitest'
 
 import {
+  MAX_WIRE_PAGE_SIZE,
   WIRE_PAGE_FIELD,
   WIRE_PAGE_SIZE_FIELD,
-  fromWirePageIndex,
-  toWirePageIndex,
   toWirePaginationParams,
-} from '@/shared/api/pagination'
+} from './pagination'
 
-describe('wire pagination boundary (RESOLUTION-017)', () => {
-  describe('toWirePageIndex', () => {
-    it('converts the UI one-based page to the contract zero-based index', () => {
-      expect(toWirePageIndex(1)).toBe(0)
-      expect(toWirePageIndex(2)).toBe(1)
-      expect(toWirePageIndex(10)).toBe(9)
-    })
+describe('toWirePaginationParams', () => {
+  it('sends the parameter name the backend actually binds', () => {
+    expect(WIRE_PAGE_FIELD).toBe('page')
+    expect(WIRE_PAGE_SIZE_FIELD).toBe('pageSize')
+  })
 
-    it('clamps rather than sending a negative index', () => {
-      expect(toWirePageIndex(0)).toBe(0)
-      expect(toWirePageIndex(-5)).toBe(0)
-    })
+  it('never sends `pageIndex`, which the server silently discards', () => {
+    // This is the regression that made every next-page button a no-op: the request
+    // was well-formed, the response was a 200, and the page never advanced.
+    expect(Object.keys(toWirePaginationParams({ pageIndex: 5, pageSize: 20 }))).not.toContain(
+      'pageIndex',
+    )
+  })
 
-    it('truncates a fractional page', () => {
-      expect(toWirePageIndex(3.9)).toBe(2)
+  it('converts the first UI page (0) to the first wire page (1)', () => {
+    expect(toWirePaginationParams({ pageIndex: 0 })).toEqual({ page: 1 })
+    expect(toWirePaginationParams({ pageIndex: 0, pageSize: 20 })).toEqual({
+      page: 1,
+      pageSize: 20,
     })
   })
 
-  it('round-trips a page through the wire', () => {
-    for (const page of [1, 2, 7, 100]) {
-      expect(fromWirePageIndex(toWirePageIndex(page))).toBe(page)
+  it('converts each subsequent UI page by exactly one', () => {
+    expect(toWirePaginationParams({ pageIndex: 1, pageSize: 20 })).toEqual({
+      page: 2,
+      pageSize: 20,
+    })
+    expect(toWirePaginationParams({ pageIndex: 98, pageSize: 20 })).toEqual({
+      page: 99,
+      pageSize: 20,
+    })
+  })
+
+  it('is the inverse of the 1-based -> 0-based conversion the list pages perform', () => {
+    // `warehouses-list-page.tsx:57` does `pageIndex: currentPage - 1` to hand
+    // DataTable's 1-based page to TanStack. A round trip must be the identity.
+    for (const currentPage of [1, 2, 3, 50, 99]) {
+      const { [WIRE_PAGE_FIELD]: wirePage } = toWirePaginationParams({
+        pageIndex: currentPage - 1,
+      })
+      expect(wirePage).toBe(currentPage)
     }
   })
 
-  it('reads a zero-based index as the page it denotes', () => {
-    expect(fromWirePageIndex(0)).toBe(1)
-    expect(fromWirePageIndex(4)).toBe(5)
-    expect(fromWirePageIndex(-1)).toBe(1)
+  it('clamps a negative page to 1 rather than sending an invalid page=0', () => {
+    // The backend rejects page=0 with 400 REQUEST_VALIDATION_FAILED.
+    expect(toWirePaginationParams({ pageIndex: -1 })).toEqual({ page: 1 })
+    expect(toWirePaginationParams({ pageIndex: -5 })).toEqual({ page: 1 })
   })
 
-  describe('toWirePaginationParams', () => {
-    it('derives the wire index from the one-based page', () => {
-      expect(toWirePaginationParams({ page: 1, pageSize: 20 })).toEqual({
-        [WIRE_PAGE_FIELD]: 0,
-        [WIRE_PAGE_SIZE_FIELD]: 20,
-      })
-    })
+  it('truncates a fractional page instead of sending 2.7', () => {
+    expect(toWirePaginationParams({ pageIndex: 1.7 })).toEqual({ page: 2 })
+  })
 
-    it('omits absent values so no undefined key reaches the wire', () => {
-      expect(toWirePaginationParams({})).toEqual({})
-      expect(toWirePaginationParams({ pageSize: 10 })).toEqual({ [WIRE_PAGE_SIZE_FIELD]: 10 })
-    })
+  it('clamps page size into the backend-accepted 1..100 range', () => {
+    expect(toWirePaginationParams({ pageSize: 0 })).toEqual({ pageSize: 1 })
+    expect(toWirePaginationParams({ pageSize: 5000 })).toEqual({ pageSize: MAX_WIRE_PAGE_SIZE })
+    expect(MAX_WIRE_PAGE_SIZE).toBe(100)
+  })
 
-    it('prefers the one-based page when both bases are supplied', () => {
-      expect(toWirePaginationParams({ page: 1, pageIndex: 99 })).toEqual({
-        [WIRE_PAGE_FIELD]: 0,
-      })
-    })
+  it('omits absent values so no `undefined` reaches the wire', () => {
+    // axios serializes { page: undefined } into the literal query string
+    // "page=undefined", which then fails to bind — the same silent page-1 pin.
+    expect(toWirePaginationParams({})).toEqual({})
+    expect(toWirePaginationParams({ pageIndex: 0 })).not.toHaveProperty(WIRE_PAGE_SIZE_FIELD)
+    expect(Object.values(toWirePaginationParams({ pageIndex: 2 }))).not.toContain(undefined)
+  })
 
-    it('clamps the page size to at least one', () => {
-      expect(toWirePaginationParams({ page: 1, pageSize: 0 })).toEqual({
-        [WIRE_PAGE_FIELD]: 0,
-        [WIRE_PAGE_SIZE_FIELD]: 1,
-      })
-    })
+  it('accepts an explicit undefined without emitting the key', () => {
+    expect(toWirePaginationParams({ pageIndex: undefined, pageSize: undefined })).toEqual({})
   })
 })
