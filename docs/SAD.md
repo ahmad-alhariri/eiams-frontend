@@ -1,5 +1,18 @@
 # EIAMS — Software Architecture Document (SAD)
 
+> **Status (2026-09-02): §4 is partially superseded by D-INT-02 / ADR-0001.**
+> The architecture in this document remains the baseline for the frontend,
+> but the **API contract** row in the §4 technology baseline no longer
+> reflects the current policy: the OpenAPI generation pipeline
+> (`Apidog OpenAPI 3.0 → openapi-typescript → OpenAPI-Qraft`) has been
+> retired in favor of handwritten per-module wire types produced by the
+> shared `ApiTransport` seam. The legacy generated artifact at
+> `src/shared/types/generated/eiams-v1.ts` is frozen migration scaffolding
+> and is deleted at `whhu.5` once the repository-wide import count reaches
+> zero. For the current contract model see
+> `docs/direct-backend-integration-plan.md` and
+> `docs/adr/0001-handwritten-contracts-for-direct-backend-integration.md`.
+
 > Status: target frontend architecture for EIAMS v1
 >
 > This document distinguishes the intended architecture from the repository's
@@ -56,7 +69,7 @@ enforcer of permissions, transitions, stock safety, and transactions.
 | Forms | React Hook Form and Zod |
 | Tables | TanStack Table v9 |
 | HTTP | Axios behind the generated/shared API layer |
-| API contract | Apidog OpenAPI 3.0 → openapi-typescript → OpenAPI-Qraft |
+| API contract | Handwritten per-module wire types (D-INT-02); backend's real OpenAPI export is human-only and not a frontend build dependency; the legacy generated artifact at `src/shared/types/generated/eiams-v1.ts` is frozen migration scaffolding per ADR-0001 and is deleted at `whhu.5` once the repository-wide import count reaches zero. |
 | Tests | Vitest, Testing Library, MSW |
 
 The implementation uses Base UI and Tabler icons. References to Mantine,

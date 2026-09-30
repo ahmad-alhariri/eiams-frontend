@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
-import { warehouseService } from '@/modules/warehouse/services/warehouse.service'
+import { createWarehouseService } from '@/modules/warehouse/services/warehouse.service'
 import type {
   ListWarehouseMaterialSettingsQuery,
   ListWarehousesQuery,
@@ -36,6 +35,21 @@ export const warehouseQueryKeys = {
 
 function useActiveScopeCacheKey() {
   return useActiveScopeContext().activeScopeCacheKey
+}
+
+// Lazy singleton: created on first read, re-creatable for tests.
+let warehouseService: ReturnType<typeof createWarehouseService> = createWarehouseService(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  {} as any,
+)
+
+export function useWarehouseService() {
+  return warehouseService
+}
+
+export function setWarehouseService(transport: Parameters<typeof createWarehouseService>[0]) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  warehouseService = createWarehouseService(transport as any)
 }
 
 export function useWarehousesQuery(query: ListWarehousesQuery = EMPTY_QUERY) {

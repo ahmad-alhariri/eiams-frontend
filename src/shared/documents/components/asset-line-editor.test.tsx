@@ -264,7 +264,7 @@ describe('AssetLineEditor', () => {
     const warehouseId = fixtureUuid(30)
     const capability = createWarehouseCapability({
       warehouseId,
-      domain: { id: IT_DOMAIN_ID, displayName: 'تقنية المعلومات', code: 'IT', status: 'Active' },
+      domain: { id: IT_DOMAIN_ID, displayName: 'تقنية المعلومات', code: 'IT' },
       operations: ['Issue'],
     })
     server.use(
@@ -290,7 +290,7 @@ describe('AssetLineEditor', () => {
     const warehouseId = fixtureUuid(31)
     const capability = createWarehouseCapability({
       warehouseId,
-      domain: { id: IT_DOMAIN_ID, displayName: 'تقنية المعلومات', code: 'IT', status: 'Active' },
+      domain: { id: IT_DOMAIN_ID, displayName: 'تقنية المعلومات', code: 'IT' },
       operations: ['Issue'],
     })
     const onCapabilityGateChange = vi.fn()

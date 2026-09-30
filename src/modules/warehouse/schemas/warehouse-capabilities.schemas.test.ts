@@ -42,10 +42,21 @@ describe('warehouseCapabilitiesSchema', () => {
           ],
         },
         [current],
+        current.warehouseId,
       ),
     ).toEqual([
-      { domainId: current.domain.id, operations: ['Receiving', 'Return'], rowVersion: 9 },
-      { domainId: newDomainId, operations: ['Count'], rowVersion: 0 },
+      {
+        warehouseId: current.warehouseId,
+        domainId: current.domain.id,
+        operations: ['Receiving', 'Return'],
+        rowVersion: 9,
+      },
+      {
+        warehouseId: current.warehouseId,
+        domainId: newDomainId,
+        operations: ['Count'],
+        rowVersion: 0,
+      },
     ])
   })
 })

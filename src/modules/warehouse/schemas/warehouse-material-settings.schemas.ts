@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type {
   WarehouseMaterialSetting,
   WarehouseMaterialSettingUpsertRequest,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/modules/warehouse/types/warehouse.api-types'
 
 /**
  * Non-negative DECIMAL(18,3) threshold kept as source text (like the
@@ -58,6 +58,7 @@ export function toWarehouseMaterialSettingRequest(
   existing: WarehouseMaterialSetting | null,
 ): WarehouseMaterialSettingUpsertRequest {
   return {
+    warehouseId: existing?.warehouseId ?? '',
     materialId: values.materialId,
     minQuantity: toNullableQuantity(values.minQuantity),
     maxQuantity: toNullableQuantity(values.maxQuantity),

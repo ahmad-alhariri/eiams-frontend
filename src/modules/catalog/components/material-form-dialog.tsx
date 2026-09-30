@@ -1,13 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCallback, useEffect } from 'react'
-import { useForm, useWatch } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 
 import {
-  applyMaterialTrackingPolicy,
-  getMaterialTrackingPolicy,
-  materialSchema,
+  materialFormSchema,
   type MaterialFormValues,
 } from '@/modules/catalog/schemas/material.schemas'
+import type { Material, MaterialFamily, UnitOfMeasure } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { useConfirm } from '@/shared/hooks/use-confirm'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
@@ -24,23 +23,18 @@ import {
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { Textarea } from '@/shared/ui/textarea'
-import type {
-  Material,
-  MaterialFamily,
-  MaterialKind,
-  UnitOfMeasure,
-} from '@/shared/types/generated/eiams-v1'
+
+type MaterialKind = Material['materialKind']
 
 const EMPTY_VALUES: MaterialFormValues = {
-  baseUnitId: '',
   code: '',
-  descriptionAr: '',
-  familyId: '',
-  materialKind: 'Consumable',
   nameAr: '',
-  requiresAssetNumber: false,
+  descriptionAr: null,
+  materialFamilyId: '',
+  unitId: '',
   status: 'Active',
-  trackingType: 'Quantity',
+  materialKind: 'Consumable',
+  nominalConversionFactor: 1,
 }
 
 export interface MaterialFormDialogProps {
@@ -56,7 +50,7 @@ export interface MaterialFormDialogProps {
 }
 
 function isMaterialKind(value: string | null): value is MaterialKind {
-  return value === 'Consumable' || value === 'Durable' || value === 'Asset'
+  return value === 'Consumable' || value === 'Asset'
 }
 
 /** Contract-backed core form with the approved material tracking matrix. */
@@ -73,10 +67,11 @@ export function MaterialFormDialog({
 }: MaterialFormDialogProps) {
   const { confirm, element: confirmElement } = useConfirm()
   const selectableFamilies = families.filter(
-    (family) => family.status === 'Active' || family.familyId === material?.family.id,
+    (family) =>
+      family.status === 'Active' || family.materialFamilyId === material?.materialFamily.id,
   )
   const selectableUnits = units.filter(
-    (unit) => unit.status === 'Active' || unit.unitId === material?.baseUnit.id,
+    (unit) => unit.status === 'Active' || unit.unitId === material?.unit.id,
   )
   const referencesUnavailable =
     isReferencesLoading ||
@@ -84,29 +79,24 @@ export function MaterialFormDialog({
     selectableFamilies.length === 0 ||
     selectableUnits.length === 0
   const form = useForm<MaterialFormValues>({
-    resolver: zodResolver(materialSchema),
+    resolver: zodResolver(materialFormSchema),
     defaultValues: EMPTY_VALUES,
   })
 
   useEffect(() => {
     if (!open) return
     const materialKind = material?.materialKind ?? 'Consumable'
-    const tracking = applyMaterialTrackingPolicy(materialKind, material?.trackingType)
     form.reset({
-      baseUnitId: material?.baseUnit.id ?? '',
       code: material?.code ?? '',
-      descriptionAr: material?.descriptionAr ?? '',
-      familyId: material?.family.id ?? '',
-      materialKind,
       nameAr: material?.nameAr ?? '',
-      requiresAssetNumber: tracking.requiresAssetNumber,
+      descriptionAr: material?.descriptionAr ?? null,
+      materialFamilyId: material?.materialFamily.id ?? '',
+      unitId: material?.unit.id ?? '',
+      nominalConversionFactor: material?.nominalConversionFactor ?? 1,
+      materialKind,
       status: material?.status ?? 'Active',
-      trackingType: tracking.trackingType,
     })
   }, [form, material, open])
-
-  const materialKind = useWatch({ control: form.control, name: 'materialKind' }) ?? 'Consumable'
-  const trackingPolicy = getMaterialTrackingPolicy(materialKind)
 
   const handleMaterialKindChange = useCallback(
     async (nextValue: string | null) => {
@@ -115,22 +105,13 @@ export function MaterialFormDialog({
       const result = await confirm({
         title: 'تأكيد تغيير نوع المادة',
         message:
-          'سيُعاد ضبط أسلوب التتبع ومتطلب رقم الأصل وفق السياسة المعتمدة. تابع فقط إذا كان التصنيف الجديد صحيحاً.',
+          'سيُعاد ضبط متطلب رقم الأصل وفق السياسة المعتمدة. تابع فقط إذا كان التصنيف الجديد صحيحاً.',
         confirmLabel: 'تغيير النوع',
         cancelLabel: 'إلغاء',
       })
       if (!result.confirmed) return
 
-      const tracking = applyMaterialTrackingPolicy(nextValue)
       form.setValue('materialKind', nextValue, { shouldDirty: true, shouldValidate: true })
-      form.setValue('trackingType', tracking.trackingType, {
-        shouldDirty: true,
-        shouldValidate: true,
-      })
-      form.setValue('requiresAssetNumber', tracking.requiresAssetNumber, {
-        shouldDirty: true,
-        shouldValidate: true,
-      })
     },
     [confirm, form],
   )
@@ -143,15 +124,14 @@ export function MaterialFormDialog({
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
         schemaKeys: [
-          'baseUnitId',
           'code',
-          'descriptionAr',
-          'familyId',
-          'materialKind',
           'nameAr',
-          'requiresAssetNumber',
+          'descriptionAr',
+          'materialFamilyId',
+          'unitId',
+          'nominalConversionFactor',
+          'materialKind',
           'status',
-          'trackingType',
         ],
       })
     }
@@ -164,7 +144,7 @@ export function MaterialFormDialog({
           <DialogHeader>
             <DialogTitle>{material ? 'تعديل مادة' : 'إضافة مادة'}</DialogTitle>
             <DialogDescription>
-              أدخل بيانات المادة الأساسية. يطبق النموذج تلقائياً سياسة التتبع المعتمدة حسب نوع
+              أدخل بيانات المادة الأساسية. يطبق النموذج تلقائياً سياسة رقم الأصل المعتمدة حسب نوع
               المادة.
             </DialogDescription>
           </DialogHeader>
@@ -252,7 +232,8 @@ export function MaterialFormDialog({
                     <FormLabel>وصف المادة</FormLabel>
                     <FormControl>
                       <Textarea
-                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(event) => field.onChange(event.currentTarget.value || null)}
                         disabled={isPending}
                         maxLength={1000}
                         placeholder="وصف اختياري للمادة"
@@ -265,7 +246,7 @@ export function MaterialFormDialog({
               <div className="grid gap-5 sm:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="familyId"
+                  name="materialFamilyId"
                   rules={{ required: true }}
                   render={({ field, fieldState }) => (
                     <FormItem>
@@ -278,14 +259,18 @@ export function MaterialFormDialog({
                         <FormControl>
                           <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
                             <SelectValue>
-                              {selectableFamilies.find((family) => family.familyId === field.value)
-                                ?.nameAr ?? 'اختر عائلة المادة'}
+                              {selectableFamilies.find(
+                                (family) => family.materialFamilyId === field.value,
+                              )?.nameAr ?? 'اختر عائلة المادة'}
                             </SelectValue>
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {selectableFamilies.map((family) => (
-                            <SelectItem key={family.familyId} value={family.familyId}>
+                            <SelectItem
+                              key={family.materialFamilyId}
+                              value={family.materialFamilyId}
+                            >
                               {family.nameAr}
                             </SelectItem>
                           ))}
@@ -297,7 +282,7 @@ export function MaterialFormDialog({
                 />
                 <FormField
                   control={form.control}
-                  name="baseUnitId"
+                  name="unitId"
                   rules={{ required: true }}
                   render={({ field, fieldState }) => (
                     <FormItem>
@@ -328,6 +313,31 @@ export function MaterialFormDialog({
                   )}
                 />
               </div>
+              <FormField
+                control={form.control}
+                name="nominalConversionFactor"
+                rules={{ required: true }}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>عامل التحويل</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="any"
+                        min="0"
+                        dir="ltr"
+                        disabled={isPending}
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.currentTarget.valueAsNumber)}
+                      />
+                    </FormControl>
+                    <p className="text-sm text-muted-foreground">
+                      كمية وحدة واحدة من هذه المادة بالوحدة الأساسية.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               {isReferencesError ? (
                 <p className="text-sm text-destructive" role="alert">
                   تعذّر تحميل عائلات المواد أو وحدات القياس. أغلق النافذة وحاول مرة أخرى.
@@ -358,7 +368,6 @@ export function MaterialFormDialog({
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="Consumable">مستهلكة</SelectItem>
-                          <SelectItem value="Durable">عهدة تشغيلية</SelectItem>
                           <SelectItem value="Asset">أصل ثابت</SelectItem>
                         </SelectContent>
                       </Select>
@@ -366,56 +375,7 @@ export function MaterialFormDialog({
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="trackingType"
-                  rules={{ required: true }}
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormLabel>أسلوب التتبع</FormLabel>
-                      <Select
-                        value={field.value}
-                        disabled={isPending || materialKind !== 'Durable'}
-                        onValueChange={field.onChange}
-                      >
-                        <FormControl>
-                          <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {trackingPolicy.availableTrackingTypes.map((trackingOption) => (
-                            <SelectItem key={trackingOption} value={trackingOption}>
-                              {trackingOption === 'Quantity' ? 'بالكمية' : 'بالرقم التسلسلي'}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
-              <FormField
-                control={form.control}
-                name="requiresAssetNumber"
-                render={({ fieldState }) => (
-                  <FormItem className="rounded-md border border-input p-3">
-                    <FormLabel>رقم الأصل</FormLabel>
-                    <p className="mt-1 text-sm text-foreground">
-                      {trackingPolicy.requiresAssetNumber ? 'مطلوب' : 'غير مطلوب'}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {trackingPolicy.requiresAssetNumber
-                        ? 'الأصل الثابت يتطلب رقم أصل داخلياً، ويُتبع بالرقم التسلسلي.'
-                        : materialKind === 'Durable'
-                          ? 'العهدة التشغيلية لا تتطلب رقم أصل، ويمكن تتبعها بالكمية أو بالرقم التسلسلي.'
-                          : 'المادة المستهلكة تُتبع بالكمية ولا تتطلب رقم أصل.'}
-                    </p>
-                    {fieldState.invalid ? <FormMessage /> : null}
-                  </FormItem>
-                )}
-              />
               <DialogFooter>
                 <Button type="submit" disabled={referencesUnavailable} loading={isPending}>
                   {material ? 'حفظ التعديلات' : 'إضافة المادة'}

@@ -22,7 +22,7 @@ import {
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { Textarea } from '@/shared/ui/textarea'
-import type { Warehouse } from '@/shared/types/generated/eiams-v1'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 
 const EMPTY_VALUES: WarehouseFormValues = {
   siteId: '',
@@ -33,14 +33,13 @@ const EMPTY_VALUES: WarehouseFormValues = {
 }
 
 export interface WarehouseFormDialogProps {
-  warehouse: Warehouse | null
+  warehouse: Warehouse | null | undefined
   open: boolean
   isPending: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (values: WarehouseFormValues) => Promise<void>
 }
 
-/** Creates and updates only the v1 warehouse identity fields. */
 export function WarehouseFormDialog({
   warehouse,
   open,
@@ -52,10 +51,7 @@ export function WarehouseFormDialog({
     resolver: zodResolver(warehouseSchema),
     defaultValues: EMPTY_VALUES,
   })
-  const sitesQuery = useSitesQuery(
-    { pageIndex: 0, pageSize: 200, status: 'Active' },
-    { enabled: open },
-  )
+  const sitesQuery = useSitesQuery({ page: 0, pageSize: 200, status: 'Active' }, { enabled: open })
 
   useEffect(() => {
     if (!open) return
@@ -100,33 +96,29 @@ export function WarehouseFormDialog({
             <FormField
               control={form.control}
               name="siteId"
-              rules={{ required: true }}
-              render={({ field, fieldState }) => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>الموقع</FormLabel>
-                  <Select
-                    value={field.value}
-                    disabled={isPending || sitesQuery.isPending}
-                    onValueChange={field.onChange}
-                  >
+                  <Select value={field.value} disabled={isPending} onValueChange={field.onChange}>
                     <FormControl>
-                      <SelectTrigger
-                        aria-invalid={fieldState.invalid || undefined}
-                        aria-label="الموقع"
-                      >
-                        <SelectValue placeholder="اختر الموقع" />
+                      <SelectTrigger aria-label="الموقع">
+                        <SelectValue>
+                          {sitesQuery.data?.items.find((s) => s.siteId === field.value)?.nameAr ??
+                            field.value ??
+                            'اختر الموقع'}
+                        </SelectValue>
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {warehouse !== null &&
-                      !sitesQuery.data?.items.some((site) => site.siteId === warehouse.site.id) ? (
-                        <SelectItem value={warehouse.site.id}>
-                          {warehouse.site.displayName}
-                        </SelectItem>
-                      ) : null}
+                      <SelectItem value="">اختر الموقع</SelectItem>
                       {sitesQuery.data?.items.map((site) => (
                         <SelectItem key={site.siteId} value={site.siteId}>
-                          {site.nameAr}
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{site.nameAr}</span>
+                            {site.code ? (
+                              <span className="text-muted text-sm">({site.code})</span>
+                            ) : null}
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -135,84 +127,91 @@ export function WarehouseFormDialog({
                 </FormItem>
               )}
             />
-            <div className="grid gap-5 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="nameAr"
-                rules={{ required: true }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>اسم المستودع</FormLabel>
+            <FormField
+              control={form.control}
+              name="code"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>الرمز</FormLabel>
+                  <FormControl>
+                    <Input
+                      value={field.value}
+                      disabled={isPending}
+                      onValueChange={field.onChange}
+                      placeholder="مثال: WH-001"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="nameAr"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>الاسم (العربية)</FormLabel>
+                  <FormControl>
+                    <Input
+                      value={field.value}
+                      disabled={isPending}
+                      onValueChange={field.onChange}
+                      placeholder="اسم المستودع"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="locationAr"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>الموقع التفصيلي (اختياري)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      value={field.value ?? ''}
+                      disabled={isPending}
+                      onChange={(event) => field.onChange(event.target.value)}
+                      placeholder="وصف موقع المستودع داخل المبنى"
+                      rows={2}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>الحالة</FormLabel>
+                  <Select value={field.value} disabled={isPending} onValueChange={field.onChange}>
                     <FormControl>
-                      <Input {...field} disabled={isPending} placeholder="مثال: المستودع المركزي" />
+                      <SelectTrigger aria-label="حالة المستودع">
+                        <SelectValue>{field.value === 'Active' ? 'نشط' : 'غير نشط'}</SelectValue>
+                      </SelectTrigger>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="code"
-                rules={{ required: true }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>رمز المستودع</FormLabel>
-                    <FormControl>
-                      <Input {...field} dir="ltr" disabled={isPending} placeholder="WH-CENTRAL" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="locationAr"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>الموقع التفصيلي</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} disabled={isPending} placeholder="مثال: دمشق" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="status"
-                rules={{ required: true }}
-                render={({ field, fieldState }) => (
-                  <FormItem>
-                    <FormLabel>الحالة</FormLabel>
-                    <Select value={field.value} disabled={isPending} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                          <SelectValue>{field.value === 'Active' ? 'نشط' : 'غير نشط'}</SelectValue>
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Active">نشط</SelectItem>
-                        <SelectItem value="Inactive">غير نشط</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                    <SelectContent>
+                      <SelectItem value="Active">نشط</SelectItem>
+                      <SelectItem value="Inactive">غير نشط</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <DialogFooter>
-              <Button type="submit" loading={isPending}>
-                {warehouse ? 'حفظ التعديلات' : 'إضافة المستودع'}
-              </Button>
               <Button
-                type="button"
-                variant="outline"
-                disabled={isPending}
-                onClick={() => onOpenChange(false)}
+                type="submit"
+                loading={isPending}
+                disabled={
+                  !form.getValues().siteId || !form.getValues().code || !form.getValues().nameAr
+                }
               >
-                إلغاء
+                {warehouse ? 'حفظ التعديلات' : 'إضافة المستودع'}
               </Button>
             </DialogFooter>
           </form>

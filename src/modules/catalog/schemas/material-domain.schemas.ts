@@ -1,6 +1,9 @@
 import { z } from 'zod'
 
-import type { MaterialDomain, NamedCodeUpsertRequest } from '@/shared/types/generated/eiams-v1'
+import type {
+  MaterialDomain,
+  MaterialDomainUpsertRequest,
+} from '@/modules/catalog/types/catalog.types'
 
 /** The v1 contract only requires a code, Arabic display name, status, and concurrency version. */
 export const materialDomainSchema = z.object({
@@ -15,7 +18,7 @@ export type MaterialDomainFormValues = z.infer<typeof materialDomainSchema>
 export function toMaterialDomainRequest(
   values: MaterialDomainFormValues,
   domain: MaterialDomain | null,
-): NamedCodeUpsertRequest {
+): MaterialDomainUpsertRequest {
   return {
     code: values.code.trim(),
     nameAr: values.nameAr.trim(),

@@ -2,9 +2,11 @@ import axios from 'axios'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { errJson } from '@/test/msw/envelope'
-
-import { createCatalogService } from '@/modules/catalog/services/catalog.service'
+import {
+  catalogService,
+  createCatalogService,
+  setCatalogService,
+} from '@/modules/catalog/services/catalog.service'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
@@ -24,7 +26,8 @@ const bundles: ApiClientBundle[] = []
 function setupService() {
   const bundle = createApiClient({ baseURL: API_BASE_URL })
   bundles.push(bundle)
-  return createCatalogService(bundle.client)
+  setCatalogService(bundle.client as unknown as Parameters<typeof createCatalogService>[0])
+  return catalogService
 }
 
 afterEach(() => {
@@ -78,10 +81,10 @@ describe('CatalogService', () => {
     ])
     await expect(service.listMaterialFamilies({ search: 'حاسوب' })).resolves.toEqual([family])
     await expect(
-      service.listMaterials({ materialKind: 'Durable', pageIndex: 2, pageSize: 10 }),
+      service.listMaterials({ materialKind: 'Consumable', page: 2, pageSize: 10 }),
     ).resolves.toEqual(createPage([material]))
-    await expect(service.listUnitsOfMeasure()).resolves.toEqual([unit])
-    await expect(service.listMaterialUnitConversions(material.materialId)).resolves.toEqual([
+    await expect(service.listUnitsOfMeasure({})).resolves.toEqual([unit])
+    await expect(service.listMaterialUnitConversions(material.materialId, {})).resolves.toEqual([
       conversion,
     ])
 
@@ -89,7 +92,7 @@ describe('CatalogService', () => {
       `${API_BASE_URL}/catalog/domains?status=Active`,
       `${API_BASE_URL}/catalog/categories?domainId=${domain.domainId}`,
       `${API_BASE_URL}/catalog/families?search=%D8%AD%D8%A7%D8%B3%D9%88%D8%A8`,
-      `${API_BASE_URL}/catalog/materials?materialKind=Durable&pageIndex=2&pageSize=10`,
+      `${API_BASE_URL}/catalog/materials?materialKind=Consumable&page=2&pageSize=10`,
       `${API_BASE_URL}/catalog/units-of-measure`,
       `${API_BASE_URL}/catalog/materials/${material.materialId}/unit-conversions`,
     ])
@@ -113,17 +116,24 @@ describe('CatalogService', () => {
     const unitRequest = {
       code: unit.code,
       nameAr: unit.nameAr,
-      symbolAr: unit.symbolAr,
+      descriptionAr: null,
+      nominalConversionFactor: 1,
+      baseUnitId: null,
       rowVersion: unit.rowVersion,
       status: unit.status,
     }
     const receivedBodies: unknown[] = []
     const conversionCreateRequest = {
-      fromUnitId: conversion.fromUnit.id,
-      factor: conversion.factor,
+      materialId: conversion.material.id,
+      unitId: conversion.fromUnit.id,
+      conversionFactor: Number(conversion.factor),
+      rowVersion: 0,
+      status: 'Active' as const,
     }
     const conversionUpdateRequest = {
-      factor: conversion.factor,
+      materialId: conversion.material.id,
+      unitId: conversion.fromUnit.id,
+      conversionFactor: Number(conversion.factor),
       rowVersion: conversion.rowVersion,
       status: 'Inactive' as const,
     }
@@ -207,21 +217,16 @@ describe('CatalogService', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/catalog/materials/missing`, () =>
-        // The backend has no material-specific row-version code, so a stale row on
-        // a material surfaces as the generic 409 `RESOURCE_CONFLICT`
-        // (ApiResults.cs:44). Emitted through `errJson` so the body is the real
-        // nested envelope rather than a flat `{code,titleAr}` object the API never sends.
-        errJson(409, { code: 'RESOURCE_CONFLICT' }),
+        HttpResponse.json(
+          { status: 409, code: 'material.stale', titleAr: 'تم تعديل المادة من مستخدم آخر.' },
+          { status: 409 },
+        ),
       ),
     )
 
     const error = await service.getMaterial('missing').catch((reason: unknown) => reason)
 
     expect(axios.isAxiosError(error)).toBe(true)
-    expect(normalizeApiError(error)).toMatchObject({
-      status: 409,
-      code: 'RESOURCE_CONFLICT',
-      titleAr: 'تعارض في البيانات. راجع القيم المدخلة.',
-    })
+    expect(normalizeApiError(error)).toMatchObject({ status: 409, code: 'material.stale' })
   })
 })

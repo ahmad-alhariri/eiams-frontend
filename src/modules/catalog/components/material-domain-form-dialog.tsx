@@ -20,7 +20,7 @@ import {
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { MaterialDomain } from '@/shared/types/generated/eiams-v1'
+import type { MaterialDomain } from '@/modules/catalog/types/catalog.types'
 
 const EMPTY_VALUES: MaterialDomainFormValues = { code: '', nameAr: '', status: 'Active' }
 

@@ -5,10 +5,8 @@ import { useNavigate, useParams } from 'react-router'
 import { ROUTE_PATHS } from '@/config/routes'
 import { MaterialUnitConversions } from '@/modules/catalog/components/material-unit-conversions'
 import { useMaterialQuery } from '@/modules/catalog/hooks/use-catalog-queries'
-import {
-  MATERIAL_KIND_LABELS,
-  TRACKING_TYPE_LABELS,
-} from '@/modules/catalog/constants/catalog-labels'
+import { MATERIAL_KIND_LABELS } from '@/modules/catalog/constants/catalog-labels'
+import type { Material, NamedReference } from '@/modules/catalog/types/catalog.types'
 import { EmptyState } from '@/shared/feedback/empty-state'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
@@ -17,16 +15,14 @@ import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
-import type { Material, MaterialKind, NamedReference } from '@/shared/types/generated/eiams-v1'
+
+type MaterialKind = Material['materialKind']
 
 function HierarchyStep({ label, reference }: { label: string; reference: NamedReference }) {
   return (
     <li className="flex min-w-36 flex-1 flex-col gap-1 rounded-lg border border-border bg-muted/30 p-3">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
       <span className="font-semibold text-foreground">{reference.displayName}</span>
-      <span className="text-xs text-muted-foreground" dir="ltr">
-        {reference.code}
-      </span>
     </li>
   )
 }
@@ -35,8 +31,6 @@ function policyDescription(materialKind: MaterialKind): string {
   switch (materialKind) {
     case 'Consumable':
       return 'لا تنشأ عهدة بعد الصرف؛ وتنتهي مسؤولية المستودع عند ترحيل سند الصرف.'
-    case 'Durable':
-      return 'تُنشأ عهدة تشغيلية إلزامية عند الصرف، من دون إنشاء سجل أصل ثابت.'
     case 'Asset':
       return 'تُنشأ عهدة إلزامية، ويُسجّل كل أصل في سجل الأصول بمعرّف داخلي للمؤسسة.'
   }
@@ -144,17 +138,17 @@ function MaterialDetail({ material, onReturn }: { material: Material; onReturn: 
         description="يعرض هذا المسار المرجعي للمادة كما يعتمد عليه كتالوج المؤسسة."
       >
         <ol className="flex flex-wrap items-stretch gap-2" aria-label="التسلسل التصنيفي للمادة">
-          <HierarchyStep label="المجال" reference={material.domain} />
+          <HierarchyStep label="المجال" reference={material.materialDomain} />
           <IconChevronLeft
             className="my-auto hidden size-5 shrink-0 text-muted-foreground sm:block"
             aria-hidden
           />
-          <HierarchyStep label="التصنيف" reference={material.category} />
+          <HierarchyStep label="التصنيف" reference={material.materialCategory} />
           <IconChevronLeft
             className="my-auto hidden size-5 shrink-0 text-muted-foreground sm:block"
             aria-hidden
           />
-          <HierarchyStep label="العائلة" reference={material.family} />
+          <HierarchyStep label="العائلة" reference={material.materialFamily} />
           <IconChevronLeft
             className="my-auto hidden size-5 shrink-0 text-muted-foreground sm:block"
             aria-hidden
@@ -178,7 +172,7 @@ function MaterialDetail({ material, onReturn }: { material: Material; onReturn: 
           <DetailField label="رمز المادة" ltr>
             {material.code}
           </DetailField>
-          <DetailField label="وحدة القياس الأساسية">{material.baseUnit.displayName}</DetailField>
+          <DetailField label="وحدة القياس الأساسية">{material.unit.displayName}</DetailField>
           <DetailField label="الحالة">
             <StatusBadge entity="record" status={material.status} />
           </DetailField>
@@ -198,9 +192,6 @@ function MaterialDetail({ material, onReturn }: { material: Material; onReturn: 
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
           <DetailField label="نوع المادة">
             {MATERIAL_KIND_LABELS[material.materialKind]}
-          </DetailField>
-          <DetailField label="أسلوب التتبع">
-            {TRACKING_TYPE_LABELS[material.trackingType]}
           </DetailField>
           <DetailField label="رقم الأصل">{assetNumberPolicy(material.materialKind)}</DetailField>
           <DetailField label="المسؤولية بعد الصرف">

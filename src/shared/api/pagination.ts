@@ -1,29 +1,29 @@
 /**
- * Pagination normalization for the direct-backend transport (D-INT-02 / ADR-0001 §4.2,
- * `docs/adr/0001-*.md` §4.2 `ApiPaginationResponse`; `docs/direct-backend-integration-plan.md`
- * §4.2 + §5.2; `docs/inventory-read-contract-decision.md` D-INV-READ-01; `docs/design-tokens.md`
- * §3 spacing scale; `docs/ui-design.md` §3 responsive / §10 accessibility).
+ * Pagination normalization for the direct-backend transport (D-INT-02 / ADR-0001 Â§4.2,
+ * `docs/adr/0001-*.md` Â§4.2 `ApiPaginationResponse`; `docs/direct-backend-integration-plan.md`
+ * Â§4.2 + Â§5.2; `docs/inventory-read-contract-decision.md` D-INV-READ-01; `docs/design-tokens.md`
+ * Â§3 spacing scale; `docs/ui-design.md` Â§3 responsive / Â§10 accessibility).
  *
  * Converts the backend's 1-based snake_case pagination (`docs/direct-backend-integration-plan.md`
- * §5.2: `page` (1-based index), `page_size`, `total_items`, `total_pages`, `has_previous_page`,
+ * Â§5.2: `page` (1-based index), `page_size`, `total_items`, `total_pages`, `has_previous_page`,
  * `has_next_page`, `total_count`) into the frontend-friendly `ApiPage<TItem>` (from `api-contracts.ts`).
- * Keeps 1-based `page` (NOT switched to 0-based — per `docs/inventory-read-contract-decision.md`
- * sorted server projections); normalizes names (snake_case → camelCase) but does NOT change
- * the pagination math (only normalization, no invention of new pagination logic — per-plan §6
+ * Keeps 1-based `page` (NOT switched to 0-based â€” per `docs/inventory-read-contract-decision.md`
+ * sorted server projections); normalizes names (snake_case â†’ camelCase) but does NOT change
+ * the pagination math (only normalization, no invention of new pagination logic â€” per-plan Â§6
  * retirement of generator artifacts; the pagination semantics are owned by the server).
  *
  * Design-system / architecture rules respected:
- *  - No literal spacing/colors/typography values (file is number-normalization only — per
- *    `docs/design-tokens.md` §4 spacing / `docs/component-guidelines.md` §2 reuse-first).
+ *  - No literal spacing/colors/typography values (file is number-normalization only â€” per
+ *    `docs/design-tokens.md` Â§4 spacing / `docs/component-guidelines.md` Â§2 reuse-first).
  *  - No feature-level pagination logic (no `useServerPagination` hook rebuilt; no second
- *    pagination engine created; `shared/hooks/use-server-pagination.ts` reused in features —
+ *    pagination engine created; `shared/hooks/use-server-pagination.ts` reused in features â€”
  *    this file only normalizes the server projection shape).
  *  - Contract-shape only: separates from `document-transport.ts` service interface (`DocumentService`
  *    handles document-level pagination; this file handles any paginated resource); no duplication.
  *  - `Readonly` arrays preserved (`ReadonlyArray<TItem>` for `ApiPage`); `Readonly<Record>` for
  *    input mapping; optional properties kept (`exactOptionalPropertyTypes`); nullable preserved
  *    (`total_count: number | null` from server); dates as ISO strings (formatted at UI edge per
- *    `docs/design-tokens.md` §4).
+ *    `docs/design-tokens.md` Â§4).
  *  - No `any` (only `Readonly` generics); no `fetch`; no `generated` import; no feature endpoint
  *    strings embedded (`/assets/`, etc.); `docs/ADR.md` shorthand reference consistent with
  *    `docs/adr/` ADR files (no contradiction with SAD supersession line or design-system rules).
@@ -32,11 +32,11 @@
 import type { ApiPaginationResponse } from './api-contracts'
 
 /**
- * Normalized pagination input interface (per-plan §4.2; `docs/direct-backend-integration-plan.md` §5.2).
- * Keeps `page` 1-based (NOT 0-based); normalizes `page_size` → `pageSize`; `total_items` → `totalItems`;
+ * Normalized pagination input interface (per-plan Â§4.2; `docs/direct-backend-integration-plan.md` Â§5.2).
+ * Keeps `page` 1-based (NOT 0-based); normalizes `page_size` â†’ `pageSize`; `total_items` â†’ `totalItems`;
  * `total_pages` preserved; `has_previous_page` / `has_next_page` derived from `page` and `total_pages`
- * (same logic as server provides — no client-side invention of pagination rules); `total_count`
- * preserved as nullable (`null` for non-paginated responses — per-plan §4.2 `total_items: number | null`).
+ * (same logic as server provides â€” no client-side invention of pagination rules); `total_count`
+ * preserved as nullable (`null` for non-paginated responses â€” per-plan Â§4.2 `total_items: number | null`).
  */
 export interface NormalizedPaginationInput {
   readonly page: number
@@ -52,7 +52,7 @@ export interface NormalizedPaginationInput {
  * Normalizes a server `ApiPaginationResponse` (1-based snake_case) into `NormalizedPaginationInput`.
  * Per-plan: does NOT invent pagination rules; keeps server semantics; only converts field names.
  * Matches `docs/inventory-read-contract-decision.md` D-INV-READ-01 (typed sort/filter parameters;
- * balance-detail identity `balanceId`; low-stock projection — pagination preserved, not rewritten).
+ * balance-detail identity `balanceId`; low-stock projection â€” pagination preserved, not rewritten).
  */
 export function normalizePagination(
   serverPagination: ApiPaginationResponse | null,
@@ -80,44 +80,6 @@ export function normalizePagination(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Request side
-// ---------------------------------------------------------------------------
-//
-// Corrected 2026-09-30.
-//
-// This boundary was wrong twice, in two independent ways, and both had to be
-// fixed together.
-//
-// 1. WRONG TARGET NAME. The old code sent a `pageIndex` query parameter. The
-//    backend binds `Page` (`Web.Api/Infrastructure/PaginationQueryParameters.cs:9-13`,
-//    declared `[Range(1, PaginationDefaults.MaximumPage)]` with `DefaultPage = 1`).
-//    ASP.NET Core query binding is case-insensitive but NOT name-agnostic, so
-//    `pageIndex` matched no property and was silently discarded. Measured against
-//    the live API on 2026-09-29: `pageIndex=0`, `=1` and `=2` each returned
-//    `pagination.page=1`, while `page=1`, `2`, `99` each returned their own page.
-//    Every next-page control in the application was inoperable and reported no
-//    error of any kind.
-//
-// 2. WRONG BASE. The `pageIndex` name was not the only fiction — the BASE was
-//    zero-based too, and it came from the provisional OpenAPI snapshot rather
-//    than from the API. `docs/adr/0001-handwritten-contracts-for-direct-backend-integration.md`
-//    supersedes that snapshot; the backend is one-based. Comments such as
-//    `// EIAMS v1 list endpoints are 0-based` (e.g.
-//    `src/modules/warehouse/pages/warehouses-list-page.tsx:57`) are artifacts of
-//    the snapshot and are now wrong about the wire.
-//
-// The 0-based `pageIndex` does, however, remain the correct *UI* view-model:
-// TanStack Table's `pageIndex` is zero-based by definition, so DataTable pages
-// are converted 1-based -> 0-based at the table and must be converted back here.
-// That single conversion is the whole reason this function exists.
-//
-// So: zero-based `pageIndex` in, one-based `page` out, sent under the name the
-// server actually binds. The old `toWirePageIndex`/`fromWirePageIndex` pair is
-// deleted rather than left as identity functions, so a caller that still expects
-// zero-based `toWirePageIndex` fails to compile instead of silently mis-paging.
-
-/** Wire query-parameter name for the requested page. One-based; `1` is the first page. */
 export const WIRE_PAGE_FIELD = 'page' as const
 
 /** Wire query-parameter name for the requested page size. */

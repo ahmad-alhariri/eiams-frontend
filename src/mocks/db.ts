@@ -30,6 +30,10 @@ import {
 } from '@/test/msw/factories'
 import { seedInventoryCounts } from '@/mocks/inventory-count-state'
 import type {
+  WarehouseCapability,
+  WarehouseMaterialSetting,
+} from '@/modules/warehouse/types/warehouse.api-types'
+import type {
   Asset,
   AuditLog,
   DocumentLifecycleEvent,
@@ -51,9 +55,7 @@ import type {
   UserRoleScope,
   UserSummary,
   Warehouse,
-  WarehouseCapability,
   WarehouseDocument,
-  WarehouseMaterialSetting,
 } from '@/shared/types/generated/eiams-v1'
 
 /**
@@ -1294,15 +1296,15 @@ function buildSeed(): MockDatabase {
     warehouses: [centralWarehouse, branchWarehouse],
     warehouseCapabilities: [
       createWarehouseCapability({
-        capabilityId: fixtureUuid(130),
         warehouseId: centralWarehouse.warehouseId,
+        domainId: itDomain.domainId,
         domain: { id: itDomain.domainId, displayName: itDomain.nameAr },
         operations: ['Receiving', 'Issue', 'Transfer', 'Return'],
         rowVersion: 1,
       }),
       createWarehouseCapability({
-        capabilityId: fixtureUuid(131),
         warehouseId: centralWarehouse.warehouseId,
+        domainId: financeDomain.domainId,
         domain: { id: financeDomain.domainId, displayName: financeDomain.nameAr },
         operations: ['Receiving'],
         rowVersion: 1,
@@ -1310,8 +1312,8 @@ function buildSeed(): MockDatabase {
     ],
     warehouseMaterialSettings: [
       createWarehouseMaterialSetting({
-        settingId: fixtureUuid(140),
         warehouseId: centralWarehouse.warehouseId,
+        materialId: fixtureUuid(62),
         material: { id: fixtureUuid(62), displayName: 'حبر أسود' },
         minQuantity: 2,
         maxQuantity: 10,

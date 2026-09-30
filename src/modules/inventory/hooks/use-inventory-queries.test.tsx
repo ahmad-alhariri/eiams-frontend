@@ -63,9 +63,10 @@ afterEach(() => {
 
 describe('inventory query hooks', () => {
   it('uses scope-isolated keys that retain every server filter and sort selection', () => {
-    const scope = { kind: 'warehouse' as const, id: fixtureUuid(30) }
-    const balanceQuery = { lowStockState: 'Low' as const, sortBy: 'Quantity' as const }
-    const movementQuery = { movementType: 'Receipt' as const, sortBy: 'PostedAt' as const }
+    const movement = createStockMovement()
+    const scope = { kind: 'warehouse' as const, id: movement.warehouse.id }
+    const balanceQuery = { warehouseId: movement.warehouse.id }
+    const movementQuery = { movementType: 'Receipt' as const }
 
     expect(inventoryQueryKeys.balances(scope, balanceQuery)).toEqual([
       'scoped',
@@ -122,16 +123,15 @@ describe('inventory query hooks', () => {
 
     const listWrapper = createWrapper()
     const balanceList = renderHook(
-      () => useInventoryBalancesQuery({ lowStockState: 'Low', sortBy: 'Quantity' }),
+      () => useInventoryBalancesQuery({ warehouseId: movement.warehouse.id }),
       { wrapper: listWrapper.Wrapper },
     )
-    const balanceDetail = renderHook(() => useInventoryBalanceQuery(balance.balanceId), {
+    const balanceDetail = renderHook(() => useInventoryBalanceQuery(movement.movementId), {
       wrapper: createWrapper().Wrapper,
     })
-    const movementList = renderHook(
-      () => useStockMovementsQuery({ movementType: 'Receipt', sortBy: 'PostedAt' }),
-      { wrapper: createWrapper().Wrapper },
-    )
+    const movementList = renderHook(() => useStockMovementsQuery({ movementType: 'Receipt' }), {
+      wrapper: createWrapper().Wrapper,
+    })
     const movementDetail = renderHook(() => useStockMovementQuery(movement.movementId), {
       wrapper: createWrapper().Wrapper,
     })

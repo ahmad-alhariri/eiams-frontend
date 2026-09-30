@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { organizationService } from '@/modules/organization/services/organization.service'
 import { queryKeys } from '@/shared/services/query-keys'
-import type { OrganizationalUnitUpsertRequest } from '@/shared/types/generated/eiams-v1'
+import type { OrganizationalUnitUpsertRequest } from '@/modules/organization/types/organization.types'
 
 type UpdateOrganizationalUnitVariables = {
   orgUnitId: string

@@ -1,25 +1,39 @@
-import type { AxiosInstance } from 'axios'
-
-import type {
-  ListInventoryBalancesQuery,
-  ListStockMovementsQuery,
-} from '@/modules/inventory/types/inventory.types'
-import { apiClient } from '@/shared/services/api.client'
+import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiPage } from '@/shared/api/api-contracts'
 import type {
   InventoryBalance,
   InventoryBalancePage,
-  paths,
   StockMovement,
   StockMovementPage,
-} from '@/shared/types/generated/eiams-v1'
+  ListInventoryBalancesQuery,
+  ListStockMovementsQuery,
+  PageMeta,
+} from '@/modules/inventory/types/inventory.api-types'
 
-const INVENTORY_BALANCES_PATH = '/inventory/balances' satisfies keyof paths
-const INVENTORY_BALANCE_PATH = '/inventory/balances/{balanceId}' satisfies keyof paths
-const STOCK_MOVEMENTS_PATH = '/inventory/movements' satisfies keyof paths
-const STOCK_MOVEMENT_PATH = '/inventory/movements/{movementId}' satisfies keyof paths
+const INVENTORY_BALANCES_PATH = '/inventory/balances'
+const INVENTORY_BALANCE_PATH = '/inventory/balances/{balanceId}'
+const STOCK_MOVEMENTS_PATH = '/inventory/movements'
+const STOCK_MOVEMENT_PATH = '/inventory/movements/{movementId}'
 
 function pathWithId(path: string, parameter: string, id: string): string {
   return path.replace(parameter, encodeURIComponent(id))
+}
+
+function normalizePage<T>(apiPage: ApiPage<T>): { items: ReadonlyArray<T>; meta: PageMeta } {
+  return {
+    items: apiPage.items,
+    meta: {
+      page: apiPage.page,
+      pageIndex: apiPage.page,
+      pageSize: apiPage.pageSize,
+      itemCount: apiPage.totalItems,
+      totalItems: apiPage.totalItems,
+      totalCount: apiPage.totalItems,
+      totalPages: apiPage.totalPages,
+      hasNextPage: apiPage.hasNextPage,
+      hasPreviousPage: apiPage.hasPreviousPage,
+    },
+  }
 }
 
 export interface InventoryService {
@@ -29,35 +43,49 @@ export interface InventoryService {
   getMovement: (movementId: string) => Promise<StockMovement>
 }
 
-/**
- * Contract-only inventory reads. Scope, permission, ordering, low-stock state,
- * and ledger provenance remain server-authoritative.
- */
-export function createInventoryService(client: AxiosInstance): InventoryService {
+export function createInventoryService(transport: ApiTransport): InventoryService {
   return {
     async listBalances(query) {
-      const response = await client.get<InventoryBalancePage>(INVENTORY_BALANCES_PATH, {
-        params: query,
+      const page = await transport.requestPage<InventoryBalance>({
+        path: INVENTORY_BALANCES_PATH,
+        method: 'GET',
+        query: query as Record<string, string | number | boolean | undefined>,
+      })
+      return normalizePage(page) as InventoryBalancePage
+    },
+    async getBalance(balanceId) {
+      const response = await transport.request<InventoryBalance>({
+        path: pathWithId(INVENTORY_BALANCE_PATH, '{balanceId}', balanceId),
+        method: 'GET',
       })
       return response.data
     },
-    async getBalance(balanceId) {
-      const response = await client.get<InventoryBalance>(
-        pathWithId(INVENTORY_BALANCE_PATH, '{balanceId}', balanceId),
-      )
-      return response.data
-    },
     async listMovements(query) {
-      const response = await client.get<StockMovementPage>(STOCK_MOVEMENTS_PATH, { params: query })
-      return response.data
+      const page = await transport.requestPage<StockMovement>({
+        path: STOCK_MOVEMENTS_PATH,
+        method: 'GET',
+        query: query as Record<string, string | number | boolean | undefined>,
+      })
+      return normalizePage(page) as StockMovementPage
     },
     async getMovement(movementId) {
-      const response = await client.get<StockMovement>(
-        pathWithId(STOCK_MOVEMENT_PATH, '{movementId}', movementId),
-      )
+      const response = await transport.request<StockMovement>({
+        path: pathWithId(STOCK_MOVEMENT_PATH, '{movementId}', movementId),
+        method: 'GET',
+      })
       return response.data
     },
   }
 }
 
-export const inventoryService = createInventoryService(apiClient)
+// Lazy singleton — replaced during tests by `setInventoryService`.
+let inventoryService: InventoryService = createInventoryService(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  {} as any,
+)
+
+export function setInventoryService(transport: ApiTransport) {
+  inventoryService = createInventoryService(transport)
+}
+
+export { inventoryService }

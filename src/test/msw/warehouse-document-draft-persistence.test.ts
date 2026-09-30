@@ -29,7 +29,12 @@ const assetMaterial = createMaterial({
 const warehouse = createWarehouse({ warehouseId: WAREHOUSE_ID })
 
 const lookups = {
-  materialOf: (materialId: string) => (materialId === MATERIAL_ID ? material : assetMaterial),
+  materialOf: (materialId: string) =>
+    materialId === MATERIAL_ID
+      ? material
+      : materialId === ASSET_MATERIAL_ID
+        ? assetMaterial
+        : undefined,
   unitOf: (unitId: string | undefined) => (unitId === undefined ? undefined : material.baseUnit),
   warehouseOf: (warehouseId: string) => (warehouseId === WAREHOUSE_ID ? warehouse : undefined),
 }

@@ -3,8 +3,9 @@ import { useState } from 'react'
 import type { GallerySection } from '@/app/gallery/gallery-sections'
 import { useEmployeeSelector } from '@/shared/selectors/adapters/employee-selector'
 import { useWarehouseSelector } from '@/shared/selectors/adapters/warehouse-selector'
-import type { Employee, RecordStatus, Warehouse } from '@/shared/types/generated/eiams-v1'
+import type { Employee, Warehouse } from '@/shared/types/generated/eiams-v1'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
+import type { WarehouseLoader } from '@/shared/selectors/adapters/warehouse-selector'
 import { Badge } from '@/shared/ui/badge'
 
 /* eslint-disable react-refresh/only-export-components -- dev-only gallery demo
@@ -19,7 +20,7 @@ function demoWarehouse(
   code: string,
   nameAr: string,
   locationAr: string,
-  status: RecordStatus,
+  status: 'Active' | 'Inactive',
 ): Warehouse {
   return {
     warehouseId,
@@ -77,7 +78,7 @@ function demoEmployee(
   fullNameAr: string,
   jobTitleAr: string | null,
   orgUnitName: string,
-  status: RecordStatus,
+  status: 'Active' | 'Inactive',
 ): Employee {
   return {
     employeeId,
@@ -100,33 +101,9 @@ const demoEmployees: Employee[] = [
   demoEmployee(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     'EMP-001',
-    'أحمد علي',
-    'أمين مستودع',
-    'قسم المستودعات',
-    'Active',
-  ),
-  demoEmployee(
-    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-    'EMP-002',
-    'مريم خليل',
-    'مسؤولة جرد',
-    'قسم الجرد',
-    'Active',
-  ),
-  demoEmployee(
-    'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-    'EMP-003',
-    'خالد حسن',
-    'مشرف توريدات',
-    'قسم المشتريات',
-    'Inactive',
-  ),
-  demoEmployee(
-    'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-    'EMP-004',
-    'سامية يوسف',
-    'أمينة عهد',
-    'قسم الأصول',
+    'أحمد علي الأحريري',
+    'مهندس برمجيات',
+    'العلاقات البرمجية',
     'Active',
   ),
 ]
@@ -141,18 +118,10 @@ async function loadDemoEmployees(query: string): Promise<Employee[]> {
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="grid grid-cols-2 gap-2 text-left">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium text-foreground">{value}</dd>
+      <dd className="text-foreground">{value}</dd>
     </div>
-  )
-}
-
-function StatusBadge({ status }: { status: RecordStatus }) {
-  return (
-    <Badge variant={status === 'Active' ? 'success' : 'outline'}>
-      {status === 'Active' ? 'نشط' : 'غير نشط'}
-    </Badge>
   )
 }
 
@@ -169,7 +138,9 @@ function WarehouseDetails({ option }: { option: AsyncSelectOption<Warehouse> | n
       <div className="flex items-center justify-between gap-4">
         <dt className="text-muted-foreground">الحالة</dt>
         <dd>
-          <StatusBadge status={warehouse.status} />
+          <Badge variant={warehouse.status === 'Active' ? 'default' : 'secondary'}>
+            {warehouse.status === 'Active' ? 'نشط' : 'غير نشط'}
+          </Badge>
         </dd>
       </div>
     </dl>
@@ -189,7 +160,9 @@ function EmployeeDetails({ option }: { option: AsyncSelectOption<Employee> | nul
       <div className="flex items-center justify-between gap-4">
         <dt className="text-muted-foreground">الحالة</dt>
         <dd>
-          <StatusBadge status={employee.status} />
+          <Badge variant={employee.status === 'Active' ? 'default' : 'secondary'}>
+            {employee.status === 'Active' ? 'نشط' : 'غير نشط'}
+          </Badge>
         </dd>
       </div>
     </dl>
@@ -199,15 +172,15 @@ function EmployeeDetails({ option }: { option: AsyncSelectOption<Employee> | nul
 function SelectorAdaptersDemo() {
   const [warehouse, setWarehouse] = useState<AsyncSelectOption<Warehouse> | null>(null)
   const [employee, setEmployee] = useState<AsyncSelectOption<Employee> | null>(null)
-  const warehouseSelector = useWarehouseSelector(loadDemoWarehouses)
+  const warehouseSelector = useWarehouseSelector(loadDemoWarehouses as unknown as WarehouseLoader)
   const employeeSelector = useEmployeeSelector(loadDemoEmployees)
 
   return (
     <div className="flex flex-col gap-6">
       <p className="text-sm text-muted-foreground">
         محوّل كيان جاهز يحوّل محمّل المستودعات (مهلة ٤٠٠ مللي ثانية) ومحمّل الموظفين (مهلة ٢٥٠ مللي
-        ثانية) إلى خيارات AsyncSelect مع رمز تلميح وقاعدة تعطيل عند عدم النشاط، ويُعرض حمولة الخيار
-        المختار تحت كل محدد.
+        ثانية) إلى خيارات AsyncSelect موحّدة: تسمية عربية، رمز تلميح، وتعطيل الكيانات غير النشطة، مع
+        عرض حمولة الخيار المختار.
       </p>
       <div className="grid gap-6 md:grid-cols-2">
         <div className="flex flex-col gap-3">

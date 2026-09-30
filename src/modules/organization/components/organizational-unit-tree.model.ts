@@ -1,5 +1,5 @@
 import { buildHierarchyForest, type HierarchyTreeNode } from '@/shared/ui/hierarchy-tree.model'
-import type { OrganizationalUnit } from '@/shared/types/generated/eiams-v1'
+import type { OrganizationalUnit } from '@/modules/organization/types/organization.types'
 
 export type OrganizationalUnitTreeNode = HierarchyTreeNode<OrganizationalUnit>
 

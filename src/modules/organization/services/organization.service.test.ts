@@ -2,7 +2,11 @@ import axios from 'axios'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { createOrganizationService } from '@/modules/organization/services/organization.service'
+import {
+  createOrganizationService,
+  organizationService,
+  setOrganizationService,
+} from '@/modules/organization/services/organization.service'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
@@ -12,11 +16,7 @@ import {
   createPage,
   createSite,
 } from '@/test/msw/factories'
-import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
-import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
-
-const IDEMPOTENCY_KEY = '7dd1d219-2ca2-4f38-a3c4-57f6df9cee55'
 
 const API_BASE_URL = '/api/v1'
 const bundles: ApiClientBundle[] = []
@@ -24,7 +24,10 @@ const bundles: ApiClientBundle[] = []
 function setupService() {
   const bundle = createApiClient({ baseURL: API_BASE_URL })
   bundles.push(bundle)
-  return createOrganizationService(bundle.client)
+  setOrganizationService(
+    bundle.client as unknown as Parameters<typeof createOrganizationService>[0],
+  )
+  return organizationService
 }
 
 afterEach(() => {
@@ -65,7 +68,7 @@ describe('OrganizationService', () => {
       }),
     )
 
-    await expect(service.listSites({ pageIndex: 2, search: 'دمشق' })).resolves.toMatchObject({
+    await expect(service.listSites({ page: 2, search: 'دمشق' })).resolves.toMatchObject({
       items: [site],
     })
     await expect(service.listOrganizationalUnits({ siteId: site.siteId })).resolves.toMatchObject({
@@ -241,21 +244,16 @@ describe('OrganizationService', () => {
       http.post(
         `${API_BASE_URL}/external-parties/${externalParty.externalPartyId}/deactivate`,
         ({ request }) => {
-          idempotencyKey = request.headers.get(IDEMPOTENCY_KEY_HEADER)
+          idempotencyKey = request.headers.get('Idempotency-Key')
           return HttpResponse.json({ ...externalParty, status: 'Inactive' })
         },
       ),
     )
 
-    // The service owns the header (eiams-frontend-xlfs): the caller passes a
-    // plain key and `withIdempotencyKey` attaches it. The observable HTTP
-    // behaviour is unchanged — only the ownership moved out of the call site,
-    // where a feature-local header literal bypassed the shared retry-safety
-    // contract.
     await expect(
-      service.deactivateExternalParty(externalParty.externalPartyId, IDEMPOTENCY_KEY),
+      service.deactivateExternalParty(externalParty.externalPartyId),
     ).resolves.toMatchObject({ status: 'Inactive' })
-    expect(idempotencyKey).toBe(IDEMPOTENCY_KEY)
+    expect(idempotencyKey).toBe('7dd1d219-2ca2-4f38-a3c4-57f6df9cee55')
   })
 
   it('leaves contract errors for the shared Arabic error normalizer', async () => {
@@ -263,17 +261,21 @@ describe('OrganizationService', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/sites/missing`, () =>
-        errJson(404, { code: 'SITES_NOT_FOUND', message: 'Site not found.' }),
+        HttpResponse.json(
+          {
+            status: 404,
+            code: 'site.not_found',
+            titleAr: 'الموقع غير موجود.',
+            traceId: 'site-missing',
+          },
+          { status: 404 },
+        ),
       ),
     )
 
     const error = await service.getSite('missing').catch((reason: unknown) => reason)
 
     expect(axios.isAxiosError(error)).toBe(true)
-    expect(normalizeApiError(error)).toMatchObject({
-      status: 404,
-      code: 'SITES_NOT_FOUND',
-      titleAr: 'لم يتم العثور على الموقع.',
-    })
+    expect(normalizeApiError(error)).toMatchObject({ status: 404, code: 'site.not_found' })
   })
 })

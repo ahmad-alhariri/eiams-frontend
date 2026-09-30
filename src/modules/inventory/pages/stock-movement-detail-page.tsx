@@ -124,7 +124,7 @@ function StockMovementDetailPage() {
             </span>
           </DetailField>
           <DetailField label="تاريخ الترحيل">{formatDateTime(movement.postedAt)}</DetailField>
-          <DetailField label="رُحّلت بواسطة">{movement.postedBy.displayName}</DetailField>
+          <DetailField label="رُحّلت بواسطة">{movement.postedBy}</DetailField>
           <DetailField label="مرجع المستند" ltr>
             <span className="break-all">{movement.documentReference ?? '—'}</span>
           </DetailField>

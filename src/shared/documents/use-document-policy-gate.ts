@@ -27,15 +27,6 @@ const EMPTY_CAPABILITY_EVALUATIONS: readonly CapabilityEvaluation[] = []
 
 export interface DocumentPolicyGateOptions {
   enabled?: boolean
-  /**
-   * Draft line snapshots captured by an edit form (they carry
-   * `materialDomainId`). When provided, the preflight gates evaluate these
-   * lines (capability included) instead of the server-loaded `document.lines`.
-   * When omitted, the read-only preflight applies: server lines never carry
-   * `materialDomainId`, so the capability gate is skipped client-side (the
-   * server owns capability revalidation at post) and no capabilities request
-   * is fired.
-   */
   lines?: readonly PreflightLineShape[]
 }
 
@@ -44,37 +35,13 @@ export interface DocumentPolicyGateResult {
   policy: DocumentPolicy | null
   isLoading: boolean
   isError: boolean
-  /**
-   * Combined client-side preflight verdict. `null` until the policy is
-   * loaded; advisories ride through untouched (SoftFreeze warnings only).
-   */
   preflight: DocumentPreflight | null
-  /** Server policy presentation composed with the session permission gate. */
   decision: (action: DocumentActionType) => DocumentActionDecision
-  /** Submit enabled when the policy presents it and the session permits it. */
   canSubmit: boolean
-  /** Post enabled when the policy presents it and the session permits it. */
   canPost: boolean
-  /** Composed refetch of the shared detail + policy queries. */
   refetch: () => Promise<void>
 }
 
-/**
- * Shared document policy-gate coordinator (e12-t12) — the single composition
- * downstream document features (e13–e21) consume for lifecycle-action
- * decisions and preflight blockers/advisories.
- *
- * The coordinator is THIN by design: it reuses `useDocumentDetailQuery` and
- * `useDocumentPolicyQuery` so the cache keys stay shared with the detail page.
- * When the page and the coordinator observe the same keys, TanStack Query
- * dedupes by key — one network fetch, multiple observers (verified in the
- * page tests). It never disables the page's own queries to make itself work.
- *
- * Server state stays in TanStack Query; this hook only composes resolved
- * data. The signed gate is read exclusively from the server policy
- * (D-ATT-01); SoftFreeze advisories are warnings only and never block
- * (inventory-count freeze policy).
- */
 export function useDocumentPolicyGate(
   documentId: string | null,
   options: DocumentPolicyGateOptions = {},
@@ -93,9 +60,6 @@ export function useDocumentPolicyGate(
   )
   const effectiveLines = options.lines ?? serverLines
 
-  // Capability preflight participates only when edit-form draft lines carry a
-  // material domain. Server-loaded (read-only) documents never do, so no
-  // capabilities request is fired for them (and `validates` stays `unknown`).
   const capabilityParticipates = useMemo(
     () =>
       effectiveLines.some(

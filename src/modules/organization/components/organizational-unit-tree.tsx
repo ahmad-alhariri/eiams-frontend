@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 
 import { buildOrganizationalUnitTree } from '@/modules/organization/components/organizational-unit-tree.model'
 import { HierarchyTree } from '@/shared/ui/hierarchy-tree'
-import type { OrganizationalUnit } from '@/shared/types/generated/eiams-v1'
+import type { OrganizationalUnit } from '@/modules/organization/types/organization.types'
 
 type OrganizationalUnitTreeProps = {
   units: readonly OrganizationalUnit[]

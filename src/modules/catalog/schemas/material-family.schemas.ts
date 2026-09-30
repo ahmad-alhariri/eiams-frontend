@@ -1,10 +1,13 @@
 import { z } from 'zod'
 
-import type { MaterialFamily, MaterialFamilyUpsertRequest } from '@/shared/types/generated/eiams-v1'
+import type {
+  MaterialFamily,
+  MaterialFamilyUpsertRequest,
+} from '@/modules/catalog/types/catalog.types'
 
 /** Fields a catalog manager may set for a material family in the v1 contract. */
 export const materialFamilySchema = z.object({
-  categoryId: z.string().uuid('اختر تصنيفاً نشطاً للعائلة.'),
+  materialCategoryId: z.string().uuid('اختر تصنيفاً نشطاً للعائلة.'),
   code: z
     .string()
     .trim()
@@ -26,7 +29,8 @@ export function toMaterialFamilyRequest(
   family: MaterialFamily | null,
 ): MaterialFamilyUpsertRequest {
   return {
-    categoryId: values.categoryId,
+    materialCategoryId: values.materialCategoryId,
+    parentFamilyId: null,
     code: values.code.trim(),
     nameAr: values.nameAr.trim(),
     rowVersion: family?.rowVersion ?? 0,

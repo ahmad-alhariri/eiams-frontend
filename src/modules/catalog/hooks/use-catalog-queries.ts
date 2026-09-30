@@ -1,206 +1,72 @@
-import { useQuery } from '@tanstack/react-query'
-
-import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { catalogService } from '@/modules/catalog/services/catalog.service'
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import type {
-  ListMaterialCategoriesQuery,
+  ListUnitsOfMeasureQuery,
   ListMaterialDomainsQuery,
+  ListMaterialCategoriesQuery,
   ListMaterialFamiliesQuery,
   ListMaterialsQuery,
-} from '@/modules/catalog/types/catalog.types'
+  ListMaterialUnitConversionsQuery,
+  UnitOfMeasureUpsertRequest,
+  MaterialDomainUpsertRequest,
+  MaterialCategoryUpsertRequest,
+  MaterialFamilyUpsertRequest,
+  MaterialUpsertRequest,
+  MaterialUnitConversionUpsertRequest,
+} from '@/modules/catalog/types/catalog.api-types'
 import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 
 const CATALOG_RESOURCE = 'catalog'
-const EMPTY_QUERY = {} as const
 
 export const catalogQueryKeys = {
+  unitsOfMeasure: (scope: ScopeCacheKey, query: ListUnitsOfMeasureQuery) =>
+    queryKeys.scoped(scope, CATALOG_RESOURCE, 'unitsOfMeasure', query),
+  unitOfMeasure: (scope: ScopeCacheKey, unitId: string) =>
+    queryKeys.scoped(scope, CATALOG_RESOURCE, 'unitsOfMeasure', unitId),
   materialDomains: (scope: ScopeCacheKey, query: ListMaterialDomainsQuery) =>
-    queryKeys.scoped(scope, CATALOG_RESOURCE, 'material-domains', query),
-  materialDomain: (scope: ScopeCacheKey, domainId: string) =>
-    queryKeys.scoped(scope, CATALOG_RESOURCE, 'material-domains', domainId),
+    queryKeys.scoped(scope, CATALOG_RESOURCE, 'materialDomains', query),
+  materialDomain: (scope: ScopeCacheKey, materialDomainId: string) =>
+    queryKeys.scoped(scope, CATALOG_RESOURCE, 'materialDomains', materialDomainId),
   materialCategories: (scope: ScopeCacheKey, query: ListMaterialCategoriesQuery) =>
-    queryKeys.scoped(scope, CATALOG_RESOURCE, 'material-categories', query),
-  materialCategory: (scope: ScopeCacheKey, categoryId: string) =>
-    queryKeys.scoped(scope, CATALOG_RESOURCE, 'material-categories', categoryId),
+    queryKeys.scoped(scope, CATALOG_RESOURCE, 'materialCategories', query),
+  materialCategory: (scope: ScopeCacheKey, materialCategoryId: string) =>
+    queryKeys.scoped(scope, CATALOG_RESOURCE, 'materialCategories', materialCategoryId),
   materialFamilies: (scope: ScopeCacheKey, query: ListMaterialFamiliesQuery) =>
-    queryKeys.scoped(scope, CATALOG_RESOURCE, 'material-families', query),
-  materialFamily: (scope: ScopeCacheKey, familyId: string) =>
-    queryKeys.scoped(scope, CATALOG_RESOURCE, 'material-families', familyId),
+    queryKeys.scoped(scope, CATALOG_RESOURCE, 'materialFamilies', query),
+  materialFamily: (scope: ScopeCacheKey, materialFamilyId: string) =>
+    queryKeys.scoped(scope, CATALOG_RESOURCE, 'materialFamilies', materialFamilyId),
   materials: (scope: ScopeCacheKey, query: ListMaterialsQuery) =>
     queryKeys.scoped(scope, CATALOG_RESOURCE, 'materials', query),
   material: (scope: ScopeCacheKey, materialId: string) =>
     queryKeys.scoped(scope, CATALOG_RESOURCE, 'materials', materialId),
-  materialUnitConversions: (scope: ScopeCacheKey, materialId: string) =>
-    queryKeys.scoped(scope, CATALOG_RESOURCE, 'materials', materialId, 'unit-conversions'),
-  materialUnitConversion: (scope: ScopeCacheKey, materialId: string, conversionId: string) =>
-    queryKeys.scoped(
-      scope,
-      CATALOG_RESOURCE,
-      'materials',
-      materialId,
-      'unit-conversions',
-      conversionId,
-    ),
-  unitsOfMeasure: (scope: ScopeCacheKey) =>
-    queryKeys.scoped(scope, CATALOG_RESOURCE, 'units-of-measure'),
-  unitOfMeasure: (scope: ScopeCacheKey, unitId: string) =>
-    queryKeys.scoped(scope, CATALOG_RESOURCE, 'units-of-measure', unitId),
+  materialUnitConversions: (
+    scope: ScopeCacheKey,
+    materialId: string,
+    query: ListMaterialUnitConversionsQuery,
+  ) => queryKeys.scoped(scope, CATALOG_RESOURCE, 'materials', materialId, 'unitConversions', query),
 }
 
 function useActiveScopeCacheKey() {
   return useActiveScopeContext().activeScopeCacheKey
 }
 
-export function useMaterialDomainsQuery(query: ListMaterialDomainsQuery = EMPTY_QUERY) {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    queryKey:
-      scope === undefined
-        ? queryKeys.public(CATALOG_RESOURCE, 'material-domains', query)
-        : catalogQueryKeys.materialDomains(scope, query),
-    queryFn: () => catalogService.listMaterialDomains(query),
-    enabled: scope !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
-
-export function useMaterialDomainQuery(domainId: string | undefined) {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    queryKey:
-      scope === undefined || domainId === undefined
-        ? queryKeys.public(CATALOG_RESOURCE, 'material-domains', domainId)
-        : catalogQueryKeys.materialDomain(scope, domainId),
-    queryFn: () => catalogService.getMaterialDomain(domainId ?? ''),
-    enabled: scope !== undefined && domainId !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
-
-export function useMaterialCategoriesQuery(query: ListMaterialCategoriesQuery = EMPTY_QUERY) {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    queryKey:
-      scope === undefined
-        ? queryKeys.public(CATALOG_RESOURCE, 'material-categories', query)
-        : catalogQueryKeys.materialCategories(scope, query),
-    queryFn: () => catalogService.listMaterialCategories(query),
-    enabled: scope !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
-
-export function useMaterialCategoryQuery(categoryId: string | undefined) {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    queryKey:
-      scope === undefined || categoryId === undefined
-        ? queryKeys.public(CATALOG_RESOURCE, 'material-categories', categoryId)
-        : catalogQueryKeys.materialCategory(scope, categoryId),
-    queryFn: () => catalogService.getMaterialCategory(categoryId ?? ''),
-    enabled: scope !== undefined && categoryId !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
-
-export function useMaterialFamiliesQuery(query: ListMaterialFamiliesQuery = EMPTY_QUERY) {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    queryKey:
-      scope === undefined
-        ? queryKeys.public(CATALOG_RESOURCE, 'material-families', query)
-        : catalogQueryKeys.materialFamilies(scope, query),
-    queryFn: () => catalogService.listMaterialFamilies(query),
-    enabled: scope !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
-
-export function useMaterialFamilyQuery(familyId: string | undefined) {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    queryKey:
-      scope === undefined || familyId === undefined
-        ? queryKeys.public(CATALOG_RESOURCE, 'material-families', familyId)
-        : catalogQueryKeys.materialFamily(scope, familyId),
-    queryFn: () => catalogService.getMaterialFamily(familyId ?? ''),
-    enabled: scope !== undefined && familyId !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
-
-export function useMaterialsQuery(query: ListMaterialsQuery = EMPTY_QUERY) {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    queryKey:
-      scope === undefined
-        ? queryKeys.public(CATALOG_RESOURCE, 'materials', query)
-        : catalogQueryKeys.materials(scope, query),
-    queryFn: () => catalogService.listMaterials(query),
-    enabled: scope !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
-
-export function useMaterialQuery(materialId: string | undefined) {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    queryKey:
-      scope === undefined || materialId === undefined
-        ? queryKeys.public(CATALOG_RESOURCE, 'materials', materialId)
-        : catalogQueryKeys.material(scope, materialId),
-    queryFn: () => catalogService.getMaterial(materialId ?? ''),
-    enabled: scope !== undefined && materialId !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
-
-/** Material-specific alternative units; a shared unit name never implies a global factor. */
-export function useMaterialUnitConversionsQuery(materialId: string | undefined) {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    queryKey:
-      scope === undefined || materialId === undefined
-        ? queryKeys.public(CATALOG_RESOURCE, 'materials', materialId, 'unit-conversions')
-        : catalogQueryKeys.materialUnitConversions(scope, materialId),
-    queryFn: () => catalogService.listMaterialUnitConversions(materialId ?? ''),
-    enabled: scope !== undefined && materialId !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
-
-export function useMaterialUnitConversionQuery(
-  materialId: string | undefined,
-  conversionId: string | undefined,
+export function useUnitsOfMeasureQuery(
+  query: ListUnitsOfMeasureQuery = {},
+  options: { enabled?: boolean } = {},
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    queryKey:
-      scope === undefined || materialId === undefined || conversionId === undefined
-        ? queryKeys.public(
-            CATALOG_RESOURCE,
-            'materials',
-            materialId,
-            'unit-conversions',
-            conversionId,
-          )
-        : catalogQueryKeys.materialUnitConversion(scope, materialId, conversionId),
-    queryFn: () => catalogService.getMaterialUnitConversion(materialId ?? '', conversionId ?? ''),
-    enabled: scope !== undefined && materialId !== undefined && conversionId !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
-
-export function useUnitsOfMeasureQuery() {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    queryKey:
-      scope === undefined
-        ? queryKeys.public(CATALOG_RESOURCE, 'units-of-measure')
-        : catalogQueryKeys.unitsOfMeasure(scope),
-    queryFn: () => catalogService.listUnitsOfMeasure(),
-    enabled: scope !== undefined,
+    queryKey: queryKeys.scoped(
+      scope ?? { kind: 'enterprise' },
+      CATALOG_RESOURCE,
+      'unitsOfMeasure',
+      query,
+    ),
+    queryFn: () => catalogService.listUnitsOfMeasure(query),
+    enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
 }
@@ -208,12 +74,358 @@ export function useUnitsOfMeasureQuery() {
 export function useUnitOfMeasureQuery(unitId: string | undefined) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    queryKey:
-      scope === undefined || unitId === undefined
-        ? queryKeys.public(CATALOG_RESOURCE, 'units-of-measure', unitId)
-        : catalogQueryKeys.unitOfMeasure(scope, unitId),
+    queryKey: queryKeys.scoped(
+      scope ?? { kind: 'enterprise' },
+      CATALOG_RESOURCE,
+      'unitsOfMeasure',
+      unitId,
+    ),
     queryFn: () => catalogService.getUnitOfMeasure(unitId ?? ''),
     enabled: scope !== undefined && unitId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
+  })
+}
+
+export function useMaterialDomainsQuery(
+  query: ListMaterialDomainsQuery = {},
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey: queryKeys.scoped(
+      scope ?? { kind: 'enterprise' },
+      CATALOG_RESOURCE,
+      'materialDomains',
+      query,
+    ),
+    queryFn: () => catalogService.listMaterialDomains(query),
+    enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
+    staleTime: MASTER_DATA_STALE_TIME,
+  })
+}
+
+export function useMaterialDomainQuery(materialDomainId: string | undefined) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey: queryKeys.scoped(
+      scope ?? { kind: 'enterprise' },
+      CATALOG_RESOURCE,
+      'materialDomains',
+      materialDomainId,
+    ),
+    queryFn: () => catalogService.getMaterialDomain(materialDomainId ?? ''),
+    enabled: scope !== undefined && materialDomainId !== undefined,
+    staleTime: MASTER_DATA_STALE_TIME,
+  })
+}
+
+export function useMaterialCategoriesQuery(
+  query: ListMaterialCategoriesQuery = {},
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey: queryKeys.scoped(
+      scope ?? { kind: 'enterprise' },
+      CATALOG_RESOURCE,
+      'materialCategories',
+      query,
+    ),
+    queryFn: () => catalogService.listMaterialCategories(query),
+    enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
+    staleTime: MASTER_DATA_STALE_TIME,
+  })
+}
+
+export function useMaterialCategoryQuery(materialCategoryId: string | undefined) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey: queryKeys.scoped(
+      scope ?? { kind: 'enterprise' },
+      CATALOG_RESOURCE,
+      'materialCategories',
+      materialCategoryId,
+    ),
+    queryFn: () => catalogService.getMaterialCategory(materialCategoryId ?? ''),
+    enabled: scope !== undefined && materialCategoryId !== undefined,
+    staleTime: MASTER_DATA_STALE_TIME,
+  })
+}
+
+export function useMaterialFamiliesQuery(
+  query: ListMaterialFamiliesQuery = {},
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey: queryKeys.scoped(
+      scope ?? { kind: 'enterprise' },
+      CATALOG_RESOURCE,
+      'materialFamilies',
+      query,
+    ),
+    queryFn: () => catalogService.listMaterialFamilies(query),
+    enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
+    staleTime: MASTER_DATA_STALE_TIME,
+  })
+}
+
+export function useMaterialFamilyQuery(materialFamilyId: string | undefined) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey: queryKeys.scoped(
+      scope ?? { kind: 'enterprise' },
+      CATALOG_RESOURCE,
+      'materialFamilies',
+      materialFamilyId,
+    ),
+    queryFn: () => catalogService.getMaterialFamily(materialFamilyId ?? ''),
+    enabled: scope !== undefined && materialFamilyId !== undefined,
+    staleTime: MASTER_DATA_STALE_TIME,
+  })
+}
+
+export function useMaterialsQuery(
+  query: ListMaterialsQuery = {},
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey: queryKeys.scoped(
+      scope ?? { kind: 'enterprise' },
+      CATALOG_RESOURCE,
+      'materials',
+      query,
+    ),
+    queryFn: () => catalogService.listMaterials(query),
+    enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
+    staleTime: MASTER_DATA_STALE_TIME,
+  })
+}
+
+export function useMaterialQuery(materialId: string | undefined) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey: queryKeys.scoped(
+      scope ?? { kind: 'enterprise' },
+      CATALOG_RESOURCE,
+      'materials',
+      materialId,
+    ),
+    queryFn: () => catalogService.getMaterial(materialId ?? ''),
+    enabled: scope !== undefined && materialId !== undefined,
+    staleTime: MASTER_DATA_STALE_TIME,
+  })
+}
+
+export function useMaterialUnitConversionsQuery(
+  materialId: string | undefined,
+  query: ListMaterialUnitConversionsQuery = {},
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey: queryKeys.scoped(
+      scope ?? { kind: 'enterprise' },
+      CATALOG_RESOURCE,
+      'materials',
+      materialId,
+      'unitConversions',
+      query,
+    ),
+    queryFn: () => catalogService.listMaterialUnitConversions(materialId ?? '', query),
+    enabled:
+      (options.enabled !== undefined ? options.enabled : scope !== undefined) &&
+      materialId !== undefined,
+    staleTime: MASTER_DATA_STALE_TIME,
+  })
+}
+
+export function useUpdateUnitOfMeasureMutation() {
+  const queryClient = useQueryClient()
+  const scope = useActiveScopeCacheKey()
+  return useMutation({
+    mutationFn: ({
+      unitId,
+      request,
+    }: {
+      readonly unitId: string
+      readonly request: UnitOfMeasureUpsertRequest
+    }) => catalogService.updateUnitOfMeasure(unitId, request),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          CATALOG_RESOURCE,
+          'unitsOfMeasure',
+          variables.unitId,
+        ),
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          CATALOG_RESOURCE,
+          'unitsOfMeasure',
+          {},
+        ),
+      })
+    },
+  })
+}
+
+export function useUpdateMaterialDomainMutation() {
+  const queryClient = useQueryClient()
+  const scope = useActiveScopeCacheKey()
+  return useMutation({
+    mutationFn: ({
+      materialDomainId,
+      request,
+    }: {
+      readonly materialDomainId: string
+      readonly request: MaterialDomainUpsertRequest
+    }) => catalogService.updateMaterialDomain(materialDomainId, request),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          CATALOG_RESOURCE,
+          'materialDomains',
+          variables.materialDomainId,
+        ),
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          CATALOG_RESOURCE,
+          'materialDomains',
+          {},
+        ),
+      })
+    },
+  })
+}
+
+export function useUpdateMaterialCategoryMutation() {
+  const queryClient = useQueryClient()
+  const scope = useActiveScopeCacheKey()
+  return useMutation({
+    mutationFn: ({
+      materialCategoryId,
+      request,
+    }: {
+      readonly materialCategoryId: string
+      readonly request: MaterialCategoryUpsertRequest
+    }) => catalogService.updateMaterialCategory(materialCategoryId, request),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          CATALOG_RESOURCE,
+          'materialCategories',
+          variables.materialCategoryId,
+        ),
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          CATALOG_RESOURCE,
+          'materialCategories',
+          {},
+        ),
+      })
+    },
+  })
+}
+
+export function useUpdateMaterialFamilyMutation() {
+  const queryClient = useQueryClient()
+  const scope = useActiveScopeCacheKey()
+  return useMutation({
+    mutationFn: ({
+      materialFamilyId,
+      request,
+    }: {
+      readonly materialFamilyId: string
+      readonly request: MaterialFamilyUpsertRequest
+    }) => catalogService.updateMaterialFamily(materialFamilyId, request),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          CATALOG_RESOURCE,
+          'materialFamilies',
+          variables.materialFamilyId,
+        ),
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          CATALOG_RESOURCE,
+          'materialFamilies',
+          {},
+        ),
+      })
+    },
+  })
+}
+
+export function useUpdateMaterialMutation() {
+  const queryClient = useQueryClient()
+  const scope = useActiveScopeCacheKey()
+  return useMutation({
+    mutationFn: ({
+      materialId,
+      request,
+    }: {
+      readonly materialId: string
+      readonly request: MaterialUpsertRequest
+    }) => catalogService.updateMaterial(materialId, request),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          CATALOG_RESOURCE,
+          'materials',
+          variables.materialId,
+        ),
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          CATALOG_RESOURCE,
+          'materials',
+          {},
+        ),
+      })
+    },
+  })
+}
+
+export function useUpdateMaterialUnitConversionMutation() {
+  const queryClient = useQueryClient()
+  const scope = useActiveScopeCacheKey()
+  return useMutation({
+    mutationFn: ({
+      materialId,
+      materialUnitConversionId,
+      request,
+    }: {
+      readonly materialId: string
+      readonly materialUnitConversionId: string
+      readonly request: MaterialUnitConversionUpsertRequest
+    }) =>
+      catalogService.updateMaterialUnitConversion(materialId, materialUnitConversionId, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.scoped(
+          scope ?? { kind: 'enterprise' },
+          CATALOG_RESOURCE,
+          'materials',
+          {},
+          'unitConversions',
+          {},
+        ),
+      })
+    },
   })
 }

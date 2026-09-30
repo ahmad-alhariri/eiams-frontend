@@ -1,7 +1,9 @@
 import { useCallback, useMemo } from 'react'
 
-import type { CapabilityOperation, WarehouseCapability } from '@/shared/types/generated/eiams-v1'
-
+import type {
+  CapabilityOperation,
+  WarehouseCapability,
+} from '@/modules/warehouse/types/warehouse.api-types'
 import { useWarehouseCapabilitiesQuery } from '@/modules/warehouse/hooks/use-warehouse-queries'
 
 export type CapabilityValidation =
@@ -16,64 +18,85 @@ export const OPERATION_LABELS: Record<CapabilityOperation, string> = {
 }
 
 const EMPTY_CAPABILITIES: readonly WarehouseCapability[] = []
-const EMPTY_OPERATIONS: readonly CapabilityOperation[] = []
 
-export function useWarehouseCapabilityValidation(warehouseId: string | undefined) {
+export interface UseWarehouseCapabilityValidationReturn {
+  validationFor: (
+    domainId: string | undefined,
+    operation: CapabilityOperation,
+  ) => CapabilityValidation
+  validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation
+  isLoading: boolean
+  isError: boolean
+  /** Read-only view of the computed operations map (warehouseId -> domainId -> operations). */
+  operations: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<CapabilityOperation>>>
+  /** Look up the set of enabled operations for a given material domain. */
+  getOperationsForDomain: (domainId: string) => ReadonlySet<CapabilityOperation>
+}
+
+export function useWarehouseCapabilityValidation(
+  warehouseId: string | undefined,
+): UseWarehouseCapabilityValidationReturn {
   const capabilitiesQuery = useWarehouseCapabilitiesQuery(warehouseId)
   const { data, isLoading, isError } = capabilitiesQuery
   const capabilities = data ?? EMPTY_CAPABILITIES
 
-  const domainOperations = useMemo(() => {
-    const operationsByDomain = new Map<string, ReadonlySet<CapabilityOperation>>()
-    for (const capability of capabilities) {
-      operationsByDomain.set(capability.domain.id, new Set(capability.operations))
+  // Build map: warehouseId -> domainId -> set of operations
+  const operationsByWarehouseDomain = useMemo(() => {
+    const outer = new Map<string, Map<string, ReadonlySet<CapabilityOperation>>>()
+    for (const cap of capabilities) {
+      const warehouseMap =
+        outer.get(cap.warehouseId) ?? new Map<string, ReadonlySet<CapabilityOperation>>()
+      // Backend returns `operations` as array; normalize to Set
+      const ops = new Set<CapabilityOperation>(cap.operations)
+      warehouseMap.set(cap.domainId, ops)
+      outer.set(cap.warehouseId, warehouseMap)
     }
-    return operationsByDomain
+    return outer
   }, [capabilities])
 
-  const domainNames = useMemo(() => {
-    const namesByDomain = new Map<string, string>()
-    for (const capability of capabilities) {
-      namesByDomain.set(capability.domain.id, capability.domain.displayName)
-    }
-    return namesByDomain
-  }, [capabilities])
+  const getOperationsForDomain = useCallback(
+    (domainId: string): ReadonlySet<CapabilityOperation> => {
+      const warehouseMap = operationsByWarehouseDomain.get(warehouseId ?? '')
+      if (warehouseMap === undefined) return new Set<CapabilityOperation>()
+      return warehouseMap.get(domainId) ?? new Set<CapabilityOperation>()
+    },
+    [operationsByWarehouseDomain, warehouseId],
+  )
+
+  const validationFor = useCallback(
+    (domainId: string | undefined, operation: CapabilityOperation): CapabilityValidation => {
+      if (isLoading || isError || warehouseId === undefined) {
+        return { status: 'unknown' }
+      }
+      const ops = getOperationsForDomain(domainId ?? '')
+      if (ops.has(operation)) {
+        return { status: 'supported' }
+      }
+      return {
+        status: 'blocked',
+        messageAr: `العملية ${OPERATION_LABELS[operation]} غير مدعومة لهذا المستودع والمجال المطلوبين.`,
+      }
+    },
+    [getOperationsForDomain, isLoading, isError, warehouseId],
+  )
 
   const validates = useCallback(
     (domainId: string | undefined, operation: CapabilityOperation): CapabilityValidation => {
-      if (
-        warehouseId === undefined ||
-        domainId == null ||
-        domainId === '' ||
-        isLoading ||
-        isError
-      ) {
-        return { status: 'unknown' }
-      }
-      const operations = domainOperations.get(domainId)
-      if (operations === undefined || !operations.has(operation)) {
-        const domainName = domainNames.get(domainId)
-        const messageAr =
-          domainName === undefined
-            ? `المستودع لا يمتلك قدرة "${OPERATION_LABELS[operation]}" لمجال هذه المادة.`
-            : `المستودع لا يمتلك قدرة "${OPERATION_LABELS[operation]}" لمجال "${domainName}".`
-        return { status: 'blocked', messageAr }
-      }
-      return { status: 'supported' }
+      return validationFor(domainId, operation)
     },
-    [warehouseId, isLoading, isError, domainOperations, domainNames],
+    [validationFor],
   )
 
-  const getOperationsForDomain = useCallback(
-    (domainId: string | undefined): readonly CapabilityOperation[] => {
-      if (domainId == null) {
-        return EMPTY_OPERATIONS
-      }
-      const operations = domainOperations.get(domainId)
-      return operations === undefined ? EMPTY_OPERATIONS : [...operations]
-    },
-    [domainOperations],
-  )
-
-  return { capabilities, isLoading, isError, validates, getOperationsForDomain }
+  return {
+    validationFor,
+    validates,
+    isLoading,
+    isError,
+    // Map is structurally compatible: string keys only, ReadonlySet values.
+    operations: operationsByWarehouseDomain as ReadonlyMap<
+      string,
+      ReadonlyMap<string, ReadonlySet<CapabilityOperation>>
+    >,
+    getOperationsForDomain,
+  }
 }

@@ -260,8 +260,11 @@ describe('the cross-module ledger graph is consumable through the production ser
       }),
     )
 
-    const balances = await inventoryService.listBalances({ pageIndex: 0, pageSize: 10 })
-    const stockMovements = await inventoryService.listMovements({ pageIndex: 0, pageSize: 10 })
+    // These services speak the transport's one-based `page` directly; only the
+    // services still on the shared `toWirePaginationParams` helper take a
+    // zero-based `pageIndex`.
+    const balances = await inventoryService.listBalances({ page: 1, pageSize: 10 })
+    const stockMovements = await inventoryService.listMovements({ page: 1, pageSize: 10 })
     const assetMovements = await assetService.listAssetMovements(SCENARIO.assets.returned.assetId, {
       pageIndex: 0,
       pageSize: 10,

@@ -33,12 +33,9 @@ import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/utils/class-names'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type {
-  CapabilityOperation,
-  DocumentType,
-  Material,
-  MaterialUnitConversion,
-} from '@/shared/types/generated/eiams-v1'
+import type { CapabilityOperation } from '@/modules/warehouse/types/warehouse.types'
+import type { DocumentType } from '@/shared/types/generated/eiams-v1'
+import type { Material, MaterialUnitConversion } from '@/modules/catalog/types/catalog.types'
 
 // The editor is a component file by contract; its schema and draft mapper live
 // in ../schemas/document-lines.schemas.ts (e12-t04).
@@ -181,11 +178,14 @@ function UnitSelector({
         <SelectContent>
           <SelectItem value={BASE_UNIT_VALUE}>{baseUnitNameAr}</SelectItem>
           {conversions.map((conversion) => (
-            <SelectItem key={conversion.conversionId} value={conversion.conversionId}>
+            <SelectItem
+              key={conversion.materialUnitConversionId}
+              value={conversion.materialUnitConversionId}
+            >
               <span className="flex items-center justify-between gap-2">
-                {conversion.fromUnit.displayName}
+                {conversion.unit.displayName}
                 <span className="text-muted-foreground" dir="ltr">
-                  × {conversion.factor}
+                  × {conversion.conversionFactor}
                 </span>
               </span>
             </SelectItem>
@@ -259,12 +259,12 @@ function QuantityLineRow({
                   const payload = option?.payload
                   materialField.onChange(nextValue ?? '')
                   setValue(`lines.${index}.materialNameAr`, payload?.nameAr ?? '')
-                  setValue(`lines.${index}.materialDomainId`, payload?.domain.id ?? '')
+                  setValue(`lines.${index}.materialDomainId`, payload?.materialDomain.id ?? '')
                   setValue(
                     `lines.${index}.materialKind`,
                     payload?.materialKind as string | undefined,
                   )
-                  setValue(`lines.${index}.baseUnitNameAr`, payload?.baseUnit.displayName ?? '')
+                  setValue(`lines.${index}.baseUnitNameAr`, payload?.unit.displayName ?? '')
                   // D-IAR-01: a material change invalidates a previously
                   // selected asset set (they belong to the old material).
                   setValue(`lines.${index}.assetIds`, [])
@@ -309,7 +309,7 @@ function QuantityLineRow({
           label="وحدة القياس"
           index={index}
           baseUnitNameAr={line.baseUnitNameAr || 'الوحدة الأساسية'}
-          conversions={conversionsQuery.data ?? []}
+          conversions={conversionsQuery.data?.items ?? []}
           value={line.conversionId ?? BASE_UNIT_VALUE}
           onValueChange={(nextValue) => {
             if (nextValue === null) {
@@ -318,8 +318,8 @@ function QuantityLineRow({
               setValue(`lines.${index}.baseQuantity`, undefined)
               return
             }
-            const conversion = (conversionsQuery.data ?? []).find(
-              (item) => item.conversionId === nextValue,
+            const conversion = (conversionsQuery.data?.items ?? []).find(
+              (item: MaterialUnitConversion) => item.materialUnitConversionId === nextValue,
             )
             if (conversion === undefined) {
               setValue(`lines.${index}.unitId`, undefined)
@@ -328,12 +328,12 @@ function QuantityLineRow({
               return
             }
             const quantity = Number(getValues(`lines.${index}.quantity`))
-            setValue(`lines.${index}.unitId`, conversion.fromUnit.id)
-            setValue(`lines.${index}.conversionId`, conversion.conversionId)
+            setValue(`lines.${index}.unitId`, conversion.unit.id)
+            setValue(`lines.${index}.conversionId`, conversion.materialUnitConversionId)
             setValue(
               `lines.${index}.baseQuantity`,
               Number.isFinite(quantity) && quantity > 0
-                ? deriveBaseQuantity(quantity, conversion.factor)
+                ? deriveBaseQuantity(quantity, conversion.conversionFactor)
                 : undefined,
             )
           }}

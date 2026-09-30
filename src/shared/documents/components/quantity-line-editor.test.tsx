@@ -250,7 +250,6 @@ describe('QuantityLineEditor', () => {
         id: fixtureUuid(20),
         displayName: 'المستلزمات المنزلية',
         code: 'DOM-20',
-        status: 'Active',
       },
       operations: ['Issue'],
     })

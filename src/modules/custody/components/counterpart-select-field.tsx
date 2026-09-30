@@ -1,10 +1,11 @@
-import { Controller, type Control } from 'react-hook-form'
+import { Controller } from 'react-hook-form'
 
 import { CounterpartSelect } from '@/modules/organization/components/counterpart-select'
 import type { AssignCustodyFormValues } from '@/modules/custody/schemas/assign-custody.schema'
+import type { CounterpartReference } from '@/modules/organization/types/counterpart-lookup.types'
 
 interface CounterpartSelectFieldProps {
-  control: Control<AssignCustodyFormValues>
+  control: import('react-hook-form').Control<AssignCustodyFormValues>
   disabled: boolean
 }
 
@@ -14,7 +15,7 @@ export function CounterpartSelectField({ control, disabled }: CounterpartSelectF
     <Controller
       control={control}
       name="holderId"
-      render={({ field: holderIdField, fieldState }) => (
+      render={({ field: holderIdField }) => (
         <div className="grid gap-2">
           <span className="text-sm font-medium text-foreground">الموظف المكلف</span>
           <Controller
@@ -22,22 +23,15 @@ export function CounterpartSelectField({ control, disabled }: CounterpartSelectF
             name="holderDisplayName"
             render={({ field: nameField }) => (
               <CounterpartSelect
-                type="Employee"
                 value={holderIdField.value === '' ? null : holderIdField.value}
-                onValueChange={(reference, counterpart) => {
+                onValueChange={(reference: CounterpartReference | null, counterpart) => {
                   holderIdField.onChange(reference === null ? '' : reference.id)
-                  nameField.onChange(reference === null ? '' : (counterpart?.displayName ?? ''))
+                  nameField.onChange(reference === null ? '' : (counterpart?.nameAr ?? ''))
                 }}
-                inputProps={{ 'aria-label': 'الموظف المكلف' }}
                 disabled={disabled}
               />
             )}
           />
-          {fieldState.error !== undefined ? (
-            <p role="alert" className="text-sm text-destructive">
-              {fieldState.error.message}
-            </p>
-          ) : null}
         </div>
       )}
     />

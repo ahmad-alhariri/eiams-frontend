@@ -1,81 +1,70 @@
 import { z } from 'zod'
 
-import type {
-  OrganizationalUnit,
-  OrganizationalUnitUpsertRequest,
-} from '@/shared/types/generated/eiams-v1'
+import type { OrganizationalUnitUpsertRequest } from '@/modules/organization/types/organization.types'
 
-const UUID_MESSAGE = 'يجب اختيار قيمة صالحة من القائمة.'
-
-/** Form-owned fields for the contract-backed organizational-unit upsert request. */
 export const organizationalUnitSchema = z.object({
-  siteId: z.uuid(UUID_MESSAGE),
-  parentOrgUnitId: z.union([z.literal(''), z.uuid(UUID_MESSAGE)]),
+  displayName: z
+    .string()
+    .trim()
+    .min(1, 'اسم الوحدة التنظيمية مطلوب.')
+    .max(200, 'اسم الوحدة التنظيمية يجب ألّا يتجاوز 200 محرف.'),
   code: z
     .string()
     .trim()
     .min(1, 'رمز الوحدة التنظيمية مطلوب.')
-    .max(50, 'رمز الوحدة التنظيمية يجب ألّا يتجاوز 50 محرفاً.'),
-  nameAr: z
-    .string()
-    .trim()
-    .min(2, 'اسم الوحدة التنظيمية يجب أن يتكون من حرفين على الأقل.')
-    .max(200, 'اسم الوحدة التنظيمية يجب ألّا يتجاوز 200 محرف.'),
+    .max(20, 'رمز الوحدة التنظيمية يجب ألّا يتجاوز 20 محرفاً.'),
   status: z.enum(['Active', 'Inactive']),
+  siteId: z.string().min(1, 'الموقع مطلوب.'),
+  parentOrgUnitId: z.string().optional(),
+  rowVersion: z.number().int().nonnegative(),
 })
 
 export type OrganizationalUnitFormValues = z.infer<typeof organizationalUnitSchema>
 
-/** Maps form values to the exact generated v1 upsert request shape. */
+/** Convert form values into the contract request shape. */
 export function toOrganizationalUnitRequest(
   values: OrganizationalUnitFormValues,
-  unit: OrganizationalUnit | null,
 ): OrganizationalUnitUpsertRequest {
   return {
+    nameAr: values.displayName,
+    code: values.code,
     siteId: values.siteId,
-    ...(values.parentOrgUnitId === '' ? {} : { parentOrgUnitId: values.parentOrgUnitId }),
-    code: values.code.trim(),
-    nameAr: values.nameAr.trim(),
+    parentOrgUnitId:
+      values.parentOrgUnitId === undefined || values.parentOrgUnitId === ''
+        ? null
+        : values.parentOrgUnitId,
     status: values.status,
-    rowVersion: unit?.rowVersion ?? 0,
+    rowVersion: values.rowVersion,
   }
 }
 
 /**
- * The list contract exposes enough local structure to reject a self-parent,
- * a descendant-parent (cycle), and a parent from a different site. Missing
- * links are left to the server because the paged contract may be incomplete.
+ * Returns true when selecting `parent` as the parent of `unit` would create a cycle.
+ * A unit cannot be its own parent, and descendants cannot become parents.
  */
 export function isInvalidOrganizationalUnitParent(
-  parentOrgUnitId: string,
-  siteId: string,
-  unit: OrganizationalUnit | null,
-  units: readonly OrganizationalUnit[],
+  unit: { orgUnitId: string; parentOrgUnitId?: string | null } | null | undefined,
+  parent: { orgUnitId: string } | null | undefined,
+  allUnits: ReadonlyArray<{ orgUnitId: string; parentOrgUnitId?: string | null }>,
 ): boolean {
-  if (parentOrgUnitId === '') {
-    return false
+  if (unit === null || unit === undefined) return false
+  if (parent === null || parent === undefined) return false
+  if (parent.orgUnitId === unit.orgUnitId) return true
+  if (parent.orgUnitId === unit.parentOrgUnitId) return true
+
+  // Walk up the parent chain from `parent` to detect a cycle.
+  const childToParent = new Map<string, string | null>()
+  for (const u of allUnits) {
+    childToParent.set(u.orgUnitId, u.parentOrgUnitId ?? null)
   }
 
-  const unitsById = new Map(units.map((candidate) => [candidate.orgUnitId, candidate]))
-  const parent = unitsById.get(parentOrgUnitId)
-  if (parent === undefined || parent.siteId !== siteId || parent.orgUnitId === unit?.orgUnitId) {
-    return true
+  let current: string | null = parent.orgUnitId
+  const seen = new Set<string>()
+  while (current !== null) {
+    if (current === unit.orgUnitId) return true
+    if (seen.has(current)) return true // pre-existing cycle in the data
+    seen.add(current)
+    current = childToParent.get(current) ?? null
   }
-
-  if (unit === null) {
-    return false
-  }
-
-  const visited = new Set<string>()
-  let candidate: OrganizationalUnit | undefined = parent
-  while (candidate !== undefined) {
-    if (candidate.orgUnitId === unit.orgUnitId || visited.has(candidate.orgUnitId)) {
-      return true
-    }
-    visited.add(candidate.orgUnitId)
-    candidate =
-      candidate.parentOrgUnitId === undefined ? undefined : unitsById.get(candidate.parentOrgUnitId)
-  }
-
   return false
 }

@@ -4,7 +4,7 @@ import type {
   CapabilityOperation,
   WarehouseCapability,
   WarehouseCapabilityUpsertRequest,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/modules/warehouse/types/warehouse.api-types'
 
 const OPERATION_VALUES = ['Receiving', 'Issue', 'Transfer', 'Count', 'Return'] as const
 
@@ -40,12 +40,14 @@ export const CAPABILITY_OPERATIONS: readonly CapabilityOperation[] = OPERATION_V
 export function toWarehouseCapabilitiesRequest(
   values: WarehouseCapabilitiesFormValues,
   currentCapabilities: readonly WarehouseCapability[],
+  warehouseId: string,
 ): readonly WarehouseCapabilityUpsertRequest[] {
   const rowVersionByDomain = new Map(
-    currentCapabilities.map((capability) => [capability.domain.id, capability.rowVersion]),
+    currentCapabilities.map((capability) => [capability.domainId, capability.rowVersion]),
   )
 
   return values.capabilities.map((capability) => ({
+    warehouseId: warehouseId,
     domainId: capability.domainId,
     operations: capability.operations,
     rowVersion: rowVersionByDomain.get(capability.domainId) ?? 0,

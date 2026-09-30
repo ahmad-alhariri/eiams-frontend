@@ -1,4 +1,4 @@
-import type { Material } from '@/shared/types/generated/eiams-v1'
+import type { Material } from '@/modules/catalog/types/catalog.types'
 
 import {
   createEntitySelectorAdapter,

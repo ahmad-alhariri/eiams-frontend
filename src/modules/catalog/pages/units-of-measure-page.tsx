@@ -21,7 +21,7 @@ import { Button } from '@/shared/ui/button'
 import { DataTable, dataTableFeatures } from '@/shared/ui/data-table'
 import { toast } from '@/shared/ui/toast-manager'
 import { listRows } from '@/shared/utils/table-data'
-import type { UnitOfMeasure } from '@/shared/types/generated/eiams-v1'
+import type { UnitOfMeasure } from '@/modules/catalog/types/catalog.types'
 
 const unitColumnHelper = createColumnHelper<typeof dataTableFeatures, UnitOfMeasure>()
 
@@ -75,7 +75,10 @@ function UnitsOfMeasurePage() {
             <span className="font-semibold text-foreground">{getValue()}</span>
           ),
         }),
-        unitColumnHelper.accessor('symbolAr', { id: 'symbolAr', header: 'رمز العرض' }),
+        unitColumnHelper.accessor('nominalConversionFactor', {
+          id: 'conversionFactor',
+          header: 'عامل التحويل',
+        }),
         unitColumnHelper.accessor('code', {
           id: 'code',
           header: 'الرمز',
@@ -129,7 +132,7 @@ function UnitsOfMeasurePage() {
       >
         <DataTable
           columns={columns}
-          data={listRows(unitsQuery.data, unitsQuery.isError)}
+          data={listRows(unitsQuery.data?.items, unitsQuery.isError)}
           isLoading={unitsQuery.isLoading}
           isError={unitsQuery.isError}
           onRetry={() => void unitsQuery.refetch()}
