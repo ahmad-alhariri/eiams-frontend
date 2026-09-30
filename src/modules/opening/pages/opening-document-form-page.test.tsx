@@ -5,6 +5,8 @@ import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { errJson } from '@/test/msw/envelope'
+
 import { ROUTE_PATHS } from '@/config/routes'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import {
@@ -401,17 +403,11 @@ describe('OpeningDocumentFormPage', () => {
   it('shows a server-authoritative one-time policy rejection and remains on the draft page', async () => {
     server.use(
       http.post(`${API_BASE_URL}/warehouse-documents`, () =>
-        HttpResponse.json(
-          {
-            code: 'validation.failed',
-            detailAr: null,
-            fieldErrors: [],
-            status: 409,
-            titleAr: 'تعذر حفظ المستند: سبق تهيئة الرصيد الافتتاحي لهذا المستودع.',
-            traceId: 'mock-trace',
-          },
-          { status: 409 },
-        ),
+        // "Already initialized" is a real, specific backend policy rejection:
+        // OPENING_DOCUMENTS_ALREADY_INITIALIZED, 409 (OpeningDocumentsErrors.cs).
+        // The invented `validation.failed` matched no code in the API, and the
+        // bespoke titleAr hand-wrote Arabic the server cannot produce.
+        errJson(409, { code: 'OPENING_DOCUMENTS_ALREADY_INITIALIZED' }),
       ),
       http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([warehouse]))),
       http.get(`${API_BASE_URL}/catalog/materials`, () =>
@@ -431,9 +427,7 @@ describe('OpeningDocumentFormPage', () => {
     await fillValidForm(user)
     await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
 
-    expect(
-      await screen.findByText('تعذر حفظ المستند: سبق تهيئة الرصيد الافتتاحي لهذا المستودع.'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('سبق تهيئة الرصيد الافتتاحي لهذا المستودع.')).toBeInTheDocument()
     expect(
       screen.getByText(
         'الرصيد الافتتاحي إجراء تهيئة لمرة واحدة وليس مستنداً دورياً. يعرض النظام نتيجة التحقق المعتمدة عند حفظ المسودة أو متابعة دورة المستند.',

@@ -24,8 +24,6 @@ const sessionFixture: SessionResponse = {
     rowVersion: 1,
   },
   permissionCodes: ['document.create'],
-  availableScopes: [],
-  scopeState: 'SelectionRequired',
   activeRoles: [],
 }
 

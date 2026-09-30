@@ -181,7 +181,7 @@ describe('document-engine scenario handlers', () => {
       .get(`/warehouse-documents/${UNKNOWN_ID}`)
       .catch((error: unknown) => error)
     expect(missing).toHaveProperty('response.status', 404)
-    expect(missing).toHaveProperty('response.data.code', 'record.not_found')
+    expect(missing).toHaveProperty('response.data.error.code', 'WAREHOUSE_DOCUMENTS_NOT_FOUND')
 
     const missingHistory = await apiClient
       .get(`/warehouse-documents/${UNKNOWN_ID}/history`)
@@ -235,7 +235,7 @@ describe('document-engine scenario handlers', () => {
       })
       expect(stale.kind).toBe('conflict')
       if (stale.kind === 'conflict') {
-        expect(stale.problem.code).toBe('document.version_conflict')
+        expect(stale.problem.code).toBe('WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH')
         expect(stale.problem.currentRowVersion).toBe(document.rowVersion)
         expect(stale.problem.policy.documentId).toBe(document.documentId)
       }
@@ -252,9 +252,9 @@ describe('document-engine scenario handlers', () => {
     })
     expect(cancel.kind).toBe('validation')
     if (cancel.kind === 'validation') {
-      expect(cancel.problem.code).toBe('document.reason_required')
+      expect(cancel.problem.code).toBe('REQUEST_VALIDATION_FAILED')
       expect(cancel.problem.fieldErrors).toEqual([
-        expect.objectContaining({ field: 'reason', code: 'document.reason_required' }),
+        expect.objectContaining({ field: 'reason', code: 'REQUEST_VALIDATION_FAILED' }),
       ])
     }
 
@@ -265,7 +265,7 @@ describe('document-engine scenario handlers', () => {
     })
     expect(unsupported.kind).toBe('validation')
     if (unsupported.kind === 'validation') {
-      expect(unsupported.problem.code).toBe('document.action_unsupported')
+      expect(unsupported.problem.code).toBe('WAREHOUSE_DOCUMENTS_INVALID_TRANSITION')
     }
     expect(actionRequiresReason('Cancel')).toBe(true)
     expect(actionRequiresReason('Reverse')).toBe(true)
@@ -318,9 +318,15 @@ describe('document-engine scenario handlers', () => {
       )
       .catch((caught: unknown) => caught)
     expect(replayCancel).toHaveProperty('response.status', 409)
-    expect(replayCancel).toHaveProperty('response.data.code', 'document.action_not_allowed')
-    expect(replayCancel).toHaveProperty('response.data.currentStatus', 'Cancelled')
-    expect(replayCancel).toHaveProperty('response.data.policy.documentStatus', 'Cancelled')
+    expect(replayCancel).toHaveProperty(
+      'response.data.error.code',
+      'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+    )
+    expect(replayCancel).toHaveProperty('response.data.error.details.currentStatus', 'Cancelled')
+    expect(replayCancel).toHaveProperty(
+      'response.data.error.details.policy.documentStatus',
+      'Cancelled',
+    )
     expect(documents[0]).toMatchObject({ documentStatus: 'Cancelled', rowVersion: 3 })
   })
 
@@ -341,11 +347,15 @@ describe('document-engine scenario handlers', () => {
       )
       .catch((caught: unknown) => caught)
     expect(stale).toHaveProperty('response.status', 409)
-    expect(stale).toHaveProperty('response.data.code', 'document.version_conflict')
-    expect(stale).toHaveProperty('response.data.status', 409)
-    expect(stale).toHaveProperty('response.data.currentRowVersion', 1)
-    expect(stale).toHaveProperty('response.data.currentStatus', 'Draft')
-    expect(stale).toHaveProperty('response.data.policy.documentId', fixtureUuid(150))
+    expect(stale).toHaveProperty(
+      'response.data.error.code',
+      'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+    )
+    // `status` lives in the HTTP status line, never in the body.
+    expect(stale).toHaveProperty('response.status', 409)
+    expect(stale).toHaveProperty('response.data.error.details.currentRowVersion', 1)
+    expect(stale).toHaveProperty('response.data.error.details.currentStatus', 'Draft')
+    expect(stale).toHaveProperty('response.data.error.details.policy.documentId', fixtureUuid(150))
     expect(documents[0]).toMatchObject({ documentStatus: 'Draft', rowVersion: 1 })
 
     const submitted = [documentInStatus('Submitted', fixtureUuid(151))]
@@ -363,7 +373,7 @@ describe('document-engine scenario handlers', () => {
       )
       .catch((caught: unknown) => caught)
     expect(missingReason).toHaveProperty('response.status', 422)
-    expect(missingReason).toHaveProperty('response.data.code', 'document.reason_required')
+    expect(missingReason).toHaveProperty('response.data.error.code', 'REQUEST_VALIDATION_FAILED')
   })
 
   it('posts only after submit and records the pair of lifecycle events in order', async () => {
@@ -383,7 +393,10 @@ describe('document-engine scenario handlers', () => {
       )
       .catch((caught: unknown) => caught)
     expect(premature).toHaveProperty('response.status', 409)
-    expect(premature).toHaveProperty('response.data.code', 'document.action_not_allowed')
+    expect(premature).toHaveProperty(
+      'response.data.error.code',
+      'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+    )
 
     await apiClient.post(
       `/warehouse-documents/${fixtureUuid(150)}/submit`,

@@ -24,6 +24,7 @@ import {
   fixtureUuid,
 } from '@/test/msw/factories'
 import { applyDocumentAction } from '@/test/msw/warehouse-document-handlers'
+import { toWireErrorResponse } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 /**
@@ -97,10 +98,6 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      { scopeType: 'Enterprise', scopeId: null, displayName: 'الهيئة العامة للرقابة والتفتيش' },
-    ],
-    scopeState: 'Selected',
     activeRoles: [],
   }
 }
@@ -238,13 +235,12 @@ function adjustmentFixture(overrides: Partial<InventoryAdjustment> = {}): Invent
 }
 
 /** 409 problem carrying the contract's Arabic conflict sentence. */
-function adjustmentConflictProblem(
-  detailAr:
-    string | null = 'تعذر تنفيذ الإجراء: سند التسوية عدَّله مستخدم آخر. أعد تحميل البيانات.',
-): ProblemDetails {
+function adjustmentConflictProblem(): ProblemDetails {
+  // The wire carries an English message only; the Arabic the user sees is resolved
+  // from this code via the governed `error-copy-ar.ts` table.
   return createProblemDetails({
-    code: 'adjustment.version_conflict',
-    detailAr,
+    code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+    detailAr: null,
     fieldErrors: [],
     status: 409,
     titleAr: 'تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.',
@@ -408,7 +404,7 @@ describe('F-2 — an adjustment retry reuses one idempotency key; a new action m
         captured.push(request.headers.get(IDEMPOTENCY_KEY_HEADER))
         postCalls += 1
         if (postCalls === 1) {
-          return HttpResponse.json(adjustmentConflictProblem(), { status: 409 })
+          return toWireErrorResponse(adjustmentConflictProblem(), 409)
         }
         return HttpResponse.json({ adjustmentId: ADJUSTMENT_ID, postedAt: null })
       }),
@@ -436,7 +432,7 @@ describe('F-3 — a 409 on an adjustment action refetches authoritative state an
         return HttpResponse.json(adjustmentFixture())
       }),
       http.post(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}/post`, () =>
-        HttpResponse.json(adjustmentConflictProblem(), { status: 409 }),
+        toWireErrorResponse(adjustmentConflictProblem(), 409),
       ),
     )
 
@@ -449,7 +445,12 @@ describe('F-3 — a 409 on an adjustment action refetches authoritative state an
     // D-LIFE-01 §226 rule 6: refetch authoritative state after a 409.
     await waitFor(() => expect(detailRequests).toBeGreaterThan(1))
     const [toastOptions] = (toast.error as unknown as { mock: { calls: unknown[][] } }).mock.calls
-    expect(JSON.stringify(toastOptions)).toContain('سند التسوية عدَّله مستخدم آخر')
+    // The Arabic comes from the governed table for the conflict code, and the
+    // English wire message must never be shown to an Arabic-first UI.
+    expect(JSON.stringify(toastOptions)).toContain(
+      'تغيرت البيانات من قبل مستخدم آخر. حدّث الصفحة ثم أعد المحاولة.',
+    )
+    expect(JSON.stringify(toastOptions)).not.toContain('row version did not match')
     expect(JSON.stringify(toastOptions)).toContain('تغيرت البيانات')
   })
 
@@ -463,7 +464,7 @@ describe('F-3 — a 409 on an adjustment action refetches authoritative state an
       }),
       http.post(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}/post`, () =>
         // `detailAr: null` is contract-legal; the local guidance must be reachable.
-        HttpResponse.json(adjustmentConflictProblem(null), { status: 409 }),
+        toWireErrorResponse(adjustmentConflictProblem(), 409),
       ),
     )
 
@@ -491,7 +492,7 @@ describe('F-3 — a 409 on an adjustment action refetches authoritative state an
       }),
       http.post(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}/post`, () => {
         postCalls += 1
-        return HttpResponse.json(adjustmentConflictProblem(), { status: 409 })
+        return toWireErrorResponse(adjustmentConflictProblem(), 409)
       }),
     )
 

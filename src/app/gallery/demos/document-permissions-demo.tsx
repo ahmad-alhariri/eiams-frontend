@@ -87,11 +87,7 @@ function buildDemoSession(
       rowVersion: 1,
     },
     activeRoles: [{ roleId: DEMO_ROLE_ID, code: 'demo-role', nameAr: roleLabelAr }],
-    availableScopes: [
-      { scopeId: DEMO_SCOPE_ID, scopeType: 'Enterprise', displayName: 'نطاق التطوير' },
-    ],
     activeScope: { scopeId: DEMO_SCOPE_ID, scopeType: 'Enterprise', displayName: 'نطاق التطوير' },
-    scopeState: 'Selected',
     permissionCodes: [...permissionCodes],
   }
 }

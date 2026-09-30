@@ -12,6 +12,7 @@ import {
   createPage,
   createSite,
 } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 
@@ -262,21 +263,17 @@ describe('OrganizationService', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/sites/missing`, () =>
-        HttpResponse.json(
-          {
-            status: 404,
-            code: 'site.not_found',
-            titleAr: 'الموقع غير موجود.',
-            traceId: 'site-missing',
-          },
-          { status: 404 },
-        ),
+        errJson(404, { code: 'SITES_NOT_FOUND', message: 'Site not found.' }),
       ),
     )
 
     const error = await service.getSite('missing').catch((reason: unknown) => reason)
 
     expect(axios.isAxiosError(error)).toBe(true)
-    expect(normalizeApiError(error)).toMatchObject({ status: 404, code: 'site.not_found' })
+    expect(normalizeApiError(error)).toMatchObject({
+      status: 404,
+      code: 'SITES_NOT_FOUND',
+      titleAr: 'لم يتم العثور على الموقع.',
+    })
   })
 })

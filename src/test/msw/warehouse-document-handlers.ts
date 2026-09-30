@@ -15,6 +15,7 @@ import {
   DOCUMENT_TRANSITIONS,
   fixtureUuid,
 } from '@/test/msw/factories'
+import { toWireErrorResponse } from '@/test/msw/envelope'
 import type {
   DocumentActionType,
   DocumentActionResult,
@@ -59,12 +60,16 @@ const DEFAULT_ACTOR: LifecycleActorSnapshot = {
   roleNameAr: 'أمين المستودع',
 }
 
+// POLICY-BLOCKER code (frontend vocabulary, `policy-blocker-codes.ts`) — NOT a wire
+// error code. Blockers and error envelopes are separate namespaces.
 const SIGNED_ORIGINAL_MISSING_CODE = 'document.signed_original_missing'
+// WIRE error code emitted by the backend (`WarehouseDocuments.SignedCopyRequired`).
+const SIGNED_COPY_REQUIRED_ERROR_CODE = 'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED'
 const SIGNED_ORIGINAL_MISSING_DETAIL_AR = 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.'
 
 function signedOriginalMissingProblem(): ProblemDetails {
   return problemBase(
-    SIGNED_ORIGINAL_MISSING_CODE,
+    SIGNED_COPY_REQUIRED_ERROR_CODE,
     SIGNED_ORIGINAL_MISSING_DETAIL_AR,
     422,
     'attachmentType',
@@ -167,17 +172,8 @@ function pageMeta(totalItems: number, pageIndex: number, pageSize: number): Page
   }
 }
 
-function notFound(): HttpResponse<ProblemDetails> {
-  const payload: ProblemDetails = {
-    code: 'record.not_found',
-    detailAr: 'لم يتم العثور على السجل المطلوب.',
-    fieldErrors: [],
-    status: 404,
-    titleAr: 'لم يتم العثور على البيانات المطلوبة.',
-    traceId: 'mock-trace',
-    type: 'https://eiams.example/problems/record.not_found',
-  }
-  return HttpResponse.json(payload, { status: 404 })
+function notFound() {
+  return toWireErrorResponse({ code: 'WAREHOUSE_DOCUMENTS_NOT_FOUND', status: 404 }, 404)
 }
 
 function problemBase(
@@ -202,7 +198,7 @@ export function versionConflictProblem(
 ): LifecycleConflictProblemDetails {
   return {
     ...problemBase(
-      'document.version_conflict',
+      'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
       'تعذر تنفيذ الإجراء: المستند عدَّله مستخدم آخر. أعد تحميل البيانات وحاول مجدداً.',
       409,
     ),
@@ -218,7 +214,7 @@ function actionNotAllowedProblem(
 ): LifecycleConflictProblemDetails {
   return {
     ...problemBase(
-      'document.action_not_allowed',
+      'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
       `لا يمكن تنفيذ إجراء «${action}» في الحالة «${document.documentStatus}» الحالية للمستند.`,
       409,
     ),
@@ -301,7 +297,7 @@ export function createIdempotencyMemo(): IdempotencyMemo {
 /** Arabic 422 problem for a same-key replay whose body differs from the stored attempt. */
 export function idempotencyMismatchProblem(): ProblemDetails {
   return problemBase(
-    'document.idempotency_mismatch',
+    'REQUEST_IDEMPOTENCY_MISMATCH',
     'لا يمكن إعادة استخدام مفتاح التكرار مع طلب مختلف عن الطلب الأصلي.',
     422,
     'idempotencyKey',
@@ -478,7 +474,7 @@ export function applyDocumentAction(input: DocumentActionInput): DocumentActionO
     return {
       kind: 'validation',
       problem: problemBase(
-        'document.action_unsupported',
+        'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
         `لا يمكن تنفيذ إجراء «${action}» عبر مسار الحالة.`,
         422,
         'action',
@@ -488,7 +484,7 @@ export function applyDocumentAction(input: DocumentActionInput): DocumentActionO
   if (actionRequiresReason(action) && !isPresent(input.reason)) {
     return {
       kind: 'validation',
-      problem: problemBase('document.reason_required', 'يرجى إدخال سبب الإجراء.', 422, 'reason'),
+      problem: problemBase('REQUEST_VALIDATION_FAILED', 'يرجى إدخال سبب الإجراء.', 422, 'reason'),
     }
   }
   if (input.rowVersion !== document.rowVersion) {
@@ -726,7 +722,7 @@ export function createWarehouseDocumentActionHandler(
         return HttpResponse.json(memoCheck.result)
       }
       if (memoCheck.kind === 'mismatch') {
-        return HttpResponse.json(idempotencyMismatchProblem(), { status: 422 })
+        return toWireErrorResponse(idempotencyMismatchProblem(), 422)
       }
       const outcome = applyDocumentAction({
         action,
@@ -736,10 +732,10 @@ export function createWarehouseDocumentActionHandler(
         occurredBy: options.occurredBy,
       })
       if (outcome.kind === 'conflict') {
-        return HttpResponse.json(outcome.problem, { status: 409 })
+        return toWireErrorResponse(outcome.problem, 409)
       }
       if (outcome.kind === 'validation') {
-        return HttpResponse.json(outcome.problem, { status: 422 })
+        return toWireErrorResponse(outcome.problem, 422)
       }
       if (idempotencyKey !== null) {
         idempotency.store(
@@ -997,7 +993,7 @@ export function createWarehouseDocumentUpdateHandler(
       }
       const body = (await request.json()) as WarehouseDocumentDraftRequest
       if (body.rowVersion !== document.rowVersion) {
-        return HttpResponse.json(versionConflictProblem(document), { status: 409 })
+        return toWireErrorResponse(versionConflictProblem(document), 409)
       }
       const updated = applyDraftToDocument(document, body, options.lookups)
       current = updated

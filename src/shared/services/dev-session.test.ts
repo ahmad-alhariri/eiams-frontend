@@ -4,13 +4,11 @@ import { PERMISSION_CODES } from '@/config/permissions'
 import { createDevSession, isDevAuthBypassEnabled } from '@/shared/services/dev-session'
 
 describe('Dev session fixture (auth bypass)', () => {
-  it('serves a selected Enterprise scope with the full permission vocabulary', () => {
+  it('serves a server-assigned Enterprise scope with the full permission vocabulary', () => {
     const response = createDevSession()
 
-    expect(response.session.scopeState).toBe('Selected')
     expect(response.session.activeScope?.scopeType).toBe('Enterprise')
     expect(response.session.permissionCodes).toEqual([...PERMISSION_CODES])
-    expect(response.session.availableScopes).toHaveLength(1)
     expect(response.accessToken.length).toBeGreaterThan(0)
   })
 

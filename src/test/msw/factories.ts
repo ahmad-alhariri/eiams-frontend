@@ -213,14 +213,11 @@ export function createScopeContext(overrides: FixtureOverrides<ScopeContext> = {
 }
 
 export function createSession(overrides: FixtureOverrides<SessionResponse> = {}): SessionResponse {
-  const activeScope = createScopeContext()
   return withOverrides(
     {
       user: createUserSummary(),
       permissionCodes: ['document.view'],
-      availableScopes: [activeScope],
-      activeScope,
-      scopeState: 'Selected',
+      activeScope: createScopeContext(),
       activeRoles: [createEffectiveRole()],
     },
     overrides,

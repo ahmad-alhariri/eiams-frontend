@@ -37,10 +37,6 @@ function session(): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: ['count.view', 'count.enter'],
-    availableScopes: [
-      { scopeType: 'Enterprise', scopeId: null, displayName: 'الهيئة العامة للرقابة والتفتيش' },
-    ],
-    scopeState: 'Selected',
     activeRoles: [],
   }
 }

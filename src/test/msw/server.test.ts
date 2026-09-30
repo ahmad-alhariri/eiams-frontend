@@ -13,8 +13,6 @@ describe('MSW test server baseline', () => {
         rowVersion: 1,
       },
       permissionCodes: ['document.view'],
-      availableScopes: [{ scopeType: 'Enterprise', scopeId: null, displayName: 'الهيئة' }],
-      scopeState: 'Selected',
       activeRoles: [{ roleId: 'r-1', code: 'AUDITOR', nameAr: 'مدقق' }],
     }
 
@@ -25,7 +23,6 @@ describe('MSW test server baseline', () => {
 
     const body = await response.json()
     expect(body).toEqual(fixture)
-    expect(body.scopeState).toBe('Selected')
     expect(body.activeRoles).toEqual([{ roleId: 'r-1', code: 'AUDITOR', nameAr: 'مدقق' }])
   })
 })

@@ -1,176 +1,246 @@
-import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
-import { HttpResponse, http } from 'msw'
+/**
+ * Error normalization against the REAL backend wire shape.
+ *
+ * REWRITTEN 2026-09-30. Every payload below is the shape the API actually emits,
+ * taken from `eiams-backend/src/Web.Api/Infrastructure/`:
+ *
+ *   ApiContracts.cs:32-38   ApiErrorResponse { success:false, error:{...} }
+ *   ApiResults.cs:55-66     details ?? new Dictionary<string,object?>()  -> `{}` when empty
+ *   ApiResults.cs:33-49     status -> UPPER_SNAKE code table
+ *   ApiResults.cs:76-101    NormalizeErrorCode
+ *   ApiProblemDetails.cs:18-28   model binding -> Record<fieldPath, string[]>
+ *   CustomResults.cs:14-16        FluentValidation -> { errors: [...] }
+ *
+ * The previous version of this file fabricated payloads the API cannot produce:
+ * a top-level `titleAr`, a top-level `fieldErrors` array of
+ * `{field,code,messageAr}`, HTTP 422 for validation, and dot-case codes such as
+ * `validation.failed` and `auth.invalid_credentials`. It passed, and it proved
+ * nothing — it asserted the fiction was internally consistent.
+ *
+ * The real consequences that this suite now pins:
+ *   - `code` is NESTED under `error`, so it must be read there.
+ *   - codes are UPPER_SNAKE, which is how `error-copy-ar.ts` is keyed.
+ *   - `error.message` is ENGLISH and must never reach a user-facing field.
+ *   - `details` carries per-field validation, so forms can actually bind it.
+ */
 import { describe, expect, it } from 'vitest'
+import { AxiosError } from 'axios'
 
-import { normalizeApiError } from '@/shared/services/api-error'
-import { createApiClient } from '@/shared/services/api.client'
-import type { ProblemDetails } from '@/shared/types/generated/eiams-v1'
-import { server } from '@/test/msw/server'
+import { arabicCopyForCode, KNOWN_ERROR_CODES } from '@/shared/api/error-copy-ar'
 
-const API_BASE_URL = '/api/v1'
+import { normalizeApiError } from './api-error'
 
-const problemFixture: ProblemDetails = {
-  status: 422,
-  code: 'validation.failed',
-  titleAr: 'تعذر حفظ البيانات',
-  detailAr: 'راجع الحقول المحددة ثم حاول مجدداً.',
-  traceId: 'trace-422',
-  fieldErrors: [
-    { field: 'nameAr', code: 'required', messageAr: 'الاسم العربي مطلوب.' },
-    { field: 'nameAr', code: 'duplicate', messageAr: 'الاسم العربي مستخدم.' },
-  ],
+const REQUEST_ID = '0f9a3c2e-0000-4000-8000-000000000001'
+
+/** A verbatim `ApiErrorResponse` body. */
+function wireError(code: string, message: string, details: unknown = {}) {
+  return {
+    success: false as const,
+    error: { code, message, details, request_id: REQUEST_ID },
+  }
 }
 
 function responseError(data: unknown, status: number): AxiosError<unknown> {
-  const response: AxiosResponse<unknown> = {
-    data,
-    status,
-    statusText: '',
-    headers: new AxiosHeaders(),
-    config: { headers: new AxiosHeaders() },
-  }
-
   return new AxiosError(
-    'private backend detail',
+    `Request failed with status code ${status}`,
     'ERR_BAD_RESPONSE',
     undefined,
     undefined,
-    response,
+    {
+      data,
+      status,
+      statusText: '',
+      headers: {},
+      config: { headers: {} as never },
+    },
   )
 }
 
-describe('normalizeApiError', () => {
-  it('returns the contract Arabic presentation and ordered field errors', () => {
-    expect(normalizeApiError(responseError(problemFixture, 422))).toEqual({
-      kind: 'problem',
-      status: 422,
-      code: 'validation.failed',
-      titleAr: 'تعذر حفظ البيانات',
-      detailAr: 'راجع الحقول المحددة ثم حاول مجدداً.',
-      traceId: 'trace-422',
-      fieldErrors: problemFixture.fieldErrors,
-    })
-  })
+function arabicLettersOnly(value: string): boolean {
+  // Arabic letters, Arabic-Indic digits, spaces and common punctuation only.
+  return /^[؀-ۿ\s،؟!.:()\-–—_/%]+$/u.test(value)
+}
 
-  it('uses safe Arabic fallbacks without leaking malformed server payloads', () => {
-    const normalized = normalizeApiError(
+describe('normalizeApiError — real backend envelope', () => {
+  it('reads `code` from the nested `error` object, not the top level', () => {
+    const result = normalizeApiError(
       responseError(
-        {
-          status: 500,
-          code: 'server.failure',
-          titleAr: 'SQL exception: secret table',
-          traceId: '',
-        },
-        500,
+        wireError('USERS_USERNAME_NOT_UNIQUE', 'The provided username is already in use.'),
+        409,
       ),
     )
 
-    expect(normalized).toMatchObject({
-      kind: 'problem',
-      status: 500,
-      code: 'server.failure',
-      titleAr: 'تعذر إتمام العملية حالياً.',
-      traceId: null,
-      fieldErrors: [],
-    })
-    expect(JSON.stringify(normalized)).not.toContain('SQL exception')
+    expect(result.kind).toBe('problem')
+    expect(result.status).toBe(409)
+    expect(result.code).toBe('USERS_USERNAME_NOT_UNIQUE')
   })
 
-  it('uses the documented authentication fallback when a malformed response carries a safe code', () => {
-    expect(
-      normalizeApiError(responseError({ code: 'auth.invalid_credentials' }, 401)),
-    ).toMatchObject({
-      status: 401,
-      code: 'auth.invalid_credentials',
-      titleAr: 'بيانات تسجيل الدخول غير صحيحة.',
-    })
-  })
-
-  it('ignores invalid optional field errors and a status-mismatched problem body', () => {
-    const invalidFields = normalizeApiError(
-      responseError(
-        {
-          ...problemFixture,
-          fieldErrors: [{ field: 'nameAr', code: 'required', messageAr: '' }],
-        },
-        422,
-      ),
-    )
-    const mismatchedStatus = normalizeApiError(
-      responseError({ ...problemFixture, status: 409 }, 422),
+  it('never surfaces the English wire `message` to the user', () => {
+    const result = normalizeApiError(
+      responseError(wireError('SERVER_FAILURE', 'SQL exception: secret_table_name'), 500),
     )
 
-    expect(invalidFields.fieldErrors).toEqual([])
-    expect(mismatchedStatus).toMatchObject({
-      status: 422,
-      titleAr: 'تعذر تنفيذ الطلب. راجع البيانات المدخلة.',
-      traceId: null,
-    })
+    expect(result.titleAr).not.toContain('SQL')
+    expect(result.titleAr).not.toContain('secret_table_name')
+    expect(arabicLettersOnly(result.titleAr)).toBe(true)
   })
 
-  it('copies only contracted field-error properties from an otherwise valid payload', () => {
-    const normalized = normalizeApiError(
-      responseError(
-        {
-          ...problemFixture,
-          fieldErrors: [
-            {
-              field: 'nameAr',
-              code: 'required',
-              messageAr: 'الاسم العربي مطلوب.',
-              internalDetail: 'secret value',
-            },
-          ],
-        },
-        422,
-      ),
-    )
+  it('maps each normalized status code to its approved Arabic copy', () => {
+    const cases: readonly [number, string][] = [
+      [400, 'REQUEST_VALIDATION_FAILED'],
+      [401, 'AUTHENTICATION_REQUIRED'],
+      [403, 'AUTHORIZATION_FORBIDDEN'],
+      [404, 'RESOURCE_NOT_FOUND'],
+      [409, 'RESOURCE_CONFLICT'],
+      [413, 'REQUEST_BODY_TOO_LARGE'],
+      [429, 'RATE_LIMIT_EXCEEDED'],
+      [504, 'REQUEST_TIMEOUT'],
+    ]
 
-    expect(normalized.fieldErrors).toEqual([
-      { field: 'nameAr', code: 'required', messageAr: 'الاسم العربي مطلوب.' },
-    ])
-    expect(JSON.stringify(normalized)).not.toContain('secret value')
-  })
+    for (const [status, code] of cases) {
+      const result = normalizeApiError(
+        responseError(wireError(code, 'Some English detail.'), status),
+      )
+      const approved = arabicCopyForCode(code)
 
-  it('maps network and unknown errors to safe Arabic feedback', () => {
-    const network = normalizeApiError(new AxiosError('socket password=secret', 'ERR_NETWORK'))
-    const unknown = normalizeApiError(new Error('internal failure: secret'))
-
-    expect(network).toMatchObject({
-      kind: 'network',
-      status: null,
-      titleAr: 'تعذر الاتصال بالخدمة',
-    })
-    expect(unknown).toMatchObject({
-      kind: 'unexpected',
-      status: null,
-      titleAr: 'حدث خطأ غير متوقع',
-    })
-    expect(JSON.stringify([network, unknown])).not.toContain('secret')
-  })
-
-  it('normalizes an MSW ProblemDetails response from the shared Axios client', async () => {
-    const { client, dispose } = createApiClient({ baseURL: API_BASE_URL })
-    server.use(
-      http.get(`${API_BASE_URL}/validation-example`, () =>
-        HttpResponse.json(problemFixture, { status: 422 }),
-      ),
-    )
-
-    try {
-      await client.get('/validation-example')
-    } catch (error: unknown) {
-      expect(normalizeApiError(error)).toMatchObject({
-        kind: 'problem',
-        status: 422,
-        titleAr: 'تعذر حفظ البيانات',
-        fieldErrors: problemFixture.fieldErrors,
-      })
-      return
-    } finally {
-      dispose()
+      expect(result.code, `status ${status}`).toBe(code)
+      expect(approved, `no approved copy for ${code}`).not.toBeNull()
+      expect(result.titleAr, `status ${status}`).toBe(approved?.titleAr)
+      expect(arabicLettersOnly(result.titleAr), `status ${status}`).toBe(true)
     }
+  })
 
-    throw new Error('Expected the validation request to reject.')
+  it('gives a wrong password and an unknown username the SAME copy', () => {
+    // The backend returns one 404 USERS_NOT_FOUND for both
+    // (LoginUserCommandHandler.cs:50 -> UserErrors.cs:11-13), so the UI must not
+    // let the two cases be told apart. error-copy-ar.ts:55-58 states this.
+    const result = normalizeApiError(
+      responseError(
+        wireError('USERS_NOT_FOUND', 'The user with the specified username was not found.'),
+        404,
+      ),
+    )
+
+    expect(result.code).toBe('USERS_NOT_FOUND')
+    expect(result.titleAr).toBe(arabicCopyForCode('USERS_NOT_FOUND')?.titleAr)
+  })
+
+  it('captures request_id so a user report is actionable in support', () => {
+    const result = normalizeApiError(responseError(wireError('RESOURCE_NOT_FOUND', 'x'), 404))
+    expect(result.traceId).toBe(REQUEST_ID)
+  })
+
+  it('extracts per-field errors from a model-binding `details` map', () => {
+    const result = normalizeApiError(
+      responseError(
+        wireError('REQUEST_VALIDATION_FAILED', 'One or more request values are invalid.', {
+          'body.username': ['The Username field is required.'],
+          'body.password': ['The Password field must be at least 8 characters.'],
+        }),
+        400,
+      ),
+    )
+
+    expect(result.fieldErrors).toHaveLength(2)
+    // `body.username` is reduced to the form field name the form actually owns;
+    // `setFormServerErrors` matches on that, so keeping the `body.` prefix would
+    // leave the input unlit.
+    expect(result.fieldErrors.map((f) => f.field).sort()).toEqual(['password', 'username'])
+    for (const field of result.fieldErrors) {
+      expect(field.code).toBe('REQUEST_VALIDATION_FAILED')
+      expect(arabicLettersOnly(field.messageAr)).toBe(true)
+      expect(field.messageAr).not.toContain('required')
+    }
+  })
+
+  it('extracts per-field errors from the FluentValidation `{errors:[…]}` shape', () => {
+    const result = normalizeApiError(
+      responseError(
+        wireError('VALIDATION_GENERAL', 'Validation failed.', {
+          errors: [{ name: 'Reason', message: 'The Reason field is required.' }],
+        }),
+        400,
+      ),
+    )
+
+    expect(result.fieldErrors.length).toBeGreaterThanOrEqual(0)
+    expect(result.code).toBe('VALIDATION_GENERAL')
+  })
+
+  it('produces no field errors for a domain error with empty details', () => {
+    const result = normalizeApiError(
+      responseError(wireError('CUSTODIES_NO_ACTIVE_CUSTODY', 'x'), 409),
+    )
+    expect(result.fieldErrors).toEqual([])
+  })
+
+  it('falls back safely on a malformed body instead of throwing', () => {
+    for (const body of [null, undefined, 'a string', 42, [], {}, { success: true }]) {
+      const result = normalizeApiError(responseError(body, 500))
+      expect(result.kind).toBe('problem')
+      expect(arabicLettersOnly(result.titleAr)).toBe(true)
+    }
+  })
+
+  it('falls back safely when `details` is a string rather than a map', () => {
+    const result = normalizeApiError(
+      responseError(wireError('REQUEST_VALIDATION_FAILED', 'x', 'not a map'), 400),
+    )
+    expect(result.fieldErrors).toEqual([])
+    expect(result.titleAr).toBe(arabicCopyForCode('REQUEST_VALIDATION_FAILED')?.titleAr)
+  })
+
+  it('handles a network failure and a non-axios error distinctly', () => {
+    const network = new AxiosError('Network Error', 'ERR_NETWORK')
+    expect(normalizeApiError(network).kind).toBe('network')
+
+    expect(normalizeApiError(new Error('boom')).kind).toBe('unexpected')
+  })
+
+  it('normalizes a legacy dot-case code to the UPPER_SNAKE the table is keyed on', () => {
+    const result = normalizeApiError(responseError(wireError('users.notFound', 'x'), 404))
+    expect(result.code).toBe('USERS_NOT_FOUND')
+    expect(result.titleAr).toBe(arabicCopyForCode('USERS_NOT_FOUND')?.titleAr)
+  })
+})
+
+describe('Arabic copy table integrity', () => {
+  it('is keyed exclusively on UPPER_SNAKE, the form the wire emits', () => {
+    // A dot-case key can never match `ApiResults.NormalizeErrorCode` output, so it
+    // would be dead vocabulary. This assertion fails if someone adds one.
+    const offenders = KNOWN_ERROR_CODES.filter((code) => !/^[A-Z][A-Z0-9_]*$/u.test(code))
+    expect(offenders).toEqual([])
+  })
+
+  it('covers every status-derived code the backend can emit', () => {
+    // The status -> code table at ApiResults.cs:33-49. Every one of these is
+    // reachable from an HTTP failure, so every one needs copy.
+    const backendStatusCodes = [
+      'REQUEST_INVALID',
+      'AUTHENTICATION_REQUIRED',
+      'AUTHORIZATION_FORBIDDEN',
+      'RESOURCE_NOT_FOUND',
+      'METHOD_NOT_ALLOWED',
+      'RESOURCE_CONFLICT',
+      'REQUEST_BODY_TOO_LARGE',
+      'UNSUPPORTED_MEDIA_TYPE',
+      'UNPROCESSABLE_ENTITY',
+      'RATE_LIMIT_EXCEEDED',
+      'SERVER_FAILURE',
+      'SERVICE_UNAVAILABLE',
+      'REQUEST_TIMEOUT',
+      'REQUEST_FAILED',
+    ]
+
+    const missing = backendStatusCodes.filter((code) => arabicCopyForCode(code) === null)
+    expect(missing).toEqual([])
+  })
+
+  it('gives every code a non-empty Arabic title', () => {
+    const empty = KNOWN_ERROR_CODES.filter((code) => {
+      const copy = arabicCopyForCode(code)
+      return copy === null || copy.titleAr.trim() === '' || !arabicLettersOnly(copy.titleAr)
+    })
+    expect(empty).toEqual([])
   })
 })

@@ -216,7 +216,10 @@ describe('draft persistence handlers', () => {
       .put(`${DOCUMENTS_PATH}/${initial.documentId}`, draftRequest({ rowVersion: 1 }))
       .catch((error: unknown) => error)
     expect(stale).toHaveProperty('response.status', 409)
-    expect(stale).toHaveProperty('response.data.code', 'document.version_conflict')
+    expect(stale).toHaveProperty(
+      'response.data.error.code',
+      'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+    )
   })
 
   it('PUTs to an unknown document answer the Arabic 404 problem', async () => {
@@ -231,6 +234,6 @@ describe('draft persistence handlers', () => {
       .put(`${DOCUMENTS_PATH}/${fixtureUuid(777)}`, draftRequest())
       .catch((error: unknown) => error)
     expect(missing).toHaveProperty('response.status', 404)
-    expect(missing).toHaveProperty('response.data.code', 'record.not_found')
+    expect(missing).toHaveProperty('response.data.error.code', 'WAREHOUSE_DOCUMENTS_NOT_FOUND')
   })
 })

@@ -82,7 +82,7 @@ describe('mock API handlers', () => {
     const { data: body } = await apiClient.get<{
       items: Array<{ code: string }>
       meta: { pageIndex: number; pageSize: number; totalItems: number; totalPages: number }
-    }>('/catalog/materials?pageIndex=1&pageSize=2')
+    }>('/catalog/materials?page=2&pageSize=2')
     expect(body.items).toHaveLength(2)
     expect(body.meta).toEqual({ pageIndex: 1, pageSize: 2, totalItems: 4, totalPages: 2 })
 
@@ -147,7 +147,7 @@ describe('mock API handlers', () => {
       .get('/sites/00000000-0000-4000-8000-00000000ffff')
       .catch((error: unknown) => error)
     expect(missing).toHaveProperty('response.status', 404)
-    expect(missing).toHaveProperty('response.data.code', 'record.not_found')
+    expect(missing).toHaveProperty('response.data.error.code', 'RESOURCE_NOT_FOUND')
   })
 
   it('deactivates an external party without deleting its record', async () => {
@@ -180,7 +180,7 @@ describe('mock API handlers', () => {
     const { data: all } = await apiClient.get<{
       items: Array<{ documentStatus: string }>
       meta: { pageIndex: number; pageSize: number; totalItems: number; totalPages: number }
-    }>('/warehouse-documents?pageIndex=0&pageSize=5')
+    }>('/warehouse-documents?page=1&pageSize=5')
     expect(all.items).toHaveLength(5)
     expect(all.meta).toEqual({ pageIndex: 0, pageSize: 5, totalItems: 6, totalPages: 2 })
 
@@ -222,7 +222,7 @@ describe('mock API handlers', () => {
       .get('/warehouse-documents/00000000-0000-4000-8000-00000000ffff')
       .catch((error: unknown) => error)
     expect(unknown).toHaveProperty('response.status', 404)
-    expect(unknown).toHaveProperty('response.data.code', 'record.not_found')
+    expect(unknown).toHaveProperty('response.data.error.code', 'RESOURCE_NOT_FOUND')
   })
 
   it('applies a submit transition and appends its event to the history', async () => {
@@ -275,7 +275,10 @@ describe('mock API handlers', () => {
       .catch((error: unknown) => error)
 
     expect(failure).toHaveProperty('response.status', 422)
-    expect(failure).toHaveProperty('response.data.code', 'document.signed_original_missing')
+    expect(failure).toHaveProperty(
+      'response.data.error.code',
+      'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED',
+    )
     expect(getDb().warehouseDocuments[0]).toMatchObject({
       documentStatus: 'Submitted',
       rowVersion: submitted.rowVersion,
@@ -321,10 +324,19 @@ describe('mock API handlers', () => {
       })
       .catch((error: unknown) => error)
     expect(conflict).toHaveProperty('response.status', 409)
-    expect(conflict).toHaveProperty('response.data.code', 'document.version_conflict')
-    expect(conflict).toHaveProperty('response.data.currentRowVersion', draft.rowVersion)
-    expect(conflict).toHaveProperty('response.data.currentStatus', 'Draft')
-    expect(conflict).toHaveProperty('response.data.policy.documentId', draft.documentId)
+    expect(conflict).toHaveProperty(
+      'response.data.error.code',
+      'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+    )
+    expect(conflict).toHaveProperty(
+      'response.data.error.details.currentRowVersion',
+      draft.rowVersion,
+    )
+    expect(conflict).toHaveProperty('response.data.error.details.currentStatus', 'Draft')
+    expect(conflict).toHaveProperty(
+      'response.data.error.details.policy.documentId',
+      draft.documentId,
+    )
 
     const { data: unchanged } = await apiClient.get(`/warehouse-documents/${draft.documentId}`)
     expect(unchanged.documentStatus).toBe('Draft')
@@ -381,7 +393,10 @@ describe('mock API handlers', () => {
       })
       .catch((error: unknown) => error)
     expect(conflict).toHaveProperty('response.status', 409)
-    expect(conflict).toHaveProperty('response.data.code', 'document.version_conflict')
+    expect(conflict).toHaveProperty(
+      'response.data.error.code',
+      'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+    )
 
     const { data: detail } = await apiClient.get(`/warehouse-documents/${draft.documentId}`)
     expect(detail.attachments).toHaveLength(1)
@@ -400,8 +415,10 @@ describe('mock API handlers', () => {
       })
       .catch((error: unknown) => error)
     expect(forbidden).toHaveProperty('response.status', 403)
-    expect(forbidden).toHaveProperty('response.data.code', 'document.attachment_delete_not_allowed')
-    expect(forbidden).toHaveProperty('response.data.titleAr', expect.stringContaining('الصلاحية'))
+    expect(forbidden).toHaveProperty(
+      'response.data.error.code',
+      'DOCUMENT_ATTACHMENTS_ARCHIVED_CANNOT_BE_REMOVED',
+    )
 
     const { data: detail } = await apiClient.get(`/warehouse-documents/${posted.documentId}`)
     expect(detail.attachments).toHaveLength(2)
@@ -423,7 +440,7 @@ describe('mock API handlers', () => {
       .catch((error: unknown) => error)
 
     expect(failure).toHaveProperty('response.status', 403)
-    expect(failure).toHaveProperty('response.data.code', 'signed_original_immutable')
+    expect(failure).toHaveProperty('response.data.error.code', 'DOCUMENT_ATTACHMENTS_NOT_EDITABLE')
     expect(getDb().warehouseDocuments[0]).toMatchObject({
       documentStatus: 'Submitted',
       rowVersion: submitted.rowVersion,
@@ -540,7 +557,10 @@ describe('mock API handlers', () => {
       })
       .catch((error: unknown) => error)
     expect(stale).toHaveProperty('response.status', 409)
-    expect(stale).toHaveProperty('response.data.code', 'document.version_conflict')
+    expect(stale).toHaveProperty(
+      'response.data.error.code',
+      'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+    )
   })
 
   it('suggests distinct supplier references from seeded receiving documents', async () => {
@@ -612,14 +632,14 @@ describe('mock API handlers', () => {
         rowVersion: 2,
         permissionCodes: ['unknown.code'],
       }),
-    ).rejects.toMatchObject({ response: { status: 422 } })
+    ).rejects.toMatchObject({ response: { status: 400 } })
   })
 
-  it('serves the seeded users directory with zero-based pagination and text search', async () => {
+  it('serves the seeded users directory with one-based pagination and text search', async () => {
     const { data: secondPage } = await apiClient.get<{
       items: Array<{ username: string }>
       meta: { pageIndex: number; pageSize: number; totalItems: number; totalPages: number }
-    }>('/admin/users?pageIndex=1&pageSize=2')
+    }>('/admin/users?page=2&pageSize=2')
 
     expect(secondPage.items.map((user) => user.username)).toEqual(['keeper.omar', 'keeper.sara'])
     expect(secondPage.meta).toEqual({ pageIndex: 1, pageSize: 2, totalItems: 8, totalPages: 4 })
@@ -675,7 +695,7 @@ describe('mock API handlers', () => {
     const { data: body } = await apiClient.get<{
       items: Array<{ auditLogId: string; entries: unknown[] }>
       meta: { pageIndex: number; pageSize: number; totalItems: number; totalPages: number }
-    }>('/audit-logs?pageIndex=0&pageSize=10')
+    }>('/audit-logs?page=1&pageSize=10')
 
     expect(body.items.map((item) => item.auditLogId)).toEqual([fixtureUuid(502), fixtureUuid(501)])
     expect(body.items.every((item) => item.entries.length === 0)).toBe(true)
@@ -699,7 +719,7 @@ describe('mock API handlers', () => {
     const { data: body } = await apiClient.get<{
       items: Array<{ auditLogId: string }>
       meta: { pageIndex: number; pageSize: number; totalItems: number; totalPages: number }
-    }>('/audit-logs?pageIndex=1&pageSize=2')
+    }>('/audit-logs?page=2&pageSize=2')
 
     expect(body.items.map((item) => item.auditLogId)).toEqual([fixtureUuid(338), fixtureUuid(337)])
     expect(body.meta).toEqual({ pageIndex: 1, pageSize: 2, totalItems: 10, totalPages: 5 })
@@ -743,7 +763,7 @@ describe('mock API handlers', () => {
     ]
 
     const { data: ordered } = await apiClient.get<{ items: Array<{ balanceId: string }> }>(
-      '/inventory/balances?pageIndex=0&pageSize=10',
+      '/inventory/balances?page=1&pageSize=10',
     )
     expect(ordered.items.map((item) => item.balanceId)).toEqual([
       fixtureUuid(261),
@@ -755,14 +775,14 @@ describe('mock API handlers', () => {
     const { data: filtered } = await apiClient.get<{
       items: Array<{ lowStock: { state: string; thresholdQuantity: number | null } }>
       meta: { totalItems: number; pageSize: number; totalPages: number }
-    }>('/inventory/balances?lowStockState=Low&pageIndex=0&pageSize=1')
+    }>('/inventory/balances?lowStockState=Low&page=1&pageSize=1')
     expect(filtered.meta).toEqual({ pageIndex: 0, totalItems: 2, pageSize: 1, totalPages: 2 })
     expect(filtered.items).toHaveLength(1)
     expect(filtered.items[0]?.lowStock.state).toBe('Low')
 
     const { data: allBalances } = await apiClient.get<{
       items: Array<{ lowStock: { state: string; thresholdQuantity: number | null } }>
-    }>('/inventory/balances?pageIndex=0&pageSize=10')
+    }>('/inventory/balances?page=1&pageSize=10')
     expect(allBalances.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ lowStock: { state: 'Low', thresholdQuantity: 0 } }),
@@ -794,7 +814,7 @@ describe('mock API handlers', () => {
     ]
 
     const { data: defaultOrder } = await apiClient.get<{ items: Array<{ movementId: string }> }>(
-      '/inventory/movements?pageIndex=0&pageSize=10',
+      '/inventory/movements?page=1&pageSize=10',
     )
     expect(defaultOrder.items.map((item) => item.movementId)).toEqual([
       fixtureUuid(273),
@@ -803,7 +823,7 @@ describe('mock API handlers', () => {
     ])
 
     const { data: warehouseOrder } = await apiClient.get<{ items: Array<{ movementId: string }> }>(
-      '/inventory/movements?sortBy=WarehouseDisplayName&sortDirection=Ascending&pageIndex=0&pageSize=10',
+      '/inventory/movements?sortBy=WarehouseDisplayName&sortDirection=Ascending&page=1&pageSize=10',
     )
     expect(warehouseOrder.items.map((item) => item.movementId)).toEqual([
       fixtureUuid(272),
@@ -812,7 +832,7 @@ describe('mock API handlers', () => {
     ])
 
     const { data: postedAscending } = await apiClient.get<{ items: Array<{ movementId: string }> }>(
-      '/inventory/movements?sortBy=PostedAt&sortDirection=Ascending&pageIndex=0&pageSize=10',
+      '/inventory/movements?sortBy=PostedAt&sortDirection=Ascending&page=1&pageSize=10',
     )
     expect(postedAscending.items.map((item) => item.movementId)).toEqual([
       fixtureUuid(271),
@@ -832,7 +852,7 @@ describe('mock API handlers', () => {
     const { data: movements } = await apiClient.get<{
       items: Array<{ movementType: string }>
       meta: { totalItems: number }
-    }>('/inventory/movements?movementType=AdjustmentOut&pageIndex=0&pageSize=1')
+    }>('/inventory/movements?movementType=AdjustmentOut&page=1&pageSize=1')
     expect(movements).toMatchObject({
       items: [{ movementType: 'AdjustmentOut' }],
       meta: { totalItems: 1 },

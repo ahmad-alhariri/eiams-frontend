@@ -13,8 +13,6 @@ import type { PermissionCode } from '@/config/permissions'
 export const ROUTE_PATHS = {
   /** Auth (public until e06 lands). */
   login: '/login',
-  scopeSelect: '/session/scope',
-  noAccess: '/session/no-access',
   /** Dashboard. */
   dashboard: '/',
   /** Session account pages (ui-design 4.2 dropdown; declared, placeholder content). */
@@ -157,8 +155,6 @@ const OPERATIONAL_VIEW_CODES = [
 
 export const ROUTE_METADATA: RouteMetaMap = {
   login: { labelAr: 'تسجيل الدخول', group: 'auth', public: true },
-  scopeSelect: { labelAr: 'اختيار نطاق العمل', group: 'auth', public: true },
-  noAccess: { labelAr: 'لا توجد صلاحية', group: 'auth', public: true },
 
   dashboard: {
     labelAr: 'لوحة المعلومات',

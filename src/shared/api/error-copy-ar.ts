@@ -408,6 +408,26 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
   CUSTODIES_HOLDER_NOT_FOUND: { titleAr: 'لم يتم العثور على الجهة المحددة.', detailAr: null },
   CUSTODIES_HOLDER_INACTIVE: { titleAr: 'الجهة المحددة غير نشطة.', detailAr: null },
   CUSTODIES_NO_ACTIVE_CUSTODY: { titleAr: 'لا توجد عهدة نشطة لهذه الوحدة.', detailAr: null },
+  // Domain not-found codes the backend emits verbatim as `<Aggregate>.NotFound`,
+  // normalized to UPPER_SNAKE by `ApiResults.NormalizeErrorCode`. These replaced the
+  // fabricated generic `RESOURCE_NOT_FOUND` that fixtures used to assert, so a 404
+  // now names the entity that is actually missing instead of "some resource".
+  AUDIT_LOGS_NOT_FOUND: { titleAr: 'لم يتم العثور على سجل التدقيق.', detailAr: null },
+  ASSETS_NOT_FOUND: { titleAr: 'لم يتم العثور على الأصل.', detailAr: null },
+  CUSTODIES_NOT_FOUND: { titleAr: 'لم يتم العثور على العهدة.', detailAr: null },
+  DOCUMENT_ATTACHMENTS_NOT_FOUND: {
+    titleAr: 'لم يتم العثور على المرفق.',
+    detailAr: null,
+  },
+  EXTERNAL_PARTIES_NOT_FOUND: { titleAr: 'لم يتم العثور على الجهة الخارجية.', detailAr: null },
+  INVENTORY_BALANCES_NOT_FOUND: { titleAr: 'لم يتم العثور على رصيد المخزون.', detailAr: null },
+  MATERIAL_CATEGORIES_NOT_FOUND: {
+    titleAr: 'لم يتم العثور على تصنيف المادة.',
+    detailAr: null,
+  },
+  MATERIAL_DOMAINS_NOT_FOUND: { titleAr: 'لم يتم العثور على مجال المادة.', detailAr: null },
+  SITES_NOT_FOUND: { titleAr: 'لم يتم العثور على الموقع.', detailAr: null },
+  WAREHOUSES_NOT_FOUND: { titleAr: 'لم يتم العثور على المستودع.', detailAr: null },
   INVENTORY_ADJUSTMENTS_ALREADY_EXISTS_FOR_COUNT: {
     titleAr: 'توجد سند تسوية مرتبط بهذه الجرد.',
     detailAr: null,

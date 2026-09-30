@@ -1,7 +1,5 @@
 import { z } from 'zod'
 
-const UUID_MESSAGE = 'يجب أن يكون المعرّف بصيغة صحيحة.'
-
 export const loginSchema = z.object({
   username: z
     .string()
@@ -13,30 +11,4 @@ export const loginSchema = z.object({
     .max(200, 'يجب ألا تتجاوز كلمة المرور 200 محرف.'),
 })
 
-const enterpriseScopeSchema = z.object({
-  scopeType: z.literal('Enterprise'),
-  scopeId: z.null(),
-})
-
-const siteScopeSchema = z.object({
-  scopeType: z.literal('Site'),
-  scopeId: z.uuid(UUID_MESSAGE),
-})
-
-const warehouseScopeSchema = z.object({
-  scopeType: z.literal('Warehouse'),
-  scopeId: z.uuid(UUID_MESSAGE),
-})
-
-/**
- * Mirrors the D-AUTH-01 active-scope invariant that OpenAPI's nullable UUID
- * type cannot express alone: only Enterprise may use a null scope identifier.
- */
-export const setActiveScopeSchema = z.discriminatedUnion('scopeType', [
-  enterpriseScopeSchema,
-  siteScopeSchema,
-  warehouseScopeSchema,
-])
-
 export type LoginFormValues = z.infer<typeof loginSchema>
-export type SetActiveScopeFormValues = z.infer<typeof setActiveScopeSchema>

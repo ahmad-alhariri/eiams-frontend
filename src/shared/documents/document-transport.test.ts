@@ -14,6 +14,7 @@ import type {
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
 import { createNamedReference, createPage, fixtureUuid } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -120,7 +121,9 @@ describe('document transport', () => {
     await expect(service.listDocuments({})).resolves.toEqual(createPage([document]))
 
     expect(requestedUrls).toEqual([
-      `${API_BASE_URL}/warehouse-documents?dateFrom=2026-07-01&dateTo=2026-08-31&documentStatus=Submitted&documentType=Receiving&pageIndex=2&pageSize=25&search=%D8%AD%D8%A7%D8%B3%D9%88%D8%A8&warehouseId=${WAREHOUSE_ID}`,
+      // The wire is one-based (`page`), matching `PaginationQueryParameters.Page`;
+      // `pageIndex: 2` is the zero-based view-model and must travel as `page=3`.
+      `${API_BASE_URL}/warehouse-documents?dateFrom=2026-07-01&dateTo=2026-08-31&documentStatus=Submitted&documentType=Receiving&page=3&pageSize=25&search=%D8%AD%D8%A7%D8%B3%D9%88%D8%A8&warehouseId=${WAREHOUSE_ID}`,
       `${API_BASE_URL}/warehouse-documents`,
     ])
   })
@@ -282,15 +285,10 @@ describe('document transport', () => {
 
     server.use(
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/reject`, () =>
-        HttpResponse.json(
-          {
-            code: 'document.stale',
-            status: 409,
-            titleAr: 'تم تعديل المستند من مستخدم آخر.',
-            traceId: 'fixture-trace-id',
-          },
-          { status: 409 },
-        ),
+        errJson(409, {
+          code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+          message: 'The document row version did not match.',
+        }),
       ),
     )
 
@@ -304,6 +302,9 @@ describe('document transport', () => {
       .catch((reason: unknown) => reason)
 
     expect(axios.isAxiosError(error)).toBe(true)
-    expect(normalizeApiError(error)).toMatchObject({ status: 409, code: 'document.stale' })
+    expect(normalizeApiError(error)).toMatchObject({
+      status: 409,
+      code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+    })
   })
 })

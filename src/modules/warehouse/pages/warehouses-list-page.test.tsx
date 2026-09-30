@@ -6,6 +6,8 @@ import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { errJson } from '@/test/msw/envelope'
+
 import { createPage, createSite, createWarehouse } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
@@ -187,18 +189,15 @@ describe('WarehousesListPage', () => {
       http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
       http.get(`${API_BASE_URL}/sites`, () => HttpResponse.json(createPage([site]))),
       http.post(`${API_BASE_URL}/warehouses`, () =>
-        HttpResponse.json(
-          {
-            code: 'validation.failed',
-            detailAr: 'تعذّر التحقق من البيانات المدخلة.',
-            fieldErrors: [{ field: 'code', code: 'duplicate', messageAr: 'رمز المستودع مستخدم.' }],
-            status: 422,
-            titleAr: 'تعذّر إتمام الطلب',
-            traceId: 'trace',
-            type: 'https://example.test/problem',
-          },
-          { status: 422 },
-        ),
+        // A duplicate warehouse code is a real, specific backend condition:
+        // WAREHOUSES_CODE_NOT_UNIQUE, 409 (WarehousesErrors.cs). The invented
+        // `validation.failed` at 422 described a condition the API never reports,
+        // and the `fieldErrors` array is a frontend shape the API never sends —
+        // the wire carries `details` as `Record<fieldPath, string[]>`.
+        errJson(409, {
+          code: 'WAREHOUSES_CODE_NOT_UNIQUE',
+          details: { code: ['The Code field is already in use.'] },
+        }),
       ),
     )
 
@@ -213,6 +212,6 @@ describe('WarehousesListPage', () => {
     await user.type(within(dialog).getByLabelText('اسم المستودع'), 'مستودع')
     await user.type(within(dialog).getByLabelText('رمز المستودع'), 'WH-DUP')
     await user.click(within(dialog).getByRole('button', { name: 'إضافة المستودع' }))
-    expect(await within(dialog).findByText('رمز المستودع مستخدم.')).toBeInTheDocument()
+    expect(await within(dialog).findByText('رمز المستودع مستخدم مسبقاً.')).toBeInTheDocument()
   })
 })

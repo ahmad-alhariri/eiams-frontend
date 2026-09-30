@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+﻿import { useQuery } from '@tanstack/react-query'
 import { IconChevronDown, IconLogout, IconSettings, IconUserCircle } from '@tabler/icons-react'
 import { useNavigate } from 'react-router'
 
@@ -46,7 +46,7 @@ function roleContext(session: SessionResponse): string {
  * local session clear final whether or not the server answers, and the
  * anonymous-capable `POST /auth/logout` cannot be undone by staying signed in.
  * The component therefore navigates nowhere itself — `clearSession()` sets
- * `status: 'unauthenticated'` synchronously and `RequireSelectedScope`
+ * `status: 'unauthenticated'` synchronously and `RequireActiveScope`
  * redirects to `/login`.
  */
 function SessionUserMenu() {

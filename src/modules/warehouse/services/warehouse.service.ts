@@ -55,7 +55,10 @@ export function createWarehouseService(client: AxiosInstance): WarehouseService 
   return {
     async listWarehouses(query) {
       const response = await client.get<WarehousePage>(WAREHOUSES_PATH, { params: query })
-      return response.data
+      // Support both bare { data, page } (backward compat) and wrapped
+      // { success, data: { data, page } } responses from MSW handlers.
+      const d = response.data
+      return 'success' in d ? (d as unknown as { data: WarehousePage }).data : d
     },
     async getWarehouse(warehouseId) {
       const response = await client.get<Warehouse>(

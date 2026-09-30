@@ -24,8 +24,6 @@ const sessionFixture: SessionResponse = {
     rowVersion: 1,
   },
   permissionCodes: ['document.view', 'document.create', 'inventory.view', 'future.backend.code'],
-  availableScopes: [],
-  scopeState: 'Selected',
   activeRoles: [],
 }
 

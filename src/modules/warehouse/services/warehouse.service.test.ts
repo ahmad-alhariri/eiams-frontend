@@ -2,6 +2,8 @@ import axios from 'axios'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { errJson } from '@/test/msw/envelope'
+
 import { createWarehouseService } from '@/modules/warehouse/services/warehouse.service'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
@@ -159,20 +161,19 @@ describe('WarehouseService', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/warehouses/missing`, () =>
-        HttpResponse.json(
-          {
-            status: 409,
-            code: 'warehouse.stale',
-            titleAr: 'تم تعديل المستودع من مستخدم آخر.',
-          },
-          { status: 409 },
-        ),
+        // No warehouse-specific row-version code exists in the backend, so a stale
+        // row surfaces as the generic 409 `RESOURCE_CONFLICT` (ApiResults.cs:44).
+        errJson(409, { code: 'RESOURCE_CONFLICT' }),
       ),
     )
 
     const error = await service.getWarehouse('missing').catch((reason: unknown) => reason)
 
     expect(axios.isAxiosError(error)).toBe(true)
-    expect(normalizeApiError(error)).toMatchObject({ status: 409, code: 'warehouse.stale' })
+    expect(normalizeApiError(error)).toMatchObject({
+      status: 409,
+      code: 'RESOURCE_CONFLICT',
+      titleAr: 'تعارض في البيانات. راجع القيم المدخلة.',
+    })
   })
 })

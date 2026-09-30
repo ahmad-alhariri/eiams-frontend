@@ -18,8 +18,6 @@ const USER_MENU_TRIGGER = 'قائمة المستخدم'
 function authenticatedSession(): SessionResponse {
   return createSession({
     activeScope: createScopeContext({ scopeType: 'Warehouse' }),
-    availableScopes: [createScopeContext({ scopeType: 'Warehouse' })],
-    scopeState: 'Selected',
     permissionCodes: ['inventory.view'],
   })
 }

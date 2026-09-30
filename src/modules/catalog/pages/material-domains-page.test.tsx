@@ -5,7 +5,8 @@ import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createFieldError, createMaterialDomain, createProblemDetails } from '@/test/msw/factories'
+import { createMaterialDomain } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -108,14 +109,11 @@ describe('MaterialDomainsPage', () => {
       http.get(`${API_BASE_URL}/catalog/domains`, () => HttpResponse.json([domain])),
       http.post(`${API_BASE_URL}/catalog/domains`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json(
-          createProblemDetails({
-            fieldErrors: [
-              createFieldError({ field: 'code', messageAr: 'رمز المجال مستخدم مسبقاً.' }),
-            ],
-          }),
-          { status: 422 },
-        )
+        return errJson(422, {
+          code: 'MATERIAL_DOMAINS_CODE_NOT_UNIQUE',
+          message: 'Material domain code is not unique.',
+          details: { code: ['not unique'] },
+        })
       }),
     )
 

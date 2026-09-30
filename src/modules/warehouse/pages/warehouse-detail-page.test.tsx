@@ -7,14 +7,13 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  createFieldError,
   createPage,
   createMaterialDomain,
-  createProblemDetails,
   createSite,
   createWarehouse,
   createWarehouseCapability,
 } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -286,17 +285,11 @@ describe('WarehouseDetailPage', () => {
       ),
       http.get(`${API_BASE_URL}/catalog/domains`, () => HttpResponse.json([domain])),
       http.put(`${API_BASE_URL}/warehouses/${warehouse.warehouseId}/capabilities`, () =>
-        HttpResponse.json(
-          createProblemDetails({
-            fieldErrors: [
-              createFieldError({
-                field: 'capabilities',
-                messageAr: 'تعارضت عمليات المجال مع سياسة المستودع.',
-              }),
-            ],
-          }),
-          { status: 422 },
-        ),
+        errJson(422, {
+          code: 'WAREHOUSES_CANNOT_HOLD_STOCK',
+          message: 'Warehouse capability conflicts with the material domain policy.',
+          details: { capabilities: ['conflict'] },
+        }),
       ),
     )
 
@@ -309,7 +302,7 @@ describe('WarehouseDetailPage', () => {
     await user.click(within(confirmation).getByRole('button', { name: 'حفظ القدرات' }))
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      'تعارضت عمليات المجال مع سياسة المستودع.',
+      'لا يمكن لهذا المستودع الاحتفاظ بالمخزون.',
     )
   })
 

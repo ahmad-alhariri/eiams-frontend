@@ -34,14 +34,6 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      {
-        scopeType: 'Enterprise',
-        scopeId: null,
-        displayName: 'الهيئة العامة للرقابة والتفتيش',
-      },
-    ],
-    scopeState: 'Selected',
     activeRoles: [],
   }
 }
@@ -91,7 +83,8 @@ describe('DocumentListPage', () => {
         const url = new URL(request.url)
         received.push({
           documentType: url.searchParams.get('documentType'),
-          pageIndex: url.searchParams.get('pageIndex'),
+          // The wire parameter is one-based `page`, not the zero-based `pageIndex`.
+          page: url.searchParams.get('page'),
           pageSize: url.searchParams.get('pageSize'),
         })
         return HttpResponse.json(createPage([document], { totalItems: 11, totalPages: 2 }))
@@ -114,7 +107,8 @@ describe('DocumentListPage', () => {
 
     expect(received).toContainEqual({
       documentType: 'Receiving',
-      pageIndex: '0',
+      // One-based on the wire; the zero-based `pageIndex: 0` starts as `page: 1`.
+      page: '1',
       pageSize: '10',
     })
   })

@@ -17,15 +17,6 @@ const sessionFixture: SessionResponse = {
     rowVersion: 1,
   },
   permissionCodes: ['document.create'],
-  availableScopes: [
-    {
-      scopeType: 'Warehouse',
-      scopeId: '20000000-0000-4000-8000-000000000001',
-      warehouseId: '20000000-0000-4000-8000-000000000001',
-      siteId: '30000000-0000-4000-8000-000000000001',
-      displayName: 'المستودع المركزي',
-    },
-  ],
   activeScope: {
     scopeType: 'Warehouse',
     scopeId: '20000000-0000-4000-8000-000000000001',
@@ -33,7 +24,6 @@ const sessionFixture: SessionResponse = {
     siteId: '30000000-0000-4000-8000-000000000001',
     displayName: 'المستودع المركزي',
   },
-  scopeState: 'Selected',
   activeRoles: [
     {
       roleId: '40000000-0000-4000-8000-000000000001',

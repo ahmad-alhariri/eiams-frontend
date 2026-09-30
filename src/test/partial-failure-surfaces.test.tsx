@@ -5,20 +5,16 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type {
-  ProblemDetails,
-  SessionResponse,
-  WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import {
   createActionAvailability,
   createDocumentAttachment,
   createDocumentPolicy,
-  createProblemDetails,
   createWarehouseDocument,
   deriveLifecycleEvents,
   fixtureUuid,
 } from '@/test/msw/factories'
+import { toWireErrorResponse } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 /**
@@ -50,9 +46,8 @@ const FILENAME = 'signed-original.pdf'
 
 const ATTACHMENT_DELETE_ERROR_SELECTOR = '[data-testid="attachment-delete-error"]'
 
-/** The generic contract sentence; the specific server reason must win over it. */
-const GENERIC_CONFLICT_TITLE_AR = 'تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.'
-const SERVER_CONFLICT_DETAIL_AR = 'تعذر تنفيذ الإجراء: المستند عدَّله مستخدم آخر.'
+/** Approved Arabic for the row-version conflict code, per the governed table. */
+const CONFLICT_TITLE_AR = 'تغيرت البيانات من قبل مستخدم آخر. حدّث الصفحة ثم أعد المحاولة.'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
@@ -64,10 +59,6 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      { scopeType: 'Enterprise', scopeId: null, displayName: 'الهيئة العامة للرقابة والتفتيش' },
-    ],
-    scopeState: 'Selected',
     activeRoles: [],
   }
 }
@@ -108,14 +99,12 @@ function draftPolicy() {
   })
 }
 
-function conflictProblem(): ProblemDetails {
-  return createProblemDetails({
-    code: 'document.version_conflict',
-    detailAr: SERVER_CONFLICT_DETAIL_AR,
-    fieldErrors: [],
+function conflictProblem() {
+  return {
+    code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
     status: 409,
-    titleAr: GENERIC_CONFLICT_TITLE_AR,
-  })
+    traceId: 'mock-trace',
+  }
 }
 
 function createClient(): QueryClient {
@@ -174,7 +163,7 @@ describe('B1 — a failed attachment delete must leave user-visible feedback', (
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/${ATTACHMENT_ID}`,
         () => {
           deleteCalls += 1
-          return HttpResponse.json(conflictProblem(), { status: 409 })
+          return toWireErrorResponse(conflictProblem(), 409)
         },
       ),
     )
@@ -221,7 +210,7 @@ describe('B2 — attachment failures keep the server Arabic detail and recover o
       ),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/${ATTACHMENT_ID}`,
-        () => HttpResponse.json(conflictProblem(), { status: 409 }),
+        () => toWireErrorResponse(conflictProblem(), 409),
       ),
     )
 
@@ -235,9 +224,12 @@ describe('B2 — attachment failures keep the server Arabic detail and recover o
 
     await waitFor(() => expect(deleteAlert(container)).not.toBeNull())
     const alert = deleteAlert(container)!
-    expect(alert).toHaveTextContent(SERVER_CONFLICT_DETAIL_AR)
-    // The generic contract sentence alone was all the user got before.
-    expect(alert).not.toHaveTextContent(GENERIC_CONFLICT_TITLE_AR)
+    // B2: the wire carries an ENGLISH message only, so the Arabic the user sees is
+    // resolved from the conflict code in the governed `error-copy-ar.ts` table. This
+    // replaces the old assertion that the SERVER's `detailAr` was rendered, which
+    // described a shape the API never sends.
+    expect(alert).toHaveTextContent(CONFLICT_TITLE_AR)
+    expect(alert).not.toHaveTextContent('The document row version did not match')
     // D-LIFE-01 rule 6: a conflict means the cached document is stale, so the
     // authoritative detail/policy/attachments branch is refetched.
     await waitFor(() => expect(detailRequests).toBeGreaterThan(before))

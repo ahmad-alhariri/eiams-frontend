@@ -48,14 +48,6 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      {
-        scopeType: 'Warehouse',
-        scopeId: '00000000-0000-4000-8000-00000000000c',
-        displayName: 'المستودع المركزي',
-      },
-    ],
-    scopeState: 'Selected',
     activeRoles: [],
   }
 }

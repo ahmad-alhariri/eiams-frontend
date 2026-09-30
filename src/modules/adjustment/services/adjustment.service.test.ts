@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/shared/services/api.client', () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
@@ -18,7 +18,7 @@ function pagedResponse(items: readonly unknown[]) {
   return {
     data: {
       items,
-      meta: { pageIndex: 0, pageSize: 20, totalItems: items.length, totalPages: 1 },
+      meta: { page: 1, pageSize: 20, totalItems: items.length, totalPages: 1 },
     },
   } as never
 }
@@ -44,7 +44,8 @@ describe('createAdjustmentService (e21-t01)', () => {
 
     expect(mockedGet).toHaveBeenCalledWith('/adjustments', {
       params: {
-        pageIndex: 2,
+        // Zero-based `pageIndex: 2` travels one-based as `page: 3`.
+        page: 3,
         pageSize: 10,
         purpose: 'CountVariance',
         status: 'Posted',
@@ -65,8 +66,8 @@ describe('createAdjustmentService (e21-t01)', () => {
     ]
     // Key-set assertion (not just toEqual, which ignores undefined-valued
     // props): catches a regression to unconditional filter spreading.
-    expect(Object.keys(config.params).sort()).toEqual(['pageIndex', 'pageSize'])
-    expect(config.params).toEqual({ pageIndex: 0, pageSize: 20 })
+    expect(Object.keys(config.params).sort()).toEqual(['page', 'pageSize'])
+    expect(config.params).toEqual({ page: 1, pageSize: 20 })
   })
 
   it('fetches one adjustment by id', async () => {
@@ -166,7 +167,7 @@ describe('createAdjustmentService (e21-t01)', () => {
     })
 
     expect(mockedGet).toHaveBeenCalledWith('/adjustments/disposal-eligible-assets', {
-      params: { pageIndex: 0, pageSize: 25, search: 'AST-', warehouseId: 'wh-9' },
+      params: { page: 1, pageSize: 25, search: 'AST-', warehouseId: 'wh-9' },
     })
   })
 })

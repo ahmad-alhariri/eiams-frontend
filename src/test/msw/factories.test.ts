@@ -36,7 +36,6 @@ describe('contract-derived MSW factories', () => {
     })
     const session = createSession({
       activeScope: scope,
-      availableScopes: [scope],
       permissionCodes: ['audit.view'],
     })
     const response = createAuthTokenResponse({ expiresInSeconds: 60, session })

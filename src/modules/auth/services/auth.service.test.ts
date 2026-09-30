@@ -1,4 +1,4 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -6,6 +6,7 @@ import { normalizeApiError } from '@/shared/services/api-error'
 import { createAuthService } from '@/modules/auth/services/auth.service'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -19,15 +20,6 @@ const sessionFixture: SessionResponse = {
     rowVersion: 1,
   },
   permissionCodes: ['document.create'],
-  availableScopes: [
-    {
-      scopeType: 'Warehouse',
-      scopeId: '20000000-0000-4000-8000-000000000001',
-      warehouseId: '20000000-0000-4000-8000-000000000001',
-      siteId: '30000000-0000-4000-8000-000000000001',
-      displayName: 'المستودع المركزي',
-    },
-  ],
   activeScope: {
     scopeType: 'Warehouse',
     scopeId: '20000000-0000-4000-8000-000000000001',
@@ -35,7 +27,6 @@ const sessionFixture: SessionResponse = {
     siteId: '30000000-0000-4000-8000-000000000001',
     displayName: 'المستودع المركزي',
   },
-  scopeState: 'Selected',
   activeRoles: [
     {
       roleId: '40000000-0000-4000-8000-000000000001',
@@ -89,25 +80,12 @@ describe('AuthService', () => {
     expect(credentials).toBe('include')
   })
 
-  it('retrieves the server-owned session and replaces the active scope through typed endpoints', async () => {
+  it('retrieves the server-owned session without offering a scope mutation', async () => {
     const service = setupService()
-    const selectedScope = {
-      scopeType: 'Warehouse' as const,
-      scopeId: '20000000-0000-4000-8000-000000000001',
-    }
-    let scopeRequest: unknown = null
 
-    server.use(
-      http.get(`${API_BASE_URL}/auth/session`, () => HttpResponse.json(sessionFixture)),
-      http.put(`${API_BASE_URL}/auth/active-scope`, async ({ request }) => {
-        scopeRequest = await request.json()
-        return HttpResponse.json(sessionFixture)
-      }),
-    )
+    server.use(http.get(`${API_BASE_URL}/auth/session`, () => HttpResponse.json(sessionFixture)))
 
     await expect(service.getSession()).resolves.toEqual(sessionFixture)
-    await expect(service.setActiveScope(selectedScope)).resolves.toEqual(sessionFixture)
-    expect(scopeRequest).toEqual(selectedScope)
   })
 
   it('performs idempotent logout without inventing a response body', async () => {
@@ -128,17 +106,12 @@ describe('AuthService', () => {
   it('keeps Axios errors available to the shared Arabic error normalizer', async () => {
     const service = setupService()
 
+    // The real login failure is a neutral 404 USERS_NOT_FOUND nested inside the
+    // standard error envelope; Arabic copy is resolved from the governed table
+    // by code, never taken from the wire.
     server.use(
       http.post(`${API_BASE_URL}/auth/login`, () =>
-        HttpResponse.json(
-          {
-            status: 401,
-            code: 'auth.invalid_credentials',
-            titleAr: 'بيانات تسجيل الدخول غير صحيحة.',
-            traceId: 'login-failed',
-          },
-          { status: 401 },
-        ),
+        errJson(404, { code: 'USERS_NOT_FOUND', message: 'User not found.' }),
       ),
     )
 
@@ -148,9 +121,9 @@ describe('AuthService', () => {
 
     expect(axios.isAxiosError(error)).toBe(true)
     expect(normalizeApiError(error)).toMatchObject({
-      status: 401,
-      code: 'auth.invalid_credentials',
-      titleAr: 'بيانات تسجيل الدخول غير صحيحة.',
+      status: 404,
+      code: 'USERS_NOT_FOUND',
+      titleAr: 'لم يتم العثور على البيانات المطلوبة.',
     })
   })
 })

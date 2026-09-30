@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from '@/shared/services/query.client'
 import { apiClient } from '@/shared/services/api.client'
 import { createWarehouseDocument, fixtureUuid } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 apiClient.defaults.adapter = 'xhr'
@@ -135,17 +136,10 @@ describe('useUpdateDocumentMutation', () => {
     const wrapper = createWrapper()
     server.use(
       http.put(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(
-          {
-            code: 'document.version_conflict',
-            detailAr: null,
-            fieldErrors: [],
-            status: 409,
-            titleAr: 'تعارض في نسخة المستند.',
-            traceId: 'trace-1',
-          },
-          { status: 409 },
-        ),
+        errJson(409, {
+          code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+          message: 'The document row version did not match.',
+        }),
       ),
     )
 
@@ -153,6 +147,8 @@ describe('useUpdateDocumentMutation', () => {
     act(() => update.result.current.mutate({ documentId: DOCUMENT_ID, request: draftRequest() }))
 
     await waitFor(() => expect(update.result.current.isError).toBe(true))
-    expect(documentDraftMutationError(update.result.current.error)).toBe('تعارض في نسخة المستند.')
+    expect(documentDraftMutationError(update.result.current.error)).toBe(
+      'تغيرت البيانات من قبل مستخدم آخر. حدّث الصفحة ثم أعد المحاولة.',
+    )
   })
 })

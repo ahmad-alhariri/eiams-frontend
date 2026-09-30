@@ -2,6 +2,8 @@ import axios from 'axios'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { errJson } from '@/test/msw/envelope'
+
 import { createCatalogService } from '@/modules/catalog/services/catalog.service'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
@@ -205,16 +207,21 @@ describe('CatalogService', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/catalog/materials/missing`, () =>
-        HttpResponse.json(
-          { status: 409, code: 'material.stale', titleAr: 'تم تعديل المادة من مستخدم آخر.' },
-          { status: 409 },
-        ),
+        // The backend has no material-specific row-version code, so a stale row on
+        // a material surfaces as the generic 409 `RESOURCE_CONFLICT`
+        // (ApiResults.cs:44). Emitted through `errJson` so the body is the real
+        // nested envelope rather than a flat `{code,titleAr}` object the API never sends.
+        errJson(409, { code: 'RESOURCE_CONFLICT' }),
       ),
     )
 
     const error = await service.getMaterial('missing').catch((reason: unknown) => reason)
 
     expect(axios.isAxiosError(error)).toBe(true)
-    expect(normalizeApiError(error)).toMatchObject({ status: 409, code: 'material.stale' })
+    expect(normalizeApiError(error)).toMatchObject({
+      status: 409,
+      code: 'RESOURCE_CONFLICT',
+      titleAr: 'تعارض في البيانات. راجع القيم المدخلة.',
+    })
   })
 })

@@ -1,16 +1,12 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  createFieldError,
-  createPage,
-  createProblemDetails,
-  createSite,
-} from '@/test/msw/factories'
+import { createPage, createSite } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -124,14 +120,11 @@ describe('SitesListPage', () => {
       http.get(`${API_BASE_URL}/sites`, () => HttpResponse.json(createPage([site]))),
       http.post(`${API_BASE_URL}/sites`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json(
-          createProblemDetails({
-            fieldErrors: [
-              createFieldError({ field: 'code', messageAr: 'رمز الموقع مستخدم مسبقًا.' }),
-            ],
-          }),
-          { status: 422 },
-        )
+        return errJson(422, {
+          code: 'SITES_CODE_NOT_UNIQUE',
+          message: 'Site code is not unique.',
+          details: { code: ['not unique'] },
+        })
       }),
     )
 
@@ -160,7 +153,7 @@ describe('SitesListPage', () => {
         rowVersion: 0,
       },
     ])
-    expect(await within(dialog).findByText('رمز الموقع مستخدم مسبقًا.')).toBeInTheDocument()
+    expect(await within(dialog).findByText('رمز الموقع مستخدم مسبقاً.')).toBeInTheDocument()
   })
 
   it('updates an existing site while retaining its owner and row version', async () => {

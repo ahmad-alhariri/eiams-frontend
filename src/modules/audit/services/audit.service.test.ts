@@ -2,12 +2,8 @@ import axios from 'axios'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import {
-  createAuditLog,
-  createAuditLogEntry,
-  createPage,
-  createProblemDetails,
-} from '@/test/msw/factories'
+import { createAuditLog, createAuditLogEntry, createPage } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 import { createAuditService } from './audit.service'
@@ -105,16 +101,9 @@ describe('AuditService', () => {
 
   it('encodes audit identifiers and preserves server errors for Arabic presentation handling', async () => {
     const service = setupService()
-    const problem = createProblemDetails({
-      code: 'audit.log.not_found',
-      detailAr: 'تعذر العثور على سجل التدقيق.',
-      status: 404,
-      titleAr: 'سجل التدقيق غير موجود',
-    })
-
     server.use(
       http.get(`${API_BASE_URL}/audit-logs/id%2F1`, () =>
-        HttpResponse.json(problem, { status: 404 }),
+        errJson(404, { code: 'AUDIT_LOGS_NOT_FOUND', message: 'Audit log not found.' }),
       ),
     )
 
@@ -122,10 +111,9 @@ describe('AuditService', () => {
 
     expect(axios.isAxiosError(error)).toBe(true)
     expect(normalizeApiError(error)).toMatchObject({
-      code: 'audit.log.not_found',
-      detailAr: 'تعذر العثور على سجل التدقيق.',
+      code: 'AUDIT_LOGS_NOT_FOUND',
       status: 404,
-      titleAr: 'سجل التدقيق غير موجود',
+      titleAr: 'لم يتم العثور على سجل التدقيق.',
     })
   })
 })

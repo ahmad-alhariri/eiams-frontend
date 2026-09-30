@@ -106,16 +106,22 @@ function detailsFor(details: unknown, fieldErrors: unknown): Record<string, unkn
 
 function errorEnvelope(
   code: string,
-  message: string,
+  titleAr: string,
   details: unknown,
   fieldErrors: unknown,
 ): Record<string, unknown> {
+  // A bare string detail becomes { detail: string } so normalizeApiError can
+  // read it as err.details (typeof === 'string' → titleAr override).
+  const detailsValue =
+    typeof details === 'string' && details.trim() !== ''
+      ? { detail: details }
+      : detailsFor(details, fieldErrors)
   return {
     success: false,
     error: {
       code,
-      message,
-      details: detailsFor(details, fieldErrors),
+      message: titleAr,
+      details: detailsValue,
       request_id: FIXTURE_META.request_id,
     },
   }
@@ -165,15 +171,86 @@ export function okPageJson<T>(
 /** An error response with the real nested error envelope. */
 export function errJson(
   status: number,
-  body?: { code?: string; message?: string; details?: unknown; fieldErrors?: unknown },
+  body?: {
+    code?: string
+    message?: string
+    detail?: string
+    details?: unknown
+    fieldErrors?: unknown
+  },
 ): HttpResponse<Record<string, unknown>> {
+  // Only an explicit `detail` becomes `details.detail`. The wire `message` is
+  // English and stays on the envelope's `message` field: promoting it into
+  // details would let `normalizeApiError` use it as a titleAr override and
+  // replace the governed Arabic copy with English server text.
   return HttpResponse.json(
     errorEnvelope(
       codeFor({ code: body?.code }),
-      messageFor({ detailAr: body?.message }),
-      body?.details,
+      body?.message ?? 'The request could not be completed.',
+      typeof body?.detail === 'string' && body.detail.trim() !== ''
+        ? { detail: body.detail }
+        : detailsFor(body?.details, body?.fieldErrors),
       body?.fieldErrors,
     ),
+    { status },
+  )
+}
+
+/**
+ * Wraps a legacy flat `ProblemDetails` in the REAL nested error envelope.
+ *
+ * The lifecycle and dev-mock engines still speak the provisional snapshot's flat
+ * `ProblemDetails`, because their types describe guard OUTCOMES rather than the
+ * wire. Everything the application actually reads lives under `error`, so the
+ * conversion happens once, here, at the HTTP boundary — instead of rewriting every
+ * problem constructor and every engine-internal assertion.
+ *
+ * `titleAr`/`detailAr` are DROPPED on purpose: the wire carries an English message,
+ * and the UI resolves its Arabic from `code` through the governed table. Keeping the
+ * fixture's Arabic in the body would put fixture-authored text on the wire.
+ */
+export function toWireErrorResponse(
+  problem: {
+    code: string
+    detailAr?: string | null | undefined
+    fieldErrors?: ReadonlyArray<{ code: string; field: string; messageAr: string }> | undefined
+    status?: number | undefined
+    titleAr?: string | undefined
+    traceId?: string | undefined
+    type?: string | null | undefined
+    // The lifecycle problem types carry extra fields (`currentRowVersion`,
+    // `policy`, `relatedDocument`, …) that must reach `details`.
+    readonly [key: string]: unknown
+  },
+  status: number,
+): HttpResponse<Record<string, unknown>> {
+  const extras: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(problem)) {
+    if (key === 'code' || key === 'status' || key === 'fieldErrors') continue
+    if (key === 'titleAr' || key === 'detailAr' || key === 'type' || key === 'traceId') continue
+    extras[key] = value
+  }
+
+  // Field failures travel in `details` as the `Record<path, string[]>` the API emits
+  // (`ApiProblemDetails.ToValidationResponse`). The English per-field text is dropped;
+  // the UI attaches the approved Arabic for the operation's code to that field name.
+  for (const fieldError of problem.fieldErrors ?? []) {
+    extras[fieldError.field] = ['invalid']
+  }
+
+  return HttpResponse.json(
+    {
+      success: false,
+      error: {
+        code: problem.code,
+        message: 'The request could not be completed.',
+        details: extras,
+        request_id:
+          problem.traceId === undefined || problem.traceId === ''
+            ? 'mock-request-id'
+            : problem.traceId,
+      },
+    },
     { status },
   )
 }

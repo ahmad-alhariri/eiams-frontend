@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+﻿import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { useLocation } from 'react-router'
@@ -12,6 +12,7 @@ import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { queryClient } from '@/shared/services/query.client'
 import type { ScopeContext, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -35,9 +36,7 @@ function sessionWith(displayName: string, permissionCodes: readonly string[] = [
       rowVersion: 1,
     },
     permissionCodes,
-    availableScopes: [warehouseScope],
     activeScope: warehouseScope,
-    scopeState: 'Selected' as const,
     activeRoles: [
       {
         roleId: '40000000-0000-4000-8000-000000000001',
@@ -172,15 +171,12 @@ describe('SessionUserMenu', () => {
     server.use(
       http.post(`${API_BASE_URL}/auth/logout`, () => {
         logoutCalls += 1
-        return HttpResponse.json(
-          {
-            status: 403,
-            code: 'auth.origin_denied',
-            titleAr: 'تعذر إتمام الطلب من هذا المصدر.',
-            traceId: 'logout-origin-denied',
-          },
-          { status: 403 },
-        )
+        // The wire carries an English message only; the Arabic reason shown to
+        // the user is resolved from the governed table by code.
+        return errJson(403, {
+          code: 'REFRESH_TOKEN_ORIGIN_REJECTED',
+          message: 'The refresh token origin was rejected.',
+        })
       }),
     )
     renderMenu(sessionWith('أحمد الحريري'))
@@ -190,7 +186,12 @@ describe('SessionUserMenu', () => {
 
     await waitFor(() => expect(useAuthSessionStore.getState().status).toBe('unauthenticated'))
     await waitFor(() => expect(logoutCalls).toBe(1))
-    expect(await screen.findAllByText('تعذر إتمام الطلب من هذا المصدر.')).not.toHaveLength(0)
+    // The toast states the locally-final outcome in its title and surfaces the
+    // governed reason for the denied origin as the description.
+    expect(await screen.findAllByText('تم إنهاء الجلسة على هذا الجهاز.')).not.toHaveLength(0)
+    expect(
+      await screen.findAllByText('افتح التطبيق من عنوانه المعتمد ثم حاول مجدداً.'),
+    ).not.toHaveLength(0)
   })
 
   it('stays available to a user whose effective permission codes are empty', async () => {

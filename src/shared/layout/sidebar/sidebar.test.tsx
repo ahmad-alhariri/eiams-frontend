@@ -61,9 +61,7 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes,
-    availableScopes: [activeScope],
     activeScope,
-    scopeState: 'Selected',
     activeRoles: [],
   }
 }

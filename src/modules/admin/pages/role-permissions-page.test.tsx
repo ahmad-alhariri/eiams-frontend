@@ -7,12 +7,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import {
-  createPermission,
-  createProblemDetails,
-  createRole,
-  createSession,
-} from '@/test/msw/factories'
+import { createPermission, createRole, createSession } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -144,18 +140,11 @@ describe('RolePermissionsPage', () => {
         HttpResponse.json([viewPermission, managePermission]),
       ),
       http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () =>
-        HttpResponse.json(
-          createProblemDetails({
-            fieldErrors: [
-              {
-                field: 'permissionCodes',
-                code: 'forbidden',
-                messageAr: 'إحدى الصلاحيات غير متاحة.',
-              },
-            ],
-          }),
-          { status: 422 },
-        ),
+        errJson(422, {
+          code: 'ROLES_NAME_NOT_UNIQUE',
+          message: 'Role name is not unique.',
+          details: { permissionCodes: ['not allowed'] },
+        }),
       ),
     )
 
@@ -173,7 +162,7 @@ describe('RolePermissionsPage', () => {
       ),
     )
 
-    expect(await screen.findByText('إحدى الصلاحيات غير متاحة.')).toBeInTheDocument()
+    expect(await screen.findByText('اسم الدور مستخدم مسبقاً.')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'إدارة الأدوار' })).toBeChecked()
   })
 })

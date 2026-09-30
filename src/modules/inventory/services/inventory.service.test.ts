@@ -10,9 +10,9 @@ import {
   createInventoryBalance,
   createNamedReference,
   createPage,
-  createProblemDetails,
   fixtureUuid,
 } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -136,16 +136,9 @@ describe('InventoryService', () => {
 
   it('preserves server failures for Arabic error normalization at the presentation boundary', async () => {
     const service = setupService()
-    const problem = createProblemDetails({
-      code: 'inventory.balance.not_found',
-      detailAr: 'تعذر العثور على رصيد المخزون.',
-      status: 404,
-      titleAr: 'الرصيد غير موجود',
-    })
-
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances/missing`, () =>
-        HttpResponse.json(problem, { status: 404 }),
+        errJson(404, { code: 'INVENTORY_BALANCES_NOT_FOUND', message: 'Balance not found.' }),
       ),
     )
 
@@ -153,10 +146,9 @@ describe('InventoryService', () => {
 
     expect(axios.isAxiosError(error)).toBe(true)
     expect(normalizeApiError(error)).toMatchObject({
-      code: 'inventory.balance.not_found',
-      detailAr: 'تعذر العثور على رصيد المخزون.',
+      code: 'INVENTORY_BALANCES_NOT_FOUND',
       status: 404,
-      titleAr: 'الرصيد غير موجود',
+      titleAr: 'لم يتم العثور على رصيد المخزون.',
     })
   })
 })

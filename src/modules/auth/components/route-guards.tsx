@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { IconLockAccess, IconRoute, IconShieldLock } from '@tabler/icons-react'
+import { IconLockAccess, IconShieldLock } from '@tabler/icons-react'
 import type { ReactNode } from 'react'
 import { Link, Navigate } from 'react-router'
 
@@ -43,16 +43,16 @@ function AuthLoadingBoundary() {
   )
 }
 
-function ScopeGate({ unavailable }: { unavailable: boolean }) {
-  const title = unavailable ? 'لا يتوفر نطاق عمل' : 'اختيار نطاق العمل مطلوب'
-  const description = unavailable
-    ? 'لا توجد صلاحيات نطاق فعّالة مرتبطة بحسابك حالياً. تواصل مع مسؤول النظام للمساعدة.'
-    : 'يلزم اختيار نطاق العمل المعتمد قبل الوصول إلى صفحات النظام.'
-
+/**
+ * Contact-administrator state for an authenticated session that carries no
+ * active scope. Scope assignment is server-owned, so this gate is terminal:
+ * there is deliberately no selection UI or route to recover from.
+ */
+function ScopeUnavailable() {
   return (
     <main
       dir="rtl"
-      aria-labelledby="scope-gate-title"
+      aria-labelledby="scope-unavailable-title"
       className="flex min-h-dvh items-center justify-center bg-background p-4 sm:p-8"
     >
       <section className="w-full max-w-lg rounded-2xl border border-border bg-popover p-8 text-center shadow-modal sm:p-10">
@@ -60,17 +60,14 @@ function ScopeGate({ unavailable }: { unavailable: boolean }) {
           className="mx-auto flex size-14 items-center justify-center rounded-full bg-muted text-primary"
           aria-hidden
         >
-          {unavailable ? <IconLockAccess className="size-7" /> : <IconRoute className="size-7" />}
+          <IconLockAccess className="size-7" />
         </span>
-        <h1 id="scope-gate-title" className="mt-5 text-2xl font-bold text-foreground">
-          {title}
+        <h1 id="scope-unavailable-title" className="mt-5 text-2xl font-bold text-foreground">
+          لا يتوفر نطاق عمل
         </h1>
-        <p className="mt-3 leading-7 text-muted-foreground">{description}</p>
-        {!unavailable ? (
-          <p className="mt-5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-6 text-foreground">
-            ستتوفر قائمة النطاقات المصرّح بها في هذه الصفحة.
-          </p>
-        ) : null}
+        <p className="mt-3 leading-7 text-muted-foreground">
+          لا توجد صلاحيات نطاق فعّالة مرتبطة بحسابك حالياً. تواصل مع مسؤول النظام للمساعدة.
+        </p>
       </section>
     </main>
   )
@@ -78,7 +75,7 @@ function ScopeGate({ unavailable }: { unavailable: boolean }) {
 
 /**
  * Keeps public login content out of the app shell while hydration is pending
- * and sends already-authenticated users to the right contract-backed gate.
+ * and sends already-authenticated users onward.
  */
 function AnonymousRoute({ children }: RouteGuardProps) {
   const status = useAuthSessionStore((state) => state.status)
@@ -96,19 +93,15 @@ function AnonymousRoute({ children }: RouteGuardProps) {
     return <AuthLoadingBoundary />
   }
 
-  if (session.scopeState === 'SelectionRequired') {
-    return <Navigate to={ROUTE_PATHS.scopeSelect} replace />
-  }
-
-  if (session.scopeState === 'Unavailable') {
-    return <Navigate to={ROUTE_PATHS.noAccess} replace />
-  }
-
   return <Navigate to={ROUTE_PATHS.dashboard} replace />
 }
 
-/** Blocks all feature routes until an authenticated session has an active scope. */
-function RequireSelectedScope({ children }: RouteGuardProps) {
+/**
+ * Blocks all feature routes until an authenticated session carries the
+ * server-assigned active scope. A session without one is denied outright,
+ * because the backend exposes no scope-selection surface.
+ */
+function RequireActiveScope({ children }: RouteGuardProps) {
   const status = useAuthSessionStore((state) => state.status)
   const session = useCachedSession()
 
@@ -124,71 +117,11 @@ function RequireSelectedScope({ children }: RouteGuardProps) {
     return <AuthLoadingBoundary />
   }
 
-  if (session.scopeState === 'SelectionRequired') {
-    return <Navigate to={ROUTE_PATHS.scopeSelect} replace />
-  }
-
-  if (session.scopeState === 'Unavailable') {
-    return <Navigate to={ROUTE_PATHS.noAccess} replace />
+  if (!session.activeScope) {
+    return <ScopeUnavailable />
   }
 
   return <>{children}</>
-}
-
-/** Presents the minimal authenticated scope-selection gate, without owning selection UI. */
-function ScopeSelectionRoute() {
-  const status = useAuthSessionStore((state) => state.status)
-  const session = useCachedSession()
-
-  if (status === 'initializing') {
-    return <AuthLoadingBoundary />
-  }
-
-  if (status === 'unauthenticated') {
-    return <Navigate to={ROUTE_PATHS.login} replace />
-  }
-
-  if (!session) {
-    return <AuthLoadingBoundary />
-  }
-
-  if (session.scopeState === 'Unavailable') {
-    return <Navigate to={ROUTE_PATHS.noAccess} replace />
-  }
-
-  if (session.scopeState === 'Selected') {
-    return <Navigate to={ROUTE_PATHS.dashboard} replace />
-  }
-
-  return <ScopeGate unavailable={false} />
-}
-
-/** Presents the contact-administrator state for an authenticated user without scope access. */
-function NoAccessRoute() {
-  const status = useAuthSessionStore((state) => state.status)
-  const session = useCachedSession()
-
-  if (status === 'initializing') {
-    return <AuthLoadingBoundary />
-  }
-
-  if (status === 'unauthenticated') {
-    return <Navigate to={ROUTE_PATHS.login} replace />
-  }
-
-  if (!session) {
-    return <AuthLoadingBoundary />
-  }
-
-  if (session.scopeState === 'SelectionRequired') {
-    return <Navigate to={ROUTE_PATHS.scopeSelect} replace />
-  }
-
-  if (session.scopeState === 'Selected') {
-    return <Navigate to={ROUTE_PATHS.dashboard} replace />
-  }
-
-  return <ScopeGate unavailable />
 }
 
 function PermissionDenied() {
@@ -215,24 +148,15 @@ function PermissionDenied() {
 }
 
 /**
- * Composes the selected-scope boundary with the canonical e06-t06 permission
+ * Composes the active-scope boundary with the canonical e06-t06 permission
  * predicate. It deliberately contains no role or permission-string logic.
  */
 function RouteAccessGuard({ children, route }: RouteAccessGuardProps) {
   const hasRoutePermission = useRoutePermission(route)
 
   return (
-    <RequireSelectedScope>
-      {hasRoutePermission ? children : <PermissionDenied />}
-    </RequireSelectedScope>
+    <RequireActiveScope>{hasRoutePermission ? children : <PermissionDenied />}</RequireActiveScope>
   )
 }
 
-export {
-  AnonymousRoute,
-  AuthLoadingBoundary,
-  NoAccessRoute,
-  RequireSelectedScope,
-  RouteAccessGuard,
-  ScopeSelectionRoute,
-}
+export { AnonymousRoute, AuthLoadingBoundary, RequireActiveScope, RouteAccessGuard }

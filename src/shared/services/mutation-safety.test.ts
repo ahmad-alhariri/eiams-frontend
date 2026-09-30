@@ -1,4 +1,4 @@
-import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
+﻿import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -25,6 +25,19 @@ function responseError(data: unknown, status: number): AxiosError<unknown> {
   }
 
   return new AxiosError('request failed', 'ERR_BAD_RESPONSE', undefined, undefined, response)
+}
+
+/** A real `ApiErrorResponse` body (ApiContracts.cs:32-38). */
+function wireError(code: string) {
+  return {
+    success: false as const,
+    error: {
+      code,
+      message: 'The request could not be completed.',
+      details: {},
+      request_id: 'mutation-safety-test',
+    },
+  }
 }
 
 describe('mutation safety helpers', () => {
@@ -60,27 +73,21 @@ describe('mutation safety helpers', () => {
   })
 
   it('copies the returned row version into action payloads without changing the original data', () => {
-    const action = { reason: 'تحديث السجل', rowVersion: 2 }
+    const action = { reason: 'ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø³Ø¬Ù„', rowVersion: 2 }
 
-    expect(withRowVersion(action, 5)).toEqual({ reason: 'تحديث السجل', rowVersion: 5 })
-    expect(action).toEqual({ reason: 'تحديث السجل', rowVersion: 2 })
+    expect(withRowVersion(action, 5)).toEqual({ reason: 'ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø³Ø¬Ù„', rowVersion: 5 })
+    expect(action).toEqual({ reason: 'ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø³Ø¬Ù„', rowVersion: 2 })
   })
 
   it('recognizes only contract 409 conflicts and leaves their cause to the feature', () => {
+    // Real nested envelopes. `lifecycle.conflict` and `validation.failed` were
+    // invented codes that the API never emits, so nothing downstream could key on
+    // them; the real vocabulary is 409 lifecycle conflicts vs 422 rejections.
     expect(
-      isConflictError(
-        responseError(
-          {
-            status: 409,
-            code: 'lifecycle.conflict',
-            titleAr: 'تغيرت حالة السند.',
-            traceId: 'conflict-1',
-          },
-          409,
-        ),
-      ),
+      isConflictError(responseError(wireError('WAREHOUSE_DOCUMENTS_INVALID_TRANSITION'), 409)),
     ).toBe(true)
-    expect(isConflictError(responseError({ code: 'validation.failed' }, 422))).toBe(false)
+    // A 422 is not a conflict: the row did not change, the request was rejected.
+    expect(isConflictError(responseError(wireError('UNPROCESSABLE_ENTITY'), 422))).toBe(false)
     expect(isConflictError(new Error('offline'))).toBe(false)
   })
 })

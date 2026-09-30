@@ -6,7 +6,8 @@ import { useState, type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { RolePermissionDialog } from '@/modules/admin/components/role-permission-dialog'
-import { createPermission, createProblemDetails, createRole } from '@/test/msw/factories'
+import { createPermission, createRole } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import type { Role } from '@/shared/types/generated/eiams-v1'
 
@@ -193,18 +194,11 @@ describe('RolePermissionDialog', () => {
         HttpResponse.json([viewPermission(), managePermission()]),
       ),
       http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () =>
-        HttpResponse.json(
-          createProblemDetails({
-            fieldErrors: [
-              {
-                field: 'permissionCodes',
-                code: 'forbidden',
-                messageAr: 'إحدى الصلاحيات غير متاحة.',
-              },
-            ],
-          }),
-          { status: 422 },
-        ),
+        errJson(422, {
+          code: 'ROLES_NAME_NOT_UNIQUE',
+          message: 'Role name is not unique.',
+          details: { permissionCodes: ['not allowed'] },
+        }),
       ),
     )
 
@@ -214,7 +208,7 @@ describe('RolePermissionDialog', () => {
     await user.click(await within(dialog).findByRole('checkbox', { name: 'إدارة الأدوار' }))
     await user.click(within(dialog).getByRole('button', { name: 'حفظ الصلاحيات' }))
 
-    expect(await within(dialog).findByText('إحدى الصلاحيات غير متاحة.')).toBeInTheDocument()
+    expect(await within(dialog).findByText('اسم الدور مستخدم مسبقاً.')).toBeInTheDocument()
     expect(within(dialog).getByRole('checkbox', { name: 'إدارة الأدوار' })).toBeChecked()
   })
 })

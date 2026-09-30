@@ -46,10 +46,10 @@ describe('AppHeader', () => {
     expect(screen.getByText('المستودعات / دمشق')).toBeInTheDocument()
   })
 
-  it('composes an injected scope switcher beside session controls', () => {
-    renderHeader({ scopeSwitcher: <span data-testid="scope-switcher">نطاق دمشق</span> })
+  it('composes an injected user menu beside session controls', () => {
+    renderHeader({ userMenu: <span data-testid="user-menu">مستخدم النظام</span> })
 
-    expect(screen.getByTestId('scope-switcher')).toHaveTextContent('نطاق دمشق')
+    expect(screen.getByTestId('user-menu')).toHaveTextContent('مستخدم النظام')
   })
 
   it('hides the user block when no session identity exists (e06 wiring)', () => {

@@ -7,6 +7,7 @@ import { createApiClient, type ApiClientBundle } from '@/shared/services/api.cli
 import { normalizeApiError } from '@/shared/services/api-error'
 import { readRequestForm } from '@/test/msw/multipart-parser'
 import { createDocumentAttachment, fixtureUuid } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -124,16 +125,10 @@ describe('document attachment transport', () => {
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/${ATTACHMENT_ID}`,
         () =>
-          HttpResponse.json(
-            {
-              code: 'document.attachment_delete_not_allowed',
-              status: 403,
-              titleAr: 'لا تملك الصلاحية اللازمة لتنفيذ هذا الإجراء.',
-              detailAr: 'لا يمكن حذف المرفقات إلا من مستند غير مُرصد بعد (مسودة).',
-              traceId: 'fixture-trace-id',
-            },
-            { status: 403 },
-          ),
+          errJson(403, {
+            code: 'DOCUMENT_ATTACHMENTS_ARCHIVED_CANNOT_BE_REMOVED',
+            message: 'An archived signed copy cannot be removed.',
+          }),
       ),
     )
 
@@ -144,7 +139,7 @@ describe('document attachment transport', () => {
     expect(axios.isAxiosError(error)).toBe(true)
     expect(normalizeApiError(error)).toMatchObject({
       status: 403,
-      code: 'document.attachment_delete_not_allowed',
+      code: 'DOCUMENT_ATTACHMENTS_ARCHIVED_CANNOT_BE_REMOVED',
     })
   })
 
@@ -155,19 +150,15 @@ describe('document attachment transport', () => {
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/${ATTACHMENT_ID}`,
         () =>
-          HttpResponse.json(
-            {
-              code: 'document.version_conflict',
+          errJson(409, {
+            code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+            message: 'The document row version did not match.',
+            details: {
               currentRowVersion: 5,
               currentStatus: 'Draft',
               policy: { documentId: DOCUMENT_ID },
-              status: 409,
-              titleAr: 'تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.',
-              detailAr: 'تعذر تنفيذ الإجراء: المستند عدَّله مستخدم آخر.',
-              traceId: 'fixture-trace-id',
             },
-            { status: 409 },
-          ),
+          }),
       ),
     )
 
@@ -178,7 +169,7 @@ describe('document attachment transport', () => {
     expect(axios.isAxiosError(error)).toBe(true)
     expect(normalizeApiError(error)).toMatchObject({
       status: 409,
-      code: 'document.version_conflict',
+      code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
     })
   })
 })

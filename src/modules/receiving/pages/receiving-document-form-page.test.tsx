@@ -14,6 +14,7 @@ import {
   createWarehouseCapability,
   fixtureUuid,
 } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { createReceivingSuppliersHandler } from '@/test/msw/receiving-handlers'
 import { createWarehouseDocumentCreateHandler } from '@/test/msw/warehouse-document-handlers'
@@ -267,17 +268,10 @@ describe('ReceivingDocumentFormPage', () => {
   it('surfaces the Arabic error banner when the create request fails', async () => {
     server.use(
       http.post(`${API_BASE_URL}/warehouse-documents`, () =>
-        HttpResponse.json(
-          {
-            code: 'document.duplicate_paper_number',
-            detailAr: null,
-            fieldErrors: [],
-            status: 409,
-            titleAr: 'تعذر حفظ المستند: الوثيقة الورقية مكررة.',
-            traceId: 'mock-trace',
-          },
-          { status: 409 },
-        ),
+        errJson(409, {
+          code: 'WAREHOUSE_DOCUMENTS_PAPER_REFERENCE_REQUIRED',
+          message: 'The paper document reference is missing or invalid.',
+        }),
       ),
       http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([warehouse]))),
       http.get(`${API_BASE_URL}/catalog/materials`, () =>
@@ -298,7 +292,9 @@ describe('ReceivingDocumentFormPage', () => {
     await fillValidForm(user)
     await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
 
-    expect(await screen.findByText('تعذر حفظ المستند: الوثيقة الورقية مكررة.')).toBeInTheDocument()
+    expect(
+      await screen.findByText('يجب إدخال رقم المستند الورقي وسنته قبل التقديم.'),
+    ).toBeInTheDocument()
     expect(screen.queryByTestId('detail-stub')).not.toBeInTheDocument()
   })
 })

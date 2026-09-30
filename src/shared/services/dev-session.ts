@@ -1,4 +1,4 @@
-import { PERMISSION_CODES } from '@/config/permissions'
+﻿import { PERMISSION_CODES } from '@/config/permissions'
 import type { AppEnvironment } from '@/config/env'
 import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
 
@@ -7,7 +7,7 @@ import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
  *
  * The refresh endpoint is the single boundary where an authenticated session
  * enters the application: `SessionAdapter.refreshSession()` feeds the query
- * cache that guards (`RequireSelectedScope`, `RouteAccessGuard`) read from.
+ * cache that guards (`RequireActiveScope`, `RouteAccessGuard`) read from.
  * Swapping that one request for a fixture — instead of touching guards — keeps
  * the production auth flow, 401-retry behavior, and RBAC wiring fully intact
  * while letting developers open any feature page without credentials.
@@ -51,19 +51,11 @@ export function createDevSession(): AuthTokenResponse {
         rowVersion: 0,
       },
       activeRoles: [{ roleId: DEV_ROLE_ID, code: 'sysadmin', nameAr: 'مدير النظام' }],
-      availableScopes: [
-        {
-          scopeId: DEV_SCOPE_ID,
-          scopeType: 'Enterprise',
-          displayName: 'نطاق التطوير',
-        },
-      ],
       activeScope: {
         scopeId: DEV_SCOPE_ID,
         scopeType: 'Enterprise',
         displayName: 'نطاق التطوير',
       },
-      scopeState: 'Selected',
       permissionCodes: [...PERMISSION_CODES],
     },
   }

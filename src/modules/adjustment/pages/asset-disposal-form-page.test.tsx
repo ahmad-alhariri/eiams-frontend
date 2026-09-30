@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
@@ -164,7 +164,7 @@ describe('asset disposal draft contract', () => {
       http.get('*/api/v1/adjustments/disposal-eligible-assets', ({ request }) => {
         const params = new URL(request.url).searchParams
         requests.push({
-          pageIndex: params.get('pageIndex'),
+          page: params.get('page'),
           pageSize: params.get('pageSize'),
           search: params.get('search'),
           warehouseId: params.get('warehouseId'),
@@ -187,7 +187,7 @@ describe('asset disposal draft contract', () => {
     await user.click(await screen.findByRole('option', { name: new RegExp(asset.assetNumber) }))
 
     expect(requests).toContainEqual({
-      pageIndex: '0',
+      page: '1',
       pageSize: '10',
       search: asset.assetNumber,
       warehouseId: warehouse.warehouseId,

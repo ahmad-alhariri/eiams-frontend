@@ -6,6 +6,8 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
+import { errJson } from '@/test/msw/envelope'
+
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import {
   createRole,
@@ -207,45 +209,39 @@ describe('UserDetailPage', () => {
   it.each([
     {
       status: 409,
-      body: {
-        status: 409,
-        code: 'admin.user_conflict',
-        titleAr: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
-        traceId: 'trace-conflict',
-      },
-      expected: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
+      code: 'RESOURCE_CONFLICT',
+      details: {},
+      // A stale user row is a 409 with no user-specific code in the backend, so it
+      // surfaces as the generic `RESOURCE_CONFLICT` (ApiResults.cs:44). The
+      // invented `admin.user_conflict` matched no code in the API.
+      expected: 'تعارض في البيانات. راجع القيم المدخلة.',
     },
     {
-      status: 422,
-      body: {
-        status: 422,
-        code: 'validation.failed',
-        titleAr: 'تعذر تنفيذ الطلب. راجع البيانات المدخلة.',
-        traceId: 'trace-validation',
-        fieldErrors: [
-          {
-            field: 'assignments',
-            code: 'invalid_scope',
-            messageAr: 'يتعذر إسناد الدور إلى النطاق المحدد.',
-          },
-        ],
-      },
-      expected: 'يتعذر إسناد الدور إلى النطاق المحدد.',
+      status: 403,
+      code: 'ROLES_ORGANIZATIONAL_UNIT_ASSIGNMENT_NOT_ALLOWED',
+      details: {},
+      // Assigning a role to an organizational unit is a real, specific backend
+      // rejection (RolesErrors.cs). The invented `validation.failed` at 422 and the
+      // top-level `fieldErrors` array were both shapes the API never sends.
+      expected: 'لا يمكن إسناد هذا الدور إلى وحدة تنظيمية.',
     },
-  ])('renders Arabic mutation feedback for HTTP $status', async ({ status, body, expected }) => {
-    const user = userEvent.setup()
-    seedRoleScopes()
-    server.use(
-      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, () =>
-        HttpResponse.json(body, { status }),
-      ),
-    )
-    render(<UserDetailPage />, { wrapper: PageWrapper })
+  ])(
+    'renders Arabic mutation feedback for HTTP $status',
+    async ({ status, code, details, expected }) => {
+      const user = userEvent.setup()
+      seedRoleScopes()
+      server.use(
+        http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, () =>
+          errJson(status, { code, details }),
+        ),
+      )
+      render(<UserDetailPage />, { wrapper: PageWrapper })
 
-    await user.click(await screen.findByRole('button', { name: 'حفظ التعيينات' }))
+      await user.click(await screen.findByRole('button', { name: 'حفظ التعيينات' }))
 
-    expect(await screen.findByText(expected)).toBeInTheDocument()
-  })
+      expect(await screen.findByText(expected)).toBeInTheDocument()
+    },
+  )
 
   it('renders an actionable Arabic error state when the role-scopes request fails', async () => {
     server.use(

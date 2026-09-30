@@ -199,7 +199,9 @@ describe('useDocumentLifecycleAction family', () => {
     expect(result.current.isConflict).toBe(false)
     // Error toasts render twice: the visible root plus the live region.
     await waitFor(() =>
-      expect(screen.getAllByText('يرجى إدخال سبب الإجراء.').length).toBeGreaterThan(0),
+      expect(
+        screen.getAllByText('تعذر تنفيذ الطلب. راجع البيانات المدخلة.').length,
+      ).toBeGreaterThan(0),
     )
 
     const cached = client.getQueryData<WarehouseDocument>(SCOPED_DOCUMENT_KEY)
@@ -236,7 +238,12 @@ describe('useDocumentLifecycleAction family', () => {
     await waitFor(() => expect(result.current.isConflict).toBe(true))
     expect(result.current.error).not.toBeNull()
     // Error toasts render twice: the visible root plus the live region.
-    await waitFor(() => expect(screen.getAllByText('تعذر إتمام الطلب').length).toBeGreaterThan(0))
+    await waitFor(() =>
+      expect(
+        screen.getAllByText('تغيرت البيانات من قبل مستخدم آخر. حدّث الصفحة ثم أعد المحاولة.')
+          .length,
+      ).toBeGreaterThan(0),
+    )
     await waitFor(() => expect(screen.getAllByText(/أعد تحميل البيانات/).length).toBeGreaterThan(0))
 
     const cached = client.getQueryData<WarehouseDocument>(SCOPED_DOCUMENT_KEY)

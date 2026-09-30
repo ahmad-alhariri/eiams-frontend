@@ -1,4 +1,6 @@
-import { delay, http, HttpResponse, type HttpHandler } from 'msw'
+﻿import { delay, http, HttpResponse, type HttpHandler } from 'msw'
+
+import { errJson } from '@/test/msw/envelope'
 
 import { environment } from '@/config/env'
 import {
@@ -21,6 +23,7 @@ import {
   createWarehouseMaterialSetting,
   deriveLifecycleEvents,
 } from '@/test/msw/factories'
+import { toWireErrorResponse } from '@/test/msw/envelope'
 import {
   applyDocumentAction,
   applyDraftToDocument,
@@ -59,7 +62,6 @@ import type {
   ReplaceRoleScopesRequest,
   Role,
   RoleUpsertRequest,
-  SetActiveScopeRequest,
   SiteUpsertRequest,
   SortDirection,
   StockMovement,
@@ -91,7 +93,16 @@ const LIST_DEFAULT_PAGE_SIZE = 20
 const DEFAULT_ORGANIZATION_ID = '00000000-0000-0000-0000-000000000071'
 
 type ListParams = {
-  pageIndex?: number
+  /**
+   * The wire page, ONE-based, as the API actually accepts it
+   * (`PaginationQueryParameters.Page`, `[Range(1, MaximumPage)]`).
+   *
+   * The mock previously read a `pageIndex` query parameter, which the backend has
+   * no property for. Because the mock honoured `pageIndex`, the pagination tests
+   * passed while the real API silently ignored the parameter and pinned every list
+   * to page 1 — the mock was agreeing with a fiction.
+   */
+  page?: number
   pageSize?: number
   search?: string | undefined
   status?: string | undefined
@@ -117,13 +128,15 @@ type ListParams = {
 }
 
 function toListParams(url: URL): ListParams {
-  const pageIndex = Number.parseInt(url.searchParams.get('pageIndex') ?? '0', 10)
+  // One-based, matching the API. A missing or invalid value falls back to page 1,
+  // which is also the backend's own `DefaultPage`.
+  const page = Number.parseInt(url.searchParams.get('page') ?? '1', 10)
   const pageSize = Number.parseInt(
     url.searchParams.get('pageSize') ?? String(LIST_DEFAULT_PAGE_SIZE),
     10,
   )
   const params: ListParams = {
-    pageIndex: Number.isFinite(pageIndex) && pageIndex >= 0 ? pageIndex : 0,
+    page: Number.isFinite(page) && page >= 1 ? page : 1,
     pageSize: Number.isFinite(pageSize) && pageSize > 0 ? pageSize : LIST_DEFAULT_PAGE_SIZE,
   }
   for (const key of [
@@ -177,25 +190,32 @@ function pageMeta(totalItems: number, pageIndex: number, pageSize: number): Page
   }
 }
 
-function pagedResponse<Record>(records: readonly Record[], { pageIndex, pageSize }: ListParams) {
-  const page = pageIndex ?? 0
+/**
+ * Slices a page out of `records`.
+ *
+ * `params.page` arrives ONE-based (the wire contract); the returned `meta.pageIndex`
+ * stays ZERO-based, because that is the frontend's own view-model and TanStack
+ * Table's `pageIndex` is zero-based by definition. Converting here keeps the
+ * frontend contract intact without pretending the wire is zero-based.
+ *
+ * NOTE: `meta` is still a frontend-shaped body, not the API's real
+ * `pagination: { page, page_size, total_items, ... }` envelope. Aligning the mock's
+ * RESPONSE shape with the backend is the remaining half of the fixture work tracked
+ * by `eiams-frontend-tgl3` / `eiams-frontend-ri48`; the request side is fixed here.
+ */
+function pagedResponse<Record>(records: readonly Record[], { page, pageSize }: ListParams) {
+  const pageIndex = (page ?? 1) - 1
   const size = pageSize ?? LIST_DEFAULT_PAGE_SIZE
-  const start = page * size
+  const start = pageIndex * size
   const items = records.slice(start, start + size)
-  return HttpResponse.json({ items, meta: pageMeta(records.length, page, size) })
+  return HttpResponse.json({ items, meta: pageMeta(records.length, pageIndex, size) })
 }
 
-function notFound(): HttpResponse<ProblemDetails> {
-  const payload: ProblemDetails = {
-    code: 'record.not_found',
-    detailAr: 'لم يتم العثور على السجل المطلوب.',
-    fieldErrors: [],
-    status: 404,
-    titleAr: 'لم يتم العثور على البيانات المطلوبة.',
-    traceId: 'mock-trace',
-    type: 'https://eiams.example/problems/record.not_found',
-  }
-  return HttpResponse.json(payload, { status: 404 })
+function notFound() {
+  return toWireErrorResponse(
+    { code: 'RESOURCE_NOT_FOUND', status: 404, traceId: 'mock-trace' },
+    404,
+  )
 }
 
 function problemBase(
@@ -218,7 +238,7 @@ function problemBase(
 function versionConflictProblem(document: WarehouseDocument): LifecycleConflictProblemDetails {
   return {
     ...problemBase(
-      'document.version_conflict',
+      'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
       'تعذر تنفيذ الإجراء: المستند عدَّله مستخدم آخر. أعد تحميل البيانات وحاول مجدداً.',
       409,
     ),
@@ -231,7 +251,7 @@ function versionConflictProblem(document: WarehouseDocument): LifecycleConflictP
 function attachmentDeleteForbiddenProblem(): ProblemDetails {
   return {
     ...problemBase(
-      'document.attachment_delete_not_allowed',
+      'DOCUMENT_ATTACHMENTS_ARCHIVED_CANNOT_BE_REMOVED',
       'لا يمكن حذف المرفقات إلا من مستند غير مُرصد بعد (مسودة).',
       403,
     ),
@@ -242,7 +262,7 @@ function attachmentDeleteForbiddenProblem(): ProblemDetails {
 function attachmentUploadForbiddenProblem(): ProblemDetails {
   return {
     ...problemBase(
-      'signed_original_immutable',
+      'DOCUMENT_ATTACHMENTS_NOT_EDITABLE',
       'لا يمكن رفع المرفقات بعد مغادرة المستند حالة المسودة.',
       403,
     ),
@@ -251,7 +271,7 @@ function attachmentUploadForbiddenProblem(): ProblemDetails {
 }
 
 function attachmentValidationProblem(field: string, messageAr: string): ProblemDetails {
-  return problemBase('document.attachment_invalid', messageAr, 422, field)
+  return problemBase('REQUEST_VALIDATION_FAILED', messageAr, 422, field)
 }
 
 /** Structural file check that works across browser and Node multipart parsers. */
@@ -403,7 +423,7 @@ async function documentActionRoute(
     return HttpResponse.json(memoCheck.result)
   }
   if (memoCheck.kind === 'mismatch') {
-    return HttpResponse.json(idempotencyMismatchProblem(), { status: 422 })
+    return toWireErrorResponse(idempotencyMismatchProblem(), 422)
   }
   const outcome = applyDocumentAction({
     action,
@@ -413,10 +433,10 @@ async function documentActionRoute(
     occurredBy: documentActor(),
   })
   if (outcome.kind === 'conflict') {
-    return HttpResponse.json(outcome.problem, { status: 409 })
+    return toWireErrorResponse(outcome.problem, 409)
   }
   if (outcome.kind === 'validation') {
-    return HttpResponse.json(outcome.problem, { status: 422 })
+    return toWireErrorResponse(outcome.problem, 422)
   }
   if (idempotencyKey !== null) {
     DOCUMENT_ACTION_IDEMPOTENCY.store(
@@ -1172,7 +1192,10 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     const status = url.searchParams.get('status')
     const custodyKind = url.searchParams.get('custodyKind')
     const search = (url.searchParams.get('search') ?? '').trim()
-    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    // One-based on the wire, matching `PaginationQueryParameters.Page`; `pageIndex`
+    // stays zero-based for slicing and for the frontend's `meta.pageIndex` view-model.
+    const page = Number(url.searchParams.get('page') ?? '1') || 1
+    const pageIndex = page - 1
     const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
     const db = getDb()
     const rows = db.assets
@@ -1221,7 +1244,10 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     const warehouseId = url.searchParams.get('warehouseId')
     const status = url.searchParams.get('status')
     const search = (url.searchParams.get('search') ?? '').trim()
-    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    // One-based on the wire, matching `PaginationQueryParameters.Page`; `pageIndex`
+    // stays zero-based for slicing and for the frontend's `meta.pageIndex` view-model.
+    const page = Number(url.searchParams.get('page') ?? '1') || 1
+    const pageIndex = page - 1
     const pageSize = Number(url.searchParams.get('pageSize') ?? '50') || 50
     const filtered = getDb().assets.filter(
       (asset) =>
@@ -1691,7 +1717,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     const current = db.warehouseDocuments[index]!
     const body = (await request.json()) as WarehouseDocumentDraftRequest
     if (body.rowVersion !== current.rowVersion) {
-      return HttpResponse.json(versionConflictProblem(current), { status: 409 })
+      return toWireErrorResponse(versionConflictProblem(current), 409)
     }
     const updated = applyDraftToDocument(current, body, draftLookups())
     db.warehouseDocuments[index] = updated
@@ -1757,7 +1783,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     }
     const document = db.warehouseDocuments[index]!
     if (document.documentStatus !== 'Draft') {
-      return HttpResponse.json(attachmentUploadForbiddenProblem(), { status: 403 })
+      return toWireErrorResponse(attachmentUploadForbiddenProblem(), 403)
     }
     const form = await readRequestForm(request)
     const file = form.get('file')
@@ -1765,24 +1791,25 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     const rowVersion = Number(form.get('rowVersion'))
 
     if (!isUploadedFile(file)) {
-      return HttpResponse.json(attachmentValidationProblem('file', 'يجب إرفاق ملف مع طلب الرفع.'), {
-        status: 422,
-      })
+      return toWireErrorResponse(
+        attachmentValidationProblem('file', 'يجب إرفاق ملف مع طلب الرفع.'),
+        422,
+      )
     }
     if (attachmentType !== 'SignedOriginal' && attachmentType !== 'Supporting') {
-      return HttpResponse.json(
+      return toWireErrorResponse(
         attachmentValidationProblem('attachmentType', 'نوع المرفق غير صالح.'),
-        { status: 422 },
+        422,
       )
     }
     if (!Number.isInteger(rowVersion)) {
-      return HttpResponse.json(
+      return toWireErrorResponse(
         attachmentValidationProblem('rowVersion', 'قيمة rowVersion مطلوبة.'),
-        { status: 422 },
+        422,
       )
     }
     if (rowVersion !== document.rowVersion) {
-      return HttpResponse.json(versionConflictProblem(document), { status: 409 })
+      return toWireErrorResponse(versionConflictProblem(document), 409)
     }
 
     const actor = documentActor()
@@ -1822,16 +1849,16 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       const document = db.warehouseDocuments[index]!
       const rowVersion = Number(new URL(request.url).searchParams.get('rowVersion'))
       if (!Number.isInteger(rowVersion)) {
-        return HttpResponse.json(
+        return toWireErrorResponse(
           attachmentValidationProblem('rowVersion', 'قيمة rowVersion مطلوبة.'),
-          { status: 422 },
+          422,
         )
       }
       if (rowVersion !== document.rowVersion) {
-        return HttpResponse.json(versionConflictProblem(document), { status: 409 })
+        return toWireErrorResponse(versionConflictProblem(document), 409)
       }
       if (document.documentStatus !== 'Draft') {
-        return HttpResponse.json(attachmentDeleteForbiddenProblem(), { status: 403 })
+        return toWireErrorResponse(attachmentDeleteForbiddenProblem(), 403)
       }
       const attachmentId = String(params['attachmentId'])
       if (!document.attachments.some((item) => item.attachmentId === attachmentId)) {
@@ -1885,22 +1912,14 @@ export const mockApiHandlers: readonly HttpHandler[] = [
 
     const catalogCodes = new Set(db.permissions.map((permission) => permission.code))
     if (body.permissionCodes.some((code) => !catalogCodes.has(code))) {
-      return HttpResponse.json(
-        {
-          status: 422,
-          code: 'validation.failed',
-          titleAr: 'تعذر تنفيذ الطلب. راجع البيانات المدخلة.',
-          traceId: 'dev-admin-role-permissions',
-          fieldErrors: [
-            {
-              field: 'permissionCodes',
-              code: 'unknown_permission',
-              messageAr: 'تتضمن قائمة الصلاحيات رمزاً غير موجود في كتالوج الخادم.',
-            },
-          ],
-        },
-        { status: 422 },
-      )
+      // An unknown permission code is model-binding validation, so the API answers
+      // 400 REQUEST_VALIDATION_FAILED with `details` keyed by the offending field
+      // (ApiProblemDetails.cs:18-28). The dev mock previously emitted a flat
+      // `{code,titleAr,fieldErrors}` body the API never sends.
+      return errJson(400, {
+        code: 'REQUEST_VALIDATION_FAILED',
+        details: { permissionCodes: ['The permission code is not in the server catalog.'] },
+      })
     }
 
     const updatedRole = {
@@ -1951,7 +1970,7 @@ export const mockApiHandlers: readonly HttpHandler[] = [
       if (a.occurredAt === b.occurredAt) return b.auditLogId.localeCompare(a.auditLogId)
       return b.occurredAt.localeCompare(a.occurredAt)
     })
-    const pageIndex = params.pageIndex ?? 0
+    const pageIndex = (params.page ?? 1) - 1
     const pageSize = params.pageSize ?? LIST_DEFAULT_PAGE_SIZE
     const start = pageIndex * pageSize
     const items = sorted.slice(start, start + pageSize).map((auditLog) => ({
@@ -2028,22 +2047,14 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     const body = (await request.json()) as RoleUpsertRequest
     const catalogCodes = new Set(db.permissions.map((permission) => permission.code))
     if (body.permissionCodes.some((code) => !catalogCodes.has(code))) {
-      return HttpResponse.json(
-        {
-          status: 422,
-          code: 'validation.failed',
-          titleAr: 'تعذر تنفيذ الطلب. راجع البيانات المدخلة.',
-          traceId: 'dev-admin-role-permissions',
-          fieldErrors: [
-            {
-              field: 'permissionCodes',
-              code: 'unknown_permission',
-              messageAr: 'تتضمن قائمة الصلاحيات رمزاً غير موجود في كتالوج الخادم.',
-            },
-          ],
-        },
-        { status: 422 },
-      )
+      // An unknown permission code is model-binding validation, so the API answers
+      // 400 REQUEST_VALIDATION_FAILED with `details` keyed by the offending field
+      // (ApiProblemDetails.cs:18-28). The dev mock previously emitted a flat
+      // `{code,titleAr,fieldErrors}` body the API never sends.
+      return errJson(400, {
+        code: 'REQUEST_VALIDATION_FAILED',
+        details: { permissionCodes: ['The permission code is not in the server catalog.'] },
+      })
     }
     const role: Role = {
       roleId: nextFixtureUuid(),
@@ -2108,26 +2119,17 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     return HttpResponse.json(next)
   }),
 
-  // --- Auth (dev scope switching) -------------------------------------------
-  http.put(`${AUTH_PREFIX}/auth/active-scope`, async ({ request }) => {
-    const body = (await request.json()) as SetActiveScopeRequest
-    const session = createDevSession()
-    return HttpResponse.json({
-      ...session.session,
-      activeScope: {
-        ...(session.session.activeScope ?? {}),
-        scopeType: body.scopeType,
-        scopeId: body.scopeId,
-      },
-    })
-  }),
+  // --- Auth -----------------------------------------------------------------
   http.post(`${AUTH_PREFIX}/auth/logout`, () => new HttpResponse<never>(null, { status: 204 })),
   http.get(`${AUTH_PREFIX}/inventory-counts`, async ({ request }) => {
     await delay(120)
     const url = new URL(request.url)
     const status = url.searchParams.get('status')
     const warehouseId = url.searchParams.get('warehouseId')
-    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    // One-based on the wire, matching `PaginationQueryParameters.Page`; `pageIndex`
+    // stays zero-based for slicing and for the frontend's `meta.pageIndex` view-model.
+    const page = Number(url.searchParams.get('page') ?? '1') || 1
+    const pageIndex = page - 1
     const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
     let rows = [...getInventoryCounts()]
     if (status !== null && status !== '') {
@@ -2155,7 +2157,10 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     const purpose = url.searchParams.get('purpose')
     const status = url.searchParams.get('status')
     const warehouseId = url.searchParams.get('warehouseId')
-    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    // One-based on the wire, matching `PaginationQueryParameters.Page`; `pageIndex`
+    // stays zero-based for slicing and for the frontend's `meta.pageIndex` view-model.
+    const page = Number(url.searchParams.get('page') ?? '1') || 1
+    const pageIndex = page - 1
     const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
 
     const warehouse = createNamedReference({
@@ -2468,7 +2473,10 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     const url = new URL(request.url)
     const warehouseId = url.searchParams.get('warehouseId')
     const search = url.searchParams.get('search')?.trim()
-    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    // One-based on the wire, matching `PaginationQueryParameters.Page`; `pageIndex`
+    // stays zero-based for slicing and for the frontend's `meta.pageIndex` view-model.
+    const page = Number(url.searchParams.get('page') ?? '1') || 1
+    const pageIndex = page - 1
     const pageSize = Number(url.searchParams.get('pageSize') ?? '20') || 20
     const assets = getDb().assets.filter(
       (asset) =>
@@ -2685,7 +2693,10 @@ export const mockApiHandlers: readonly HttpHandler[] = [
     // The count id rides in the path of the registered handler; derive it from the referrer-free
     // URL pattern MSW resolved. listLines is keyed by countId in the page, so read it from query.
     const countId = url.searchParams.get('countId') ?? extractCountIdFromLinesRequest(url.pathname)
-    const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0') || 0
+    // One-based on the wire, matching `PaginationQueryParameters.Page`; `pageIndex`
+    // stays zero-based for slicing and for the frontend's `meta.pageIndex` view-model.
+    const page = Number(url.searchParams.get('page') ?? '1') || 1
+    const pageIndex = page - 1
     const pageSize = Number(url.searchParams.get('pageSize') ?? '50') || 50
     const search = (url.searchParams.get('search') ?? '').trim()
     let rows = [...getInventoryCountLines(countId)]

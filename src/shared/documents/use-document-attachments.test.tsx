@@ -9,6 +9,7 @@ import { apiClient } from '@/shared/services/api.client'
 import type { DocumentAttachment } from '@/shared/types/generated/eiams-v1'
 import { createWarehouseDocument, fixtureUuid } from '@/test/msw/factories'
 import { readRequestForm } from '@/test/msw/multipart-parser'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 // jsdom's XHR serializer preserves File names; undici's fetch adapter drops
@@ -120,16 +121,10 @@ describe('useDocumentAttachmentManager', () => {
         HttpResponse.json(store.document),
       ),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () =>
-        HttpResponse.json(
-          {
-            code: 'attachment.file_too_large',
-            status: 413,
-            titleAr: 'حجم الملف يتجاوز الحد الأقصى المسموح.',
-            detailAr: null,
-            traceId: 'fixture-trace-id',
-          },
-          { status: 413 },
-        ),
+        errJson(413, {
+          code: 'DOCUMENT_ATTACHMENTS_FILE_TOO_LARGE',
+          message: 'The uploaded file exceeds the allowed size.',
+        }),
       ),
     )
 
@@ -143,7 +138,7 @@ describe('useDocumentAttachmentManager', () => {
 
     await waitFor(() => expect(result.current.pendingUploads[0]?.failed).toBe(true))
     expect(result.current.pendingUploads[0]?.file).toBe(file)
-    expect(result.current.uploadError).toBe('حجم الملف يتجاوز الحد الأقصى المسموح.')
+    expect(result.current.uploadError).toBe('حجم الملف يتجاوز الحد المسموح.')
     expect(result.current.attachments).toHaveLength(0)
   })
 
@@ -157,10 +152,10 @@ describe('useDocumentAttachmentManager', () => {
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, async () => {
         uploadCalls += 1
         if (uploadCalls === 1) {
-          return HttpResponse.json(
-            { code: 'attachment.failed', status: 422, titleAr: 'تعذر الرفع.', traceId: 't' },
-            { status: 422 },
-          )
+          return errJson(422, {
+            code: 'DOCUMENT_ATTACHMENTS_STORAGE_FAILURE',
+            message: 'The file could not be stored.',
+          })
         }
         store.document = makeDraftDocument([signedAttachment()])
         return HttpResponse.json(store.document.attachments[0], { status: 201 })
@@ -270,19 +265,15 @@ describe('useDocumentAttachmentManager', () => {
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
         ({ request }) => {
           expect(new URL(request.url).searchParams.get('rowVersion')).toBe('1')
-          return HttpResponse.json(
-            {
-              code: 'document.version_conflict',
+          return errJson(409, {
+            code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+            message: 'The document row version did not match.',
+            details: {
               currentRowVersion: 1,
               currentStatus: 'Draft',
               policy: store.document.policy,
-              status: 409,
-              titleAr: 'تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.',
-              detailAr: 'تعذر تنفيذ الإجراء: المستند عدَّله مستخدم آخر.',
-              traceId: 'fixture-trace-id',
             },
-            { status: 409 },
-          )
+          })
         },
       ),
     )
@@ -296,7 +287,9 @@ describe('useDocumentAttachmentManager', () => {
     act(() => result.current.onRemove(result.current.attachments[0]!))
 
     await waitFor(() =>
-      expect(result.current.deleteError).toBe('تعذر تنفيذ الإجراء: المستند عدَّله مستخدم آخر.'),
+      expect(result.current.deleteError).toBe(
+        'تغيرت البيانات من قبل مستخدم آخر. حدّث الصفحة ثم أعد المحاولة.',
+      ),
     )
     expect(result.current.attachments).toHaveLength(1)
     // D-LIFE-01 rule 6: the cached document was stale, so it is refetched.
@@ -349,16 +342,10 @@ describe('useDocumentAttachmentManager', () => {
         HttpResponse.json(store.document),
       ),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () =>
-        HttpResponse.json(
-          {
-            code: 'attachment.signed_original_conflict',
-            status: 409,
-            titleAr: 'تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.',
-            detailAr: 'لا يمكن رفع نسخة موقعة بينما السند بحالة مسودة معدَّلة.',
-            traceId: 'fixture-trace-id',
-          },
-          { status: 409 },
-        ),
+        errJson(409, {
+          code: 'DOCUMENT_ATTACHMENTS_SIGNED_ORIGINAL_ALREADY_EXISTS',
+          message: 'A signed original already exists for this document.',
+        }),
       ),
     )
 
@@ -370,9 +357,7 @@ describe('useDocumentAttachmentManager', () => {
     act(() => result.current.onUpload([makeFile('signed.pdf')], 'SignedOriginal'))
 
     await waitFor(() => expect(result.current.uploadError).not.toBeNull())
-    expect(result.current.uploadError).toBe(
-      'لا يمكن رفع نسخة موقعة بينما السند بحالة مسودة معدَّلة.',
-    )
+    expect(result.current.uploadError).toBe('أرشف النسخة الموقعة الحالية ثم أعد المحاولة.')
   })
 
   it('renders a zero-network manager for a null documentId', async () => {

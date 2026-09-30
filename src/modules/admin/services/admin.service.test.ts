@@ -12,6 +12,7 @@ import {
   createUserRoleScope,
   createUserSummary,
 } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -171,21 +172,17 @@ describe('AdminService', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/admin/users/missing`, () =>
-        HttpResponse.json(
-          {
-            status: 404,
-            code: 'admin.user_not_found',
-            titleAr: 'المستخدم غير موجود.',
-            traceId: 'admin-user-missing',
-          },
-          { status: 404 },
-        ),
+        errJson(404, { code: 'USERS_NOT_FOUND', message: 'User not found.' }),
       ),
     )
 
     const error = await service.getUser('missing').catch((reason: unknown) => reason)
 
     expect(axios.isAxiosError(error)).toBe(true)
-    expect(normalizeApiError(error)).toMatchObject({ status: 404, code: 'admin.user_not_found' })
+    expect(normalizeApiError(error)).toMatchObject({
+      status: 404,
+      code: 'USERS_NOT_FOUND',
+      titleAr: 'لم يتم العثور على البيانات المطلوبة.',
+    })
   })
 })

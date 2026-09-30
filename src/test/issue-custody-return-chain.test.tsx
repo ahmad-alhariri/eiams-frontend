@@ -293,14 +293,6 @@ function readSession(): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: ['asset.view', 'custody.assign', 'document.view', 'inventory.view'],
-    availableScopes: [
-      {
-        scopeType: 'Enterprise',
-        scopeId: null,
-        displayName: 'المؤسسة',
-      },
-    ],
-    scopeState: 'Selected',
     activeRoles: [],
   }
 }

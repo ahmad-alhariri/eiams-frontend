@@ -7,6 +7,7 @@ import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import type { CounterpartOption, CounterpartPage } from '@/shared/types/generated/eiams-v1'
 import { createPage, fixtureUuid } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -90,15 +91,7 @@ describe('CounterpartLookupService', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/counterparts/Employee/missing`, () =>
-        HttpResponse.json(
-          {
-            status: 404,
-            code: 'counterpart.not_found',
-            titleAr: 'الجهة غير موجودة.',
-            traceId: 'counterpart-missing',
-          },
-          { status: 404 },
-        ),
+        errJson(404, { code: 'EXTERNAL_PARTIES_NOT_FOUND', message: 'Counterpart not found.' }),
       ),
     )
 
@@ -107,6 +100,10 @@ describe('CounterpartLookupService', () => {
       .catch((reason: unknown) => reason)
 
     expect(axios.isAxiosError(error)).toBe(true)
-    expect(normalizeApiError(error)).toMatchObject({ status: 404, code: 'counterpart.not_found' })
+    expect(normalizeApiError(error)).toMatchObject({
+      status: 404,
+      code: 'EXTERNAL_PARTIES_NOT_FOUND',
+      titleAr: 'لم يتم العثور على الجهة الخارجية.',
+    })
   })
 })

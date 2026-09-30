@@ -305,14 +305,6 @@ function readOnlySession(): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: ['document.view', 'inventory.view'],
-    availableScopes: [
-      {
-        scopeType: 'Enterprise',
-        scopeId: null,
-        displayName: 'المؤسسة',
-      },
-    ],
-    scopeState: 'Selected',
     activeRoles: [],
   }
 }

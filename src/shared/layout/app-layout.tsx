@@ -24,8 +24,8 @@ const SANDBOX_FIXTURES: readonly UiSandboxFixture[] = [
  * forest sidebar on the inline-end (right) side, ivory main content, footer.
  * The header chrome (brand, bell, user block) and the sidebar render
  * immediately; lazy page chunks suspend under the main Suspense boundary.
- * Session-driven chrome is injected by the router (`scopeSwitcher`,
- * `userMenu`) so the frame itself never reads session state.
+ * Session-driven chrome is injected by the router (`userMenu`) so the frame
+ * itself never reads session state.
  *
  * The sandbox notice is the one exception: RESOLUTION-040 requires a
  * fixture-backed session to be visibly marked, and it must be unmissable above
@@ -34,16 +34,15 @@ const SANDBOX_FIXTURES: readonly UiSandboxFixture[] = [
 type AppLayoutProps = {
   /** Test-only override; production navigation reads the hydrated session. */
   hasPermission?: HasPermission | undefined
-  scopeSwitcher?: ReactNode
   userMenu?: ReactNode
 }
 
-function AppLayout({ hasPermission, scopeSwitcher, userMenu }: AppLayoutProps) {
+function AppLayout({ hasPermission, userMenu }: AppLayoutProps) {
   return (
     <div className="flex min-h-svh flex-col bg-ivory text-foreground" dir="rtl">
       <UiSandboxNotice fixtures={SANDBOX_FIXTURES} />
       <AppChromeBoundary label="الشريط العلوي">
-        <AppHeader breadcrumb={<Breadcrumbs />} scopeSwitcher={scopeSwitcher} userMenu={userMenu} />
+        <AppHeader breadcrumb={<Breadcrumbs />} userMenu={userMenu} />
       </AppChromeBoundary>
       <div className="flex flex-1 items-stretch">
         <AppChromeBoundary label="القائمة الجانبية">

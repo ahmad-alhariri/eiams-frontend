@@ -25,7 +25,7 @@ import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
 const ALL_ROUTE_KEYS = Object.keys(ROUTE_METADATA) as RouteKey[]
 
 /** Routes that render no page through the registry and are composed by hand. */
-const HAND_COMPOSED: readonly RouteKey[] = ['scopeSelect', 'noAccess']
+const HAND_COMPOSED: readonly RouteKey[] = []
 
 /** Dev-only surface, stripped from production builds. */
 const DEV_ONLY: readonly RouteKey[] = ['devGallery']
@@ -49,8 +49,11 @@ function sessionWith(codes: readonly string[]): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: [...codes],
-    availableScopes: [],
-    scopeState: 'Selected',
+    activeScope: {
+      scopeType: 'Warehouse',
+      scopeId: '20000000-0000-4000-8000-000000000001',
+      displayName: 'المستودع المركزي',
+    },
     activeRoles: [],
   }
 }

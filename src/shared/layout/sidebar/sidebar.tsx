@@ -109,8 +109,7 @@ function SidebarScopeIndicator({ collapsed }: { collapsed: boolean }) {
     enabled: false,
     staleTime: Number.POSITIVE_INFINITY,
   })
-  const scopeName =
-    session?.scopeState === 'Selected' ? session.activeScope?.displayName : undefined
+  const scopeName = session?.activeScope?.displayName
   const accessibleLabel =
     scopeName === undefined ? 'نطاق العمل غير محدد' : `نطاق العمل الحالي: ${scopeName}`
 

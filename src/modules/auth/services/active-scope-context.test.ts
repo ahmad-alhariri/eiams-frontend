@@ -1,20 +1,14 @@
-import { HttpResponse, http } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import {
   createActiveScopeContext,
   selectedScope,
   toScopeCacheKey,
 } from '@/modules/auth/services/active-scope-context'
-import { createAuthService } from '@/modules/auth/services/auth.service'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { createQueryClient } from '@/shared/services/query.client'
-import { queryKeys } from '@/shared/services/query-keys'
 import type { ScopeContext, SessionResponse } from '@/shared/types/generated/eiams-v1'
-import { server } from '@/test/msw/server'
 
-const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = '20000000-0000-4000-8000-000000000001'
 const SITE_ID = '30000000-0000-4000-8000-000000000001'
 
@@ -41,149 +35,76 @@ const siteScope = {
   siteId: SITE_ID,
 }
 
-function selectedSession(activeScope: ScopeContext = warehouseScope): SessionResponse {
+function sessionWithScope(activeScope: ScopeContext = warehouseScope): SessionResponse {
   return {
     user,
     permissionCodes: ['document.create'],
-    availableScopes: [warehouseScope, siteScope],
     activeScope,
-    scopeState: 'Selected',
     activeRoles: [],
   }
 }
 
-const bundles: ApiClientBundle[] = []
-
-function setupContext() {
-  const bundle = createApiClient({ baseURL: API_BASE_URL })
-  bundles.push(bundle)
-  const queryClient = createQueryClient()
-  const context = createActiveScopeContext({
-    authService: createAuthService(bundle.client),
-    queryClient,
-  })
-
-  return { context, queryClient }
+function sessionWithoutScope(): SessionResponse {
+  return { user, permissionCodes: ['document.create'], activeRoles: [] }
 }
 
-afterEach(() => {
-  for (const bundle of bundles.splice(0)) {
-    bundle.dispose()
+function setupContext(session?: SessionResponse) {
+  const queryClient = createQueryClient()
+  if (session) {
+    queryClient.setQueryData(authSessionQueryKey, session)
   }
-})
+
+  return { context: createActiveScopeContext(queryClient), queryClient }
+}
 
 describe('active scope context', () => {
-  it('derives cache namespaces only from the selected server projection', () => {
+  it('derives cache namespaces from the server-assigned scope projection', () => {
     expect(
       toScopeCacheKey({ scopeType: 'Enterprise', scopeId: null, displayName: 'الهيئة' }),
     ).toEqual({ kind: 'enterprise' })
     expect(toScopeCacheKey(siteScope)).toEqual({ kind: 'site', id: SITE_ID })
     expect(toScopeCacheKey(warehouseScope)).toEqual({ kind: 'warehouse', id: WAREHOUSE_ID })
-    expect(selectedScope({ ...selectedSession(), scopeState: 'SelectionRequired' })).toBeUndefined()
   })
 
-  it('serializes scope switches, evicts prior scoped data, and caches the final server session', async () => {
-    const { context, queryClient } = setupContext()
-    const calls: unknown[] = []
-    const warehouseSession = selectedSession(warehouseScope)
-    const siteSession = selectedSession(siteScope)
+  it('rejects a Site or Warehouse scope that is missing its identifier', () => {
+    expect(() => toScopeCacheKey({ ...siteScope, scopeId: null })).toThrow(TypeError)
+  })
 
-    server.use(
-      http.put(`${API_BASE_URL}/auth/active-scope`, async ({ request }) => {
-        calls.push(await request.json())
-        return HttpResponse.json(calls.length === 1 ? siteSession : warehouseSession)
-      }),
-    )
+  it('exposes the server-assigned active scope and its cache key', () => {
+    const { context } = setupContext(sessionWithScope())
 
-    queryClient.setQueryData(authSessionQueryKey, selectedSession())
-    queryClient.setQueryData(
-      queryKeys.scoped({ kind: 'warehouse', id: WAREHOUSE_ID }, 'balances'),
-      [1],
-    )
-    queryClient.setQueryData(queryKeys.scoped({ kind: 'site', id: SITE_ID }, 'documents'), [2])
-    queryClient.setQueryData(queryKeys.public('catalog'), ['retained'])
-
-    const siteSwitch = context.switchScope({ scopeType: 'Site', scopeId: SITE_ID })
-    const warehouseSwitch = context.switchScope({ scopeType: 'Warehouse', scopeId: WAREHOUSE_ID })
-
-    await expect(siteSwitch).resolves.toEqual(siteSession)
-    await expect(warehouseSwitch).resolves.toEqual(warehouseSession)
-    expect(calls).toEqual([
-      { scopeType: 'Site', scopeId: SITE_ID },
-      { scopeType: 'Warehouse', scopeId: WAREHOUSE_ID },
-    ])
+    expect(context.getSession()).toEqual(sessionWithScope())
+    expect(context.getActiveScope()).toEqual(warehouseScope)
     expect(context.getActiveScopeCacheKey()).toEqual({ kind: 'warehouse', id: WAREHOUSE_ID })
-    expect(queryClient.getQueryData(authSessionQueryKey)).toEqual(warehouseSession)
-    expect(
-      queryClient.getQueryData(
-        queryKeys.scoped({ kind: 'warehouse', id: WAREHOUSE_ID }, 'balances'),
-      ),
-    ).toBeUndefined()
-    expect(
-      queryClient.getQueryData(queryKeys.scoped({ kind: 'site', id: SITE_ID }, 'documents')),
-    ).toBeUndefined()
-    expect(queryClient.getQueryData(queryKeys.public('catalog'))).toEqual(['retained'])
   })
 
-  it('preserves the prior session on an ordinary rejected switch', async () => {
-    const { context, queryClient } = setupContext()
-    const previousSession = selectedSession()
+  it('reports no scope when the session has not been hydrated yet', () => {
+    const { context } = setupContext()
 
-    server.use(
-      http.put(`${API_BASE_URL}/auth/active-scope`, () =>
-        HttpResponse.json({ code: 'validation.scope', status: 422 }, { status: 422 }),
-      ),
-    )
-
-    queryClient.setQueryData(authSessionQueryKey, previousSession)
-    queryClient.setQueryData(
-      queryKeys.scoped({ kind: 'warehouse', id: WAREHOUSE_ID }, 'balances'),
-      [1],
-    )
-
-    await expect(context.switchScope({ scopeType: 'Site', scopeId: SITE_ID })).rejects.toBeTruthy()
-    expect(queryClient.getQueryData(authSessionQueryKey)).toEqual(previousSession)
-    expect(
-      queryClient.getQueryData(
-        queryKeys.scoped({ kind: 'warehouse', id: WAREHOUSE_ID }, 'balances'),
-      ),
-    ).toEqual([1])
+    expect(context.getSession()).toBeUndefined()
+    expect(context.getActiveScope()).toBeUndefined()
+    expect(context.getActiveScopeCacheKey()).toBeUndefined()
   })
 
-  it('refetches the session when the server reports that a scope was revoked', async () => {
-    const { context, queryClient } = setupContext()
-    const previousSession = selectedSession()
-    const unavailableSession: SessionResponse = {
-      user: previousSession.user,
-      availableScopes: [],
-      permissionCodes: [],
-      scopeState: 'Unavailable',
-      activeRoles: previousSession.activeRoles,
-    }
-    let sessionRequests = 0
+  it('reports no scope for an authenticated session that carries none', () => {
+    const { context } = setupContext(sessionWithoutScope())
 
-    server.use(
-      http.put(`${API_BASE_URL}/auth/active-scope`, () =>
-        HttpResponse.json(
-          {
-            code: 'auth.scope_not_available',
-            titleAr: 'النطاق المحدد غير متاح لك.',
-            status: 403,
-            traceId: 'trace-1',
-          },
-          { status: 403 },
-        ),
-      ),
-      http.get(`${API_BASE_URL}/auth/session`, () => {
-        sessionRequests += 1
-        return HttpResponse.json(unavailableSession)
-      }),
-    )
+    expect(context.getActiveScope()).toBeUndefined()
+    expect(context.getActiveScopeCacheKey()).toBeUndefined()
+  })
 
-    queryClient.setQueryData(authSessionQueryKey, previousSession)
+  it('reads the active scope directly, without a separate selection state', () => {
+    expect(selectedScope(sessionWithScope(siteScope))).toEqual(siteScope)
+    expect(selectedScope(undefined)).toBeUndefined()
+  })
 
-    await expect(context.switchScope({ scopeType: 'Site', scopeId: SITE_ID })).rejects.toBeTruthy()
-    expect(sessionRequests).toBe(1)
-    expect(queryClient.getQueryData(authSessionQueryKey)).toEqual(unavailableSession)
+  it('exposes no scope-switching surface, so the scope cannot be mutated locally', () => {
+    const { context } = setupContext(sessionWithScope())
+
+    expect(Object.keys(context).sort()).toEqual([
+      'getActiveScope',
+      'getActiveScopeCacheKey',
+      'getSession',
+    ])
   })
 })

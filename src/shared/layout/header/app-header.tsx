@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+﻿import type { ReactNode } from 'react'
 import { IconBell, IconMenu2 } from '@tabler/icons-react'
 
 import { cn } from '@/shared/utils/class-names'
@@ -14,7 +14,6 @@ type AppHeaderProps = {
   /** Breadcrumb trail rendered in the center region (delivered by e05-t06). */
   breadcrumb?: ReactNode
   /** Auth feature composition mounted beside the session controls. */
-  scopeSwitcher?: ReactNode
   /**
    * Auth feature composition for the session user block and its dropdown
    * (ui-design 4.2: avatar, name, role, caret, menu). Injected rather than
@@ -37,13 +36,7 @@ type AppHeaderProps = {
  * opens the injected user menu. Until a session exists neither the user block
  * nor the caret is rendered, and the bell shows no badge.
  */
-function AppHeader({
-  breadcrumb,
-  scopeSwitcher,
-  userMenu,
-  notificationsCount = 0,
-  user,
-}: AppHeaderProps) {
+function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHeaderProps) {
   const collapsed = useUiStore((state) => state.sidebarCollapsed)
   const toggleCollapsed = useUiStore((state) => state.toggleSidebarCollapsed)
   const setDrawerOpen = useUiStore((state) => state.setSidebarDrawerOpen)
@@ -95,7 +88,6 @@ function AppHeader({
       </div>
 
       <div className="ms-auto flex shrink-0 items-center gap-3">
-        {scopeSwitcher}
         <button
           type="button"
           aria-label="الإشعارات"

@@ -4,14 +4,11 @@ import { AppLayout } from '@/shared/layout/app-layout'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
 import {
   AnonymousRoute,
-  NoAccessRoute,
-  RequireSelectedScope,
+  RequireActiveScope,
   RouteAccessGuard,
-  ScopeSelectionRoute,
 } from '@/modules/auth/components/route-guards'
-import { ActiveScopeSwitcher } from '@/modules/auth/components/active-scope-switcher'
 import { SessionUserMenu } from '@/modules/auth/components/session-user-menu'
-import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
+import { ROUTE_METADATA } from '@/config/routes'
 import {
   getWiredRouteKeys,
   isDevOnlyRoute,
@@ -27,15 +24,14 @@ import {
  *
  * Protected routes are driven entirely by ROUTE_METADATA: every non-public
  * wired route gets the RouteAccessGuard (scope + permission). Public routes
- * (login, scope select, no-access, not-found, dev gallery) are composed
- * explicitly below instead.
+ * (login, not-found, dev gallery) are composed explicitly below instead.
  *
  * App routes render inside the AppLayout frame; anonymous routes own their
  * standalone composition and mount outside that frame. Only the protected
- * branch receives the session chrome (`scopeSwitcher`, `userMenu`): the
- * dev-gallery and not-found branches render the same frame without a session
- * identity. Lazy routes retain the shared per-domain error boundary, while
- * AppLayout supplies its own suspense boundary for framed pages.
+ * branch receives the session chrome (`userMenu`): the dev-gallery and
+ * not-found branches render the same frame without a session identity. Lazy
+ * routes retain the shared per-domain error boundary, while AppLayout supplies
+ * its own suspense boundary for framed pages.
  */
 const PROTECTED_ROUTE_OBJECTS = getWiredRouteKeys().flatMap((key) => {
   if (ROUTE_METADATA[key].public) {
@@ -68,22 +64,14 @@ const appRouter = createBrowserRouter([
     ),
   },
   {
-    path: ROUTE_PATHS.scopeSelect,
-    element: <ScopeSelectionRoute />,
-  },
-  {
-    path: ROUTE_PATHS.noAccess,
-    element: <NoAccessRoute />,
-  },
-  {
     element: <AppLayout />,
     children: DEV_GALLERY_ROUTE,
   },
   {
     element: (
-      <RequireSelectedScope>
-        <AppLayout scopeSwitcher={<ActiveScopeSwitcher />} userMenu={<SessionUserMenu />} />
-      </RequireSelectedScope>
+      <RequireActiveScope>
+        <AppLayout userMenu={<SessionUserMenu />} />
+      </RequireActiveScope>
     ),
     children: PROTECTED_ROUTE_OBJECTS,
   },
