@@ -1,3 +1,38 @@
+/**
+ * Shared collapsible hierarchy tree primitive.
+ *
+ * Owns the recursion, the collapse state, the toggle and edit controls, the
+ * status badge slot, and the ARIA wiring that the consuming feature trees
+ * (`material-category-tree`, `organizational-unit-tree`, and downstream
+ * custody / count trees) used to duplicate. The component is generic over the
+ * record type `T`; consumers supply the key, label, code, and status getters
+ * plus an optional edit callback.
+ *
+ * Interaction model
+ * -----------------
+ * The expand/collapse toggle is a real `<button>` with `aria-expanded`; the
+ * optional edit action is a separate real `<button>` with an Arabic
+ * `aria-label` that names the record being edited. The root list exposes the
+ * tree under a consumer-supplied `ariaLabel`. Keyboard activation follows the
+ * native semantics of those controls — focus, Enter/Space, and screen-reader
+ * announcement work without extra wiring.
+ *
+ * Status type
+ * -----------
+ * `RecordStatus` is the only contract status enum in v1, so the badge slot
+ * is typed against it directly. The import comes from the generated type
+ * artifact at `@/shared/types/generated/eiams-v1`; once that artifact is
+ * retired (per `whhu.5`) the import path will move to `@/shared/types` and
+ * the public API of this component is unchanged.
+ *
+ * Generic forest builder
+ * ----------------------
+ * The companion `buildHierarchyForest` in `./hierarchy-tree.model.ts` builds a
+ * resilient `HierarchyTreeNode<T>[]` from a flat list with parent
+ * references. The two consume each other but neither imports the other from
+ * the consumer's module, so neither feature tree carries duplicated tree
+ * markup or duplicated parent-resolution logic.
+ */
 import { IconChevronDown, IconEdit } from '@tabler/icons-react'
 import { useCallback, useState, type ReactNode } from 'react'
 
