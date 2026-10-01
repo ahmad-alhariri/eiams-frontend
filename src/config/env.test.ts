@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { environment, parseEnvironment } from '@/config/env'
+import { environment, parseEnvironment, type AppEnvironment } from '@/config/env'
 
 const viteEnvironment = {
   MODE: 'test',
@@ -8,16 +8,33 @@ const viteEnvironment = {
 }
 
 describe('environment configuration', () => {
-  it('exposes the validated Vite runtime environment', () => {
-    expect(environment).toMatchObject({
-      apiBaseUrl: '/api/v1',
-      enableApiMocks: false,
-      authBypass: false,
-      uiSandbox: false,
-      mode: 'test',
-      isDevelopment: true,
-      isProduction: false,
-    })
+  it('exposes the validated Vite runtime environment as a frozen AppEnvironment', () => {
+    // This case asserts the SHAPE of the ambient `environment` object, not
+    // any specific fixture flag value. Specific flag values depend on the
+    // developer's local .env / .env.local, which Vitest merges into
+    // import.meta.env before this module loads, so asserting 'uiSandbox:
+    // false' here would fail for any developer who opts into the ui-sandbox
+    // profile without recording that the failure was environmental (see
+    // eiams-frontend-2pqj).
+    //
+    // The default flag values themselves are covered by the explicit-input
+    // cases below — "leaves both development fixtures off when nothing is
+    // set" passes an empty viteEnvironment and proves the defaults.
+    expect(Object.isFrozen(environment)).toBe(true)
+    const expectedShape: Record<keyof AppEnvironment, 'string' | 'boolean'> = {
+      apiBaseUrl: 'string',
+      enableApiMocks: 'boolean',
+      authBypass: 'boolean',
+      uiSandbox: 'boolean',
+      mode: 'string',
+      isDevelopment: 'boolean',
+      isProduction: 'boolean',
+    }
+    for (const [key, kind] of Object.entries(expectedShape)) {
+      const value = (environment as Record<string, unknown>)[key]
+      expect(typeof value, `environment.${key}`).toBe(kind)
+    }
+    expect(environment.mode).toBe('test')
   })
 
   it('uses the documented same-origin API path by default', () => {
