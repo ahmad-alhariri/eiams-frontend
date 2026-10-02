@@ -1,11 +1,12 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okPageJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createPage, createUserSummary } from '@/test/msw/factories'
+import { createUserSummary } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -45,7 +46,7 @@ describe('UsersListPage', () => {
         const url = new URL(request.url)
         receivedPageIndex = url.searchParams.get('pageIndex')
         receivedPageSize = url.searchParams.get('pageSize')
-        return HttpResponse.json(createPage([account], { totalItems: 11, totalPages: 2 }))
+        return okPageJson([account], { page: 1, pageSize: 10, totalCount: 11, totalPages: 2 })
       }),
     )
 
@@ -68,7 +69,7 @@ describe('UsersListPage', () => {
       http.get(`${API_BASE_URL}/admin/users`, ({ request }) => {
         const url = new URL(request.url)
         receivedSearches.push(url.searchParams.get('search'))
-        return HttpResponse.json(createPage([createUserSummary()]))
+        return okPageJson([createUserSummary()])
       }),
     )
 
@@ -88,7 +89,7 @@ describe('UsersListPage', () => {
         attempts += 1
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(createPage([createUserSummary()]))
+          : okPageJson([createUserSummary()])
       }),
     )
 

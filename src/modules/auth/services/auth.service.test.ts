@@ -1,4 +1,5 @@
 ﻿import axios from 'axios'
+import { createAxiosTransport } from '@/shared/api/axios-transport'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -6,7 +7,7 @@ import { normalizeApiError } from '@/shared/services/api-error'
 import { createAuthService } from '@/modules/auth/services/auth.service'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
-import { errJson } from '@/test/msw/envelope'
+import { errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -48,7 +49,7 @@ const bundles: ApiClientBundle[] = []
 function setupService() {
   const bundle = createApiClient({ baseURL: API_BASE_URL })
   bundles.push(bundle)
-  return createAuthService(bundle.client)
+  return createAuthService(createAxiosTransport(bundle.client))
 }
 
 afterEach(() => {
@@ -70,7 +71,7 @@ describe('AuthService', () => {
         received = await httpRequest.json()
         authorization = httpRequest.headers.get('Authorization')
         credentials = httpRequest.credentials
-        return HttpResponse.json(tokenResponse)
+        return okJson(tokenResponse)
       }),
     )
 
@@ -83,7 +84,7 @@ describe('AuthService', () => {
   it('retrieves the server-owned session without offering a scope mutation', async () => {
     const service = setupService()
 
-    server.use(http.get(`${API_BASE_URL}/auth/session`, () => HttpResponse.json(sessionFixture)))
+    server.use(http.get(`${API_BASE_URL}/auth/session`, () => okJson(sessionFixture)))
 
     await expect(service.getSession()).resolves.toEqual(sessionFixture)
   })

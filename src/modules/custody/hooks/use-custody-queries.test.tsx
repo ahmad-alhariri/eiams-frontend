@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -32,7 +33,7 @@ describe('useCustodiesQuery (e19-t01)', () => {
         const url = new URL(request.url)
         expect(url.searchParams.get('status')).toBe('Active')
         expect(url.searchParams.get('custodyKind')).toBe('Operational')
-        return HttpResponse.json({
+        return okJson({
           items: [
             {
               assetId: ASSET_ID,
@@ -76,7 +77,7 @@ describe('useCustodiesQuery (e19-t01)', () => {
     // the disabled branch is covered by the service contract tests.
     server.use(
       http.get(`${API_BASE_URL}/custodies`, () =>
-        HttpResponse.json({
+        okJson({
           items: [],
           meta: { pageIndex: 0, pageSize: 20, totalItems: 0, totalPages: 0 },
         }),

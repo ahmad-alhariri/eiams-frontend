@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -9,12 +9,11 @@ import { ROUTE_PATHS } from '@/config/routes'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import {
   createMaterial,
-  createPage,
   createWarehouse,
   createWarehouseCapability,
   fixtureUuid,
 } from '@/test/msw/factories'
-import { errJson } from '@/test/msw/envelope'
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { createReceivingSuppliersHandler } from '@/test/msw/receiving-handlers'
 import { createWarehouseDocumentCreateHandler } from '@/test/msw/warehouse-document-handlers'
@@ -128,16 +127,10 @@ async function fillAssetLine(user: ReturnType<typeof userEvent.setup>) {
 
 function usePageHandlers(store: WarehouseDocument[], nextSystemReference: () => string) {
   server.use(
-    http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([warehouse]))),
-    http.get(`${API_BASE_URL}/catalog/materials`, () =>
-      HttpResponse.json(createPage([material, assetMaterial])),
-    ),
-    http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () =>
-      HttpResponse.json([capability]),
-    ),
-    http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () =>
-      HttpResponse.json([]),
-    ),
+    http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
+    http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material, assetMaterial])),
+    http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () => okJson([capability])),
+    http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () => okJson([])),
     ...createReceivingSuppliersHandler(['Sham Co']),
     ...createWarehouseDocumentCreateHandler({
       documentStore: () => store,
@@ -273,16 +266,10 @@ describe('ReceivingDocumentFormPage', () => {
           message: 'The paper document reference is missing or invalid.',
         }),
       ),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([warehouse]))),
-      http.get(`${API_BASE_URL}/catalog/materials`, () =>
-        HttpResponse.json(createPage([material])),
-      ),
-      http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () =>
-        HttpResponse.json([capability]),
-      ),
-      http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () =>
-        HttpResponse.json([]),
-      ),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
+      http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material])),
+      http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () => okJson([capability])),
+      http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () => okJson([])),
       ...createReceivingSuppliersHandler(['Sham Co']),
     )
 

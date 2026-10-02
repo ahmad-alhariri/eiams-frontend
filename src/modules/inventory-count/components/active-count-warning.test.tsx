@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ActiveCountWarning } from './active-count-warning'
@@ -33,7 +34,7 @@ describe('ActiveCountWarning (e20-t09)', () => {
   it('shows the warning when an InProgress count exists for the warehouse', async () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory-counts`, () =>
-        HttpResponse.json({
+        okJson({
           items: [
             {
               countId: 'active-1',
@@ -61,7 +62,7 @@ describe('ActiveCountWarning (e20-t09)', () => {
   it('renders nothing when no active count exists', async () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory-counts`, () =>
-        HttpResponse.json({
+        okJson({
           items: [],
           meta: { pageIndex: 0, pageSize: 10, totalItems: 0, totalPages: 1 },
         }),

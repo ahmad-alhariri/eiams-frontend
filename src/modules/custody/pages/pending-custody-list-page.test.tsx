@@ -1,7 +1,8 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
@@ -33,7 +34,7 @@ function usePendingHandler() {
       const url = new URL(request.url)
       expect(url.searchParams.get('status')).toBe('Active')
       expect(url.searchParams.get('custodyKind')).toBe('Operational')
-      return HttpResponse.json({
+      return okJson({
         items: [
           {
             assetId: ASSET_ID,

@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
@@ -29,7 +30,7 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 function useDetailHandlers() {
   server.use(
     http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
-      HttpResponse.json(
+      okJson(
         createAssetFixture({
           assetId: ASSET_ID,
           assetNumber: 'AST-2024-C01',
@@ -42,7 +43,7 @@ function useDetailHandlers() {
       ),
     ),
     http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () =>
-      HttpResponse.json([
+      okJson([
         createAssetCustody({
           custodyId: fixtureUuid(51),
           assetId: ASSET_ID,
@@ -110,7 +111,7 @@ describe('AssetDetailPage (e18-t03)', () => {
   it('shows the no-custody note when the timeline is empty', async () => {
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
-        HttpResponse.json(
+        okJson(
           createAssetFixture({
             assetId: ASSET_ID,
             derivedStatus: 'InStock',
@@ -118,7 +119,7 @@ describe('AssetDetailPage (e18-t03)', () => {
           }),
         ),
       ),
-      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () => HttpResponse.json([])),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () => okJson([])),
     )
     renderPage()
 
@@ -134,7 +135,7 @@ describe('AssetDetailPage (e18-t03)', () => {
     const toTs = '2026-09-02T11:30:00.000Z'
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
-        HttpResponse.json(
+        okJson(
           createAssetFixture({
             assetId: ASSET_ID,
             derivedStatus: 'InCustody',
@@ -143,7 +144,7 @@ describe('AssetDetailPage (e18-t03)', () => {
         ),
       ),
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () =>
-        HttpResponse.json([
+        okJson([
           createAssetCustody({
             custodyId: fixtureUuid(52),
             assetId: ASSET_ID,
@@ -177,7 +178,7 @@ describe('AssetDetailPage (e18-t03)', () => {
   it('omits the end time for an open custody row', async () => {
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
-        HttpResponse.json(
+        okJson(
           createAssetFixture({
             assetId: ASSET_ID,
             derivedStatus: 'InCustody',
@@ -186,7 +187,7 @@ describe('AssetDetailPage (e18-t03)', () => {
         ),
       ),
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () =>
-        HttpResponse.json([
+        okJson([
           createAssetCustody({
             custodyId: fixtureUuid(53),
             assetId: ASSET_ID,
@@ -222,7 +223,7 @@ describe('AssetDetailPage (e18-t03)', () => {
     let custodyShouldFail = true
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
-        HttpResponse.json(
+        okJson(
           createAssetFixture({
             assetId: ASSET_ID,
             assetNumber: 'AST-2024-C01',
@@ -236,7 +237,7 @@ describe('AssetDetailPage (e18-t03)', () => {
         if (custodyShouldFail) {
           return new HttpResponse(null, { status: 500 })
         }
-        return HttpResponse.json([
+        return okJson([
           createAssetCustody({
             custodyId: fixtureUuid(54),
             assetId: ASSET_ID,
@@ -278,7 +279,7 @@ describe('AssetDetailPage (e18-t03)', () => {
   it('uses the shared retry Button, not a hand-rolled element, for the asset read failure', async () => {
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () => new HttpResponse(null, { status: 500 })),
-      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () => HttpResponse.json([])),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () => okJson([])),
     )
     const { container } = renderPage(createDeterministicClient())
 

@@ -1,6 +1,5 @@
-﻿import type { AxiosInstance } from 'axios'
-
-import { apiClient } from '@/shared/services/api.client'
+﻿import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 import type {
   AuthTokenResponse,
   LoginRequest,
@@ -25,20 +24,28 @@ export interface AuthService {
  * navigate, or normalize/present errors. Those concerns belong to the session
  * lifecycle, query, route, and UI boundaries that compose this service.
  */
-export function createAuthService(client: AxiosInstance): AuthService {
+export function createAuthService(transport: ApiTransport): AuthService {
   return {
     async login(request) {
-      const response = await client.post<AuthTokenResponse>(AUTH_LOGIN_PATH, request)
+      const response = await transport.request<AuthTokenResponse>({
+        path: AUTH_LOGIN_PATH,
+        method: 'POST',
+        body: request,
+      })
       return response.data
     },
     async getSession() {
-      const response = await client.get<SessionResponse>(AUTH_SESSION_PATH)
+      const response = await transport.request<SessionResponse>({
+        path: AUTH_SESSION_PATH,
+        method: 'GET',
+      })
       return response.data
     },
     async logout() {
-      await client.post(AUTH_LOGOUT_PATH)
+      // 204: no body, so `requestEmpty` rather than `request`.
+      await transport.requestEmpty({ path: AUTH_LOGOUT_PATH, method: 'POST' })
     },
   }
 }
 
-export const authService = createAuthService(apiClient)
+export const authService = createAuthService(apiTransport)

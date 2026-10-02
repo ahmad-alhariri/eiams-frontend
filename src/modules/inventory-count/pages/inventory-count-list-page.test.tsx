@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okPageJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import InventoryCountListPage from './inventory-count-list-page'
-import { createPage, fixtureUuid } from '@/test/msw/factories'
+import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
@@ -41,25 +42,23 @@ function useCountHandlers() {
     http.get(`${API_BASE_URL}/inventory-counts`, ({ request }) => {
       const url = new URL(request.url)
       expect(url.searchParams.get('status')).toBe(null)
-      return HttpResponse.json(
-        createPage([
-          {
-            countId: COUNT_ID,
-            countType: 'Partial',
-            createdAt: '2026-08-18T08:00:00.000Z',
-            createdBy: { id: fixtureUuid(90), displayName: 'مروان السيد' },
-            freezePolicy: 'SoftFreeze',
-            lineCount: 3,
-            referenceNumber: 'EIAMS-CNT-2026-0001',
-            rowVersion: 1,
-            scope: { scopeIds: [], scopeType: 'ByCategory', summaryAr: 'أجهزة الحاسوب' },
-            startedAt: '2026-08-18T09:00:00.000Z',
-            status: 'InProgress',
-            varianceCount: 0,
-            warehouse: { id: fixtureUuid(30), displayName: 'المستودع المركزي' },
-          },
-        ]),
-      )
+      return okPageJson([
+        {
+          countId: COUNT_ID,
+          countType: 'Partial',
+          createdAt: '2026-08-18T08:00:00.000Z',
+          createdBy: { id: fixtureUuid(90), displayName: 'مروان السيد' },
+          freezePolicy: 'SoftFreeze',
+          lineCount: 3,
+          referenceNumber: 'EIAMS-CNT-2026-0001',
+          rowVersion: 1,
+          scope: { scopeIds: [], scopeType: 'ByCategory', summaryAr: 'أجهزة الحاسوب' },
+          startedAt: '2026-08-18T09:00:00.000Z',
+          status: 'InProgress',
+          varianceCount: 0,
+          warehouse: { id: fixtureUuid(30), displayName: 'المستودع المركزي' },
+        },
+      ])
     }),
   )
 }

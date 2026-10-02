@@ -1,4 +1,6 @@
-import { HttpResponse, http } from 'msw'
+import { createAxiosTransport } from '@/shared/api/axios-transport'
+import { apiJson, okJson } from '@/test/msw/envelope'
+import { http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createReceivingService } from '@/modules/receiving/services/receiving.service'
@@ -16,7 +18,7 @@ function setupService() {
     refreshSession: async () => createDevSession() as AuthTokenResponse,
   })
   bundles.push(bundle)
-  return createReceivingService(bundle.client)
+  return createReceivingService(createAxiosTransport(bundle.client))
 }
 
 afterEach(() => {
@@ -31,7 +33,7 @@ describe('ReceivingService', () => {
     server.use(
       http.get(`${API_BASE_URL}/receiving/suppliers`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname + new URL(request.url).search)
-        return HttpResponse.json(['مورد الشام', 'مورد النور'])
+        return okJson(['مورد الشام', 'مورد النور'])
       }),
     )
 
@@ -48,7 +50,7 @@ describe('ReceivingService', () => {
     const service = setupService()
     server.use(
       http.get(`${API_BASE_URL}/receiving/suppliers`, () =>
-        HttpResponse.json({ title: 'غير مصرح', status: 401 }, { status: 401 }),
+        apiJson({ title: 'غير مصرح', status: 401 }, { status: 401 }),
       ),
     )
 
@@ -64,7 +66,7 @@ describe('ReceivingService', () => {
     server.use(
       http.get(`${API_BASE_URL}/receiving/suppliers`, ({ request }) => {
         requestedUrls.push(new URL(request.url).search)
-        return HttpResponse.json(['مورد الشام'])
+        return okJson(['مورد الشام'])
       }),
     )
 

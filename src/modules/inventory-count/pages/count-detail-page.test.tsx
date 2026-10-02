@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -58,11 +59,11 @@ function useHandlers() {
         notes: null,
         rowVersion: 1,
       }
-      return HttpResponse.json(count)
+      return okJson(count)
     }),
     http.post(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/start`, async ({ request }) => {
       startedBody = (await request.json()) as { rowVersion?: number }
-      return HttpResponse.json({
+      return okJson({
         countId: COUNT_ID,
         referenceNumber: 'EIAMS-CNT-2026-0101',
         documentStatus: 'InProgress',

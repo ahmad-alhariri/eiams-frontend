@@ -1,7 +1,8 @@
 ﻿import { QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { okJson } from '@/test/msw/envelope'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router'
 
@@ -133,7 +134,7 @@ describe('RBAC route and action separation', () => {
     const onExecute = vi.fn()
     const nextSession = selectedSession(['document.post'])
 
-    server.use(http.get(`${API_BASE_URL}/auth/session`, () => HttpResponse.json(nextSession)))
+    server.use(http.get(`${API_BASE_URL}/auth/session`, () => okJson(nextSession)))
 
     queryClient.setQueryData(authSessionQueryKey, selectedSession(['inventory.view']))
     useAuthSessionStore.setState({ status: 'authenticated' })

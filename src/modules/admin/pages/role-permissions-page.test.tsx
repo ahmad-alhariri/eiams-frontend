@@ -4,11 +4,11 @@ import userEvent from '@testing-library/user-event'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createPermission, createRole, createSession } from '@/test/msw/factories'
-import { errJson } from '@/test/msw/envelope'
+import { errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -58,9 +58,9 @@ describe('RolePermissionsPage', () => {
       nameAr: 'إدارة الأدوار',
     })
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => HttpResponse.json(role)),
+      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => okJson(role)),
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        HttpResponse.json([viewPermission, managePermission]),
+        okJson([viewPermission, managePermission]),
       ),
     )
 
@@ -89,13 +89,13 @@ describe('RolePermissionsPage', () => {
     })
     const receivedBodies: unknown[] = []
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => HttpResponse.json(role)),
+      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => okJson(role)),
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        HttpResponse.json([viewPermission, managePermission]),
+        okJson([viewPermission, managePermission]),
       ),
       http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json({
+        return okJson({
           ...role,
           permissionCodes: ['admin.role.view', 'admin.role.manage'],
         })
@@ -135,9 +135,9 @@ describe('RolePermissionsPage', () => {
       nameAr: 'إدارة الأدوار',
     })
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => HttpResponse.json(role)),
+      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => okJson(role)),
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        HttpResponse.json([viewPermission, managePermission]),
+        okJson([viewPermission, managePermission]),
       ),
       http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () =>
         errJson(422, {

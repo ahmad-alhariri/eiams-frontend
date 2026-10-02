@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CountQuantityWorkspace } from './count-quantity-workspace'
@@ -91,7 +92,7 @@ function usePagedLinesHandlers(seed: readonly TestLine[]) {
       const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
       const pageSize = Number(url.searchParams.get('pageSize') ?? String(FIRST_PAGE_SIZE))
       const start = pageIndex * pageSize
-      return HttpResponse.json({
+      return okJson({
         items: store.slice(start, start + pageSize),
         meta: {
           pageIndex,
@@ -117,14 +118,14 @@ function usePagedLinesHandlers(seed: readonly TestLine[]) {
         target.reason = saved.reason ?? null
         target.rowVersion += 1
       }
-      return HttpResponse.json({ items: [], meta: emptyMeta(0, FIRST_PAGE_SIZE, store.length) })
+      return okJson({ items: [], meta: emptyMeta(0, FIRST_PAGE_SIZE, store.length) })
     }),
     // The workspace observes the count header as well as its lines, so the
     // conflict-recovery path can reload the session rowVersion
     // (eiams-frontend-3wv1). MSW runs with `onUnhandledRequest: 'error'`, so
     // every workspace test has to serve it.
     http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}`, () =>
-      HttpResponse.json({
+      okJson({
         countId: COUNT_ID,
         countNumber: 'CNT-1',
         countStatus: 'InProgress',
@@ -421,7 +422,7 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
     const user = userEvent.setup()
     server.use(
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-        HttpResponse.json({ error: { code: 'x', message: 'boom' } }, { status: 500 }),
+        apiJson({ error: { code: 'x', message: 'boom' } }, { status: 500 }),
       ),
     )
     renderWorkspace()
@@ -455,7 +456,7 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
         const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
         const pageSize = Number(url.searchParams.get('pageSize') ?? String(FIRST_PAGE_SIZE))
         const start = pageIndex * pageSize
-        return HttpResponse.json({
+        return okJson({
           items: store.slice(start, start + pageSize),
           meta: {
             pageIndex,
@@ -466,7 +467,7 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
         })
       }),
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}`, () =>
-        HttpResponse.json({
+        okJson({
           countId: COUNT_ID,
           countNumber: 'CNT-1',
           countStatus: 'InProgress',
@@ -492,7 +493,7 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
           entry.difference = entry.actualQuantity - entry.snapshotQuantity
           entry.rowVersion += 1
         }
-        return HttpResponse.json(
+        return apiJson(
           { status: 409, code: 'state.conflict', titleAr: 'تغيرت البيانات', traceId: 't-1' },
           { status: 409, headers: { 'Content-Type': 'application/problem+json' } },
         )
@@ -682,7 +683,7 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
     // A non-conflict failure, so the inline (non-dialog) branch is the one shown.
     server.use(
       http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-        HttpResponse.json({ status: 500 }, { status: 500 }),
+        apiJson({ status: 500 }, { status: 500 }),
       ),
     )
     await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))

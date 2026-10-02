@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -38,7 +39,7 @@ describe('admin mutation hooks', () => {
 
     server.use(
       http.put(`${API_BASE_URL}/admin/users/${user.userId}/role-scopes`, () =>
-        HttpResponse.json([assignment]),
+        okJson([assignment]),
       ),
     )
 

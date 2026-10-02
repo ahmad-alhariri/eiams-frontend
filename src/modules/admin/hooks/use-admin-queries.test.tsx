@@ -1,12 +1,12 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
 import {
-  createPage,
   createPermission,
   createRole,
   createUserRoleScope,
@@ -91,13 +91,13 @@ describe('admin query hooks', () => {
     const assignment = createUserRoleScope({ userId: user.userId, role })
 
     server.use(
-      http.get(`${API_BASE_URL}/admin/permissions`, () => HttpResponse.json([permission])),
-      http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([role])),
-      http.get(`${API_BASE_URL}/admin/roles/${role.roleId}`, () => HttpResponse.json(role)),
-      http.get(`${API_BASE_URL}/admin/users`, () => HttpResponse.json(createPage([user]))),
-      http.get(`${API_BASE_URL}/admin/users/${user.userId}`, () => HttpResponse.json(user)),
+      http.get(`${API_BASE_URL}/admin/permissions`, () => okJson([permission])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okJson([role])),
+      http.get(`${API_BASE_URL}/admin/roles/${role.roleId}`, () => okJson(role)),
+      http.get(`${API_BASE_URL}/admin/users`, () => okPageJson([user])),
+      http.get(`${API_BASE_URL}/admin/users/${user.userId}`, () => okJson(user)),
       http.get(`${API_BASE_URL}/admin/users/${user.userId}/role-scopes`, () =>
-        HttpResponse.json([assignment]),
+        okJson([assignment]),
       ),
     )
 
@@ -134,7 +134,7 @@ describe('admin query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/admin/users`, () => {
         requestCount += 1
-        return HttpResponse.json(createPage([createUserSummary()]))
+        return okPageJson([createUserSummary()])
       }),
     )
 

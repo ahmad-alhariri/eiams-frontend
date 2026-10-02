@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PropsWithChildren } from 'react'
@@ -47,8 +48,8 @@ describe('RolesCatalogPage', () => {
     const permission = createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
 
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([role])),
-      http.get(`${API_BASE_URL}/admin/permissions`, () => HttpResponse.json([permission])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okJson([role])),
+      http.get(`${API_BASE_URL}/admin/permissions`, () => okJson([permission])),
     )
 
     render(<RolesCatalogPage />, { wrapper: createWrapper() })
@@ -71,11 +72,9 @@ describe('RolesCatalogPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/admin/roles`, () => {
         roleAttempts += 1
-        return roleAttempts === 1
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json([createRole()])
+        return roleAttempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson([createRole()])
       }),
-      http.get(`${API_BASE_URL}/admin/permissions`, () => HttpResponse.json([permission])),
+      http.get(`${API_BASE_URL}/admin/permissions`, () => okJson([permission])),
     )
 
     render(<RolesCatalogPage />, { wrapper: createWrapper() })
@@ -90,8 +89,8 @@ describe('RolesCatalogPage', () => {
 
   it('renders independent Arabic empty states for both catalog resources', async () => {
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([])),
-      http.get(`${API_BASE_URL}/admin/permissions`, () => HttpResponse.json([])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okJson([])),
+      http.get(`${API_BASE_URL}/admin/permissions`, () => okJson([])),
     )
 
     render(<RolesCatalogPage />, { wrapper: createWrapper() })
@@ -111,9 +110,9 @@ describe('RolesCatalogPage', () => {
     })
 
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([role])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okJson([role])),
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        HttpResponse.json([viewPermission, managePermission]),
+        okJson([viewPermission, managePermission]),
       ),
     )
 

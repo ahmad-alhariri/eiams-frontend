@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { RolePermissionDialog } from '@/modules/admin/components/role-permission-dialog'
 import { createPermission, createRole } from '@/test/msw/factories'
-import { errJson } from '@/test/msw/envelope'
+import { errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import type { Role } from '@/shared/types/generated/eiams-v1'
 
@@ -67,11 +67,11 @@ describe('RolePermissionDialog', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        HttpResponse.json([viewPermission(), managePermission()]),
+        okJson([viewPermission(), managePermission()]),
       ),
       http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json({
+        return okJson({
           ...role,
           permissionCodes: ['admin.role.view', 'admin.role.manage'],
           rowVersion: 8,
@@ -120,11 +120,11 @@ describe('RolePermissionDialog', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        HttpResponse.json([viewPermission(), managePermission()]),
+        okJson([viewPermission(), managePermission()]),
       ),
       http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json({ ...role, permissionCodes: ['admin.role.view'], rowVersion: 4 })
+        return okJson({ ...role, permissionCodes: ['admin.role.view'], rowVersion: 4 })
       }),
     )
 
@@ -156,9 +156,7 @@ describe('RolePermissionDialog', () => {
     server.use(
       http.get(`${API_BASE_URL}/admin/permissions`, () => {
         attempts += 1
-        return attempts === 1
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json([viewPermission()])
+        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson([viewPermission()])
       }),
     )
 
@@ -181,7 +179,7 @@ describe('RolePermissionDialog', () => {
     const user = userEvent.setup()
     const emptyRole = createRole({ roleId: ROLE_ID, permissionCodes: [] })
 
-    server.use(http.get(`${API_BASE_URL}/admin/permissions`, () => HttpResponse.json([])))
+    server.use(http.get(`${API_BASE_URL}/admin/permissions`, () => okJson([])))
 
     const { unmount } = render(<DialogHost role={emptyRole} />, { wrapper: createWrapper() })
     await user.click(screen.getByRole('button', { name: `تعديل صلاحيات ${emptyRole.nameAr}` }))
@@ -191,7 +189,7 @@ describe('RolePermissionDialog', () => {
     const role = createRole({ roleId: ROLE_ID, permissionCodes: ['admin.role.view'] })
     server.use(
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        HttpResponse.json([viewPermission(), managePermission()]),
+        okJson([viewPermission(), managePermission()]),
       ),
       http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () =>
         errJson(422, {

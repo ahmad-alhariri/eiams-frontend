@@ -1,7 +1,8 @@
-import type { AxiosInstance } from 'axios'
+﻿import type { ApiPage } from '@/shared/api/api-contracts'
+import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 
 import type { ListAssetMovementsQuery, ListAssetsQuery } from '@/modules/asset/types/asset.types'
-import { apiClient } from '@/shared/services/api.client'
 import type {
   Asset,
   AssetCustody,
@@ -35,30 +36,59 @@ export interface AssetService {
  * movement provenance are server-authoritative; the client never infers an
  * asset's lifecycle from other records.
  */
-export function createAssetService(client: AxiosInstance): AssetService {
+export function createAssetService(transport: ApiTransport): AssetService {
+  const toViewPage = <T>(page: ApiPage<T>) =>
+    ({
+      items: page.items,
+      meta: {
+        pageIndex: page.page - 1,
+        page: page.page,
+        pageSize: page.pageSize,
+        itemCount: page.totalItems,
+        totalItems: page.totalItems,
+        totalCount: page.totalItems,
+        totalPages: page.totalPages,
+        hasNextPage: page.hasNextPage,
+        hasPreviousPage: page.hasPreviousPage,
+      },
+    }) as unknown as { items: readonly T[] }
+
   return {
     async listAssets(query) {
-      const response = await client.get<AssetPage>(ASSETS_PATH, { params: query })
-      return response.data
+      // Rebuild the documented page view-model from the normalized `ApiPage`; the
+      // generated page type described a body the backend never sends on its own.
+      return toViewPage(
+        await transport.requestPage<Asset>({
+          path: ASSETS_PATH,
+          method: 'GET',
+          query: query as Record<string, string | number | boolean | undefined>,
+        }),
+      ) as AssetPage
     },
     async getAsset(assetId) {
-      const response = await client.get<Asset>(pathWithId(ASSET_PATH, '{assetId}', assetId))
+      const response = await transport.request<Asset>({
+        path: pathWithId(ASSET_PATH, '{assetId}', assetId),
+        method: 'GET',
+      })
       return response.data
     },
     async getAssetCustodyTimeline(assetId) {
-      const response = await client.get<readonly AssetCustody[]>(
-        pathWithId(ASSET_CUSTODY_PATH, '{assetId}', assetId),
-      )
+      const response = await transport.request<readonly AssetCustody[]>({
+        path: pathWithId(ASSET_CUSTODY_PATH, '{assetId}', assetId),
+        method: 'GET',
+      })
       return response.data
     },
     async listAssetMovements(assetId, query) {
-      const response = await client.get<AssetMovementPage>(
-        pathWithId(ASSET_MOVEMENTS_PATH, '{assetId}', assetId),
-        { params: query },
-      )
-      return response.data
+      return toViewPage(
+        await transport.requestPage<AssetMovementPage['items'][number]>({
+          path: pathWithId(ASSET_MOVEMENTS_PATH, '{assetId}', assetId),
+          method: 'GET',
+          query: query as Record<string, string | number | boolean | undefined>,
+        }),
+      ) as AssetMovementPage
     },
   }
 }
 
-export const assetService = createAssetService(apiClient)
+export const assetService = createAssetService(apiTransport)

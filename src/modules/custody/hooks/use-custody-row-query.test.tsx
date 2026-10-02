@@ -1,4 +1,5 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
@@ -40,9 +41,9 @@ function seedCustodyEndpoints() {
   const row = createAssetCustody({ custodyId: CUSTODY_ID, assetId: ASSET_ID })
   server.use(
     http.get(`${API_BASE_URL}/custodies`, () =>
-      HttpResponse.json(createPage([row], { totalItems: 1, totalPages: 1 })),
+      okPageJson([row], { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 }),
     ),
-    http.post(`${API_BASE_URL}/custodies/assign`, () => HttpResponse.json(row)),
+    http.post(`${API_BASE_URL}/custodies/assign`, () => okJson(row)),
   )
 
   return row

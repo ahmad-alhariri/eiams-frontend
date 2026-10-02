@@ -1,6 +1,5 @@
-import type { AxiosInstance } from 'axios'
-
-import { apiClient } from '@/shared/services/api.client'
+import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 import type { paths } from '@/shared/types/generated/eiams-v1'
 
 const RECEIVING_SUPPLIERS_PATH = '/receiving/suppliers' satisfies keyof paths
@@ -21,15 +20,17 @@ export interface ReceivingService {
  * (`documentService.createDocument` / `updateDocument`); this service adds
  * only the receiving-owned supplier-suggestion operation.
  */
-export function createReceivingService(client: AxiosInstance): ReceivingService {
+export function createReceivingService(transport: ApiTransport): ReceivingService {
   return {
     async searchReceivingSuppliers(search) {
-      const response = await client.get<readonly string[]>(RECEIVING_SUPPLIERS_PATH, {
-        params: { search },
+      const response = await transport.request<readonly string[]>({
+        path: RECEIVING_SUPPLIERS_PATH,
+        method: 'GET',
+        query: { search },
       })
       return response.data
     },
   }
 }
 
-export const receivingService = createReceivingService(apiClient)
+export const receivingService = createReceivingService(apiTransport)

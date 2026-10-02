@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import { render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
@@ -80,7 +81,7 @@ describe('useUpdateCountLinesMutation invalidation', () => {
   it('refreshes both the whole-session review and the paged entry read', async () => {
     server.use(
       http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-        HttpResponse.json(emptyPage(0, ALL_LINES_PAGE_SIZE, 0)),
+        okJson(emptyPage(0, ALL_LINES_PAGE_SIZE, 0)),
       ),
     )
     const client = createClient()
@@ -116,7 +117,7 @@ describe('useUpdateCountLinesMutation invalidation', () => {
     // across all five count mutations at once.
     server.use(
       http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-        HttpResponse.json(emptyPage(0, ALL_LINES_PAGE_SIZE, 0)),
+        okJson(emptyPage(0, ALL_LINES_PAGE_SIZE, 0)),
       ),
     )
     const client = createClient()
@@ -146,7 +147,7 @@ describe('useAllCountLinesQuery', () => {
         const pageSize = Number(url.searchParams.get('pageSize') ?? String(ALL_LINES_PAGE_SIZE))
         const start = pageIndex * pageSize
         const size = Math.max(0, Math.min(pageSize, totalItems - start))
-        return HttpResponse.json({
+        return okJson({
           items: Array.from({ length: size }, (_u, i) => ({
             countLineId: `L${start + i + 1}`,
             material: { id: `m${start + i + 1}`, displayName: `مادة ${start + i + 1}` },
@@ -200,7 +201,7 @@ describe('useAllCountLinesQuery', () => {
   it('surfaces the read error so the review can offer a retry', async () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-        HttpResponse.json({ error: { code: 'x', message: 'boom' } }, { status: 500 }),
+        apiJson({ error: { code: 'x', message: 'boom' } }, { status: 500 }),
       ),
     )
     const client = createClient()

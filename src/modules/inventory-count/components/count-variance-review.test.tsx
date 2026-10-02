@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
@@ -33,7 +34,7 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
 function useHandlers(lines: unknown[]) {
   server.use(
     http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-      HttpResponse.json({
+      okJson({
         items: lines,
         meta: { pageIndex: 0, pageSize: 200, totalItems: lines.length, totalPages: 1 },
       }),
@@ -159,7 +160,7 @@ describe('CountVarianceReview (e20-t07)', () => {
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
         const pageIndex = Number(new URL(request.url).searchParams.get('pageIndex'))
         requestedPages.push(pageIndex)
-        return HttpResponse.json({
+        return okJson({
           items: pageIndex === 0 ? firstPage : [varianceWithoutReason],
           meta: { pageIndex, pageSize: 200, totalItems: 201, totalPages: 2 },
         })
@@ -193,7 +194,7 @@ describe('CountVarianceReview (e20-t07)', () => {
         if (pageIndex === 1 && failLaterPage) {
           return new HttpResponse(null, { status: 500 })
         }
-        return HttpResponse.json({
+        return okJson({
           items: pageIndex === 0 ? [matchingLine] : [varianceWithReason],
           meta: { pageIndex, pageSize: 1, totalItems: 2, totalPages: 2 },
         })

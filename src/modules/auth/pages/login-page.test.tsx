@@ -7,7 +7,7 @@ import { AppProviders } from '@/app/providers/app-providers'
 import LoginPage from '@/modules/auth/pages/login-page'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
-import { errJson } from '@/test/msw/envelope'
+import { errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const loginResponse: AuthTokenResponse = {
@@ -73,7 +73,7 @@ describe('LoginPage', () => {
     server.use(
       http.post('/api/v1/auth/login', async ({ request }) => {
         received = await request.json()
-        return HttpResponse.json(loginResponse)
+        return okJson(loginResponse)
       }),
     )
     renderLoginPage()
@@ -97,7 +97,7 @@ describe('LoginPage', () => {
         await new Promise<void>((resolve) => {
           resolveLogin = resolve
         })
-        return HttpResponse.json(loginResponse)
+        return okJson(loginResponse)
       }),
     )
     renderLoginPage()

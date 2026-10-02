@@ -1,18 +1,18 @@
+﻿import { createAxiosTransport } from '@/shared/api/axios-transport'
 import axios from 'axios'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createAdminService } from '@/modules/admin/services/admin.service'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
-  createPage,
   createPermission,
   createRole,
   createUserRoleScope,
   createUserSummary,
 } from '@/test/msw/factories'
-import { errJson } from '@/test/msw/envelope'
+import { apiJson, errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -21,7 +21,7 @@ const bundles: ApiClientBundle[] = []
 function setupService() {
   const bundle = createApiClient({ baseURL: API_BASE_URL })
   bundles.push(bundle)
-  return createAdminService(bundle.client)
+  return createAdminService(createAxiosTransport(bundle.client))
 }
 
 afterEach(() => {
@@ -42,28 +42,28 @@ describe('AdminService', () => {
     server.use(
       http.get(`${API_BASE_URL}/admin/permissions`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
-        return HttpResponse.json([permission])
+        return okJson([permission])
       }),
       http.get(`${API_BASE_URL}/admin/roles`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
-        return HttpResponse.json([role])
+        return okJson([role])
       }),
       http.get(`${API_BASE_URL}/admin/roles/${role.roleId}`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
-        return HttpResponse.json(role)
+        return okJson(role)
       }),
       http.get(`${API_BASE_URL}/admin/users`, ({ request }) => {
         const url = new URL(request.url)
         requestedUrls.push(`${url.pathname}${url.search}`)
-        return HttpResponse.json(createPage([user]))
+        return okPageJson([user])
       }),
       http.get(`${API_BASE_URL}/admin/users/${user.userId}`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
-        return HttpResponse.json(user)
+        return okJson(user)
       }),
       http.get(`${API_BASE_URL}/admin/users/${user.userId}/role-scopes`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
-        return HttpResponse.json([assignment])
+        return okJson([assignment])
       }),
     )
 
@@ -122,31 +122,31 @@ describe('AdminService', () => {
     server.use(
       http.post(`${API_BASE_URL}/admin/roles`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json(role, { status: 201 })
+        return apiJson(role, { status: 201 })
       }),
       http.put(
         `${API_BASE_URL}/admin/roles/${encodeURIComponent(encodedRoleId)}`,
         async ({ request }) => {
           receivedBodies.push(await request.json())
-          return HttpResponse.json(role)
+          return okJson(role)
         },
       ),
       http.post(`${API_BASE_URL}/admin/users`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json(user, { status: 201 })
+        return apiJson(user, { status: 201 })
       }),
       http.put(
         `${API_BASE_URL}/admin/users/${encodeURIComponent(encodedUserId)}`,
         async ({ request }) => {
           receivedBodies.push(await request.json())
-          return HttpResponse.json(user)
+          return okJson(user)
         },
       ),
       http.put(
         `${API_BASE_URL}/admin/users/${encodeURIComponent(encodedUserId)}/role-scopes`,
         async ({ request }) => {
           receivedBodies.push(await request.json())
-          return HttpResponse.json([assignment])
+          return okJson([assignment])
         },
       ),
     )

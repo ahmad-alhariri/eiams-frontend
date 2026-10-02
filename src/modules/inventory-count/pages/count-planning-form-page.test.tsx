@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okPageJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import CountPlanningFormPage from './count-planning-form-page'
-import { createPage, createWarehouse } from '@/test/msw/factories'
+import { createWarehouse } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
@@ -45,10 +46,10 @@ function useHandlers() {
   postStatus = 201
   const warehouse = createWarehouse({ warehouseId: WAREHOUSE_ID, nameAr: 'المستودع المركزي' })
   server.use(
-    http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([warehouse]))),
+    http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
     http.post(`${API_BASE_URL}/inventory-counts`, async ({ request }) => {
       postedBody = (await request.json()) as Record<string, unknown>
-      return HttpResponse.json(
+      return apiJson(
         {
           countId: COUNT_ID,
           referenceNumber: 'EIAMS-CNT-2026-0100',

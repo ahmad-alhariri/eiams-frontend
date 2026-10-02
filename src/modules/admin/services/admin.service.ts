@@ -1,6 +1,5 @@
-import type { AxiosInstance } from 'axios'
-
-import { apiClient } from '@/shared/services/api.client'
+﻿import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 import type {
   paths,
   Permission,
@@ -47,61 +46,105 @@ export interface AdminService {
  * Authorization, scope validation, concurrency, and access recomputation
  * remain server-authoritative.
  */
-export function createAdminService(client: AxiosInstance): AdminService {
+export function createAdminService(transport: ApiTransport): AdminService {
   return {
     async listPermissions() {
-      const response = await client.get<readonly Permission[]>(PERMISSIONS_PATH)
+      const response = await transport.request<readonly Permission[]>({
+        path: PERMISSIONS_PATH,
+        method: 'GET',
+      })
       return response.data
     },
     async listRoles() {
-      const response = await client.get<readonly Role[]>(ROLES_PATH)
+      const response = await transport.request<readonly Role[]>({ path: ROLES_PATH, method: 'GET' })
       return response.data
     },
     async getRole(roleId) {
-      const response = await client.get<Role>(pathWithId(ROLE_PATH, '{roleId}', roleId))
+      const response = await transport.request<Role>({
+        path: pathWithId(ROLE_PATH, '{roleId}', roleId),
+        method: 'GET',
+      })
       return response.data
     },
     async createRole(request) {
-      const response = await client.post<Role>(ROLES_PATH, request)
+      const response = await transport.request<Role>({
+        path: ROLES_PATH,
+        method: 'POST',
+        body: request,
+      })
       return response.data
     },
     async updateRole(roleId, request) {
-      const response = await client.put<Role>(pathWithId(ROLE_PATH, '{roleId}', roleId), request)
+      const response = await transport.request<Role>({
+        path: pathWithId(ROLE_PATH, '{roleId}', roleId),
+        method: 'PUT',
+        body: request,
+      })
       return response.data
     },
     async listUsers(query) {
-      const response = await client.get<UserPage>(USERS_PATH, { params: query })
-      return response.data
+      const page = await transport.requestPage<UserSummary>({
+        path: USERS_PATH,
+        method: 'GET',
+        query: query as Record<string, string | number | boolean | undefined>,
+      })
+      // The generated `UserPage` described a body the backend never sends on its
+      // own; rebuild the documented view-model from the normalized `ApiPage` so
+      // the declared type and the runtime value describe the same thing.
+      return {
+        items: page.items,
+        meta: {
+          pageIndex: page.page - 1,
+          page: page.page,
+          pageSize: page.pageSize,
+          itemCount: page.totalItems,
+          totalItems: page.totalItems,
+          totalCount: page.totalItems,
+          totalPages: page.totalPages,
+          hasNextPage: page.hasNextPage,
+          hasPreviousPage: page.hasPreviousPage,
+        },
+      } as UserPage
     },
     async getUser(userId) {
-      const response = await client.get<UserSummary>(pathWithId(USER_PATH, '{userId}', userId))
+      const response = await transport.request<UserSummary>({
+        path: pathWithId(USER_PATH, '{userId}', userId),
+        method: 'GET',
+      })
       return response.data
     },
     async createUser(request) {
-      const response = await client.post<UserSummary>(USERS_PATH, request)
+      const response = await transport.request<UserSummary>({
+        path: USERS_PATH,
+        method: 'POST',
+        body: request,
+      })
       return response.data
     },
     async updateUser(userId, request) {
-      const response = await client.put<UserSummary>(
-        pathWithId(USER_PATH, '{userId}', userId),
-        request,
-      )
+      const response = await transport.request<UserSummary>({
+        path: pathWithId(USER_PATH, '{userId}', userId),
+        method: 'PUT',
+        body: request,
+      })
       return response.data
     },
     async getUserRoleScopes(userId) {
-      const response = await client.get<readonly UserRoleScope[]>(
-        pathWithId(USER_ROLE_SCOPES_PATH, '{userId}', userId),
-      )
+      const response = await transport.request<readonly UserRoleScope[]>({
+        path: pathWithId(USER_ROLE_SCOPES_PATH, '{userId}', userId),
+        method: 'GET',
+      })
       return response.data
     },
     async replaceUserRoleScopes(userId, request) {
-      const response = await client.put<readonly UserRoleScope[]>(
-        pathWithId(USER_ROLE_SCOPES_PATH, '{userId}', userId),
-        request,
-      )
+      const response = await transport.request<readonly UserRoleScope[]>({
+        path: pathWithId(USER_ROLE_SCOPES_PATH, '{userId}', userId),
+        method: 'PUT',
+        body: request,
+      })
       return response.data
     },
   }
 }
 
-export const adminService = createAdminService(apiClient)
+export const adminService = createAdminService(apiTransport)

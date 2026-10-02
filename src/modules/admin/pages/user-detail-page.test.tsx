@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
-import { errJson } from '@/test/msw/envelope'
+import { errJson, okJson } from '@/test/msw/envelope'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import {
@@ -59,7 +59,7 @@ function PageWrapper({ children }: PropsWithChildren) {
 function seedRoleScopes() {
   server.use(
     http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
-      HttpResponse.json(
+      okJson(
         createUserSummary({
           userId: USER_ID,
           username: 'review.user',
@@ -69,14 +69,14 @@ function seedRoleScopes() {
       ),
     ),
     http.get(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, () =>
-      HttpResponse.json([
+      okJson([
         createUserRoleScope({
           role: createRole({ roleId: ROLE_A.roleId, nameAr: 'مدير النظام' }),
           scope: { scopeType: 'Enterprise', scopeId: null, displayName: 'المؤسسة' },
         }),
       ]),
     ),
-    http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([ROLE_A, ROLE_B])),
+    http.get(`${API_BASE_URL}/admin/roles`, () => okJson([ROLE_A, ROLE_B])),
   )
 }
 
@@ -94,7 +94,7 @@ describe('UserDetailPage', () => {
     server.use(
       http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json([
+        return okJson([
           createUserRoleScope({
             role: createRole({ roleId: ROLE_A.roleId, nameAr: 'مدير النظام' }),
             scope: { scopeType: 'Enterprise', scopeId: null, displayName: 'المؤسسة' },
@@ -246,13 +246,13 @@ describe('UserDetailPage', () => {
   it('renders an actionable Arabic error state when the role-scopes request fails', async () => {
     server.use(
       http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
-        HttpResponse.json(createUserSummary({ userId: USER_ID, rowVersion: 7 })),
+        okJson(createUserSummary({ userId: USER_ID, rowVersion: 7 })),
       ),
       http.get(
         `${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`,
         () => new HttpResponse(null, { status: 500 }),
       ),
-      http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([ROLE_A])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okJson([ROLE_A])),
     )
 
     render(<UserDetailPage />, { wrapper: PageWrapper })

@@ -1,13 +1,14 @@
-import type { AxiosInstance } from 'axios'
+﻿import type { ApiPage } from '@/shared/api/api-contracts'
+import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 
 import type {
   InventoryCountPlanRequest,
   ListInventoryCountsQuery,
   UpdateCountLinesRequest,
 } from '@/modules/inventory-count/types/inventory-count.types'
-import { apiClient } from '@/shared/services/api.client'
 import { pathWithId } from '@/shared/services/api-path'
-import { withIdempotencyKey } from '@/shared/services/mutation-safety'
+import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import type {
   InventoryCount,
   InventoryCountLinePage,
@@ -65,73 +66,106 @@ interface CountLinesQuery {
  * batches actual quantities through `updateLines`, and `complete`/`close`
  * advance the review lifecycle. `complete` carries an Idempotency-Key.
  */
-export function createCountService(client: AxiosInstance): CountService {
+export function createCountService(transport: ApiTransport): CountService {
+  /**
+   * Rebuilds a declared page view-model from the transport's normalized
+   * `ApiPage`. The generated page types described a body the backend never
+   * sends on its own, so returning `response.data` made the declared type and
+   * the runtime value disagree.
+   */
+  const toPage = <T>(page: ApiPage<T>) =>
+    ({
+      items: page.items,
+      meta: {
+        pageIndex: page.page - 1,
+        page: page.page,
+        pageSize: page.pageSize,
+        itemCount: page.totalItems,
+        totalItems: page.totalItems,
+        totalCount: page.totalItems,
+        totalPages: page.totalPages,
+        hasNextPage: page.hasNextPage,
+        hasPreviousPage: page.hasPreviousPage,
+      },
+    }) as unknown as { items: readonly T[] }
+
   return {
     async listCounts(query) {
-      const response = await client.get<InventoryCountPageShape>(COUNTS_PATH, {
-        params: query,
+      return toPage(
+        await transport.requestPage<InventoryCountPageShape['items'][number]>({
+          path: COUNTS_PATH,
+          method: 'GET',
+          query: query as Record<string, string | number | boolean | undefined>,
+        }),
+      ) as InventoryCountPageShape
+    },
+
+    async getCount(countId) {
+      const response = await transport.request<InventoryCount>({
+        path: pathWithId(COUNT_PATH, '{countId}', countId),
+        method: 'GET',
       })
       return response.data
     },
 
-    async getCount(countId) {
-      const response = await client.get<InventoryCount>(
-        pathWithId(COUNT_PATH, '{countId}', countId),
-      )
-      return response.data
-    },
-
     async planCount(request, idempotencyKey) {
-      const response = await client.post<InventoryCount>(
-        COUNTS_PATH,
-        request,
-        withIdempotencyKey(idempotencyKey).config,
-      )
+      const response = await transport.request<InventoryCount>({
+        path: COUNTS_PATH,
+        method: 'POST',
+        body: request,
+        headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
+      })
       return response.data
     },
 
     async startCount(countId, rowVersion) {
-      const response = await client.post<InventoryCount>(
-        pathWithId(COUNT_START_PATH, '{countId}', countId),
-        { rowVersion } satisfies RowVersionAction,
-      )
+      const response = await transport.request<InventoryCount>({
+        path: pathWithId(COUNT_START_PATH, '{countId}', countId),
+        method: 'POST',
+        body: { rowVersion } satisfies RowVersionAction,
+      })
       return response.data
     },
 
     async listLines(countId, query) {
-      const response = await client.get<InventoryCountLinePage>(
-        pathWithId(COUNT_LINES_PATH, '{countId}', countId),
-        { params: query },
-      )
-      return response.data
+      return toPage(
+        await transport.requestPage<InventoryCountLinePage['items'][number]>({
+          path: pathWithId(COUNT_LINES_PATH, '{countId}', countId),
+          method: 'GET',
+          query: query as Record<string, string | number | boolean | undefined>,
+        }),
+      ) as InventoryCountLinePage
     },
 
     async updateLines(countId, request) {
-      const response = await client.put<InventoryCountLinePage>(
-        pathWithId(COUNT_LINES_PATH, '{countId}', countId),
-        request,
-      )
-      return response.data
+      const page = await transport.requestPage<InventoryCountLinePage['items'][number]>({
+        path: pathWithId(COUNT_LINES_PATH, '{countId}', countId),
+        method: 'PUT',
+        body: request,
+      })
+      return toPage(page) as InventoryCountLinePage
     },
 
     async completeCount(countId, rowVersion, idempotencyKey) {
-      const response = await client.post<InventoryCount>(
-        pathWithId(COUNT_COMPLETE_PATH, '{countId}', countId),
-        { rowVersion } satisfies RowVersionAction,
-        withIdempotencyKey(idempotencyKey).config,
-      )
+      const response = await transport.request<InventoryCount>({
+        path: pathWithId(COUNT_COMPLETE_PATH, '{countId}', countId),
+        method: 'POST',
+        body: { rowVersion } satisfies RowVersionAction,
+        headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
+      })
       return response.data
     },
 
     async closeCount(countId, rowVersion) {
-      const response = await client.post<InventoryCount>(
-        pathWithId(COUNT_CLOSE_PATH, '{countId}', countId),
-        { rowVersion } satisfies RowVersionAction,
-      )
+      const response = await transport.request<InventoryCount>({
+        path: pathWithId(COUNT_CLOSE_PATH, '{countId}', countId),
+        method: 'POST',
+        body: { rowVersion } satisfies RowVersionAction,
+      })
       return response.data
     },
   }
 }
 
-/** Session-scoped singleton bound to the shared axios instance. */
-export const countService = createCountService(apiClient)
+/** Session-scoped singleton bound to the shared transport. */
+export const countService = createCountService(apiTransport)

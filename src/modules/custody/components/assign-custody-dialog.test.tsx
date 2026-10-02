@@ -1,7 +1,8 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
 import { assignCustodySchema } from '@/modules/custody/schemas/assign-custody.schema'
@@ -45,7 +46,7 @@ function useEmployeeHandler() {
     http.get(`${API_BASE_URL}/counterparts`, ({ request }) => {
       const url = new URL(request.url)
       expect(url.searchParams.get('type')).toBe('Employee')
-      return HttpResponse.json({
+      return okJson({
         items: [
           {
             displayName: 'أحمد محمد',
@@ -92,7 +93,7 @@ describe('AssignCustodyDialog (e19-t03)', () => {
       http.post(`${API_BASE_URL}/custodies/assign`, async ({ request }) => {
         postedBody = (await request.json()) as Record<string, unknown>
         idempotencyKey = request.headers.get('Idempotency-Key') ?? undefined
-        return HttpResponse.json(
+        return apiJson(
           { custodyId: fixtureUuid(60), status: 'Active', custodyKind: 'Personal' },
           { status: 201 },
         )
@@ -122,7 +123,7 @@ describe('AssignCustodyDialog (e19-t03)', () => {
     server.use(
       http.post(`${API_BASE_URL}/custodies/assign`, async ({ request }) => {
         postedBody = (await request.json()) as Record<string, unknown>
-        return HttpResponse.json({}, { status: 201 })
+        return apiJson({}, { status: 201 })
       }),
     )
 

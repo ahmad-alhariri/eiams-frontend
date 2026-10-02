@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AssetMovementLedger } from './asset-movement-ledger'
@@ -20,7 +21,7 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 function useMovementsHandler() {
   server.use(
     http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () =>
-      HttpResponse.json({
+      okJson({
         items: [
           {
             assetId: ASSET_ID,
@@ -84,7 +85,7 @@ describe('AssetMovementLedger (e18-t05)', () => {
   it('shows the empty state when the asset has no movements', async () => {
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () =>
-        HttpResponse.json({
+        okJson({
           items: [],
           meta: { pageIndex: 0, pageSize: 20, totalItems: 0, totalPages: 0 },
         }),

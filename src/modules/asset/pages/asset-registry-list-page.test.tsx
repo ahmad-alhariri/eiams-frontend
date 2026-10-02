@@ -1,7 +1,8 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
@@ -39,7 +40,7 @@ function useTwoAssetsHandler() {
   server.use(
     http.get(`${API_BASE_URL}/assets`, ({ request }) => {
       lastAssetsQuery = new URL(request.url).searchParams
-      return HttpResponse.json({
+      return okJson({
         items: [
           createAsset({
             assetId: fixtureUuid(230),
@@ -106,7 +107,7 @@ describe('AssetRegistryListPage (e18-t02)', () => {
   it('shows the empty state when no assets match', async () => {
     server.use(
       http.get(`${API_BASE_URL}/assets`, () =>
-        HttpResponse.json({
+        okJson({
           items: [],
           meta: { pageIndex: 0, pageSize: 20, totalItems: 0, totalPages: 0 },
         }),
