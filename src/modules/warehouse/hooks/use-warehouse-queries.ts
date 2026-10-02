@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
-import { createWarehouseService } from '@/modules/warehouse/services/warehouse.service'
+import { warehouseService } from '@/modules/warehouse/services/warehouse.service'
 import type {
   ListWarehouseMaterialSettingsQuery,
   ListWarehousesQuery,
@@ -37,20 +37,12 @@ function useActiveScopeCacheKey() {
   return useActiveScopeContext().activeScopeCacheKey
 }
 
-// Lazy singleton: created on first read, re-creatable for tests.
-let warehouseService: ReturnType<typeof createWarehouseService> = createWarehouseService(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  {} as any,
-)
-
-export function useWarehouseService() {
-  return warehouseService
-}
-
-export function setWarehouseService(transport: Parameters<typeof createWarehouseService>[0]) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  warehouseService = createWarehouseService(transport as any)
-}
+// The warehouse service is a single instance owned by
+// services/warehouse.service.ts (9uuf). This file previously kept its own
+// private copy plus a `useWarehouseService`/`setWarehouseService` pair whose
+// exports had zero importers; the copy is what kept these query hooks calling
+// an empty transport at runtime. Do not reintroduce a local instance — inject
+// through `setWarehouseService` in the service module instead.
 
 export function useWarehousesQuery(query: ListWarehousesQuery = EMPTY_QUERY) {
   const scope = useActiveScopeCacheKey()

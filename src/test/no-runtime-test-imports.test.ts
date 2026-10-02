@@ -75,10 +75,17 @@ import {
  * `src/shared/layout/ui-sandbox-marker.tsx` (the shared mount point for the
  * RESOLUTION-040 sandbox marker, mounted both by `AppLayout` and by the
  * anonymous routes).
+ * Re-measured at 354 by `eiams-frontend-9uuf`, which added
+ * `src/shared/api/transport.ts` — the single production `ApiTransport` instance
+ * built from `apiClient`. Re-measured rather than relaxed, per the protocol in
+ * this file's header: a scan whose file set drifts silently turns every "no
+ * offenders" assertion into a vacuous pass.
  * This file lives in `src/test/`, so adding or editing test files does not move
- * the number; only application code does.
+ * the number; only application code does. `9uuf` also added
+ * `src/test/support/test-transport-harness.ts` and two `src/test/**` suites,
+ * none of which belong to this set.
  */
-const SCANNED_FILE_COUNT = 353
+const SCANNED_FILE_COUNT = 354
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

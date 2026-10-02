@@ -1,25 +1,24 @@
-import { HttpResponse, http } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+﻿import { HttpResponse, http } from 'msw'
+import { describe, expect, it } from 'vitest'
 
 import {
   counterpartLookupService,
-  createCounterpartLookupService,
   setCounterpartLookupService,
 } from '@/modules/organization/services/counterpart-lookup.service'
 import type { ExternalParty } from '@/modules/organization/types/organization.types'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
 
 const API_BASE_URL = '/api/v1'
-const bundles: ApiClientBundle[] = []
+
+// A real transport over a real Axios client (9uuf); the previous cast supplied
+// none of requestPage/request/requestEmpty while satisfying the type.
+const createHarness = registerTestTransportHarness(API_BASE_URL)
 
 function setupService() {
-  const bundle = createApiClient({ baseURL: API_BASE_URL })
-  bundles.push(bundle)
-  setCounterpartLookupService(
-    bundle.client as unknown as Parameters<typeof createCounterpartLookupService>[0],
-  )
+  const { transport } = createHarness()
+  setCounterpartLookupService(transport)
   return counterpartLookupService
 }
 
@@ -35,12 +34,6 @@ function createExternalParty(overrides: Partial<ExternalParty> = {}): ExternalPa
     ...overrides,
   }
 }
-
-afterEach(() => {
-  for (const bundle of bundles.splice(0)) {
-    bundle.dispose()
-  }
-})
 
 describe('CounterpartLookupService', () => {
   it('searches external parties with the contract query parameters', async () => {

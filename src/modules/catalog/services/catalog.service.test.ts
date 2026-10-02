@@ -1,14 +1,9 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import { HttpResponse, http } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import {
-  catalogService,
-  createCatalogService,
-  setCatalogService,
-} from '@/modules/catalog/services/catalog.service'
+import { catalogService, setCatalogService } from '@/modules/catalog/services/catalog.service'
 import { normalizeApiError } from '@/shared/services/api-error'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
   createMaterial,
   createMaterialCategory,
@@ -19,20 +14,21 @@ import {
   createUnitOfMeasure,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
 
 const API_BASE_URL = '/api/v1'
-const bundles: ApiClientBundle[] = []
+
+// A real transport over a real Axios client (9uuf). The previous
+// `bundle.client as unknown as Parameters<typeof createCatalogService>[0]` cast
+// satisfied TypeScript while supplying none of requestPage/request/requestEmpty,
+// which is how the missing production wiring stayed invisible.
+const createHarness = registerTestTransportHarness(API_BASE_URL)
 
 function setupService() {
-  const bundle = createApiClient({ baseURL: API_BASE_URL })
-  bundles.push(bundle)
-  setCatalogService(bundle.client as unknown as Parameters<typeof createCatalogService>[0])
+  const { transport } = createHarness()
+  setCatalogService(transport)
   return catalogService
 }
-
-afterEach(() => {
-  for (const bundle of bundles.splice(0)) bundle.dispose()
-})
 
 describe('CatalogService', () => {
   it('maps catalog list queries and responses to the generated contract endpoints', async () => {

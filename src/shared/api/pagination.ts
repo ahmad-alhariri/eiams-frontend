@@ -55,9 +55,16 @@ export interface NormalizedPaginationInput {
  * balance-detail identity `balanceId`; low-stock projection â€” pagination preserved, not rewritten).
  */
 export function normalizePagination(
-  serverPagination: ApiPaginationResponse | null,
+  serverPagination: ApiPaginationResponse | null | undefined,
 ): NormalizedPaginationInput {
-  if (serverPagination === null) {
+  // `undefined` is handled as well as `null`, and that is not defensive
+  // padding. `ApiSuccessResponse.pagination` is OPTIONAL, so a well-formed
+  // success envelope with no `pagination` key arrives here as `undefined` —
+  // the strict `=== null` check let it through and the next line threw
+  // `Cannot read properties of undefined (reading 'page')`. That was
+  // unreachable while `createAxiosTransport` had no callers (9uuf) and became
+  // a live crash the moment the transport was actually wired.
+  if (serverPagination === null || serverPagination === undefined) {
     return {
       page: 1,
       pageSize: 0,

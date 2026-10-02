@@ -1,4 +1,5 @@
 import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 import type {
   Warehouse,
   WarehouseCapability,
@@ -154,11 +155,19 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
   }
 }
 
-// Lazy singleton — replaced during tests by `setWarehouseService`.
-let warehouseService: WarehouseService = createWarehouseService(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  {} as any,
-)
+// Eager singleton over the application's single transport (9uuf). Never `{} as
+// any` — that default is what made the first runtime list call throw.
+//
+// This is the ONE warehouse service instance. Before 9uuf the module held
+// three competing singletons: this one, plus private copies inside
+// use-warehouse-queries.ts and use-warehouse-mutations.ts whose exported
+// `useWarehouseService`/`setWarehouseService` had zero importers. Injecting
+// only this one would have left 8 live query and mutation hooks calling an
+// empty object, so `warehouse.service.test.ts` would have gone green while the
+// warehouse UI stayed broken. The two hook-local copies are deleted, not
+// injected; every warehouse hook imports this binding. Replaced during tests
+// by `setWarehouseService`.
+let warehouseService: WarehouseService = createWarehouseService(apiTransport)
 
 export function setWarehouseService(transport: ApiTransport) {
   warehouseService = createWarehouseService(transport)

@@ -5,7 +5,8 @@ import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import { createPage, createWarehouse } from '@/test/msw/factories'
+import { createWarehouse } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -48,7 +49,7 @@ describe('useScopedWarehouseSelector', () => {
       http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
         const search = new URL(request.url).searchParams.get('search') ?? ''
         const items = search === '' ? [central, archive] : [central]
-        return HttpResponse.json(createPage(items))
+        return okPageJson(items)
       }),
     )
     const { result } = renderHook(() => useScopedWarehouseSelector(), {
@@ -77,7 +78,7 @@ describe('useScopedWarehouseSelector', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
         const search = new URL(request.url).searchParams.get('search') ?? ''
-        return HttpResponse.json(createPage(search.includes('مركزي') ? [central] : []))
+        return okPageJson(search.includes('مركزي') ? [central] : [])
       }),
     )
     const { result } = renderHook(() => useScopedWarehouseSelector(), {
@@ -95,7 +96,7 @@ describe('useScopedWarehouseSelector', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses`, () => {
         requests += 1
-        return HttpResponse.json(createPage([]))
+        return okPageJson([])
       }),
     )
     const { result } = renderHook(() => useScopedWarehouseSelector(), {

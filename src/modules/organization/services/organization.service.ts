@@ -1,4 +1,5 @@
 import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 import type { ApiPage } from '@/shared/api/api-contracts'
 import type {
   Site,
@@ -232,11 +233,10 @@ export function createOrganizationService(transport: ApiTransport): Organization
   }
 }
 
-// Lazy singleton — replaced during tests by `setOrganizationService`.
-let organizationService: OrganizationService = createOrganizationService(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  {} as any,
-)
+// Eager singleton over the application's single transport (9uuf). Never `{} as
+// any` — that default is what made the first runtime list call throw. Replaced
+// during tests by `setOrganizationService`.
+let organizationService: OrganizationService = createOrganizationService(apiTransport)
 
 export function setOrganizationService(transport: ApiTransport) {
   organizationService = createOrganizationService(transport)

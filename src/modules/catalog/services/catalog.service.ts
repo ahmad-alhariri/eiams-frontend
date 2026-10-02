@@ -1,4 +1,5 @@
 import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 import type {
   UnitOfMeasure,
   UnitOfMeasureUpsertRequest,
@@ -353,11 +354,10 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
   }
 }
 
-// Lazy singleton — replaced during tests by `setCatalogService`.
-let catalogService: CatalogService = createCatalogService(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  {} as any,
-)
+// Eager singleton over the application's single transport (9uuf). Never `{} as
+// any` — that default is what made the first runtime list call throw. Replaced
+// during tests by `setCatalogService`.
+let catalogService: CatalogService = createCatalogService(apiTransport)
 
 export function setCatalogService(transport: ApiTransport) {
   catalogService = createCatalogService(transport)

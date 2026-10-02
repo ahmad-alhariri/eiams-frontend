@@ -1,14 +1,12 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import { HttpResponse, http } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import {
-  createOrganizationService,
   organizationService,
   setOrganizationService,
 } from '@/modules/organization/services/organization.service'
 import { normalizeApiError } from '@/shared/services/api-error'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
   createEmployee,
   createExternalParty,
@@ -17,24 +15,19 @@ import {
   createSite,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
 
 const API_BASE_URL = '/api/v1'
-const bundles: ApiClientBundle[] = []
+
+// A real transport over a real Axios client (9uuf); the previous cast supplied
+// none of requestPage/request/requestEmpty while satisfying the type.
+const createHarness = registerTestTransportHarness(API_BASE_URL)
 
 function setupService() {
-  const bundle = createApiClient({ baseURL: API_BASE_URL })
-  bundles.push(bundle)
-  setOrganizationService(
-    bundle.client as unknown as Parameters<typeof createOrganizationService>[0],
-  )
+  const { transport } = createHarness()
+  setOrganizationService(transport)
   return organizationService
 }
-
-afterEach(() => {
-  for (const bundle of bundles.splice(0)) {
-    bundle.dispose()
-  }
-})
 
 describe('OrganizationService', () => {
   it('maps each paginated organization resource to its contract endpoint and query parameters', async () => {

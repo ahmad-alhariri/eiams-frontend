@@ -1,30 +1,29 @@
-import { HttpResponse, http } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+﻿import { HttpResponse, http } from 'msw'
+import { describe, expect, it } from 'vitest'
 
 import { createWarehouseService } from '@/modules/warehouse/services/warehouse.service'
 import { normalizeApiError } from '@/shared/services/api-error'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
-  createPage,
   createWarehouse,
   createWarehouseCapability,
   createWarehouseMaterialSetting,
 } from '@/test/msw/factories'
+import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
-import type { ApiTransport } from '@/shared/api/api-transport'
+import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
 
 const API_BASE_URL = '/api/v1'
-const bundles: ApiClientBundle[] = []
+
+// A real transport over a real Axios client (9uuf). This suite built a service
+// directly rather than through the singleton, so it never exercised
+// `setWarehouseService` at all — which is part of why the module's three
+// competing singletons went unnoticed.
+const createHarness = registerTestTransportHarness(API_BASE_URL)
 
 function setupService(): ReturnType<typeof createWarehouseService> {
-  const bundle = createApiClient({ baseURL: API_BASE_URL })
-  bundles.push(bundle)
-  return createWarehouseService(bundle.client as unknown as ApiTransport)
+  const { transport } = createHarness()
+  return createWarehouseService(transport)
 }
-
-afterEach(() => {
-  for (const bundle of bundles.splice(0)) bundle.dispose()
-})
 
 describe('WarehouseService', () => {
   it('maps warehouse and material-setting list filters to the generated contract endpoints', async () => {
@@ -37,33 +36,37 @@ describe('WarehouseService', () => {
       http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
         const url = new URL(request.url)
         requestedUrls.push(url.pathname + url.search)
-        return HttpResponse.json(createPage([warehouse]))
+        return okPageJson([warehouse])
       }),
       http.get(
         `${API_BASE_URL}/warehouses/${warehouse.warehouseId}/material-settings`,
         ({ request }) => {
           const url = new URL(request.url)
           requestedUrls.push(url.pathname + url.search)
-          return HttpResponse.json(createPage([setting]))
+          return okPageJson([setting])
         },
       ),
     )
 
-    await expect(
-      service.listWarehouses({
-        page: 2,
-        pageSize: 10,
-        siteId: warehouse.site.id,
-        status: 'Active',
-      }),
-    ).resolves.toEqual(createPage([warehouse]))
-    await expect(
-      service.listWarehouseMaterialSettings(warehouse.warehouseId, {
-        page: 1,
-        pageSize: 25,
-        search: 'حاسوب',
-      }),
-    ).resolves.toEqual(createPage([setting]))
+    // The fixtures now serve the WIRE envelope (`okPageJson`) rather than a UI
+    // page (`createPage`). Under the old cast this file asserted against a
+    // service whose every list call threw `requestPage is not a function`, so
+    // the body shape it returned was never actually checked — which is how a
+    // fixture that no production response could ever produce survived here.
+    const warehousePage = await service.listWarehouses({
+      page: 2,
+      pageSize: 10,
+      siteId: warehouse.site.id,
+      status: 'Active',
+    })
+    expect(warehousePage.items).toEqual([warehouse])
+
+    const settingsPage = await service.listWarehouseMaterialSettings(warehouse.warehouseId, {
+      page: 1,
+      pageSize: 25,
+      search: 'حاسوب',
+    })
+    expect(settingsPage.items).toEqual([setting])
 
     expect(requestedUrls).toEqual([
       `${API_BASE_URL}/warehouses?page=2&pageSize=10&siteId=${warehouse.site.id}&status=Active`,
@@ -105,34 +108,34 @@ describe('WarehouseService', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${encodeURIComponent(warehouseId)}`, () =>
-        HttpResponse.json(warehouse),
+        okJson(warehouse),
       ),
       http.post(`${API_BASE_URL}/warehouses`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json(warehouse, { status: 201 })
+        return apiJson(warehouse, { status: 201 })
       }),
       http.put(
         `${API_BASE_URL}/warehouses/${encodeURIComponent(warehouseId)}`,
         async ({ request }) => {
           receivedBodies.push(await request.json())
-          return HttpResponse.json(warehouse)
+          return okJson(warehouse)
         },
       ),
       http.get(`${API_BASE_URL}/warehouses/${encodeURIComponent(warehouseId)}/capabilities`, () =>
-        HttpResponse.json([capability]),
+        okJson([capability]),
       ),
       http.put(
         `${API_BASE_URL}/warehouses/${encodeURIComponent(warehouseId)}/capabilities`,
         async ({ request }) => {
           receivedBodies.push(await request.json())
-          return HttpResponse.json([capability])
+          return okJson([capability])
         },
       ),
       http.put(
         `${API_BASE_URL}/warehouses/${encodeURIComponent(warehouseId)}/material-settings`,
         async ({ request }) => {
           receivedBodies.push(await request.json())
-          return HttpResponse.json(setting)
+          return okJson(setting)
         },
       ),
     )
