@@ -1,5 +1,5 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { apiJson, okJson } from '@/test/msw/envelope'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okPageJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -46,18 +46,18 @@ function useEmployeeHandler() {
     http.get(`${API_BASE_URL}/counterparts`, ({ request }) => {
       const url = new URL(request.url)
       expect(url.searchParams.get('type')).toBe('Employee')
-      return okJson({
-        items: [
+      return okPageJson(
+        [
           {
-            displayName: 'أحمد محمد',
+            displayName: 'محمد السيد',
             id: EMPLOYEE_ID,
             secondaryLabelAr: null,
             status: 'Active' as const,
             type: 'Employee' as const,
           },
         ],
-        meta: { page: 0, pageSize: 10, total: 1 },
-      })
+        { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 },
+      )
     }),
   )
 }

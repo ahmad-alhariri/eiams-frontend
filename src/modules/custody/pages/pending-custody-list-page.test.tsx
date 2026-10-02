@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { okJson } from '@/test/msw/envelope'
+import { okPageJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -34,8 +34,8 @@ function usePendingHandler() {
       const url = new URL(request.url)
       expect(url.searchParams.get('status')).toBe('Active')
       expect(url.searchParams.get('custodyKind')).toBe('Operational')
-      return okJson({
-        items: [
+      return okPageJson(
+        [
           {
             assetId: ASSET_ID,
             assetNumber: 'AST-2023-C099',
@@ -54,8 +54,8 @@ function usePendingHandler() {
             status: 'Active',
           },
         ],
-        meta: { pageIndex: 0, pageSize: 20, totalItems: 1, totalPages: 1 },
-      })
+        { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 },
+      )
     }),
   )
 }

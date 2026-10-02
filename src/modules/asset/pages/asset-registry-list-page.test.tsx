@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { okJson } from '@/test/msw/envelope'
+import { okPageJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -40,8 +40,8 @@ function useTwoAssetsHandler() {
   server.use(
     http.get(`${API_BASE_URL}/assets`, ({ request }) => {
       lastAssetsQuery = new URL(request.url).searchParams
-      return okJson({
-        items: [
+      return okPageJson(
+        [
           createAsset({
             assetId: fixtureUuid(230),
             assetNumber: 'AST-2024-C01',
@@ -60,8 +60,8 @@ function useTwoAssetsHandler() {
             currentWarehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي' },
           }),
         ],
-        meta: { pageIndex: 0, pageSize: 20, totalItems: 2, totalPages: 1 },
-      })
+        { page: 1, pageSize: 20, totalCount: 2, totalPages: 1 },
+      )
     }),
   )
 }
@@ -107,10 +107,7 @@ describe('AssetRegistryListPage (e18-t02)', () => {
   it('shows the empty state when no assets match', async () => {
     server.use(
       http.get(`${API_BASE_URL}/assets`, () =>
-        okJson({
-          items: [],
-          meta: { pageIndex: 0, pageSize: 20, totalItems: 0, totalPages: 0 },
-        }),
+        okPageJson([], { page: 1, pageSize: 20, totalCount: 0, totalPages: 0 }),
       ),
     )
     render(<AssetRegistryListPage />, { wrapper: createWrapper() })
