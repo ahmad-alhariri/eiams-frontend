@@ -128,7 +128,7 @@ the other rendering.
 | --- | --- | --- |
 | `src/test/policy-failure-matrix.test.ts` | 60 | The vocabulary; every blocker code; all three gates across all six types; aggregation; advisories-never-block; the action presentation table |
 | `src/test/policy-failure-surfaces.test.tsx` | 17 | Cross-surface consistency of the two action bars; the hard-stop, advisory, and permission-hidden behaviours |
-| `src/mocks/handlers.test.ts` (added) | 4 | MSW evidence for the dev-mock policy states: canonical blocker code, opt-in advisory, Post-Enabled-with-blocker, and an unchanged default flow |
+| `src/test/msw/adjustment-policy-simulator.test.ts` (port of the deleted `src/mocks/handlers.test.ts` block) | 4 states in one table-driven row each | Policy-state evidence for the four Draft-adjustment states: canonical blocker code, opt-in advisory, Post-Enabled-with-blocker, and an unchanged default flow |
 
 Suite totals: **242 files / 1665 tests**, up from 240 / 1584.
 
@@ -171,6 +171,13 @@ twice) has no seeded document in the dev mock and is covered by
 
 ### Dev-mock gaps found while verifying
 
+> **Historical (the dev mock no longer exists).** `eiams-frontend-m4jm` (EPIC G7)
+> deleted `src/mocks/` and retired `VITE_ENABLE_API_MOCKS`, so there is no dev
+> mock to have these gaps. The policy simulator these findings produced was
+> ported to `@/test/msw/adjustment-policy-simulator` before the deletion (see the
+> evidence table above); gap (2) was never fixed and no longer has a surface to
+> be fixed on.
+
 The dev mock could not express two contract-legal policy states, which is why the
 bead's rendered verification was initially blocked:
 
@@ -199,3 +206,5 @@ failures, and correcting it belongs with the adjustment module rather than here.
 - `src/modules/adjustment/pages/adjustment-detail-page.tsx` — passes advisories.
 - `src/mocks/handlers.ts` — canonical blocker code; opt-in
   `simulateSoftFreeze` / `simulateEnabledWithBlocker` policy simulation.
+  **Deleted** in `eiams-frontend-m4jm`; the simulator itself lives on in
+  `@/test/msw/adjustment-policy-simulator`.

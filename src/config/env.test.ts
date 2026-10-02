@@ -17,13 +17,12 @@ describe('environment configuration', () => {
     // profile without recording that the failure was environmental (see
     // eiams-frontend-2pqj).
     //
-    // The default flag values themselves are covered by the explicit-input
-    // cases below — "leaves both development fixtures off when nothing is
-    // set" passes an empty viteEnvironment and proves the defaults.
+    // The default flag value itself is covered by the explicit-input
+    // cases below — "leaves the development fixture off when nothing is
+    // set" passes an empty viteEnvironment and proves the default.
     expect(Object.isFrozen(environment)).toBe(true)
     const expectedShape: Record<keyof AppEnvironment, 'string' | 'boolean'> = {
       apiBaseUrl: 'string',
-      enableApiMocks: 'boolean',
       authBypass: 'boolean',
       uiSandbox: 'boolean',
       mode: 'string',
@@ -34,7 +33,22 @@ describe('environment configuration', () => {
       const value = (environment as Record<string, unknown>)[key]
       expect(typeof value, `environment.${key}`).toBe(kind)
     }
+    // `VITE_ENABLE_API_MOCKS` was retired with `src/mocks/`
+    // (eiams-frontend-m4jm). An unknown key is not rejected by the schema, so
+    // a stray leftover in a developer's `.env.local` would otherwise be accepted
+    // silently and read as if it still selected a profile. It must be inert.
+    expect(environment).not.toHaveProperty('enableApiMocks')
     expect(environment.mode).toBe('test')
+  })
+
+  it('ignores a retired VITE_ENABLE_API_MOCKS instead of honouring it', () => {
+    const environment = parseEnvironment({
+      ...viteEnvironment,
+      VITE_ENABLE_API_MOCKS: 'true',
+    })
+
+    expect(environment.uiSandbox).toBe(false)
+    expect(environment).not.toHaveProperty('enableApiMocks')
   })
 
   it('uses the documented same-origin API path by default', () => {
@@ -42,7 +56,6 @@ describe('environment configuration', () => {
 
     expect(environment).toEqual({
       apiBaseUrl: '/api/v1',
-      enableApiMocks: false,
       authBypass: false,
       uiSandbox: false,
       mode: 'test',
@@ -53,72 +66,44 @@ describe('environment configuration', () => {
   })
 
   describe('RESOLUTION-040 real-integration default', () => {
-    it('leaves both development fixtures off when nothing is set', () => {
+    it('leaves the development fixture off when nothing is set', () => {
       const environment = parseEnvironment(viteEnvironment)
 
-      expect(environment.enableApiMocks).toBe(false)
       expect(environment.authBypass).toBe(false)
       expect(environment.uiSandbox).toBe(false)
     })
 
-    it.each(['VITE_ENABLE_API_MOCKS', 'VITE_AUTH_BYPASS'])(
-      'marks the session as a sandbox when %s is enabled',
-      (flag) => {
-        const environment = parseEnvironment({ ...viteEnvironment, [flag]: 'true' })
+    it('marks the session as a sandbox when VITE_AUTH_BYPASS is enabled', () => {
+      const environment = parseEnvironment({
+        ...viteEnvironment,
+        VITE_AUTH_BYPASS: 'true',
+      })
 
-        expect(environment.uiSandbox).toBe(true)
-      },
-    )
+      expect(environment.uiSandbox).toBe(true)
+    })
 
     it('keeps the sandbox off when only the real profile is requested', () => {
       const environment = parseEnvironment({
         ...viteEnvironment,
-        VITE_ENABLE_API_MOCKS: 'false',
         VITE_AUTH_BYPASS: 'false',
       })
 
       expect(environment.uiSandbox).toBe(false)
     })
 
-    it.each(['VITE_ENABLE_API_MOCKS', 'VITE_AUTH_BYPASS'])(
-      'refuses to boot a production build with %s enabled',
-      (flag) => {
-        expect(() => parseEnvironment({ ...viteEnvironment, PROD: true, [flag]: 'true' })).toThrow(
-          'a production build cannot enable VITE_ENABLE_API_MOCKS or VITE_AUTH_BYPASS',
-        )
-      },
-    )
+    it('refuses to boot a production build with VITE_AUTH_BYPASS enabled', () => {
+      expect(() =>
+        parseEnvironment({ ...viteEnvironment, PROD: true, VITE_AUTH_BYPASS: 'true' }),
+      ).toThrow('a production build cannot enable VITE_AUTH_BYPASS')
+    })
 
-    it('allows a production build when both fixtures are off', () => {
+    it('allows a production build when the fixture is off', () => {
       const environment = parseEnvironment({ ...viteEnvironment, PROD: true })
 
       expect(environment.isProduction).toBe(true)
       expect(environment.uiSandbox).toBe(false)
     })
   })
-
-  it('enables development API mocks with an explicit flag', () => {
-    const environment = parseEnvironment({
-      ...viteEnvironment,
-      VITE_ENABLE_API_MOCKS: 'true',
-    })
-
-    expect(environment.enableApiMocks).toBe(true)
-  })
-
-  it.each(['1', 'TRUE', '', 'yes'])(
-    'rejects an unsupported mocks flag value: %s',
-    (enableApiMocks) => {
-      expect(() =>
-        parseEnvironment({
-          ...viteEnvironment,
-          VITE_ENABLE_API_MOCKS: enableApiMocks,
-        }),
-      ).toThrowError(
-        'Invalid EIAMS frontend environment configuration: VITE_ENABLE_API_MOCKS: Invalid option: expected one of "true"|"false"',
-      )
-    },
-  )
 
   it.each(['1', 'TRUE', '', 'yes'])(
     'rejects an unsupported auth-bypass flag value: %s',

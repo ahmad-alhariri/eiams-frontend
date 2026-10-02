@@ -44,10 +44,21 @@ import type {
  *
  * These functions return MSW handler arrays (registered via `server.use(...)`)
  * so document-engine tests — list filtering, detail, history, policy, and the
- * six lifecycle action POSTs — exercise the exact contract shapes the dev mock
- * API serves. The transition engine (`applyDocumentAction`) is the single
- * implementation shared with `src/mocks/handlers.ts`: same rowVersion guard,
- * same reason validation, same state-transition table, same 409 problem body.
+ * six lifecycle action POSTs — exercise the exact contract shapes the deleted
+ * dev mock API used to serve. The transition engine (`applyDocumentAction`) is
+ * the single implementation it shared with `src/mocks/handlers.ts`: same
+ * rowVersion guard, same reason validation, same state-transition table, same
+ * 409 problem body.
+ *
+ * What used to live ONLY in the dev mock, and now lives here so deleting
+ * `src/mocks/` (EPIC G7, bead `eiams-frontend-79na` → `eiams-frontend-m4jm`)
+ * could not lose it:
+ * - the `Idempotency-Key` memo wiring — `documentActionIdempotency`,
+ *   `readIdempotencyKey`, `applyIdempotentDocumentAction` below;
+ * - the browser-first multipart branch — `readRequestForm` in
+ *   `@/test/msw/multipart-parser`;
+ * - the audit chronology comparator — `@/test/msw/audit-chronology`;
+ * - the adjustment policy simulator — `@/test/msw/adjustment-policy-simulator`.
  */
 
 const DOCUMENT_PREFIX = `${environment.apiBaseUrl}/warehouse-documents`
@@ -302,6 +313,129 @@ export function idempotencyMismatchProblem(): ProblemDetails {
     422,
     'idempotencyKey',
   )
+}
+
+/**
+ * Module-scoped memo for the six lifecycle action routes (D-LIFE-01 §94-97).
+ *
+ * WHY THIS IS MODULE-SCOPED AND NOT PER-REQUEST
+ * ---------------------------------------------
+ * An `Idempotency-Key` identifies an INTENT, not a call. The retry that matters
+ * is the one that arrives after the first response was lost — which is a fresh
+ * request, quite possibly after a re-registration of the routes, and it must
+ * still recognise the earlier success. A memo scoped to one handler instance
+ * forgets the intent the moment the instance is rebuilt, and the retry then
+ * falls through to the rowVersion guard and answers 409 for work that already
+ * happened. So the shared instance lives here, at module scope, exactly as the
+ * dev mock's `DOCUMENT_ACTION_IDEMPOTENCY` does.
+ *
+ * This is contract-relevant rather than cosmetic: the backend reads
+ * `Idempotency-Key` on exactly five actions (`PostDocumentController.cs:31`,
+ * `PostInventoryAdjustmentController.cs:32`, `ReverseInventoryAdjustmentController.cs:29`,
+ * `CreateReversalDocumentController.cs:26`, `CompleteWarehouseDocumentDraftController.cs:30`),
+ * and `src/shared/services/mutation-safety.ts` mints a key per user intent, so
+ * the replay semantics below are the ones the UI depends on.
+ *
+ * Suite-local isolation is still available: pass an explicit `idempotency`
+ * (see `createWarehouseDocumentActionHandler`), which is what keeps one test's
+ * stored key out of the next test's document.
+ */
+export const documentActionIdempotency: IdempotencyMemo = createIdempotencyMemo()
+
+/** Reads the wire header the backend reads; `null` when the caller sent none. */
+export function readIdempotencyKey(request: Request): string | null {
+  return request.headers.get(IDEMPOTENCY_KEY_HEADER)
+}
+
+export interface IdempotentDocumentActionInput {
+  action: DocumentActionType
+  document: WarehouseDocument
+  rowVersion: number
+  reason?: string | null
+  occurredBy?: LifecycleActorSnapshot | undefined
+  /** Raw `Idempotency-Key` header value; `null` leaves this attempt unmemoized. */
+  idempotencyKey: string | null
+  /** Memo to consult and record into; defaults to the module-scoped instance. */
+  idempotency?: IdempotencyMemo
+}
+
+/**
+ * The route-level outcome: everything `applyDocumentAction` can produce, plus
+ * the two outcomes only the memo can produce. `status` is carried alongside the
+ * failed kinds so an HTTP route answers 422 for a mismatch and 409 for a
+ * conflict without re-deriving which is which.
+ */
+export type IdempotentDocumentActionOutcome =
+  | { kind: 'replay'; result: DocumentActionResult }
+  | { kind: 'mismatch'; problem: ProblemDetails; status: 422 }
+  | { kind: 'conflict'; problem: LifecycleConflictProblemDetails; status: 409 }
+  | { kind: 'validation'; problem: ProblemDetails; status: 422 }
+  | {
+      kind: 'ok'
+      document: WarehouseDocument
+      result: DocumentActionResult
+      compensatingDocument?: WarehouseDocument
+    }
+
+/**
+ * One lifecycle action as an HTTP route performs it: read the intent key, replay
+ * a matching earlier success verbatim, refuse a non-equivalent same-key retry
+ * with 422, then apply the transition and — only on success — record the result
+ * under that key (D-LIFE-01 §94-97).
+ *
+ * The memo key uses the RESOLVED document id rather than whatever the caller
+ * read out of the path: the memo must identify the record that was actually
+ * transitioned, and a handler that echoes an unvalidated path segment into the
+ * key would let two spellings of one document store two independent intents.
+ *
+ * Nothing is stored for a conflict or a validation failure, so a client that
+ * retries the same key after fixing the rowVersion gets a fresh attempt rather
+ * than a poisoned memo entry.
+ */
+export function applyIdempotentDocumentAction(
+  input: IdempotentDocumentActionInput,
+): IdempotentDocumentActionOutcome {
+  const memo = input.idempotency ?? documentActionIdempotency
+  const documentId = input.document.documentId
+  const memoCheck = memo.check({
+    idempotencyKey: input.idempotencyKey,
+    action: input.action,
+    documentId,
+    rowVersion: input.rowVersion,
+    reason: input.reason ?? null,
+  })
+  if (memoCheck.kind === 'replay') {
+    return { kind: 'replay', result: memoCheck.result }
+  }
+  if (memoCheck.kind === 'mismatch') {
+    return { kind: 'mismatch', problem: idempotencyMismatchProblem(), status: 422 }
+  }
+  const outcome = applyDocumentAction({
+    action: input.action,
+    document: input.document,
+    rowVersion: input.rowVersion,
+    reason: input.reason ?? null,
+    occurredBy: input.occurredBy,
+  })
+  if (outcome.kind === 'conflict') {
+    return { kind: 'conflict', problem: outcome.problem, status: 409 }
+  }
+  if (outcome.kind === 'validation') {
+    return { kind: 'validation', problem: outcome.problem, status: 422 }
+  }
+  if (input.idempotencyKey !== null) {
+    memo.store(
+      input.idempotencyKey,
+      input.action,
+      documentId,
+      input.rowVersion,
+      input.reason ?? null,
+      outcome.result,
+    )
+  }
+  // `outcome` is narrowed to the success variant: its document, result, and
+  // optional compensating document are handed to the caller unchanged.
+  return outcome
 }
 
 let eventIdSequence = 300
@@ -690,7 +824,15 @@ export interface DocumentActionHandlerOptions {
  * The six lifecycle action POSTs (submit/post/reject/revise/cancel/reverse)
  * wired to one mutable in-memory document record. Replays the same transition
  * engine the dev mock API uses, so engine tests and `pnpm dev` agree on
- * rowVersion (409), reason (422), and transition guards.
+ * rowVersion (409), reason (422), transition guards, and `Idempotency-Key`
+ * replay/mismatch.
+ *
+ * The memo handed to `applyIdempotentDocumentAction` is PER HANDLER SET, not the
+ * module-scoped one. These handlers exist to serve one test, and a test that
+ * registers a document, runs an action, then registers another document must not
+ * inherit the first test's stored key. Suites that model the dev mock's
+ * long-lived process — where one key spans route re-registrations — use
+ * `applyIdempotentDocumentAction` directly with the module-scoped memo.
  */
 export function createWarehouseDocumentActionHandler(
   options: DocumentActionHandlerOptions,
@@ -709,43 +851,20 @@ export function createWarehouseDocumentActionHandler(
       }
       const body = (await request.json()) as
         VersionOnlyDocumentActionRequest | ReasonedDocumentActionRequest
-      const reason = 'reason' in body ? (body.reason ?? null) : null
-      const idempotencyKey = request.headers.get(IDEMPOTENCY_KEY_HEADER)
-      const memoCheck = idempotency.check({
-        idempotencyKey,
-        action,
-        documentId,
-        rowVersion: body.rowVersion,
-        reason,
-      })
-      if (memoCheck.kind === 'replay') {
-        return HttpResponse.json(memoCheck.result)
-      }
-      if (memoCheck.kind === 'mismatch') {
-        return toWireErrorResponse(idempotencyMismatchProblem(), 422)
-      }
-      const outcome = applyDocumentAction({
+      const outcome = applyIdempotentDocumentAction({
         action,
         document,
         rowVersion: body.rowVersion,
-        reason,
+        reason: 'reason' in body ? (body.reason ?? null) : null,
         occurredBy: options.occurredBy,
+        idempotencyKey: readIdempotencyKey(request),
+        idempotency,
       })
-      if (outcome.kind === 'conflict') {
-        return toWireErrorResponse(outcome.problem, 409)
-      }
-      if (outcome.kind === 'validation') {
-        return toWireErrorResponse(outcome.problem, 422)
-      }
-      if (idempotencyKey !== null) {
-        idempotency.store(
-          idempotencyKey,
-          action,
-          documentId,
-          body.rowVersion,
-          reason,
-          outcome.result,
-        )
+      if (outcome.kind !== 'ok') {
+        if (outcome.kind === 'replay') {
+          return HttpResponse.json(outcome.result)
+        }
+        return toWireErrorResponse(outcome.problem, outcome.status)
       }
       current = outcome.document
       if (store !== undefined) {

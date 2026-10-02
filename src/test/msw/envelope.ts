@@ -1,6 +1,10 @@
 import { HttpResponse } from 'msw'
 
-import { normalizeWireErrorCode } from '@/shared/api/envelope'
+import {
+  buildErrorEnvelope,
+  normalizeErrorDetails,
+  resolveWireErrorCode,
+} from '@/shared/api/error-envelope'
 
 /**
  * Fixture helpers that emit the REAL backend envelope.
@@ -17,7 +21,23 @@ import { normalizeWireErrorCode } from '@/shared/api/envelope'
  * deliberately strict — an ambiguous body THROWS rather than guessing, because a
  * silently mis-wrapped fixture produces a test that passes while asserting
  * something the API would never send.
+ *
+ * What is NOT here any more, and why
+ * -----------------------------------
+ * `errJson` and `toWireErrorResponse` used to be defined in this file, and the
+ * development mock API imported them from here. `src/mocks/**` was
+ * application/dev-reachable code and `@/test/**` is test support, so that was
+ * an inverted dependency, which `src/test/no-runtime-test-imports.test.ts`
+ * (EPIC G7) now forbids in both directions of use. They moved to
+ * `@/shared/api/error-envelope` — the layer that owns the envelope SHAPE — and
+ * are re-exported below unchanged, so every suite that already imported them
+ * from the test tree keeps its existing import. `okJson`, `okPageJson` and
+ * `apiJson` stayed: they are test-only fixtures, they need MSW's `HttpResponse`,
+ * and nothing outside `src/test/` wanted them. `src/mocks/` itself was deleted
+ * in `eiams-frontend-m4jm`, so the inversion no longer has a consumer at all.
  */
+
+export { errJson, toWireErrorResponse } from '@/shared/api/error-envelope'
 
 const FIXTURE_META = { request_id: 'test-request-id', timestamp: '2026-01-01T00:00:00.000Z' }
 
@@ -33,23 +53,9 @@ function looksLikeProblemDetails(body: unknown): boolean {
   return isRecord(body) && ERROR_CODE_KEYS.some((key) => key in body)
 }
 
-/**
- * Derives a wire-shaped code from a fixture body.
- *
- * The snapshot's codes were lowerCamel and dotted; the wire is UPPER_SNAKE. A
- * fixture that still uses the old spelling keeps working rather than silently
- * becoming a code the Arabic table has never heard of.
- */
+/** True for any status outside 2xx — `apiJson`'s half of the error classifier. */
 function isErrorStatus(status: number | undefined): boolean {
   return status !== undefined && (status < 200 || status >= 300)
-}
-
-function codeFor(body: Record<string, unknown> | undefined): string {
-  const raw = body?.['code']
-  if (typeof raw === 'string' && raw.trim() !== '') {
-    return normalizeWireErrorCode(raw) ?? raw
-  }
-  return typeof body?.['titleAr'] === 'string' ? 'REQUEST_INVALID' : 'REQUEST_FAILED'
 }
 
 function messageFor(body: Record<string, unknown> | undefined): string {
@@ -57,74 +63,6 @@ function messageFor(body: Record<string, unknown> | undefined): string {
   return typeof detail === 'string' && detail.trim() !== ''
     ? detail
     : 'The request could not be completed.'
-}
-
-/**
- * A `details` map keyed by field path, which is what the API sends
- * (`ApiProblemDetails` emits `Record<path, string[]>`).
- *
- * Passed through UNCHANGED. An earlier version of this helper stringified
- * whatever it was given into `body: [ ... ]`, which is right for a legacy
- * `FieldError[]` but wrong for a real details map: it turned
- * `{ password: [...] }` into a single unaddressable `body` entry, and
- * `normalizeApiError` correctly dropped it as having no field to attach to. The
- * symptom was a login form that stopped showing its field error while every
- * other assertion still passed.
- */
-function detailsFor(details: unknown, fieldErrors: unknown): Record<string, unknown> {
-  if (isRecord(details)) {
-    return details
-  }
-
-  if (Array.isArray(details)) {
-    return { body: details.map((entry) => String(entry)) }
-  }
-
-  if (isRecord(fieldErrors)) {
-    return fieldErrors
-  }
-
-  if (Array.isArray(fieldErrors)) {
-    // Legacy snapshot shape: [{ field, code, messageAr }] -> Record<path, string[]>
-    const map: Record<string, string[]> = {}
-    for (const entry of fieldErrors) {
-      if (!isRecord(entry) || typeof entry['field'] !== 'string') {
-        continue
-      }
-      const field = entry['field']
-      const message =
-        typeof entry['messageAr'] === 'string' && entry['messageAr'].trim() !== ''
-          ? entry['messageAr']
-          : 'The submitted value is invalid.'
-      map[field] = [...(map[field] ?? []), message]
-    }
-    return map
-  }
-
-  return {}
-}
-
-function errorEnvelope(
-  code: string,
-  titleAr: string,
-  details: unknown,
-  fieldErrors: unknown,
-): Record<string, unknown> {
-  // A bare string detail becomes { detail: string } so normalizeApiError can
-  // read it as err.details (typeof === 'string' → titleAr override).
-  const detailsValue =
-    typeof details === 'string' && details.trim() !== ''
-      ? { detail: details }
-      : detailsFor(details, fieldErrors)
-  return {
-    success: false,
-    error: {
-      code,
-      message: titleAr,
-      details: detailsValue,
-      request_id: FIXTURE_META.request_id,
-    },
-  }
 }
 
 function successEnvelope(data: unknown, pagination: unknown): Record<string, unknown> {
@@ -168,93 +106,6 @@ export function okPageJson<T>(
   )
 }
 
-/** An error response with the real nested error envelope. */
-export function errJson(
-  status: number,
-  body?: {
-    code?: string
-    message?: string
-    detail?: string
-    details?: unknown
-    fieldErrors?: unknown
-  },
-): HttpResponse<Record<string, unknown>> {
-  // Only an explicit `detail` becomes `details.detail`. The wire `message` is
-  // English and stays on the envelope's `message` field: promoting it into
-  // details would let `normalizeApiError` use it as a titleAr override and
-  // replace the governed Arabic copy with English server text.
-  return HttpResponse.json(
-    errorEnvelope(
-      codeFor({ code: body?.code }),
-      body?.message ?? 'The request could not be completed.',
-      typeof body?.detail === 'string' && body.detail.trim() !== ''
-        ? { detail: body.detail }
-        : detailsFor(body?.details, body?.fieldErrors),
-      body?.fieldErrors,
-    ),
-    { status },
-  )
-}
-
-/**
- * Wraps a legacy flat `ProblemDetails` in the REAL nested error envelope.
- *
- * The lifecycle and dev-mock engines still speak the provisional snapshot's flat
- * `ProblemDetails`, because their types describe guard OUTCOMES rather than the
- * wire. Everything the application actually reads lives under `error`, so the
- * conversion happens once, here, at the HTTP boundary — instead of rewriting every
- * problem constructor and every engine-internal assertion.
- *
- * `titleAr`/`detailAr` are DROPPED on purpose: the wire carries an English message,
- * and the UI resolves its Arabic from `code` through the governed table. Keeping the
- * fixture's Arabic in the body would put fixture-authored text on the wire.
- */
-export function toWireErrorResponse(
-  problem: {
-    code: string
-    detailAr?: string | null | undefined
-    fieldErrors?: ReadonlyArray<{ code: string; field: string; messageAr: string }> | undefined
-    status?: number | undefined
-    titleAr?: string | undefined
-    traceId?: string | undefined
-    type?: string | null | undefined
-    // The lifecycle problem types carry extra fields (`currentRowVersion`,
-    // `policy`, `relatedDocument`, …) that must reach `details`.
-    readonly [key: string]: unknown
-  },
-  status: number,
-): HttpResponse<Record<string, unknown>> {
-  const extras: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(problem)) {
-    if (key === 'code' || key === 'status' || key === 'fieldErrors') continue
-    if (key === 'titleAr' || key === 'detailAr' || key === 'type' || key === 'traceId') continue
-    extras[key] = value
-  }
-
-  // Field failures travel in `details` as the `Record<path, string[]>` the API emits
-  // (`ApiProblemDetails.ToValidationResponse`). The English per-field text is dropped;
-  // the UI attaches the approved Arabic for the operation's code to that field name.
-  for (const fieldError of problem.fieldErrors ?? []) {
-    extras[fieldError.field] = ['invalid']
-  }
-
-  return HttpResponse.json(
-    {
-      success: false,
-      error: {
-        code: problem.code,
-        message: 'The request could not be completed.',
-        details: extras,
-        request_id:
-          problem.traceId === undefined || problem.traceId === ''
-            ? 'mock-request-id'
-            : problem.traceId,
-      },
-    },
-    { status },
-  )
-}
-
 /**
  * Drop-in replacement for `HttpResponse.json` that emits the real envelope.
  *
@@ -272,7 +123,12 @@ export function apiJson(body: unknown, init?: ResponseInit): HttpResponse<Record
       )
     }
     return HttpResponse.json(
-      errorEnvelope(codeFor(body), messageFor(body), body['details'], body['fieldErrors']),
+      buildErrorEnvelope(
+        resolveWireErrorCode(body),
+        messageFor(body),
+        normalizeErrorDetails(body['details'], body['fieldErrors']),
+        body['fieldErrors'],
+      ),
       { ...init, status: status ?? 500 },
     )
   }

@@ -29,6 +29,111 @@ export default defineConfig([
     },
   },
   {
+    // No application source may import the test-support tree — the lint-time half
+    // of the rule `src/test/no-runtime-test-imports.test.ts` already enforces
+    // (EPIC G7, eiams-frontend-yqpe).
+    //
+    // `src/test/**` is test support: MSW handlers, factories, the canonical
+    // lifecycle engine. It runs under Vitest with jsdom and MSW's Node
+    // interceptors, none of which exist in a browser deployment. A production
+    // module importing it drags that tree into the app bundle — dead weight at
+    // best, and for the handlers actively dangerous, because a fixture handler
+    // reachable from an app chunk is a fixture able to answer a real request.
+    //
+    // Why a test alone was not enough
+    // -------------------------------
+    // The scan is GREEN, but the quality gate runs `lint` before `test`
+    // (`pnpm run quality`). A violation introduced today is therefore reported
+    // only after the full Vitest suite has run — minutes, and the author has
+    // usually moved on — when `pnpm run lint` would have named the offending
+    // file and line in seconds, on the file that was just edited. Enforcing at
+    // lint time also moves the check to the only moment the author is actually
+    // looking at the import. The test stays: it scans the whole tree including
+    // files ESLint never sees, and it proves non-vacuity with a synthetic
+    // negative control and a pinned file count.
+    //
+    // Why the scope is spelled out rather than inherited
+    // --------------------------------------------------
+    // Flat config merges by REPLACEMENT, not by union: a later config object
+    // that sets `no-restricted-imports` discards the earlier one's `paths`
+    // entirely. An unscoped block placed after the service-purity block below
+    // would therefore silently DELETE that block's four import bans
+    // (@tanstack/react-query, zustand, react, @/shared/ui/toast-manager)
+    // without any error — a rule that disappears is worse than one that never
+    // existed. So this block must not overlap the service scope. It is placed
+    // BEFORE the service block and excludes the four service globs, which
+    // keeps each block the sole authority on the files it owns.
+    //
+    // `files` is inclusive-only, so the exemptions are expressed as `ignores`
+    // in the same object (scoped ignores, not `globalIgnores`, so they narrow
+    // this block only and leave those files linted by the config above):
+    //   - `src/test/**` and `*.test.ts(x)` anywhere — the ~150 legitimate
+    //     importers. `src/test/**` alone is not enough: co-located test files
+    //     under `src/modules/**` and `src/shared/**` import `@/test/**` too,
+    //     and missing them would make `pnpm run lint` red on all of them.
+    //   - the four service globs, per the replacement note above. Those 17
+    //     files are therefore NOT covered by this lint rule: the service block
+    //     owns `no-restricted-imports` for them and wins the merge, so the two
+    //     configurations cannot both apply. That gap is covered by the test
+    //     guard, which scans the whole tree and does reach service files —
+    //     verified, not assumed. The layering is deliberate rather than
+    //     incidental: `lint` is the fast, per-edit signal for the ~330 other
+    //     application files, and `no-runtime-test-imports.test.ts` is the
+    //     complete one. Closing the lint gap for services would mean adding the
+    //     `@/test` patterns to the service block's own `paths`, which is out of
+    //     scope here.
+    //
+    // There is deliberately NO escape hatch. The test guard has no allowlist
+    // and the epic's criterion is "none", so an accepted exception would have
+    // to be honoured by BOTH checks; `// standard-allow:` is invisible to
+    // ESLint (it is consumed by `withoutAllowMarkers` in the scan) and
+    // `eslint-disable` is invisible to the scan, so neither marker can excuse
+    // a line in both places. A rule that cannot be excepted is also a rule
+    // whose fix is always the right one: the code belongs in application
+    // source, not in the test tree.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: [
+      'src/test/**',
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      'src/modules/*/services/*.service.ts',
+      'src/shared/documents/*-service.ts',
+      'src/shared/documents/*-transport.ts',
+      'src/shared/services/*-transport.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              // `@/test` (bare) and `@/test/**` (every subpath), matching the
+              // test guard's `(@\/test[^'"]*)`: it anchors on the prefix and
+              // does not require the slash, so the bare-directory form is
+              // caught there and is caught here. `@/test*` is NOT used — it
+              // would also match a legitimate `@/testing/**` tree.
+              group: ['@/test', '@/test/**'],
+              message:
+                'Application source must not import the test-support tree (@/test/**). Those modules run under Vitest with jsdom and MSW, none of which exist in a browser build, and a fixture handler reachable from an app chunk can answer a real request. This is the lint-time half of src/test/no-runtime-test-imports.test.ts; fix the import rather than silencing it.',
+            },
+          ],
+        },
+      ],
+      // `no-restricted-imports` only inspects static import/export
+      // declarations, so `await import('@/test/msw/server')` would slip past it
+      // while the test guard — which matches the specifier after `import(` —
+      // reports it. This selector closes that gap so the two agree.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportExpression[source.value=/^@\\/test(\\/|$)/u]',
+          message:
+            'Application source must not import the test-support tree (@/test/**), dynamically or otherwise. A dynamic import is still a bundle edge — see src/test/no-runtime-test-imports.test.ts.',
+        },
+      ],
+    },
+  },
+  {
     // Service purity — the machine-enforced half of
     // `docs/feature-service-composition-standard.md`. A feature service is a
     // transport: it builds a request and returns response data. It is not where

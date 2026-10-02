@@ -4,17 +4,22 @@ import { z } from 'zod'
  * Development environment profiles (RESOLUTION-040, D-INT-02).
  *
  * Two mutually exclusive profiles exist, and real backend integration is the
- * default so that "mocks disabled" is no longer mistaken for proof of the real
- * authentication flow:
+ * default:
  *
- * | Profile         | `VITE_ENABLE_API_MOCKS` | `VITE_AUTH_BYPASS` | Evidence it produces      |
- * | --------------- | ----------------------- | ------------------ | ------------------------- |
- * | real-backend    | `false`                 | `false`            | genuine integration       |
- * | ui-sandbox      | `true` and/or `true`    | explicit opt-in    | fixture only, must be marked |
+ * | Profile      | `VITE_AUTH_BYPASS` | Evidence it produces                |
+ * | ------------ | ------------------ | ----------------------------------- |
+ * | real-backend | `false` (default)  | genuine integration                 |
+ * | ui-sandbox   | `true`             | fixture session only, must be marked |
  *
- * Both fixtures are opt-in. `uiSandbox` reports whether either is active so the
- * shell can mark the session, because a fixture-authenticated UI is not evidence
- * of backend integration.
+ * `uiSandbox` reports whether the fixture is active so the shell can mark the
+ * session, because a fixture-authenticated UI is not evidence of backend
+ * integration.
+ *
+ * There was a second flag, `VITE_ENABLE_API_MOCKS`, backed by an MSW browser
+ * worker in `src/mocks/`. It is gone: `eiams-frontend-m4jm` (EPIC G7) deleted
+ * that directory, because a runtime mock layer reachable from the app bootstrap
+ * is a fixture that can answer a real request. `src/test/msw/` remains and is
+ * test-only — it is the harness, not a profile.
  */
 const defaultApiBaseUrl = '/api/v1'
 
@@ -39,7 +44,7 @@ const apiBaseUrlSchema = z
 
 /**
  * Strict boolean-ish flag. Only the literal strings `true`/`false` are accepted
- * so a typo such as `VITE_ENABLE_API_MOCKS=1` fails loudly on startup instead of
+ * so a typo such as `VITE_AUTH_BYPASS=1` fails loudly on startup instead of
  * silently selecting a profile.
  */
 const strictFlagSchema = z
@@ -47,12 +52,10 @@ const strictFlagSchema = z
   .default('false')
   .transform((value) => value === 'true')
 
-const enableApiMocksSchema = strictFlagSchema
 const authBypassSchema = strictFlagSchema
 
 const environmentSchema = z.object({
   VITE_API_BASE_URL: apiBaseUrlSchema,
-  VITE_ENABLE_API_MOCKS: enableApiMocksSchema,
   VITE_AUTH_BYPASS: authBypassSchema,
   MODE: z.string().trim().min(1, 'MODE must not be empty'),
   DEV: z.boolean(),
@@ -61,10 +64,9 @@ const environmentSchema = z.object({
 
 export type AppEnvironment = Readonly<{
   apiBaseUrl: string
-  enableApiMocks: boolean
   authBypass: boolean
   /**
-   * True when any development fixture can answer instead of the real backend.
+   * True when a development fixture can answer instead of the real backend.
    * Rendered as a visible marker so sandbox sessions are never mistaken for
    * integration evidence.
    */
@@ -86,23 +88,23 @@ export function parseEnvironment(source: Record<string, unknown>): AppEnvironmen
   }
 
   const isProduction = result.data.PROD
-  const enableApiMocks = result.data.VITE_ENABLE_API_MOCKS
   const authBypass = result.data.VITE_AUTH_BYPASS
 
-  // A fixture that survives into a production build would silently answer real
-  // requests with canned data, and the host-only refresh cookie would be
-  // bypassed. Refuse to boot rather than ship that.
-  if (isProduction && (enableApiMocks || authBypass)) {
+  // A fixture that survives into a production build would answer real requests
+  // with canned data, and the host-only refresh cookie would be bypassed. Refuse
+  // to boot rather than ship that. The sibling `VITE_ENABLE_API_MOCKS` half of
+  // this guard went away with `src/mocks/`; the auth bypass is the only fixture
+  // left that can authenticate a production session without a backend.
+  if (isProduction && authBypass) {
     throw new Error(
-      'Invalid EIAMS frontend environment configuration: a production build cannot enable VITE_ENABLE_API_MOCKS or VITE_AUTH_BYPASS',
+      'Invalid EIAMS frontend environment configuration: a production build cannot enable VITE_AUTH_BYPASS',
     )
   }
 
   return Object.freeze({
     apiBaseUrl: result.data.VITE_API_BASE_URL,
-    enableApiMocks,
     authBypass,
-    uiSandbox: enableApiMocks || authBypass,
+    uiSandbox: authBypass,
     mode: result.data.MODE,
     isDevelopment: result.data.DEV,
     isProduction,

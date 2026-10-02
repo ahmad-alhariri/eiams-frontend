@@ -46,7 +46,7 @@ services, the query keys, and the fixtures use. A search for `CustodyHistory` in
 | `inventoryService` / `assetService` / `auditService` method shape | Exactly `get*`/`list*`; no `post`/`put`/`patch`/`delete` on any ledger service source |
 | `src/` cache-write scan | No `setQueryData` / `updateQueryData` / `removeQueries` / `onMutate` names a ledger query key or endpoint |
 | `clearScopedQueries` (behavioural) | A session scope change drops ledger caches — a session boundary, not a browser-authored row |
-| `src/mocks/handlers.ts` verb scan | Every ledger endpoint is registered `http.get`; none is registered with a write verb |
+| `src/test/**` mock-surface verb scan | Every ledger endpoint is registered `http.get` in the harness; none is registered with a write verb (repointed from the deleted `src/mocks/handlers.ts` by `eiams-frontend-m4jm`, and widened to the whole mock surface) |
 | Production services + MSW | All four stock/asset/audit reads return the `createCrossModuleScenario().ledgers` rows unchanged; the audit **list** read returns zero entries per header (D-AUD-02) |
 | `auditService.getAuditLog` | A redacted scenario entry stays redacted: no `oldValue`/`newValue` key at all, reason preserved |
 | `createAssetMovement` / `createAssetCustody` | The new asset-movement factory yields a contract-complete append-only row; a closed custody carries `toTs` |

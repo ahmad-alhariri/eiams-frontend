@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router'
 
 import { AppLayout } from '@/shared/layout/app-layout'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
+import { UiSandboxMarker } from '@/shared/layout/ui-sandbox-marker'
 import {
   AnonymousRoute,
   RequireActiveScope,
@@ -32,6 +33,12 @@ import {
  * not-found branches render the same frame without a session identity. Lazy
  * routes retain the shared per-domain error boundary, while AppLayout supplies
  * its own suspense boundary for framed pages.
+ *
+ * The RESOLUTION-040 sandbox marker has to reach the anonymous routes too, and
+ * they get no AppLayout — a developer running the sandbox lands on `/login`
+ * first, and an unmarked page there reads as integration evidence. Login is
+ * therefore wrapped in the same `UiSandboxMarker` the frame uses, so there is
+ * one element and one profile read, not two of each.
  */
 const PROTECTED_ROUTE_OBJECTS = getWiredRouteKeys().flatMap((key) => {
   if (ROUTE_METADATA[key].public) {
@@ -58,9 +65,11 @@ const appRouter = createBrowserRouter([
   {
     ...LOGIN_ROUTE,
     element: (
-      <AnonymousRoute>
-        <RouteSuspense>{LOGIN_ROUTE.element}</RouteSuspense>
-      </AnonymousRoute>
+      <UiSandboxMarker>
+        <AnonymousRoute>
+          <RouteSuspense>{LOGIN_ROUTE.element}</RouteSuspense>
+        </AnonymousRoute>
+      </UiSandboxMarker>
     ),
   },
   {

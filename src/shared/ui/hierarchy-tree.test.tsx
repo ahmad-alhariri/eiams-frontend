@@ -162,9 +162,7 @@ describe('HierarchyTree (shared primitive)', () => {
     // Each edit button names the record it edits, so screen readers can pick
     // the right one. The label carries the row's Arabic name verbatim.
     expect(screen.getByRole('button', { name: 'تعديل الإدارة العامة' })).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'تعديل مديرية تقنية المعلومات' }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'تعديل مديرية تقنية المعلومات' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'تعديل قسم الحواسيب' }))
     expect(onEdit).toHaveBeenCalledTimes(1)
@@ -177,14 +175,8 @@ describe('HierarchyTree (shared primitive)', () => {
     // The two leaves ("قسم الشبكات" and "قسم الحواسيب") have no children, so
     // they expose no expand/collapse control. Their edit/aria-label buttons,
     // when present, must not carry the "طي" / "توسيع" prefix.
-    expect(
-      screen.queryByRole('button', { name: 'طي قسم الشبكات' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'توسيع قسم الشبكات' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'طي قسم الحواسيب' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'طي قسم الشبكات' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'توسيع قسم الشبكات' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'طي قسم الحواسيب' })).not.toBeInTheDocument()
   })
 })

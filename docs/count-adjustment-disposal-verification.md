@@ -62,7 +62,7 @@ scroll inside their own container instead of overflowing the mobile page.
 | `asset-disposal-form-page.test.tsx` | Keeper denial, real selection required, warehouse-scoped server search (including a match beyond the first 50), exact material/asset request mapping, one line at −1, no count reference, duplicate-submit prevention, warehouse reset, and recoverable lookup/save failures. |
 | Count variance and adjustment draft tests | Complete page aggregation with 201 lines, including a nonzero variance returned only on page two; later-page failure hides partial data and supports retry. |
 | `kc7v` review, launch, and draft regressions | Null/omitted actual quantities, server-owned difference, completion guard, Planned/InProgress direct-link denial, Completed/Closed eligibility, zero-variance and incomplete seed feedback, and authoritative warehouse mapping on save. |
-| `src/mocks/handlers.test.ts` | Development disposal search filters before pagination; a matching asset after 50 unfiltered rows is returned and the warehouse constraint remains effective. |
+| `src/modules/adjustment/hooks/disposal-eligible-asset-search-before-pagination.test.tsx` | Disposal search filters before pagination; a matching asset after 50 unfiltered rows is returned and the warehouse constraint remains effective. |
 | Route, launch, list, draft, detail, and action-bar tests | Metadata/CTA agreement, realistic keeper create-without-post permissions, and independent post/reverse permissions. |
 | `cross-module-scenarios.test.ts` | Shared document and adjustment projections reference the same signed originals. |
 

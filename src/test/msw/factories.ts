@@ -54,6 +54,36 @@ import type {
  * is checked against the generated OpenAPI surface. Factories deliberately
  * produce ordinary data only; endpoint-specific handlers remain owned by the
  * feature that exercises the endpoint.
+ *
+ * Why this stays in the test tree, and did NOT move to `src/shared/`
+ * -----------------------------------------------------------------
+ * `eiams-frontend-vs8p` (EPIC G7) briefly moved this file to
+ * `src/shared/fixtures/factories.ts` with a re-export shim here, to satisfy
+ * "no file under `src/` outside `src/test/` imports `@/test/**`" without waiting
+ * for the mock layer to be deleted. That was reverted, and the reasoning is
+ * worth keeping because the move looks reasonable and is still wrong.
+ *
+ * `src/shared/` is the PRODUCTION shared layer: it is inside the app TypeScript
+ * project and inside the browser module graph. Parking 1300 lines of Arabic
+ * fixture data and the canonical `DOCUMENT_TRANSITIONS` table there means any
+ * production component can `import { createWarehouseDocument } from
+ * '@/shared/fixtures/factories'` and ship seed records, and the only thing
+ * standing between that and a 40 kB fixture bundle in `dist/` is a developer
+ * noticing. `production-artifact-purity.test.ts` would catch the resulting
+ * artifact, but "safe because nothing imports it yet" is precisely the posture
+ * that rots: this epic exists because a fixture layer nobody was importing
+ * still shipped.
+ *
+ * The other consumer was `src/mocks/` — the development mock API. `eiams-frontend-m4jm`
+ * deleted that directory, which is why the two remaining runtime imports
+ * (`src/mocks/db.ts`, `src/mocks/handlers.ts`) were never a structural problem
+ * to be engineered around: they were two lines that stopped existing when the
+ * directory did. `src/test/no-runtime-test-imports.test.ts` named exactly those
+ * two files and stayed red until then, which was the honest state — the guard
+ * reported what was still true rather than being satisfied by moving the problem
+ * somewhere it could not see. It is green now, and it is green because nothing
+ * outside `src/test/` imports this file at all: which makes the reasoning above
+ * the only thing standing between it and the next well-meaning relocation.
  */
 /**
  * Recursive override type: a full `T[K]` value (spread semantics), an explicit
@@ -611,9 +641,9 @@ export function createStockMovement(
  * --- Document engine fixtures -------------------------------------------------
  *
  * Shared mock-data spine for the document engine: attachment/line/policy/event
- * fixtures plus the canonical lifecycle transition table that both the mock
- * API (src/mocks/handlers.ts) and the scenario handlers
- * (src/test/msw/warehouse-document-handlers.ts) replay.
+ * fixtures plus the canonical lifecycle transition table that the scenario
+ * handlers (src/test/msw/warehouse-document-handlers.ts) replay. The deleted
+ * development mock (src/mocks/handlers.ts) replayed the same table.
  */
 
 export type DocumentTransition = Readonly<{

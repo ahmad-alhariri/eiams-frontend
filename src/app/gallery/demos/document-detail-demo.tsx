@@ -1,5 +1,4 @@
 import type { GallerySection } from '@/app/gallery/gallery-sections'
-import { DocumentDetailBody } from '@/shared/documents/pages/document-detail-page'
 import {
   createDocumentAttachment,
   createDocumentPolicy,
@@ -7,7 +6,8 @@ import {
   createWarehouseDocument,
   createWarehouseDocumentLine,
   fixtureUuid,
-} from '@/test/msw/factories'
+} from '@/app/gallery/demos/document-detail-demo-fixtures'
+import { DocumentDetailBody } from '@/shared/documents/pages/document-detail-page'
 
 /* eslint-disable react-refresh/only-export-components -- dev-only gallery demo
    that intentionally exports its sections registry alongside local components. */

@@ -23,9 +23,9 @@ import { describe, expect, it } from 'vitest'
  *   2. justify the regression against ADR-0001;
  *   3. bump `BASELINE_IMPORTS` here with a pointer to the bead.
  *
- * Dev fixtures (`src/mocks/`), MSW handlers (`src/test/msw/`), and tests
- * (`src/test/`) are subject to the same rule. The only "tolerance" is the
- * frozen baseline itself.
+ * MSW handlers (`src/test/msw/`) and tests (`src/test/`) are subject to the same
+ * rule, as was the dev mock layer `src/mocks/` before `eiams-frontend-m4jm`
+ * deleted it. The only "tolerance" is the frozen baseline itself.
  */
 
 const SRC_ROOT = join(process.cwd(), 'src')

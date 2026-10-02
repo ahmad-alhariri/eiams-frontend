@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import { apiClient } from '@/shared/services/api.client'
 import {
   actionRequiresReason,
@@ -11,11 +12,15 @@ import {
 import { server } from '@/test/msw/server'
 import {
   applyDocumentAction,
+  applyIdempotentDocumentAction,
+  createIdempotencyMemo,
   createWarehouseDocumentActionHandler,
   createWarehouseDocumentDetailHandler,
   createWarehouseDocumentHistoryHandler,
   createWarehouseDocumentListHandler,
   createWarehouseDocumentPolicyHandler,
+  documentActionIdempotency,
+  readIdempotencyKey,
 } from '@/test/msw/warehouse-document-handlers'
 import type { DocumentActionType, DocumentStatus } from '@/shared/types/generated/eiams-v1'
 
@@ -416,5 +421,202 @@ describe('document-engine scenario handlers', () => {
     expect(documents[0]).toMatchObject({ documentStatus: 'Posted', rowVersion: 3 })
     expect(documents[0]?.policy.documentStatus).toBe('Posted')
     expect(documents[0]?.postedAt).toBeDefined()
+  })
+})
+
+/**
+ * The `Idempotency-Key` memo WIRING (D-LIFE-01 §94-97), the half of the route
+ * that used to exist only in the deleted `src/mocks/handlers.ts`.
+ *
+ * `createIdempotencyMemo` and `idempotencyMismatchProblem` are primitives; on
+ * their own they prove nothing about the route. What the backend depends on is
+ * the sequence around them: read the header, replay a matching earlier success
+ * verbatim, refuse a non-equivalent same-key retry, and record only successes.
+ * That sequence is what `applyIdempotentDocumentAction` owns, and these tests
+ * drive it directly so deleting the dev mock cannot take it with it.
+ */
+describe('idempotency-key memo wiring', () => {
+  const MEMO_DOCUMENT_ID = fixtureUuid(160)
+
+  it('replays the byte-identical original result for a repeated key and answers a same-key/different-body retry with 422 (D-LIFE-01 §94-97)', () => {
+    const document = documentInStatus('Draft', MEMO_DOCUMENT_ID)
+    const memo = createIdempotencyMemo()
+    const request = {
+      action: 'Cancel' as DocumentActionType,
+      document,
+      idempotencyKey: IDEMPOTENCY_KEY,
+      idempotency: memo,
+      occurredAt: '2026-03-01T00:00:00.000Z',
+      reason: 'إلغاء',
+      rowVersion: document.rowVersion,
+    }
+
+    const first = applyIdempotentDocumentAction(request)
+    if (first.kind !== 'ok') {
+      throw new Error(`expected the first attempt to succeed, received ${first.kind}`)
+    }
+
+    // Same key, same body: the original result object, not a re-applied one.
+    const replay = applyIdempotentDocumentAction({ ...request, document: first.document })
+    expect(replay.kind).toBe('replay')
+    if (replay.kind !== 'replay') {
+      throw new Error(`expected a replay of the original result, received ${replay.kind}`)
+    }
+    expect(replay.result).toBe(first.result)
+    expect(replay.result).toEqual(first.result)
+    expect(replay.result.lifecycleEvent.eventId).toBe(first.result.lifecycleEvent.eventId)
+    expect(replay.result.document).toMatchObject({
+      documentStatus: 'Cancelled',
+      rowVersion: document.rowVersion + 1,
+    })
+
+    // Same key, different body (the reason changed): refused, never applied.
+    const mismatch = applyIdempotentDocumentAction({
+      ...request,
+      document: first.document,
+      reason: 'سبب مختلف',
+    })
+    expect(mismatch).toMatchObject({ kind: 'mismatch', status: 422 })
+    if (mismatch.kind !== 'mismatch') {
+      throw new Error(`expected a mismatch, received ${mismatch.kind}`)
+    }
+    expect(mismatch.problem.code).toBe('REQUEST_IDEMPOTENCY_MISMATCH')
+    expect(mismatch.problem.fieldErrors).toEqual([
+      {
+        code: 'REQUEST_IDEMPOTENCY_MISMATCH',
+        field: 'idempotencyKey',
+        messageAr: expect.any(String),
+      },
+    ])
+
+    // A different rowVersion under the same key is a mismatch too, not a fresh
+    // attempt: the key names the intent, and the intent is now different.
+    const rowVersionMismatch = applyIdempotentDocumentAction({
+      ...request,
+      document: first.document,
+      reason: 'إلغاء',
+      rowVersion: 7,
+    })
+    expect(rowVersionMismatch.kind).toBe('mismatch')
+  })
+
+  it('never memoizes a failure, so a same-key retry proceeds fresh after a 409', () => {
+    const document = documentInStatus('Draft', MEMO_DOCUMENT_ID)
+    const memo = createIdempotencyMemo()
+
+    const stale = applyIdempotentDocumentAction({
+      action: 'Submit',
+      document,
+      idempotencyKey: SECOND_IDEMPOTENCY_KEY,
+      idempotency: memo,
+      reason: null,
+      rowVersion: document.rowVersion + 5,
+    })
+    expect(stale).toMatchObject({ kind: 'conflict', status: 409 })
+
+    const retry = applyIdempotentDocumentAction({
+      action: 'Submit',
+      document,
+      idempotencyKey: SECOND_IDEMPOTENCY_KEY,
+      idempotency: memo,
+      reason: null,
+      rowVersion: document.rowVersion,
+    })
+    expect(retry.kind).toBe('ok')
+    if (retry.kind !== 'ok') throw new Error(`expected success, received ${retry.kind}`)
+    expect(retry.document).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
+  })
+
+  it('skips the memo entirely when the caller sent no Idempotency-Key', () => {
+    const document = documentInStatus('Draft', MEMO_DOCUMENT_ID)
+
+    const first = applyIdempotentDocumentAction({
+      action: 'Submit',
+      document,
+      idempotencyKey: null,
+      rowVersion: document.rowVersion,
+    })
+    expect(first.kind).toBe('ok')
+    if (first.kind !== 'ok') throw new Error(`expected success, received ${first.kind}`)
+
+    // Without a key there is nothing to replay: the same body against the now
+    // updated document must hit the rowVersion guard, not a stored result.
+    const second = applyIdempotentDocumentAction({
+      action: 'Submit',
+      document: first.document,
+      idempotencyKey: null,
+      rowVersion: document.rowVersion,
+    })
+    expect(second).toMatchObject({ kind: 'conflict', status: 409 })
+  })
+
+  it('records into the module-scoped memo by default, so a key outlives a route re-registration', () => {
+    // The dev mock holds ONE memo for the lifetime of the page: a retry that
+    // arrives after the routes were re-registered still recognises the earlier
+    // success, instead of falling through to the rowVersion guard and answering
+    // 409 for work that already happened. Per-handler memo instances cannot
+    // express that, which is why `documentActionIdempotency` is module-scoped.
+    const document = documentInStatus('Submitted', fixtureUuid(161))
+    const action = 'Post' as DocumentActionType
+    const request = {
+      action,
+      document,
+      idempotencyKey: UNKNOWN_ID,
+      reason: null,
+      rowVersion: document.rowVersion,
+    }
+
+    const first = applyIdempotentDocumentAction(request)
+    expect(first.kind).toBe('ok')
+    if (first.kind !== 'ok') throw new Error(`expected success, received ${first.kind}`)
+
+    // "A later request" — same key, same body, reached from an unrelated
+    // call site that passes no memo of its own.
+    const replay = applyIdempotentDocumentAction({ ...request, document: first.document })
+    expect(replay.kind).toBe('replay')
+    if (replay.kind !== 'replay') {
+      throw new Error(`expected the module-scoped memo to replay, received ${replay.kind}`)
+    }
+    expect(replay.result).toEqual(first.result)
+
+    // Decisive: the entry really is in the module-scoped instance, and NOT in a
+    // fresh one. Without this, a per-call memo would satisfy every assertion above.
+    expect(
+      documentActionIdempotency.check({
+        action,
+        documentId: fixtureUuid(161),
+        idempotencyKey: UNKNOWN_ID,
+        reason: null,
+        rowVersion: document.rowVersion,
+      }),
+    ).toEqual({ kind: 'replay', result: first.result })
+    expect(
+      createIdempotencyMemo().check({
+        action,
+        documentId: fixtureUuid(161),
+        idempotencyKey: UNKNOWN_ID,
+        reason: null,
+        rowVersion: document.rowVersion,
+      }),
+    ).toEqual({ kind: 'miss' })
+  })
+
+  it('reads the header the backend reads and nothing else', () => {
+    expect(
+      readIdempotencyKey(
+        new Request('http://localhost/api/v1/x', {
+          method: 'POST',
+          headers: { [IDEMPOTENCY_KEY_HEADER]: IDEMPOTENCY_KEY },
+        }),
+      ),
+    ).toBe(IDEMPOTENCY_KEY)
+    expect(readIdempotencyKey(new Request('http://localhost/api/v1/x'))).toBeNull()
+  })
+
+  it('exposes a memo that is independent per instance but shared by the module default', () => {
+    const isolated = createIdempotencyMemo()
+    expect(documentActionIdempotency).not.toBe(isolated)
+    expect(typeof documentActionIdempotency.check).toBe('function')
+    expect(typeof documentActionIdempotency.store).toBe('function')
   })
 })

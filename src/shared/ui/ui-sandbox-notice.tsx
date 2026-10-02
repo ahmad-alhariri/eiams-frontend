@@ -9,6 +9,12 @@ import { cn } from '@/shared/utils/class-names'
  * endpoint with a fixture session. Either one invalidates integration evidence,
  * which is why RESOLUTION-040 requires the sandbox to be explicitly opted into
  * and visibly marked.
+ *
+ * `mocks` is retained for its Arabic label even though `src/mocks/` and
+ * `VITE_ENABLE_API_MOCKS` were deleted in `eiams-frontend-m4jm` and no caller
+ * can pass it: this component is pure and owns the fixture vocabulary, so
+ * dropping a label from here would couple the marker's wording to whichever
+ * fixtures happen to exist this week.
  */
 export type UiSandboxFixture = 'mocks' | 'authBypass'
 

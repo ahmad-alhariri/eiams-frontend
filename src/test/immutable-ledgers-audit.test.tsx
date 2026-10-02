@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { readdirSync, readFileSync } from 'node:fs'
-import { join, sep } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -28,10 +28,15 @@ import {
   fixtureUuid,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import {
+  applicationSourceFiles,
+  readSource,
+  relativeToRepo,
+  sourceFilesIn,
+} from '@/test/support/source-scan'
 
 import auditServiceSource from '@/modules/audit/services/audit.service.ts?raw'
 import assetServiceSource from '@/modules/asset/services/asset.service.ts?raw'
-import devMockSource from '@/mocks/handlers.ts?raw'
 import inventoryServiceSource from '@/modules/inventory/services/inventory.service.ts?raw'
 
 /**
@@ -45,12 +50,17 @@ import inventoryServiceSource from '@/modules/inventory/services/inventory.servi
  * The read-only claim is therefore mostly a claim about ABSENCE, and a test that
  * calls a mutation cannot prove absence. The honest proof is a static one —
  * there is no write verb on a ledger service, no cache-write call that targets
- * a ledger query key, and no write handler in the dev mock — so those three
- * checks are asserted against the real source. The behavioural cases then cover
- * what a behavioural test can prove: that the read path is the only path, that
- * the five ledgers' rows are consumable as-is, and that the surfaces a user
- * actually reads (audit detail, custody timeline, movement ledger) present the
- * evidence the ledgers hold.
+ * a ledger query key, and no write handler registered for a ledger endpoint on
+ * any mock surface — so those three checks are asserted against the real source.
+ * The behavioural cases then cover what a behavioural test can prove: that the
+ * read path is the only path, that the five ledgers' rows are consumable as-is,
+ * and that the surfaces a user actually reads (audit detail, custody timeline,
+ * movement ledger) present the evidence the ledgers hold.
+ *
+ * The mock-surface check used to read `src/mocks/handlers.ts?raw` — the runtime
+ * development mock, deleted by `eiams-frontend-m4jm`. It now scans `src/test/**`,
+ * which is the only mock surface left; see the case body for why the assertion
+ * was repointed rather than dropped.
  *
  * MSW proves nothing about the backend: not transaction atomicity, not
  * append-only enforcement, not RBAC or scope filtering on ledger rows. Those are
@@ -86,22 +96,39 @@ const LEDGER_SERVICE_SOURCES: Readonly<Record<string, string>> = {
   'audit.service.ts': auditServiceSource,
 }
 
-/** Endpoint fragments of the five ledgers, as registered in the dev mock. */
-const LEDGER_ENDPOINT_FRAGMENTS = [
-  '/inventory/balances',
-  '/inventory/movements',
+/**
+ * Path fragments that identify a ledger endpoint in ANY mock surface.
+ *
+ * Suffix form (`/movements`, not `/inventory/movements`) on purpose: handlers
+ * build their paths from a prefix — `${API_BASE_URL}/inventory/movements`,
+ * `${environment.apiBaseUrl}/assets/${assetId}/custody` — so only the tail is
+ * common to all of them. A prefix-matching fragment set would silently skip
+ * every handler that interpolates, which is most of them, and turn the scan
+ * below into a pass over nothing.
+ */
+const LEDGER_WIRE_FRAGMENTS = [
+  '/balances',
+  '/movements',
   '/assets/:assetId/movements',
   '/assets/:assetId/custody',
   '/custodies',
   '/audit-logs',
 ] as const
 
-/** The dev mock builds these paths from a prefix constant, so match the suffix. */
-const LEDGER_MOCK_FRAGMENTS = [
-  '/balances',
-  '/movements',
-  ...LEDGER_ENDPOINT_FRAGMENTS.slice(2),
-] as const
+/**
+ * A path fragment that is definitely NOT a ledger, and that the harness DOES
+ * register write handlers for. Used as the negative control below: a scan that
+ * cannot find this has stopped working and its "no offenders" verdict on the
+ * ledger fragments means nothing.
+ *
+ * `/adjustments`, not `/documents`, and the distinction is the point. The
+ * document handlers write through a `DOCUMENT_PREFIX` constant, so their path
+ * string never appears in the source at all and no fragment could ever find
+ * them; the adjustment paths are spelled out in template literals, so they are
+ * genuinely detectable. A control chosen from the constant-built half would
+ * have failed for a reason that has nothing to do with the scanner working.
+ */
+const WRITABLE_NON_LEDGER_FRAGMENT = '/adjustments'
 
 /** Query-key builders and endpoint constants that name a ledger cache entry. */
 const LEDGER_KEY_TOKENS = [
@@ -119,29 +146,76 @@ const LEDGER_KEY_TOKENS = [
 
 const CACHE_WRITE_VERBS = /\.(setQueryData|updateQueryData|removeQueries|onMutate)\b/u
 
-function sourceFilesIn(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) return sourceFilesIn(full)
-    return /\.tsx?$/u.test(entry.name) ? [full] : []
-  })
-}
-
-/** Application source only: the assertion is about production code, not fixtures. */
-function applicationSourceFiles(): string[] {
-  return sourceFilesIn(join(process.cwd(), 'src')).filter(
-    (file) => !/\.test\.tsx?$/u.test(file) && !file.includes(`${sep}test${sep}`),
-  )
+/** Every mock surface left in the repository: the test harness, and only it. */
+function mockSurfaceSourceFiles(): string[] {
+  return sourceFilesIn(join(process.cwd(), 'src', 'test')).filter((file) => /\.tsx?$/u.test(file))
 }
 
 /**
- * The verb that registered the handler whose path contains `index`, found by
+ * The source with comment lines removed, so prose about handlers cannot be
+ * mistaken for handlers.
+ *
+ * Necessary, not cosmetic: the version of this scan that read `src/mocks/**`
+ * was immune because no comment in that file mentioned `http.post`. This file
+ * does — the comment explaining WHY the assertion survived the deletion names
+ * `http.post('/audit-logs')` as the thing that must never appear. Left
+ * un-stripped, that comment is the one `http.post` the scan finds, and the guard
+ * fails on its own documentation. Any future comment naming an example handler
+ * does the same.
+ *
+ * Only LINE-LEADING comments are removed. A general `/* … *\/` stripper cannot
+ * distinguish a block comment from the `/*` inside a string such as
+ * `'src/**\/*.{test,spec}…'`, and this repo has those; swallowing the source
+ * between the two would delete real registrations from the scan set instead of
+ * prose from it. In TypeScript a line-leading `/*` cannot be inside a string.
+ */
+function withoutLeadingComments(source: string): string {
+  return source.replace(/^[ \t]*\/\/[^\n]*$/gmu, '').replace(/^[ \t]*\/\*[\s\S]*?\*\//gmu, '')
+}
+
+/**
+ * The verb that registered the handler whose path contains `fragment`, found by
  * scanning backwards over the short span between `http.<verb>(` and the path.
  */
 function registeringVerbAt(source: string, index: number): string | undefined {
   const window = source.slice(Math.max(0, index - 120), index)
   const matches = [...window.matchAll(/http\.(get|post|put|patch|delete)\(/gu)]
   return matches.at(-1)?.[1]
+}
+
+interface Registration {
+  readonly file: string
+  readonly fragment: string
+  readonly verb: string | undefined
+}
+
+/**
+ * Every `http.<verb>( … <fragment>` registration across the mock surface.
+ *
+ * `verb === undefined` means the backward scan found no registration before the
+ * fragment, i.e. the fragment appears in prose, a comment or an unrelated
+ * expression rather than in a handler path. Callers must decide what to do with
+ * those; silently treating them as `get` is how this kind of scan rots.
+ */
+function registrationsOf(fragments: readonly string[]): Registration[] {
+  const found: Registration[] = []
+
+  for (const file of mockSurfaceSourceFiles()) {
+    const source = withoutLeadingComments(readFileSync(file, 'utf8'))
+    for (const fragment of fragments) {
+      let index = source.indexOf(fragment)
+      while (index >= 0) {
+        found.push({
+          file: relativeToRepo(file),
+          fragment,
+          verb: registeringVerbAt(source, index),
+        })
+        index = source.indexOf(fragment, index + fragment.length)
+      }
+    }
+  }
+
+  return found
 }
 
 describe('the five ledgers expose no write path (static proof)', () => {
@@ -185,36 +259,82 @@ describe('the five ledgers expose no write path (static proof)', () => {
     // key from the client, or rolling one back, would let the browser author a
     // ledger row — which is exactly what append-only forbids.
     const offenders = applicationSourceFiles()
-      .map((file) => ({ file, source: readFileSync(file, 'utf8') }))
+      .map((file) => ({ file, source: readSource(file) }))
       .filter(({ source }) => CACHE_WRITE_VERBS.test(source))
       .filter(({ source }) => LEDGER_KEY_TOKENS.some((token) => source.includes(token)))
-      .map(({ file }) => file.replace(`${process.cwd()}${sep}`, ''))
+      .map(({ file }) => relativeToRepo(file))
     expect(offenders).toEqual([])
   })
 
-  it('registers no write handler for a ledger endpoint in the dev mock', () => {
-    const writeHandlers = LEDGER_MOCK_FRAGMENTS.flatMap((fragment) => {
-      const found: string[] = []
-      let index = devMockSource.indexOf(fragment)
-      while (index >= 0) {
-        const verb = registeringVerbAt(devMockSource, index)
-        if (verb !== undefined && verb !== 'get') {
-          found.push(`http.${verb}( … ${fragment}`)
-        }
-        index = devMockSource.indexOf(fragment, index + fragment.length)
-      }
-      return found
-    })
+  it('finds a write registration on a non-ledger endpoint, so the scan below can fail', () => {
+    // The negative control. This scan replaces one that read the source of the
+    // deleted development mock (`src/mocks/handlers.ts`, removed by
+    // `eiams-frontend-m4jm`), and it inherits that scan's whole weakness: it
+    // reports "no offenders" just as happily when it has found nothing at all.
+    // The harness registers `http.post` / `http.put` for the adjustment and
+    // document engines, so this fragment MUST be detectable as a write — if it
+    // ever stops being, the ledger verdict two cases down has changed subject.
+    const control = registrationsOf([WRITABLE_NON_LEDGER_FRAGMENT])
+    const writeVerbs = control
+      .filter((registration) => registration.verb !== undefined && registration.verb !== 'get')
+      .map(
+        (registration) =>
+          `${registration.file}: http.${registration.verb}( … ${registration.fragment}`,
+      )
+
+    expect(writeVerbs).not.toEqual([])
+  })
+
+  it('registers no write handler for a ledger endpoint anywhere in the mock surface', () => {
+    // Why this still exists after `src/mocks/` was deleted
+    // --------------------------------------------------
+    // The old version read `src/mocks/handlers.ts?raw` and asserted the runtime
+    // mock never registered a write verb on a ledger. Deleting that mock
+    // removes the hazard by construction — there is no runtime mock left that
+    // *could* answer a real request — but it also removes the check, and
+    // "the directory is gone" is a fact about a commit, not a guard.
+    //
+    // Deleting it outright was the other option, and it was rejected: the
+    // failure mode this catches is not gone. `src/test/msw/` is now the only
+    // mock surface, and a harness that grew `http.post('/audit-logs')` could
+    // author an append-only row in-process and then let this file assert, from
+    // fake data, that no such thing happens. That is a test suite quietly
+    // grading its own homework. So the same assertion now runs over the surface
+    // that actually exists, and it is strictly wider than the old one: every
+    // handler in `src/test/**`, not one registry in `src/mocks/`.
+    const writeHandlers = registrationsOf(LEDGER_WIRE_FRAGMENTS)
+      .filter((registration) => registration.verb !== undefined && registration.verb !== 'get')
+      .map(
+        (registration) =>
+          `${registration.file}: http.${registration.verb}( … ${registration.fragment}`,
+      )
+
     expect(writeHandlers).toEqual([])
   })
 
-  it('keeps the dev mock GET registrations present for every ledger endpoint', () => {
-    // A `null` verb would mean the backward scan found no registration, i.e. the
-    // endpoint is not mocked at all — the previous case would then pass vacuously.
-    for (const fragment of LEDGER_MOCK_FRAGMENTS) {
-      expect(devMockSource, fragment).toContain(fragment)
+  it('keeps every ledger endpoint mocked on a read verb, so the scan above is not vacuous', () => {
+    // The old version asserted the dev mock's GET registrations were present,
+    // so the previous case could not pass merely because the endpoints were not
+    // mocked at all. That failure mode survives the move, so it is re-anchored
+    // on the harness: every ledger fragment must be present, and every
+    // registration the scan can attribute to it must be `get`.
+    const registrations = registrationsOf(LEDGER_WIRE_FRAGMENTS)
+    const attributed = registrations.filter((registration) => registration.verb !== undefined)
+    const getVerbs = attributed.filter((registration) => registration.verb === 'get')
+    const otherVerbs = attributed.filter((registration) => registration.verb !== 'get')
+
+    for (const fragment of LEDGER_WIRE_FRAGMENTS) {
+      expect(
+        attributed.filter((registration) => registration.fragment === fragment),
+        `${fragment} has no attributable handler registration in the harness`,
+      ).not.toEqual([])
     }
-    expect(registeringVerbAt(devMockSource, devMockSource.indexOf('/audit-logs'))).toBe('get')
+    expect(otherVerbs).toEqual([])
+    expect(
+      getVerbs.length,
+      'the harness is expected to read every ledger through MSW; an empty set means ' +
+        'the ledger read path is no longer exercised and the scan above is hollow',
+    ).toBeGreaterThan(0)
   })
 
   it('drops ledger caches on a session scope change, not through a ledger write', () => {

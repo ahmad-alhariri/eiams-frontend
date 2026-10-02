@@ -15,7 +15,10 @@ import {
   useMaterialsQuery,
   useUnitsOfMeasureQuery,
 } from '@/modules/catalog/hooks/use-catalog-queries'
-import { MATERIAL_KIND_LABELS, MATERIAL_KIND_OPTIONS } from '@/modules/catalog/constants/catalog-labels'
+import {
+  MATERIAL_KIND_LABELS,
+  MATERIAL_KIND_OPTIONS,
+} from '@/modules/catalog/constants/catalog-labels'
 import {
   toMaterialRequest,
   type MaterialFormValues,

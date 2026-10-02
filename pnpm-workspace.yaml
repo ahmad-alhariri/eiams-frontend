@@ -1,2 +1,25 @@
+# Removed: `allowBuilds: { msw: true }` in eiams-frontend-etf7 (EPIC G7).
+#
+# The entry existed only so pnpm would run the `msw` package's install script.
+# That script generates `public/mockServiceWorker.js`, which is exactly the file
+# EPIC G7 removed: `public/` is copied verbatim into every Vite outDir, so a
+# committed or generated worker is deployed and installable in production
+# regardless of what the bundler prunes. RESOLUTION-040
+# (`docs/development-environment-profiles.md`) requires the sandbox to be unable
+# to enter a production artifact, so the worker is no longer produced at install
+# time and a developer opting into the UI sandbox runs `npx msw init public`
+# explicitly.
+#
+# The file is retained (rather than deleted) because a single-package repository
+# having a `pnpm-workspace.yaml` is not harmful, and deleting it is a structural
+# change nobody asked for.
+#
+# Updated (eiams-frontend-m4jm): the paragraph above said a developer opting into
+# the UI sandbox runs `npx msw init public` explicitly. There is no mock half of
+# the sandbox any more — `src/mocks/` and `VITE_ENABLE_API_MOCKS` are gone — so
+# that sentence no longer applies to anything, and `msw` itself remains only as
+# a devDependency of the Vitest harness in `src/test/msw/`, which needs no
+# service worker and runs nothing at install time.
+
 allowBuilds:
-  msw: true
+  msw: set this to true or false
