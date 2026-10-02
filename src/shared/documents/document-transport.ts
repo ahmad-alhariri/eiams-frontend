@@ -1,8 +1,8 @@
-import type { AxiosInstance } from 'axios'
-
-import { apiClient } from '@/shared/services/api.client'
+﻿import type { ApiPage } from '@/shared/api/api-contracts'
+import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 import { toWirePaginationParams } from '@/shared/api/pagination'
-import type { IdempotentRequest } from '@/shared/services/mutation-safety'
+import { IDEMPOTENCY_KEY_HEADER, type IdempotentRequest } from '@/shared/services/mutation-safety'
 import type {
   DocumentActionResult,
   DocumentLifecycleHistory,
@@ -13,7 +13,6 @@ import type {
   VersionOnlyDocumentActionRequest,
   WarehouseDocument,
   WarehouseDocumentDraftRequest,
-  WarehouseDocumentPage,
 } from '@/shared/types/generated/eiams-v1'
 
 const DOCUMENTS_PATH = '/warehouse-documents' satisfies keyof paths
@@ -62,7 +61,9 @@ function toQueryParams(query: ListWarehouseDocumentsQuery) {
 }
 
 export interface DocumentService {
-  listDocuments: (query: Readonly<ListWarehouseDocumentsQuery>) => Promise<WarehouseDocumentPage>
+  listDocuments: (
+    query: Readonly<ListWarehouseDocumentsQuery>,
+  ) => Promise<ApiPage<WarehouseDocument>>
   getDocument: (documentId: string) => Promise<WarehouseDocument>
   createDocument: (request: Readonly<WarehouseDocumentDraftRequest>) => Promise<WarehouseDocument>
   updateDocument: (
@@ -110,54 +111,66 @@ export interface DocumentService {
  * Contract-only warehouse-document transport. The API remains authoritative
  * for workflow state, policy evaluation, and optimistic-concurrency conflicts.
  */
-export function createDocumentService(client: AxiosInstance): DocumentService {
+export function createDocumentService(transport: ApiTransport): DocumentService {
   const executeAction = async (
     path: string,
     request: VersionOnlyDocumentActionRequest | ReasonedDocumentActionRequest,
     idempotentRequest: IdempotentRequest,
   ): Promise<DocumentActionResult> => {
-    const response = await client.post<DocumentActionResult>(
+    const response = await transport.request<DocumentActionResult>({
       path,
-      request,
-      idempotentRequest.config,
-    )
+      method: 'POST',
+      body: request,
+      // Read the typed `idempotencyKey` rather than digging through the Axios
+      // config, so the header cannot drift from the key the caller holds.
+      headers: { [IDEMPOTENCY_KEY_HEADER]: idempotentRequest.idempotencyKey },
+    })
     return response.data
   }
 
   return {
     async listDocuments(query) {
-      const response = await client.get<WarehouseDocumentPage>(DOCUMENTS_PATH, {
-        params: toQueryParams(query),
+      return transport.requestPage<WarehouseDocument>({
+        path: DOCUMENTS_PATH,
+        method: 'GET',
+        query: toQueryParams(query),
+      })
+    },
+    async getDocument(documentId) {
+      const response = await transport.request<WarehouseDocument>({
+        path: pathWithDocumentId(DOCUMENT_PATH, documentId),
+        method: 'GET',
       })
       return response.data
     },
-    async getDocument(documentId) {
-      const response = await client.get<WarehouseDocument>(
-        pathWithDocumentId(DOCUMENT_PATH, documentId),
-      )
-      return response.data
-    },
     async createDocument(request) {
-      const response = await client.post<WarehouseDocument>(DOCUMENTS_PATH, request)
+      const response = await transport.request<WarehouseDocument>({
+        path: DOCUMENTS_PATH,
+        method: 'POST',
+        body: request,
+      })
       return response.data
     },
     async updateDocument(documentId, request) {
-      const response = await client.put<WarehouseDocument>(
-        pathWithDocumentId(DOCUMENT_PATH, documentId),
-        request,
-      )
+      const response = await transport.request<WarehouseDocument>({
+        path: pathWithDocumentId(DOCUMENT_PATH, documentId),
+        method: 'PUT',
+        body: request,
+      })
       return response.data
     },
     async getDocumentHistory(documentId) {
-      const response = await client.get<DocumentLifecycleHistory>(
-        pathWithDocumentId(DOCUMENT_HISTORY_PATH, documentId),
-      )
+      const response = await transport.request<DocumentLifecycleHistory>({
+        path: pathWithDocumentId(DOCUMENT_HISTORY_PATH, documentId),
+        method: 'GET',
+      })
       return response.data
     },
     async getDocumentPolicy(documentId) {
-      const response = await client.get<DocumentPolicy>(
-        pathWithDocumentId(DOCUMENT_POLICY_PATH, documentId),
-      )
+      const response = await transport.request<DocumentPolicy>({
+        path: pathWithDocumentId(DOCUMENT_POLICY_PATH, documentId),
+        method: 'GET',
+      })
       return response.data
     },
     async submitDocument(documentId, rowVersion, idempotentRequest) {
@@ -205,4 +218,4 @@ export function createDocumentService(client: AxiosInstance): DocumentService {
   }
 }
 
-export const documentService = createDocumentService(apiClient)
+export const documentService = createDocumentService(apiTransport)

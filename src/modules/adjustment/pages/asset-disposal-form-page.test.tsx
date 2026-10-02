@@ -1,5 +1,6 @@
 ﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { apiJson, okPageJson } from '@/test/msw/envelope'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -8,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import AssetDisposalFormPage from '@/modules/adjustment/pages/asset-disposal-form-page'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
-import { createPage, createSession } from '@/test/msw/factories'
+import { createSession } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { toast } from '@/shared/ui/toast-manager'
 
@@ -53,11 +54,7 @@ function renderForm(permissions = manager) {
 }
 
 function eligibleHandler() {
-  server.use(
-    http.get('*/api/v1/adjustments/disposal-eligible-assets', () =>
-      HttpResponse.json(createPage([asset])),
-    ),
-  )
+  server.use(http.get('*/api/v1/adjustments/disposal-eligible-assets', () => okPageJson([asset])))
 }
 
 async function chooseWarehouse(user: ReturnType<typeof userEvent.setup>, name = warehouse.nameAr) {
@@ -112,10 +109,7 @@ describe('asset disposal draft contract', () => {
       http.post('*/api/v1/adjustments', async ({ request }) => {
         bodies.push(await request.json())
         await pending
-        return HttpResponse.json(
-          { ...scenario.adjustments.disposal, status: 'Draft' },
-          { status: 201 },
-        )
+        return apiJson({ ...scenario.adjustments.disposal, status: 'Draft' }, { status: 201 })
       }),
     )
     const user = renderForm()
@@ -171,12 +165,12 @@ describe('asset disposal draft contract', () => {
         })
         // This asset represents a match outside the unfiltered first 50. The
         // contract search projects it back onto the selector's first page.
-        return HttpResponse.json(
-          createPage(params.get('search') === asset.assetNumber ? [asset] : [], {
-            pageIndex: 0,
-            pageSize: 10,
-          }),
-        )
+        return okPageJson(params.get('search') === asset.assetNumber ? [asset] : [], {
+          page: 1,
+          pageSize: 10,
+          totalCount: 1,
+          totalPages: 1,
+        })
       }),
     )
     const user = renderForm()

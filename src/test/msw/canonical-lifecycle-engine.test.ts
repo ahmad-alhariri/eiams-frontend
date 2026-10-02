@@ -1,5 +1,7 @@
+import type { ApiSuccessResponse } from '@/shared/api/api-contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { HttpResponse, http } from 'msw'
+import { okJson } from '@/test/msw/envelope'
+import { http } from 'msw'
 
 import { environment } from '@/config/env'
 import { apiClient } from '@/shared/services/api.client'
@@ -128,7 +130,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
         }),
       )
 
-      const { data: result } = await apiClient.post<DocumentActionResult>(
+      const {
+        data: { data: result },
+      } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
         actionUrl(action),
         actionBody(action, documents[0]!.rowVersion, 'سبب الإجراء'),
         { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -161,7 +165,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
 
     const events: DocumentLifecycleEvent[] = []
     for (const action of ['Submit', 'Post', 'Reverse'] as const) {
-      const { data: result } = await apiClient.post<DocumentActionResult>(
+      const {
+        data: { data: result },
+      } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
         actionUrl(action),
         actionBody(action, documents[0]!.rowVersion, 'سبب الإجراء'),
         { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -334,7 +340,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
         }),
       )
 
-      const { data: result } = await apiClient.post<DocumentActionResult>(
+      const {
+        data: { data: result },
+      } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
         actionUrl(action),
         { rowVersion: 1 },
         { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -355,7 +363,7 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
           documentStore: () => documents,
         }),
         http.get(`${environment.apiBaseUrl}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-          HttpResponse.json({
+          okJson({
             documentId: DOCUMENT_ID,
             currentStatus: documents[0]?.documentStatus ?? 'Draft',
             currentRowVersion: documents[0]?.rowVersion ?? 0,
@@ -366,7 +374,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
         ),
       )
 
-      const { data: result } = await apiClient.post<DocumentActionResult>(
+      const {
+        data: { data: result },
+      } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
         actionUrl('Cancel'),
         actionBody('Cancel', documents[0]!.rowVersion, 'إلغاء بسبب خطأ في البيانات'),
         { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -386,7 +396,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       })
       expect(documents[0]).toEqual(result.document)
 
-      const { data: history } = await apiClient.get<DocumentLifecycleHistory>(historyUrl())
+      const {
+        data: { data: history },
+      } = await apiClient.get<ApiSuccessResponse<DocumentLifecycleHistory>>(historyUrl())
       expect(history).toMatchObject({ currentStatus: 'Cancelled', currentRowVersion: 2 })
       expect(history.events.map((event) => event.eventType)).toEqual(
         from === 'Submitted'
@@ -485,14 +497,18 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       }),
     )
 
-    const { data: first } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: first },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Submit'),
       { rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
     )
     expect(first.document).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
 
-    const { data: replay } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: replay },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Submit'),
       { rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -514,7 +530,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       }),
     )
 
-    const { data: first } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: first },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Cancel'),
       { reason: 'أ', rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -545,7 +563,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       }),
     )
 
-    const { data: first } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: first },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Submit'),
       { rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -596,14 +616,18 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
     )
 
-    const { data: retry } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: retry },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Submit'),
       { rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
     )
     expect(retry.document).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
 
-    const { data: replay } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: replay },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Submit'),
       { rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -626,7 +650,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       }),
     )
 
-    const { data: first } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: first },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Reverse'),
       { reason: 'خطأ في الترحيل', rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -634,7 +660,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     expect(first.relatedDocument).toBeDefined()
     expect(first.document).toMatchObject({ documentStatus: 'Reversed', rowVersion: 2 })
 
-    const { data: replay } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: replay },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Reverse'),
       { reason: 'خطأ في الترحيل', rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -654,7 +682,7 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
         documentStore: () => documents,
       }),
       http.get(`${environment.apiBaseUrl}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: documents[0]?.documentStatus ?? 'Draft',
           currentRowVersion: documents[0]?.rowVersion ?? 0,
@@ -664,7 +692,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     )
 
     const chain = async () => {
-      const { data: history } = await apiClient.get<DocumentLifecycleHistory>(historyUrl())
+      const {
+        data: { data: history },
+      } = await apiClient.get<ApiSuccessResponse<DocumentLifecycleHistory>>(historyUrl())
       return history.events.map((event) => event.eventType)
     }
 
@@ -685,7 +715,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     expect(documents[0]).toMatchObject({ documentStatus: 'Posted', rowVersion: 1 })
     expect(await chain()).toEqual(['Created', 'Submitted', 'Posted'])
 
-    const { data: reversed } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: reversed },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Reverse'),
       { reason: 'خطأ في الترحيل', rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -700,7 +732,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     })
     expect(documents[0]).toEqual(reversed.document)
 
-    const { data: afterSuccess } = await apiClient.get<DocumentLifecycleHistory>(historyUrl())
+    const {
+      data: { data: afterSuccess },
+    } = await apiClient.get<ApiSuccessResponse<DocumentLifecycleHistory>>(historyUrl())
     expect(afterSuccess).toMatchObject({ currentStatus: 'Reversed', currentRowVersion: 2 })
     expect(afterSuccess.events.map((event) => event.eventType)).toEqual([
       'Created',
@@ -724,7 +758,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       }),
     )
 
-    const { data: result } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: result },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Reverse'),
       { reason: 'خطأ في الترحيل', rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -759,7 +795,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       }),
     )
 
-    const { data: result } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: result },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Reverse'),
       { reason: 'خطأ في الترحيل', rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -810,7 +848,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       }),
     )
 
-    const { data: result } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: result },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Reverse'),
       { reason: 'خطأ في الترحيل', rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -848,7 +888,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
       }),
     )
 
-    const { data: result } = await apiClient.post<DocumentActionResult>(
+    const {
+      data: { data: result },
+    } = await apiClient.post<ApiSuccessResponse<DocumentActionResult>>(
       actionUrl('Reverse'),
       { reason: 'تصحيح تسوية مخزون', rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -935,7 +977,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     ]
     server.use(...createWarehouseDocumentHistoryHandler(events))
 
-    const { data: first } = await apiClient.get<DocumentLifecycleHistory>(historyUrl())
+    const {
+      data: { data: first },
+    } = await apiClient.get<ApiSuccessResponse<DocumentLifecycleHistory>>(historyUrl())
     expect(first).toMatchObject({
       documentId: DOCUMENT_ID,
       currentStatus: 'Reversed',
@@ -958,10 +1002,14 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     expect(first.events[0]).toMatchObject({ eventType: 'Created', toStatus: 'Draft' })
     expect(first.events[1]).toMatchObject({ fromStatus: 'Draft', toStatus: 'Submitted' })
 
-    const { data: second } = await apiClient.get<DocumentLifecycleHistory>(historyUrl())
+    const {
+      data: { data: second },
+    } = await apiClient.get<ApiSuccessResponse<DocumentLifecycleHistory>>(historyUrl())
     expect(second.events).toEqual(first.events)
 
-    const { data: paged } = await apiClient.get<DocumentLifecycleHistory>(
+    const {
+      data: { data: paged },
+    } = await apiClient.get<ApiSuccessResponse<DocumentLifecycleHistory>>(
       `${historyUrl()}?pageIndex=0&pageSize=1`,
     )
     expect(paged.events).toEqual(first.events)

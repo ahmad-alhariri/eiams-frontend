@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okPageJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -12,7 +13,6 @@ import type {
   AdjustmentPurpose,
   AdjustmentStatus,
   InventoryAdjustment,
-  InventoryAdjustmentPage,
   SessionResponse,
 } from '@/shared/types/generated/eiams-v1'
 
@@ -109,9 +109,12 @@ function useAdjustmentsHandler(items: readonly InventoryAdjustment[]) {
   server.use(
     http.get(`${API_BASE_URL}/adjustments`, ({ request }) => {
       capturedListUrl = new URL(request.url)
-      return HttpResponse.json<InventoryAdjustmentPage>({
-        items: [...items],
-        meta: { pageIndex: 0, pageSize: 20, totalItems: items.length, totalPages: 1 },
+      // Wire envelope: `data` is the item array, `pagination` is snake_case.
+      return okPageJson([...items], {
+        page: 1,
+        pageSize: 20,
+        totalCount: items.length,
+        totalPages: 1,
       })
     }),
   )
@@ -201,7 +204,7 @@ describe('AdjustmentsListPage (e21-t02)', () => {
   it('shows the error state with retry when the list request fails', async () => {
     server.use(
       http.get(`${API_BASE_URL}/adjustments`, () =>
-        HttpResponse.json({ title: 'Server Error' }, { status: 500 }),
+        apiJson({ title: 'Server Error' }, { status: 500 }),
       ),
     )
     renderPage(['document.view'])

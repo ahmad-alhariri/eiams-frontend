@@ -1,12 +1,13 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { okPageJson } from '@/test/msw/envelope'
 import { renderHook } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
 import type { Asset } from '@/shared/types/generated/eiams-v1'
-import { createAsset, createNamedReference, createPage, fixtureUuid } from '@/test/msw/factories'
+import { createAsset, createNamedReference, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -145,14 +146,16 @@ function serveEligibleAssets(
           ? matched.slice(offset, offset + size)
           : assets.slice(offset, offset + size).filter(isEligible)
 
-      return HttpResponse.json(
-        createPage(items, {
-          pageIndex,
-          pageSize: size,
-          totalItems: matched.length,
-          totalPages: matched.length === 0 ? 0 : Math.ceil(matched.length / size),
-        }),
-      )
+      // Wire envelope: `data` is the item array and `pagination` is the
+      // snake_case block. Wrapping the whole `{items, meta}` page in a success
+      // envelope instead would leave `requestPage` reading `data.pagination` as
+      // undefined, which is exactly the bug this suite exists to rule out.
+      return okPageJson(items, {
+        page: pageIndex + 1,
+        pageSize: size,
+        totalCount: matched.length,
+        totalPages: matched.length === 0 ? 0 : Math.ceil(matched.length / size),
+      })
     }),
   )
 }

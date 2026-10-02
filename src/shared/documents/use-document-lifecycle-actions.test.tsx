@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { act, renderHook, screen, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -72,11 +73,11 @@ function useMutableDocumentHandlers(store: { documents: WarehouseDocument[] }) {
   server.use(
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
       counters.detailRequests += 1
-      return HttpResponse.json(store.documents[0])
+      return okJson(store.documents[0])
     }),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => {
       counters.historyRequests += 1
-      return HttpResponse.json({
+      return okJson({
         documentId: DOCUMENT_ID,
         currentStatus: store.documents[0]?.documentStatus ?? 'Draft',
         currentRowVersion: store.documents[0]?.rowVersion ?? 0,
@@ -85,7 +86,7 @@ function useMutableDocumentHandlers(store: { documents: WarehouseDocument[] }) {
     }),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => {
       counters.policyRequests += 1
-      return HttpResponse.json(store.documents[0]?.policy)
+      return okJson(store.documents[0]?.policy)
     }),
     ...createWarehouseDocumentActionHandler({
       initialDocument: store.documents[0]!,
@@ -264,7 +265,7 @@ describe('useDocumentLifecycleAction family', () => {
             documentStatus: 'Submitted',
             rowVersion: 2,
           })
-          return HttpResponse.json(
+          return okJson(
             createDocumentActionResult('Submit', {
               document: updated,
             }),
@@ -360,7 +361,7 @@ describe('useDocumentLifecycleAction family', () => {
     server.use(
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/submit`, () => {
         submitCalls += 1
-        return HttpResponse.json(createDocumentActionResult('Submit'))
+        return okJson(createDocumentActionResult('Submit'))
       }),
     )
 

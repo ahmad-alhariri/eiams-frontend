@@ -1,4 +1,4 @@
-import { delay, http, HttpResponse, type HttpHandler } from 'msw'
+﻿import { delay, http, type HttpHandler } from 'msw'
 
 import { environment } from '@/config/env'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
@@ -15,7 +15,7 @@ import {
   DOCUMENT_TRANSITIONS,
   fixtureUuid,
 } from '@/test/msw/factories'
-import { toWireErrorResponse } from '@/test/msw/envelope'
+import { apiJson, okJson, okPageJson, toWireErrorResponse } from '@/test/msw/envelope'
 import type {
   DocumentActionType,
   DocumentActionResult,
@@ -30,7 +30,6 @@ import type {
   LifecycleDocumentReference,
   Material,
   NamedReference,
-  PageMeta,
   ProblemDetails,
   ReasonedDocumentActionRequest,
   VersionOnlyDocumentActionRequest,
@@ -117,7 +116,8 @@ export const WAREHOUSE_DOCUMENT_TYPES = [
 interface DocumentListQuery {
   documentStatus?: DocumentStatus
   documentType?: DocumentType
-  pageIndex: number
+  /** One-based page index, as bound by `PaginationQueryParameters.Page`. */
+  page: number
   pageSize: number
   search?: string
   warehouseId?: string
@@ -131,14 +131,29 @@ function queryEnum<T extends string>(value: string | null, allowed: readonly T[]
   return value !== null && (allowed as readonly string[]).includes(value) ? (value as T) : undefined
 }
 
+/**
+ * Reads the list query the way the backend actually binds it.
+ *
+ * The page parameter is `page` and is ONE-BASED (`PaginationQueryParameters.Page`,
+ * `Range(1, ...)`, default 1). This harness used to read a zero-based
+ * `pageIndex`, a convention no backend accepts, so it silently disagreed with
+ * every list request the application makes. `pageSize` is read under the name
+ * `toWirePaginationParams` actually emits; whether the backend binds that as
+ * `pageSize` or `page_size` is `eiams-frontend-3svn`'s decision, and this
+ * harness deliberately does not pre-empt it.
+ *
+ * Out-of-range values clamp the way ASP.NET model binding would: a `page` below
+ * 1 becomes 1 and a non-positive page size falls back to the default, instead of
+ * producing a negative slice offset.
+ */
 function parseDocumentListQuery(url: URL): DocumentListQuery {
-  const pageIndex = Number.parseInt(url.searchParams.get('pageIndex') ?? '0', 10)
+  const page = Number.parseInt(url.searchParams.get('page') ?? '1', 10)
   const pageSize = Number.parseInt(
     url.searchParams.get('pageSize') ?? String(LIST_DEFAULT_PAGE_SIZE),
     10,
   )
   const query: DocumentListQuery = {
-    pageIndex: Number.isFinite(pageIndex) && pageIndex >= 0 ? pageIndex : 0,
+    page: Number.isFinite(page) && page >= 1 ? page : 1,
     pageSize: Number.isFinite(pageSize) && pageSize > 0 ? pageSize : LIST_DEFAULT_PAGE_SIZE,
   }
   const search = url.searchParams.get('search')
@@ -174,13 +189,16 @@ function matchesSearch<Record>(
   return textOf(record).toLowerCase().includes(search.toLowerCase())
 }
 
-function pageMeta(totalItems: number, pageIndex: number, pageSize: number): PageMeta {
-  return {
-    pageIndex,
-    pageSize,
-    totalItems,
-    totalPages: totalItems === 0 ? 0 : Math.ceil(totalItems / pageSize),
-  }
+/**
+ * Wire page count for a filtered list.
+ *
+ * Replaces the former `pageMeta()`, which built the UI shape
+ * `{pageIndex, pageSize, totalItems, totalPages}` and existed only to be
+ * embedded in a bare `{items, meta}` body the backend never sends.
+ * `okPageJson` derives the snake_case `pagination` block the contract carries.
+ */
+function totalPageCount(totalItems: number, pageSize: number): number {
+  return totalItems === 0 ? 0 : Math.ceil(totalItems / pageSize)
 }
 
 function notFound() {
@@ -740,10 +758,18 @@ export function createWarehouseDocumentListHandler(
             (item) => `${item.paperDocumentNumber} ${item.systemReferenceNumber}`,
           ),
       )
-      const start = query.pageIndex * query.pageSize
-      return HttpResponse.json({
-        items: filtered.slice(start, start + query.pageSize),
-        meta: pageMeta(filtered.length, query.pageIndex, query.pageSize),
+      // One-based `page`, so page 1 is the first slice.
+      const start = (query.page - 1) * query.pageSize
+      // Serves the wire envelope, not `{items, meta}`. The backend wraps every
+      // response in `ApiResponse<T>(Success, Data, Pagination, Meta)`; a bare UI
+      // page here made the shared `ApiTransport` read `data`/`pagination` off
+      // undefined and return an empty page, which is what eiams-frontend-3abe
+      // exposed once the document services moved onto the transport.
+      return okPageJson(filtered.slice(start, start + query.pageSize), {
+        page: query.page,
+        pageSize: query.pageSize,
+        totalCount: filtered.length,
+        totalPages: totalPageCount(filtered.length, query.pageSize),
       })
     }),
   ]
@@ -757,7 +783,7 @@ export function createWarehouseDocumentDetailHandler(
   return [
     http.get(`${DOCUMENT_PREFIX}/:documentId`, async ({ params }) => {
       await delay(options.delayMs ?? 0)
-      return params['documentId'] === document.documentId ? HttpResponse.json(document) : notFound()
+      return params['documentId'] === document.documentId ? okJson(document) : notFound()
     }),
   ]
 }
@@ -780,7 +806,7 @@ export function createWarehouseDocumentHistoryHandler(
       if (params['documentId'] !== documentId) {
         return notFound()
       }
-      return HttpResponse.json({
+      return okJson({
         documentId,
         currentStatus: options.currentStatus ?? lastEvent?.toStatus ?? EMPTY_HISTORY_STATUS,
         currentRowVersion: options.currentRowVersion ?? lastEvent?.documentRowVersion ?? 0,
@@ -798,7 +824,7 @@ export function createWarehouseDocumentPolicyHandler(
   return [
     http.get(`${DOCUMENT_PREFIX}/:documentId/policy`, async ({ params }) => {
       await delay(options.delayMs ?? 0)
-      return params['documentId'] === policy.documentId ? HttpResponse.json(policy) : notFound()
+      return params['documentId'] === policy.documentId ? okJson(policy) : notFound()
     }),
   ]
 }
@@ -862,7 +888,7 @@ export function createWarehouseDocumentActionHandler(
       })
       if (outcome.kind !== 'ok') {
         if (outcome.kind === 'replay') {
-          return HttpResponse.json(outcome.result)
+          return okJson(outcome.result)
         }
         return toWireErrorResponse(outcome.problem, outcome.status)
       }
@@ -877,7 +903,7 @@ export function createWarehouseDocumentActionHandler(
       if (outcome.compensatingDocument !== undefined) {
         options.onCompensatingDocumentCreated?.(outcome.compensatingDocument)
       }
-      return HttpResponse.json(outcome.result)
+      return okJson(outcome.result)
     }),
   )
 }
@@ -1088,7 +1114,7 @@ export function createWarehouseDocumentCreateHandler(
         store.push(document)
       }
       options.onDocumentCreated?.(document)
-      return HttpResponse.json(document, { status: 201 })
+      return apiJson(document, { status: 201 })
     }),
   ]
 }
@@ -1123,7 +1149,7 @@ export function createWarehouseDocumentUpdateHandler(
         }
       }
       options.onDocumentUpdated?.(updated)
-      return HttpResponse.json(updated)
+      return okJson(updated)
     }),
   ]
 }

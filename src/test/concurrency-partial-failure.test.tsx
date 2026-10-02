@@ -24,7 +24,7 @@ import {
   fixtureUuid,
 } from '@/test/msw/factories'
 import { applyDocumentAction } from '@/test/msw/warehouse-document-handlers'
-import { toWireErrorResponse } from '@/test/msw/envelope'
+import { apiJson, okJson, toWireErrorResponse } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 /**
@@ -255,11 +255,9 @@ describe('F-1 — a failed policy read degrades only the policy-dependent surfac
     let policyShouldFail = true
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(document)),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: document.documentStatus,
           currentRowVersion: document.rowVersion,
@@ -271,7 +269,7 @@ describe('F-1 — a failed policy read degrades only the policy-dependent surfac
         if (policyShouldFail) {
           return new HttpResponse(null, { status: 500 })
         }
-        return HttpResponse.json(policy)
+        return okJson(policy)
       }),
     )
 
@@ -321,11 +319,9 @@ describe('F-1 — a failed policy read degrades only the policy-dependent surfac
     const document = detailFixture()
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(document)),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: document.documentStatus,
           currentRowVersion: document.rowVersion,
@@ -333,7 +329,7 @@ describe('F-1 — a failed policy read degrades only the policy-dependent surfac
         }),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(draftPolicy()),
+        okJson(draftPolicy()),
       ),
     )
 
@@ -353,9 +349,7 @@ describe('F-2 — an adjustment retry reuses one idempotency key; a new action m
     let postCalls = 0
 
     server.use(
-      http.get(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}`, () =>
-        HttpResponse.json(adjustmentFixture()),
-      ),
+      http.get(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}`, () => okJson(adjustmentFixture())),
       http.post(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}/post`, async ({ request }) => {
         captured.push(request.headers.get(IDEMPOTENCY_KEY_HEADER))
         postCalls += 1
@@ -365,7 +359,7 @@ describe('F-2 — an adjustment retry reuses one idempotency key; a new action m
           committed = true
           return HttpResponse.error()
         }
-        return HttpResponse.json({ adjustmentId: ADJUSTMENT_ID, postedAt: null })
+        return okJson({ adjustmentId: ADJUSTMENT_ID, postedAt: null })
       }),
     )
 
@@ -397,16 +391,14 @@ describe('F-2 — an adjustment retry reuses one idempotency key; a new action m
     let postCalls = 0
 
     server.use(
-      http.get(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}`, () =>
-        HttpResponse.json(adjustmentFixture()),
-      ),
+      http.get(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}`, () => okJson(adjustmentFixture())),
       http.post(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}/post`, async ({ request }) => {
         captured.push(request.headers.get(IDEMPOTENCY_KEY_HEADER))
         postCalls += 1
         if (postCalls === 1) {
           return toWireErrorResponse(adjustmentConflictProblem(), 409)
         }
-        return HttpResponse.json({ adjustmentId: ADJUSTMENT_ID, postedAt: null })
+        return okJson({ adjustmentId: ADJUSTMENT_ID, postedAt: null })
       }),
     )
 
@@ -429,7 +421,7 @@ describe('F-3 — a 409 on an adjustment action refetches authoritative state an
     server.use(
       http.get(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(adjustmentFixture())
+        return okJson(adjustmentFixture())
       }),
       http.post(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}/post`, () =>
         toWireErrorResponse(adjustmentConflictProblem(), 409),
@@ -460,7 +452,7 @@ describe('F-3 — a 409 on an adjustment action refetches authoritative state an
     server.use(
       http.get(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(adjustmentFixture())
+        return okJson(adjustmentFixture())
       }),
       http.post(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}/post`, () =>
         // `detailAr: null` is contract-legal; the local guidance must be reachable.
@@ -488,7 +480,7 @@ describe('F-3 — a 409 on an adjustment action refetches authoritative state an
     server.use(
       http.get(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(adjustmentFixture())
+        return okJson(adjustmentFixture())
       }),
       http.post(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}/post`, () => {
         postCalls += 1
@@ -521,11 +513,11 @@ describe('verify-only — the shared document lifecycle action path already comp
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(store.document)
+        return okJson(store.document)
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => {
         historyRequests += 1
-        return HttpResponse.json({
+        return okJson({
           documentId: DOCUMENT_ID,
           currentStatus: store.document.documentStatus,
           currentRowVersion: store.document.rowVersion,
@@ -534,7 +526,7 @@ describe('verify-only — the shared document lifecycle action path already comp
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => {
         policyRequests += 1
-        return HttpResponse.json(draftPolicy())
+        return okJson(draftPolicy())
       }),
       http.post(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/submit`,
@@ -546,12 +538,12 @@ describe('verify-only — the shared document lifecycle action path already comp
             rowVersion: body.rowVersion,
           })
           if (outcome.kind !== 'ok') {
-            return HttpResponse.json(outcome.problem, {
+            return apiJson(outcome.problem, {
               status: outcome.kind === 'conflict' ? 409 : 422,
             })
           }
           submitCalls += 1
-          return HttpResponse.json(outcome.result)
+          return okJson(outcome.result)
         },
       ),
     )

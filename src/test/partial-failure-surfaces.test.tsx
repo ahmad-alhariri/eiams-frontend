@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -14,7 +14,7 @@ import {
   deriveLifecycleEvents,
   fixtureUuid,
 } from '@/test/msw/factories'
-import { toWireErrorResponse } from '@/test/msw/envelope'
+import { okJson, toWireErrorResponse } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 /**
@@ -146,13 +146,13 @@ describe('B1 — a failed attachment delete must leave user-visible feedback', (
     let deleteCalls = 0
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(draftWithSignedOriginal()),
+        okJson(draftWithSignedOriginal()),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(draftPolicy()),
+        okJson(draftPolicy()),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: 'Draft',
           currentRowVersion: 4,
@@ -195,13 +195,13 @@ describe('B2 — attachment failures keep the server Arabic detail and recover o
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(draftWithSignedOriginal())
+        return okJson(draftWithSignedOriginal())
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(draftPolicy()),
+        okJson(draftPolicy()),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: 'Draft',
           currentRowVersion: 4,

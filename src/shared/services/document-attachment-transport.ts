@@ -1,6 +1,5 @@
-import type { AxiosInstance } from 'axios'
-
-import { apiClient } from '@/shared/services/api.client'
+﻿import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 import type { AttachmentType, DocumentAttachment, paths } from '@/shared/types/generated/eiams-v1'
 
 const DOCUMENT_ATTACHMENTS_PATH =
@@ -61,31 +60,32 @@ export function createDocumentAttachmentFormData(
  * build download URLs, inspect checksums, or normalize/present API failures.
  */
 export function createDocumentAttachmentTransport(
-  client: AxiosInstance,
+  transport: ApiTransport,
 ): DocumentAttachmentTransport {
   return {
     async list(documentId) {
-      const response = await client.get<readonly DocumentAttachment[]>(
-        interpolatePath(DOCUMENT_ATTACHMENTS_PATH, documentId),
-      )
+      const response = await transport.request<readonly DocumentAttachment[]>({
+        path: interpolatePath(DOCUMENT_ATTACHMENTS_PATH, documentId),
+        method: 'GET',
+      })
       return response.data
     },
     async upload(documentId, request) {
-      const response = await client.post<DocumentAttachment>(
-        interpolatePath(DOCUMENT_ATTACHMENTS_PATH, documentId),
-        createDocumentAttachmentFormData(request),
-      )
+      const response = await transport.request<DocumentAttachment>({
+        path: interpolatePath(DOCUMENT_ATTACHMENTS_PATH, documentId),
+        method: 'POST',
+        body: createDocumentAttachmentFormData(request),
+      })
       return response.data
     },
     async delete(documentId, request) {
-      await client.delete(
-        interpolatePath(DOCUMENT_ATTACHMENT_PATH, documentId, request.attachmentId),
-        {
-          params: { rowVersion: request.rowVersion },
-        },
-      )
+      await transport.requestEmpty({
+        path: interpolatePath(DOCUMENT_ATTACHMENT_PATH, documentId, request.attachmentId),
+        method: 'DELETE',
+        query: { rowVersion: request.rowVersion },
+      })
     },
   }
 }
 
-export const documentAttachmentTransport = createDocumentAttachmentTransport(apiClient)
+export const documentAttachmentTransport = createDocumentAttachmentTransport(apiTransport)

@@ -1,9 +1,9 @@
-import axios from 'axios'
-import { HttpResponse, http } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+﻿import axios from 'axios'
+import { http } from 'msw'
+import { describe, expect, it } from 'vitest'
 
+import type { ApiPage } from '@/shared/api/api-contracts'
 import { createDocumentService } from '@/shared/documents/document-transport'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { withIdempotencyKey } from '@/shared/services/mutation-safety'
 import type {
@@ -13,9 +13,10 @@ import type {
   DocumentPolicy,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
-import { createNamedReference, createPage, fixtureUuid } from '@/test/msw/factories'
-import { errJson } from '@/test/msw/envelope'
+import { createNamedReference, fixtureUuid } from '@/test/msw/factories'
+import { apiJson, errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
+import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
 
 const API_BASE_URL = '/api/v1'
 const DOCUMENT_ID = fixtureUuid(60)
@@ -80,17 +81,39 @@ function createHistoryFixture(): DocumentLifecycleHistory {
   }
 }
 
-const bundles: ApiClientBundle[] = []
+/**
+ * The `ApiPage` the transport produces for a one-item `okPageJson` response.
+ *
+ * `okPageJson` defaults page=1, pageSize=items.length=1, totalCount=1,
+ * totalPages=1 and emits `has_next_page: page < totalPages`, so BOTH navigation
+ * flags are false for a single full page. That is deliberate: the transport reads
+ * the server's flags rather than deriving them, because pagination semantics are
+ * server-owned. An `items.length >= pageSize` derivation would return true here
+ * and would be inventing a rule the backend owns.
+ *
+ * Written literally rather than via `createPage`, which produces the UI shape
+ * `{items, meta:{pageIndex,...}}` — not what the transport returns.
+ */
+const EXPECTED_PAGE = <T>(items: readonly T[]): ApiPage<T> => ({
+  items,
+  page: 1,
+  pageSize: 1,
+  totalItems: 1,
+  totalPages: 1,
+  hasPreviousPage: false,
+  hasNextPage: false,
+})
+
+// A real transport over a real Axios client (9uuf). The fixtures below now serve
+// the wire envelope via okJson/okPageJson, which is what the transport reads —
+// previously they served bare objects, so the suite passed while the production
+// service returned the envelope to every caller.
+const createHarness = registerTestTransportHarness(API_BASE_URL)
 
 function setupService() {
-  const bundle = createApiClient({ baseURL: API_BASE_URL })
-  bundles.push(bundle)
-  return createDocumentService(bundle.client)
+  const { transport } = createHarness()
+  return createDocumentService(transport)
 }
-
-afterEach(() => {
-  for (const bundle of bundles.splice(0)) bundle.dispose()
-})
 
 describe('document transport', () => {
   it('maps document list filters to the contract query parameters without undefined keys', async () => {
@@ -102,7 +125,7 @@ describe('document transport', () => {
       http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
         const url = new URL(request.url)
         requestedUrls.push(url.pathname + url.search)
-        return HttpResponse.json(createPage([document]))
+        return okPageJson([document])
       }),
     )
 
@@ -117,8 +140,8 @@ describe('document transport', () => {
         search: 'حاسوب',
         warehouseId: WAREHOUSE_ID,
       }),
-    ).resolves.toEqual(createPage([document]))
-    await expect(service.listDocuments({})).resolves.toEqual(createPage([document]))
+    ).resolves.toEqual(EXPECTED_PAGE([document]))
+    await expect(service.listDocuments({})).resolves.toEqual(EXPECTED_PAGE([document]))
 
     expect(requestedUrls).toEqual([
       // The wire is one-based (`page`), matching `PaginationQueryParameters.Page`;
@@ -135,15 +158,9 @@ describe('document transport', () => {
     const policy = createPolicyFixture()
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(document),
-      ),
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json(history),
-      ),
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(policy),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(document)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => okJson(history)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => okJson(policy)),
     )
 
     await expect(service.getDocument(DOCUMENT_ID)).resolves.toEqual(document)
@@ -170,14 +187,14 @@ describe('document transport', () => {
           body: await request.json(),
           idempotencyKey: request.headers.get('Idempotency-Key'),
         })
-        return HttpResponse.json(document, { status: 201 })
+        return apiJson(document, { status: 201 })
       }),
       http.put(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, async ({ request }) => {
         received.push({
           body: await request.json(),
           idempotencyKey: request.headers.get('Idempotency-Key'),
         })
-        return HttpResponse.json(document)
+        return okJson(document)
       }),
     )
 
@@ -205,7 +222,7 @@ describe('document transport', () => {
           body: await request.json(),
           idempotencyKey: request.headers.get('Idempotency-Key'),
         })
-        return HttpResponse.json(result)
+        return okJson(result)
       }
 
     server.use(
@@ -272,7 +289,7 @@ describe('document transport', () => {
           expect(new URL(request.url).pathname).toBe(
             `${API_BASE_URL}/warehouse-documents/${encodeURIComponent(documentId)}/history`,
           )
-          return HttpResponse.json(history)
+          return okJson(history)
         },
       ),
     )

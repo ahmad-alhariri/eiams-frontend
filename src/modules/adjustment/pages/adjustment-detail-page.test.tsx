@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -91,7 +92,7 @@ function draftFixture(): InventoryAdjustment {
 }
 
 function useDetailHandler(adjustment: InventoryAdjustment) {
-  server.use(http.get(`*/api/v1/adjustments/${ADJUSTMENT_ID}`, () => HttpResponse.json(adjustment)))
+  server.use(http.get(`*/api/v1/adjustments/${ADJUSTMENT_ID}`, () => okJson(adjustment)))
 }
 
 function renderPage(
@@ -171,7 +172,7 @@ describe('AdjustmentDetailPage (e21-t07)', () => {
   it('shows the error state when the detail request fails', async () => {
     server.use(
       http.get(`*/api/v1/adjustments/${ADJUSTMENT_ID}`, () =>
-        HttpResponse.json({ title: 'x' }, { status: 500 }),
+        apiJson({ title: 'x' }, { status: 500 }),
       ),
     )
     renderPage()

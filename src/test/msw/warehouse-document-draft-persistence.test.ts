@@ -1,3 +1,4 @@
+import type { ApiSuccessResponse } from '@/shared/api/api-contracts'
 import { describe, expect, it } from 'vitest'
 
 import { apiClient } from '@/shared/services/api.client'
@@ -184,10 +185,9 @@ describe('draft persistence handlers', () => {
       }),
     )
 
-    const { data: created } = await apiClient.post<WarehouseDocument>(
-      DOCUMENTS_PATH,
-      draftRequest(),
-    )
+    const {
+      data: { data: created },
+    } = await apiClient.post<ApiSuccessResponse<WarehouseDocument>>(DOCUMENTS_PATH, draftRequest())
     expect(created.documentStatus).toBe('Draft')
     expect(created.systemReferenceNumber).toBe('EIAMS-RCV-2024-9999')
     expect(store).toHaveLength(1)
@@ -210,7 +210,9 @@ describe('draft persistence handlers', () => {
       }),
     )
 
-    const { data: updated } = await apiClient.put<WarehouseDocument>(
+    const {
+      data: { data: updated },
+    } = await apiClient.put<ApiSuccessResponse<WarehouseDocument>>(
       `${DOCUMENTS_PATH}/${initial.documentId}`,
       draftRequest({ rowVersion: initial.rowVersion }),
     )

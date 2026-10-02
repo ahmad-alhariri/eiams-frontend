@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { delay, HttpResponse, http } from 'msw'
+import { delay, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -128,10 +129,10 @@ function useMutableJourney(delayMs = 0): MutableJourney {
 
   server.use(
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-      HttpResponse.json(journey.documents[0]),
+      okJson(journey.documents[0]),
     ),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-      HttpResponse.json({
+      okJson({
         documentId: DOCUMENT_ID,
         currentStatus: journey.documents[0]?.documentStatus ?? 'Draft',
         currentRowVersion: journey.documents[0]?.rowVersion ?? 0,
@@ -139,7 +140,7 @@ function useMutableJourney(delayMs = 0): MutableJourney {
       }),
     ),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-      HttpResponse.json(journey.documents[0]?.policy),
+      okJson(journey.documents[0]?.policy),
     ),
   )
 
@@ -160,14 +161,14 @@ function useMutableJourney(delayMs = 0): MutableJourney {
             reason: 'reason' in body ? (body.reason ?? null) : null,
           })
           if (outcome.kind === 'conflict') {
-            return HttpResponse.json(outcome.problem, { status: 409 })
+            return apiJson(outcome.problem, { status: 409 })
           }
           if (outcome.kind === 'validation') {
-            return HttpResponse.json(outcome.problem, { status: 422 })
+            return apiJson(outcome.problem, { status: 422 })
           }
           journey.documents[0] = outcome.document
           journey.events.push(outcome.result.lifecycleEvent)
-          return HttpResponse.json(outcome.result)
+          return okJson(outcome.result)
         },
       ),
     )

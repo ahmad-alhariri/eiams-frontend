@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+﻿import { beforeEach, describe, expect, it } from 'vitest'
 
+import type { ApiSuccessResponse } from '@/shared/api/api-contracts'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import { apiClient } from '@/shared/services/api.client'
 import {
@@ -102,39 +103,64 @@ describe('document-engine scenario handlers', () => {
     ]
     server.use(...createWarehouseDocumentListHandler(documents))
 
-    const { data: all } = await apiClient.get<{
-      items: Array<{ documentId: string }>
-      meta: { pageIndex: number; pageSize: number; totalItems: number; totalPages: number }
-    }>('/warehouse-documents')
-    expect(all.items).toHaveLength(3)
-    expect(all.meta).toEqual({ pageIndex: 0, pageSize: 20, totalItems: 3, totalPages: 1 })
+    // The harness now serves the real envelope: `data` is the item ARRAY and
+    // `pagination` is the snake_case block. Asserting `{items, meta:{pageIndex}}`
+    // would pin the UI shape the backend never sends.
+    const first =
+      await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>('/warehouse-documents')
+    expect(first.data.data).toHaveLength(3)
+    expect(first.data.pagination).toMatchObject({
+      page: 1,
+      page_size: 20,
+      total_items: 3,
+      total_pages: 1,
+      has_previous_page: false,
+      // 3 items in one 20-per-page page, so `page < totalPages` is 1 < 1 = false.
+      // The flags are server-owned and read, never derived client-side.
+      has_next_page: false,
+    })
 
-    const { data: submitted } = await apiClient.get<{ items: Array<{ documentId: string }> }>(
+    const submitted = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
       '/warehouse-documents?documentStatus=Submitted',
     )
-    expect(submitted.items.map((item) => item.documentId)).toEqual([fixtureUuid(151)])
+    expect(submitted.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(151)])
 
-    const { data: transfers } = await apiClient.get<{ items: Array<{ documentId: string }> }>(
+    const transfers = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
       '/warehouse-documents?documentType=Transfer',
     )
-    expect(transfers.items.map((item) => item.documentId)).toEqual([fixtureUuid(152)])
+    expect(transfers.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(152)])
 
-    const { data: byWarehouse } = await apiClient.get<{ items: Array<{ documentId: string }> }>(
+    const byWarehouse = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
       `/warehouse-documents?warehouseId=${fixtureUuid(31)}`,
     )
-    expect(byWarehouse.items.map((item) => item.documentId)).toEqual([fixtureUuid(152)])
+    expect(byWarehouse.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(152)])
 
-    const { data: bySearch } = await apiClient.get<{ items: Array<{ documentId: string }> }>(
+    const bySearch = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
       '/warehouse-documents?search=2024/102',
     )
-    expect(bySearch.items.map((item) => item.documentId)).toEqual([fixtureUuid(151)])
+    expect(bySearch.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(151)])
 
-    const { data: page } = await apiClient.get<{
-      items: unknown[]
-      meta: { totalItems: number; totalPages: number }
-    }>('/warehouse-documents?pageSize=2&pageIndex=1')
-    expect(page.items).toHaveLength(1)
-    expect(page.meta).toEqual({ pageIndex: 1, pageSize: 2, totalItems: 3, totalPages: 2 })
+    // One-based `page`, matching `PaginationQueryParameters.Page`. The old
+    // `pageIndex=1` meant the SECOND slice; `page=2` means the same thing in the
+    // convention the backend actually binds.
+    const secondPage = await apiClient.get<ApiSuccessResponse<unknown[]>>(
+      '/warehouse-documents?pageSize=2&page=2',
+    )
+    expect(secondPage.data.data).toHaveLength(1)
+    expect(secondPage.data.pagination).toMatchObject({
+      page: 2,
+      page_size: 2,
+      total_items: 3,
+      total_pages: 2,
+    })
+
+    // `page=0` is below the backend's `Range(1, ...)` and clamps to page 1
+    // rather than producing a negative slice offset.
+    const clamped = await apiClient.get<ApiSuccessResponse<unknown[]>>(
+      '/warehouse-documents?page=0',
+    )
+    expect(clamped.data.data).toHaveLength(3)
+    expect(clamped.data.pagination?.page).toBe(1)
   })
 
   it('serves detail, history, and policy; unknown ids return an Arabic 404 problem', async () => {
@@ -161,23 +187,31 @@ describe('document-engine scenario handlers', () => {
       ...createWarehouseDocumentPolicyHandler(document.policy),
     )
 
-    const { data: detail } = await apiClient.get<{ documentStatus: DocumentStatus }>(
+    const {
+      data: { data: detail },
+    } = await apiClient.get<ApiSuccessResponse<{ documentStatus: DocumentStatus }>>(
       `/warehouse-documents/${document.documentId}`,
     )
     expect(detail.documentStatus).toBe('Submitted')
 
-    const { data: history } = await apiClient.get<{
-      currentStatus: DocumentStatus
-      currentRowVersion: number
-      events: Array<{ eventType: string }>
-    }>(`/warehouse-documents/${document.documentId}/history`)
+    const {
+      data: { data: history },
+    } = await apiClient.get<
+      ApiSuccessResponse<{
+        currentStatus: DocumentStatus
+        currentRowVersion: number
+        events: Array<{ eventType: string }>
+      }>
+    >(`/warehouse-documents/${document.documentId}/history`)
     expect(history).toMatchObject({
       currentStatus: 'Submitted',
       currentRowVersion: 2,
     })
     expect(history.events.map((event) => event.eventType)).toEqual(['Created', 'Submitted'])
 
-    const { data: policy } = await apiClient.get<{ documentStatus: DocumentStatus }>(
+    const {
+      data: { data: policy },
+    } = await apiClient.get<ApiSuccessResponse<{ documentStatus: DocumentStatus }>>(
       `/warehouse-documents/${document.documentId}/policy`,
     )
     expect(policy.documentStatus).toBe('Submitted')
@@ -286,10 +320,14 @@ describe('document-engine scenario handlers', () => {
       }),
     )
 
-    const { data: result } = await apiClient.post<{
-      document: { documentStatus: DocumentStatus; rowVersion: number }
-      lifecycleEvent: { eventType: string; fromStatus: DocumentStatus }
-    }>(
+    const {
+      data: { data: result },
+    } = await apiClient.post<
+      ApiSuccessResponse<{
+        document: { documentStatus: DocumentStatus; rowVersion: number }
+        lifecycleEvent: { eventType: string; fromStatus: DocumentStatus }
+      }>
+    >(
       `/warehouse-documents/${fixtureUuid(150)}/submit`,
       { rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -300,18 +338,20 @@ describe('document-engine scenario handlers', () => {
     expect(result.lifecycleEvent.fromStatus).toBe('Draft')
     expect(documents[0]).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
 
-    const cancelled = await apiClient.post<{
-      document: { documentStatus: DocumentStatus; rowVersion: number }
-      lifecycleEvent: { eventType: string; fromStatus: DocumentStatus }
-    }>(
+    const cancelled = await apiClient.post<
+      ApiSuccessResponse<{
+        document: { documentStatus: DocumentStatus; rowVersion: number }
+        lifecycleEvent: { eventType: string; fromStatus: DocumentStatus }
+      }>
+    >(
       `/warehouse-documents/${fixtureUuid(150)}/cancel`,
       { rowVersion: 2, reason: 'إلغاء' },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
     )
-    expect(cancelled.data.document.documentStatus).toBe('Cancelled')
-    expect(cancelled.data.document.rowVersion).toBe(3)
-    expect(cancelled.data.lifecycleEvent.eventType).toBe('Cancelled')
-    expect(cancelled.data.lifecycleEvent.fromStatus).toBe('Submitted')
+    expect(cancelled.data.data.document.documentStatus).toBe('Cancelled')
+    expect(cancelled.data.data.document.rowVersion).toBe(3)
+    expect(cancelled.data.data.lifecycleEvent.eventType).toBe('Cancelled')
+    expect(cancelled.data.data.lifecycleEvent.fromStatus).toBe('Submitted')
     expect(documents[0]).toMatchObject({ documentStatus: 'Cancelled', rowVersion: 3 })
     expect(documents[0]?.policy.documentStatus).toBe('Cancelled')
 
@@ -408,10 +448,14 @@ describe('document-engine scenario handlers', () => {
       { rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
     )
-    const { data: posted } = await apiClient.post<{
-      document: { rowVersion: number }
-      lifecycleEvent: { eventType: string }
-    }>(
+    const {
+      data: { data: posted },
+    } = await apiClient.post<
+      ApiSuccessResponse<{
+        document: { rowVersion: number }
+        lifecycleEvent: { eventType: string }
+      }>
+    >(
       `/warehouse-documents/${fixtureUuid(150)}/post`,
       { rowVersion: 2 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },

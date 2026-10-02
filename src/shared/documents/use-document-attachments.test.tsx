@@ -9,7 +9,7 @@ import { apiClient } from '@/shared/services/api.client'
 import type { DocumentAttachment } from '@/shared/types/generated/eiams-v1'
 import { createWarehouseDocument, fixtureUuid } from '@/test/msw/factories'
 import { readRequestForm } from '@/test/msw/multipart-parser'
-import { errJson } from '@/test/msw/envelope'
+import { apiJson, errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 // jsdom's XHR serializer preserves File names; undici's fetch adapter drops
@@ -85,7 +85,7 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(store.document)
+        return okJson(store.document)
       }),
       http.post(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`,
@@ -93,7 +93,7 @@ describe('useDocumentAttachmentManager', () => {
           const form = await readRequestForm(request)
           expect(form.get('attachmentType')).toBe('SignedOriginal')
           store.document = makeDraftDocument([signedAttachment()])
-          return HttpResponse.json(store.document.attachments[0], { status: 201 })
+          return apiJson(store.document.attachments[0], { status: 201 })
         },
       ),
     )
@@ -117,9 +117,7 @@ describe('useDocumentAttachmentManager', () => {
   it('keeps the pending entry failed and surfaces the Arabic upload error', async () => {
     const store = { document: makeDraftDocument() }
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(store.document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () =>
         errJson(413, {
           code: 'DOCUMENT_ATTACHMENTS_FILE_TOO_LARGE',
@@ -146,9 +144,7 @@ describe('useDocumentAttachmentManager', () => {
     const store = { document: makeDraftDocument() }
     let uploadCalls = 0
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(store.document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, async () => {
         uploadCalls += 1
         if (uploadCalls === 1) {
@@ -158,7 +154,7 @@ describe('useDocumentAttachmentManager', () => {
           })
         }
         store.document = makeDraftDocument([signedAttachment()])
-        return HttpResponse.json(store.document.attachments[0], { status: 201 })
+        return apiJson(store.document.attachments[0], { status: 201 })
       }),
     )
 
@@ -187,7 +183,7 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(store.document)
+        return okJson(store.document)
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
@@ -218,12 +214,10 @@ describe('useDocumentAttachmentManager', () => {
     let posts = 0
     let deletes = 0
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(store.document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () => {
         posts += 1
-        return HttpResponse.json(signedAttachment(), { status: 201 })
+        return apiJson(signedAttachment(), { status: 201 })
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
@@ -259,7 +253,7 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(store.document)
+        return okJson(store.document)
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
@@ -302,12 +296,12 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(store.document)
+        return okJson(store.document)
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
         () =>
-          HttpResponse.json(
+          apiJson(
             {
               code: 'attachment.forbidden',
               status: 403,
@@ -338,9 +332,7 @@ describe('useDocumentAttachmentManager', () => {
   it('surfaces the server Arabic detail of a failed upload, not the generic title', async () => {
     const store = { document: makeDraftDocument() }
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(store.document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () =>
         errJson(409, {
           code: 'DOCUMENT_ATTACHMENTS_SIGNED_ORIGINAL_ALREADY_EXISTS',
@@ -367,11 +359,11 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(makeDraftDocument())
+        return okJson(makeDraftDocument())
       }),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () => {
         posts += 1
-        return HttpResponse.json(signedAttachment(), { status: 201 })
+        return apiJson(signedAttachment(), { status: 201 })
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,

@@ -1,20 +1,22 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import { HttpResponse, http } from 'msw'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createDocumentAttachmentService } from '@/shared/documents/document-attachment-service'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { readRequestForm } from '@/test/msw/multipart-parser'
 import { createDocumentAttachment, fixtureUuid } from '@/test/msw/factories'
-import { errJson } from '@/test/msw/envelope'
+import { apiJson, errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
+import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
 
 const API_BASE_URL = '/api/v1'
 const DOCUMENT_ID = fixtureUuid(60)
 const ATTACHMENT_ID = fixtureUuid(61)
 
-const bundles: ApiClientBundle[] = []
+// A real transport over a real Axios client (3abe). The harness now serves the
+// wire envelope, which is what the transport reads.
+const createHarness = registerTestTransportHarness(API_BASE_URL)
 
 beforeAll(() => {
   // jsdom's XHR serializer preserves File names; undici's fetch adapter drops
@@ -23,14 +25,9 @@ beforeAll(() => {
 })
 
 function setupService() {
-  const bundle = createApiClient({ baseURL: API_BASE_URL })
-  bundles.push(bundle)
-  return { service: createDocumentAttachmentService(bundle.client), client: bundle.client }
+  const { transport, bundle } = createHarness()
+  return { service: createDocumentAttachmentService(transport), client: bundle.client }
 }
-
-afterEach(() => {
-  for (const bundle of bundles.splice(0)) bundle.dispose()
-})
 
 describe('document attachment transport', () => {
   it('uploads multipart file, attachmentType and rowVersion fields to the document URL', async () => {
@@ -48,7 +45,7 @@ describe('document attachment transport', () => {
         async ({ request }) => {
           capturedUrl.mockReturnValue(new URL(request.url))
           capturedForm.mockReturnValue(await readRequestForm(request))
-          return HttpResponse.json(attachment, { status: 201 })
+          return apiJson(attachment, { status: 201 })
         },
       ),
     )
@@ -87,7 +84,7 @@ describe('document attachment transport', () => {
           expect(new URL(request.url).pathname).toBe(
             `${API_BASE_URL}/warehouse-documents/${encodeURIComponent(documentId)}/attachments`,
           )
-          return HttpResponse.json(attachment, { status: 201 })
+          return apiJson(attachment, { status: 201 })
         },
       ),
     )

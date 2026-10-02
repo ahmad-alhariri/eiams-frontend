@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createPage, createWarehouse, createWarehouseDocument } from '@/test/msw/factories'
+import { createWarehouse, createWarehouseDocument } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -52,9 +53,9 @@ describe('ReceivingDocumentsListPage', () => {
       http.get(`${API_BASE_URL}/warehouse-documents`, async ({ request }) => {
         const url = new URL(request.url)
         expect(url.searchParams.get('documentType')).toBe('Receiving')
-        return HttpResponse.json(createPage([document]))
+        return okPageJson([document])
       }),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json([warehouse])),
+      http.get(`${API_BASE_URL}/warehouses`, () => okJson([warehouse])),
     )
 
     render(<ReceivingDocumentsListPage />, { wrapper: createWrapper() })
@@ -74,7 +75,7 @@ describe('ReceivingDocumentsListPage', () => {
   it('shows the Arabic error state and retries the failed request', async () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, () =>
-        HttpResponse.json({ titleAr: 'تعذر جلب السندات' }, { status: 500 }),
+        apiJson({ titleAr: 'تعذر جلب السندات' }, { status: 500 }),
       ),
     )
 
@@ -82,17 +83,13 @@ describe('ReceivingDocumentsListPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'تعذّر تحميل السندات' })).toBeInTheDocument()
 
-    server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents`, () => HttpResponse.json(createPage([]))),
-    )
+    server.use(http.get(`${API_BASE_URL}/warehouse-documents`, () => okPageJson([])))
     await userEvent.click(screen.getByRole('button', { name: /إعادة المحاولة/i }))
     await waitFor(() => expect(screen.getByText(/لم يتم العثور على سندات/i)).toBeInTheDocument())
   })
 
   it('shows the Arabic empty state when the receiving page has no documents', async () => {
-    server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents`, () => HttpResponse.json(createPage([]))),
-    )
+    server.use(http.get(`${API_BASE_URL}/warehouse-documents`, () => okPageJson([])))
 
     render(<ReceivingDocumentsListPage />, { wrapper: createWrapper() })
 
