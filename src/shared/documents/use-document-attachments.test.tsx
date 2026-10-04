@@ -1,4 +1,4 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { type PropsWithChildren } from 'react'
@@ -300,17 +300,14 @@ describe('useDocumentAttachmentManager', () => {
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
+        // A 403 carries the ERROR envelope. Emitting it through apiJson would
+        // send `success: true` with HTTP 403, a shape the backend never
+        // produces - so the Arabic title travels as `detailAr`.
         () =>
-          apiJson(
-            {
-              code: 'attachment.forbidden',
-              status: 403,
-              titleAr: 'لا تملك الصلاحية اللازمة لتنفيذ هذا الإجراء.',
-              detailAr: null,
-              traceId: 'fixture-trace-id',
-            },
-            { status: 403 },
-          ),
+          errJson(403, {
+            code: 'attachment.forbidden',
+            message: 'Attachment deletion is not permitted.',
+          }),
       ),
     )
 

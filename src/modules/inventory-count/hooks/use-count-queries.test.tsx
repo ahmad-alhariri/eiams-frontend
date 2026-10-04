@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { apiJson, okJson } from '@/test/msw/envelope'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okPageJson } from '@/test/msw/envelope'
 import { render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -48,14 +48,32 @@ function createClient() {
   return client
 }
 
-function emptyPage(pageIndex: number, pageSize: number, totalItems: number) {
+// Two distinct shapes, deliberately not shared: an MSW handler must serve the
+// WIRE envelope, while `setQueryData` seeds the SERVICE's view-model. Wrapping
+// one in the other silently produces an unusable cache entry or an empty page.
+function emptyWirePage(pageIndex: number, pageSize: number, totalItems: number) {
+  return okPageJson([], {
+    page: pageIndex + 1,
+    pageSize,
+    totalCount: totalItems,
+    totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
+  })
+}
+
+/** The view-model `countService.listLines` resolves to. */
+function emptyViewPage(pageIndex: number, pageSize: number, totalItems: number) {
   return {
     items: [],
     meta: {
       pageIndex,
+      page: pageIndex + 1,
       pageSize,
+      itemCount: totalItems,
       totalItems,
+      totalCount: totalItems,
       totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
+      hasNextPage: false,
+      hasPreviousPage: false,
     },
   }
 }
@@ -81,7 +99,7 @@ describe('useUpdateCountLinesMutation invalidation', () => {
   it('refreshes both the whole-session review and the paged entry read', async () => {
     server.use(
       http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-        okJson(emptyPage(0, ALL_LINES_PAGE_SIZE, 0)),
+        emptyWirePage(0, ALL_LINES_PAGE_SIZE, 0),
       ),
     )
     const client = createClient()
@@ -95,7 +113,7 @@ describe('useUpdateCountLinesMutation invalidation', () => {
     })
 
     client.setQueryData(allLines, [])
-    client.setQueryData(pagedLines, emptyPage(1, 25, 205))
+    client.setQueryData(pagedLines, emptyViewPage(1, 25, 205))
 
     const user = userEvent.setup()
     render(withClient(client, <SaveProbe />))
@@ -117,7 +135,7 @@ describe('useUpdateCountLinesMutation invalidation', () => {
     // across all five count mutations at once.
     server.use(
       http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-        okJson(emptyPage(0, ALL_LINES_PAGE_SIZE, 0)),
+        emptyWirePage(0, ALL_LINES_PAGE_SIZE, 0),
       ),
     )
     const client = createClient()
@@ -147,8 +165,8 @@ describe('useAllCountLinesQuery', () => {
         const pageSize = Number(url.searchParams.get('pageSize') ?? String(ALL_LINES_PAGE_SIZE))
         const start = pageIndex * pageSize
         const size = Math.max(0, Math.min(pageSize, totalItems - start))
-        return okJson({
-          items: Array.from({ length: size }, (_u, i) => ({
+        return okPageJson(
+          Array.from({ length: size }, (_u, i) => ({
             countLineId: `L${start + i + 1}`,
             material: { id: `m${start + i + 1}`, displayName: `مادة ${start + i + 1}` },
             snapshotQuantity: 4,
@@ -156,13 +174,13 @@ describe('useAllCountLinesQuery', () => {
             difference: start + i - 3,
             rowVersion: 1,
           })),
-          meta: {
-            pageIndex,
+          {
+            page: pageIndex + 1,
             pageSize,
-            totalItems,
+            totalCount: totalItems,
             totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
           },
-        })
+        )
       }),
     )
   }

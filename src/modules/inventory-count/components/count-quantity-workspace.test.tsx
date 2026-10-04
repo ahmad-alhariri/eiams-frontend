@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { apiJson, okJson } from '@/test/msw/envelope'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -92,14 +92,13 @@ function usePagedLinesHandlers(seed: readonly TestLine[]) {
       const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
       const pageSize = Number(url.searchParams.get('pageSize') ?? String(FIRST_PAGE_SIZE))
       const start = pageIndex * pageSize
-      return okJson({
-        items: store.slice(start, start + pageSize),
-        meta: {
-          pageIndex,
-          pageSize,
-          totalItems: store.length,
-          totalPages: Math.max(1, Math.ceil(store.length / pageSize)),
-        },
+      // Wire envelope: `data` is the line array and `pagination` is the snake_case
+      // block. The zero-based `pageIndex` travels one-based as `page`.
+      return okPageJson(store.slice(start, start + pageSize), {
+        page: pageIndex + 1,
+        pageSize,
+        totalCount: store.length,
+        totalPages: Math.max(1, Math.ceil(store.length / pageSize)),
       })
     }),
     http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, async ({ request }) => {
@@ -118,7 +117,12 @@ function usePagedLinesHandlers(seed: readonly TestLine[]) {
         target.reason = saved.reason ?? null
         target.rowVersion += 1
       }
-      return okJson({ items: [], meta: emptyMeta(0, FIRST_PAGE_SIZE, store.length) })
+      return okPageJson([], {
+        page: 1,
+        pageSize: FIRST_PAGE_SIZE,
+        totalCount: store.length,
+        totalPages: 1,
+      })
     }),
     // The workspace observes the count header as well as its lines, so the
     // conflict-recovery path can reload the session rowVersion
@@ -134,15 +138,6 @@ function usePagedLinesHandlers(seed: readonly TestLine[]) {
       }),
     ),
   )
-}
-
-function emptyMeta(pageIndex: number, pageSize: number, totalItems: number) {
-  return {
-    pageIndex,
-    pageSize,
-    totalItems,
-    totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
-  }
 }
 
 function renderWorkspace(permissionCodes: readonly string[] = ['count.view', 'count.enter']) {
@@ -422,7 +417,7 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
     const user = userEvent.setup()
     server.use(
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-        apiJson({ error: { code: 'x', message: 'boom' } }, { status: 500 }),
+        errJson(500, { code: 'x', message: 'boom' }),
       ),
     )
     renderWorkspace()
@@ -456,14 +451,13 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
         const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
         const pageSize = Number(url.searchParams.get('pageSize') ?? String(FIRST_PAGE_SIZE))
         const start = pageIndex * pageSize
-        return okJson({
-          items: store.slice(start, start + pageSize),
-          meta: {
-            pageIndex,
-            pageSize,
-            totalItems: store.length,
-            totalPages: Math.max(1, Math.ceil(store.length / pageSize)),
-          },
+        // Wire envelope: `data` is the line array, `pagination` is snake_case.
+        // The zero-based `pageIndex` travels one-based as `page`.
+        return okPageJson(store.slice(start, start + pageSize), {
+          page: pageIndex + 1,
+          pageSize,
+          totalCount: store.length,
+          totalPages: Math.max(1, Math.ceil(store.length / pageSize)),
         })
       }),
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}`, () =>
@@ -683,7 +677,7 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
     // A non-conflict failure, so the inline (non-dialog) branch is the one shown.
     server.use(
       http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-        apiJson({ status: 500 }, { status: 500 }),
+        errJson(500, { code: 'x', message: 'boom' }),
       ),
     )
     await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))

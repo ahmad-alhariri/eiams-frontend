@@ -121,31 +121,31 @@ describe('AdminService', () => {
 
     server.use(
       http.post(`${API_BASE_URL}/admin/roles`, async ({ request }) => {
-        receivedBodies.push(await request.json())
+        receivedBodies.push(JSON.parse(await request.text()))
         return apiJson(role, { status: 201 })
       }),
       http.put(
         `${API_BASE_URL}/admin/roles/${encodeURIComponent(encodedRoleId)}`,
         async ({ request }) => {
-          receivedBodies.push(await request.json())
+          receivedBodies.push(JSON.parse(await request.text()))
           return okJson(role)
         },
       ),
       http.post(`${API_BASE_URL}/admin/users`, async ({ request }) => {
-        receivedBodies.push(await request.json())
+        receivedBodies.push(JSON.parse(await request.text()))
         return apiJson(user, { status: 201 })
       }),
       http.put(
         `${API_BASE_URL}/admin/users/${encodeURIComponent(encodedUserId)}`,
         async ({ request }) => {
-          receivedBodies.push(await request.json())
+          receivedBodies.push(JSON.parse(await request.text()))
           return okJson(user)
         },
       ),
       http.put(
         `${API_BASE_URL}/admin/users/${encodeURIComponent(encodedUserId)}/role-scopes`,
         async ({ request }) => {
-          receivedBodies.push(await request.json())
+          receivedBodies.push(JSON.parse(await request.text()))
           return okJson([assignment])
         },
       ),

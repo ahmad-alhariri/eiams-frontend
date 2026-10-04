@@ -78,7 +78,7 @@ describe('createCountService (e20-t01)', () => {
 
   it('plans a count with an Idempotency-Key header and returns the session', async () => {
     const session = { countId: COUNT_ID, status: 'Planned' }
-    mockedRequest.mockReturnValue({ data: session } as never)
+    mockedRequest.mockReturnValue(envelope(session))
     const service = createCountService(testTransport)
 
     const result = await service.planCount(
@@ -136,7 +136,8 @@ describe('createCountService (e20-t01)', () => {
 
     mockedRequest.mockReturnValue(envelope({ countId: COUNT_ID, status: 'Closed' }))
     await service.closeCount(COUNT_ID, 6)
-    expect(sentConfig()).toMatchObject({
+    // Second call: the first was completeCount, which shares this transport.
+    expect(sentConfig(1)).toMatchObject({
       url: `/inventory-counts/${COUNT_ID}/close`,
       data: { rowVersion: 6 },
     })

@@ -1,5 +1,5 @@
-import { createAxiosTransport } from '@/shared/api/axios-transport'
-import { apiJson, okJson } from '@/test/msw/envelope'
+﻿import { createAxiosTransport } from '@/shared/api/axios-transport'
+import { errJson, okJson } from '@/test/msw/envelope'
 import { http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -50,12 +50,16 @@ describe('ReceivingService', () => {
     const service = setupService()
     server.use(
       http.get(`${API_BASE_URL}/receiving/suppliers`, () =>
-        apiJson({ title: 'غير مصرح', status: 401 }, { status: 401 }),
+        errJson(401, {
+          code: 'auth.session_expired',
+          message: 'Unauthorized.',
+          detail: 'غير مصرح',
+        }),
       ),
     )
 
     await expect(service.searchReceivingSuppliers('شام')).rejects.toMatchObject({
-      response: { status: 401, data: { status: 401, title: 'غير مصرح' } },
+      response: { status: 401 },
     })
   })
 

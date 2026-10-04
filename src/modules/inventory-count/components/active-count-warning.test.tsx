@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { okJson } from '@/test/msw/envelope'
+import { okPageJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
 import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
@@ -34,8 +34,8 @@ describe('ActiveCountWarning (e20-t09)', () => {
   it('shows the warning when an InProgress count exists for the warehouse', async () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory-counts`, () =>
-        okJson({
-          items: [
+        okPageJson(
+          [
             {
               countId: 'active-1',
               referenceNumber: 'EIAMS-CNT-2026-0109',
@@ -43,8 +43,8 @@ describe('ActiveCountWarning (e20-t09)', () => {
               status: 'InProgress',
             },
           ],
-          meta: { pageIndex: 0, pageSize: 10, totalItems: 1, totalPages: 1 },
-        }),
+          { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 },
+        ),
       ),
     )
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -62,10 +62,7 @@ describe('ActiveCountWarning (e20-t09)', () => {
   it('renders nothing when no active count exists', async () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory-counts`, () =>
-        okJson({
-          items: [],
-          meta: { pageIndex: 0, pageSize: 10, totalItems: 0, totalPages: 1 },
-        }),
+        okPageJson([], { page: 1, pageSize: 10, totalCount: 0, totalPages: 1 }),
       ),
     )
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
