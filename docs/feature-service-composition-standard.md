@@ -27,25 +27,39 @@ src/modules/<domain>/
 └── components/ or pages/         # presentation and Arabic feedback
 ```
 
-Services may import only generated API types and the shared Axios client. Query
-and mutation hooks compose a feature service with the shared query client and
-query-key conventions. Components and pages call hooks; they never call Axios,
-encode endpoint URLs, or assemble protected headers.
+Services may import only generated API types and the shared transport
+interface. Query and mutation hooks compose a feature service with the shared
+query client and query-key conventions. Components and pages call hooks; they
+never call Axios, encode endpoint URLs, or assemble protected headers.
 
 Each service exposes an injectable factory plus one application singleton:
 
 ```ts
-export function createFeatureService(client: AxiosInstance): FeatureService {
+export function createFeatureService(transport: ApiTransport): FeatureService {
   // typed contract operations only
 }
 
-export const featureService = createFeatureService(apiClient)
+export const featureService = createFeatureService(transport)
 ```
 
-The factory is the test seam. Tests create an isolated Axios client with
-`createApiClient`, then pass it to the factory. A service must not create an
-Axios instance, own authentication/token state, instantiate a `QueryClient`,
-or import UI primitives.
+The factory is the test seam. Tests build a transport with
+`createAxiosTransport(createApiClient({ baseURL }))`, then pass it to the
+factory. A service must not create an Axios instance, receive an `AxiosInstance`,
+own authentication/token state, instantiate a `QueryClient`, or import UI
+primitives.
+
+**A service takes `ApiTransport`, never `AxiosInstance`.** The transport is the
+single seam over HTTP: `transport.request` for a payload,
+`transport.requestPage` for a paged list, `transport.requestEmpty` for a bodyless
+response. This is what lets the envelope be unwrapped in one reviewed place
+instead of at every call site — the arrangement ratified as Architecture A in
+`eiams-frontend-9uuf`, where a global unwrapping interceptor was rejected as the
+alternative. Injecting the raw Axios instance reintroduces exactly the
+per-call-site `response.data.data` reading that made the drift invisible, and
+`src/test/no-transport-mask.test.ts` fails the build if a service takes one.
+The three auth session modules (`api.client.ts`, `session-adapter.ts`,
+`dev-session.ts`) remain Axios-aware by design: they own the token lifecycle the
+transport sits on top of.
 
 ## Contract-only service rules
 
