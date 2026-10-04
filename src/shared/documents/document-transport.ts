@@ -125,7 +125,7 @@ export function createDocumentService(transport: ApiTransport): DocumentService 
       // config, so the header cannot drift from the key the caller holds.
       headers: { [IDEMPOTENCY_KEY_HEADER]: idempotentRequest.idempotencyKey },
     })
-    return response.data
+    return response
   }
 
   return {
@@ -141,7 +141,7 @@ export function createDocumentService(transport: ApiTransport): DocumentService 
         path: pathWithDocumentId(DOCUMENT_PATH, documentId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async createDocument(request) {
       const response = await transport.request<WarehouseDocument>({
@@ -149,7 +149,7 @@ export function createDocumentService(transport: ApiTransport): DocumentService 
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
     async updateDocument(documentId, request) {
       const response = await transport.request<WarehouseDocument>({
@@ -157,21 +157,21 @@ export function createDocumentService(transport: ApiTransport): DocumentService 
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
     async getDocumentHistory(documentId) {
       const response = await transport.request<DocumentLifecycleHistory>({
         path: pathWithDocumentId(DOCUMENT_HISTORY_PATH, documentId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async getDocumentPolicy(documentId) {
       const response = await transport.request<DocumentPolicy>({
         path: pathWithDocumentId(DOCUMENT_POLICY_PATH, documentId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async submitDocument(documentId, rowVersion, idempotentRequest) {
       return executeAction(

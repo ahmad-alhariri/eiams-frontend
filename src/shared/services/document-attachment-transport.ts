@@ -68,7 +68,7 @@ export function createDocumentAttachmentTransport(
         path: interpolatePath(DOCUMENT_ATTACHMENTS_PATH, documentId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async upload(documentId, request) {
       const response = await transport.request<DocumentAttachment>({
@@ -76,7 +76,7 @@ export function createDocumentAttachmentTransport(
         method: 'POST',
         body: createDocumentAttachmentFormData(request),
       })
-      return response.data
+      return response
     },
     async delete(documentId, request) {
       await transport.requestEmpty({

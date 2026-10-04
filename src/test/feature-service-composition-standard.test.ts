@@ -35,7 +35,14 @@ describe('feature service composition standard (document)', () => {
     // future edit removes the rationale for a rule, this fails and the rule can
     // be reconsidered deliberately rather than left orphaned.
     expect(compositionStandard).toContain('satisfies keyof paths')
-    expect(compositionStandard).toContain('createFeatureService(client: AxiosInstance)')
+    // `ApiTransport`, not `AxiosInstance`. This anchor previously pinned the
+    // old signature, and the doc was amended to prescribe the transport while
+    // this assertion kept demanding the Axios one — so the test was enforcing a
+    // standard the project had already moved off. It now pins the seam that
+    // `src/test/no-transport-mask.test.ts` and the envelope guard actually
+    // depend on.
+    expect(compositionStandard).toContain('createFeatureService(transport: ApiTransport)')
+    expect(compositionStandard).toMatch(/A service takes `ApiTransport`, never `AxiosInstance`/u)
     expect(compositionStandard).toMatch(/withIdempotencyKey\(idempotencyKey\)/u)
     expect(compositionStandard).toMatch(/must not create an\s+Axios instance/u)
     expect(compositionStandard).toMatch(/Do not add a\s+global Axios retry interceptor/u)

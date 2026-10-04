@@ -49,7 +49,7 @@ export function createDocumentAttachmentService(
         // why the transport passes the body through untouched.
         body: form,
       })
-      return response.data
+      return response
     },
     async deleteAttachment(documentId, attachmentId, rowVersion) {
       await transport.requestEmpty({

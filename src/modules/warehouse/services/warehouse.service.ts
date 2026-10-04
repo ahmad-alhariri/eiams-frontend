@@ -96,7 +96,7 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         path: pathWithId(WAREHOUSE_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createWarehouse(request) {
@@ -105,7 +105,7 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateWarehouse(warehouseId, request) {
@@ -114,7 +114,7 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async getWarehouseCapabilities(warehouseId) {
@@ -122,7 +122,7 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         path: pathWithId(WAREHOUSE_CAPABILITIES_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async replaceWarehouseCapabilities(warehouseId, request) {
@@ -131,7 +131,7 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async listWarehouseMaterialSettings(warehouseId, query) {
@@ -150,7 +150,7 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
   }
 }

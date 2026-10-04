@@ -150,7 +150,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         path: pathWithId(UNIT_OF_MEASURE_PATH, '{unitId}', unitId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createUnitOfMeasure(request) {
@@ -159,7 +159,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateUnitOfMeasure(unitId, request) {
@@ -168,7 +168,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async listMaterialDomains(query) {
@@ -185,7 +185,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         path: pathWithId(MATERIAL_DOMAIN_PATH, '{materialDomainId}', materialDomainId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createMaterialDomain(request) {
@@ -194,7 +194,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateMaterialDomain(materialDomainId, request) {
@@ -203,7 +203,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async listMaterialCategories(query) {
@@ -220,7 +220,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         path: pathWithId(MATERIAL_CATEGORY_PATH, '{materialCategoryId}', materialCategoryId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createMaterialCategory(request) {
@@ -229,7 +229,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateMaterialCategory(materialCategoryId, request) {
@@ -238,7 +238,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async listMaterialFamilies(query) {
@@ -255,7 +255,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         path: pathWithId(MATERIAL_FAMILY_PATH, '{materialFamilyId}', materialFamilyId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createMaterialFamily(request) {
@@ -264,7 +264,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateMaterialFamily(materialFamilyId, request) {
@@ -273,7 +273,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async listMaterials(query) {
@@ -290,7 +290,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         path: pathWithId(MATERIAL_PATH, '{materialId}', materialId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createMaterial(request) {
@@ -299,7 +299,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateMaterial(materialId, request) {
@@ -308,7 +308,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async listMaterialUnitConversions(materialId, query) {
@@ -328,7 +328,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         ),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createMaterialUnitConversion(materialId, request) {
@@ -337,7 +337,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateMaterialUnitConversion(materialId, materialUnitConversionId, request) {
@@ -349,7 +349,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
   }
 }

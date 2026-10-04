@@ -57,7 +57,7 @@ export function createCustodyService(transport: ApiTransport): CustodyService {
         body: request,
         headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
       })
-      return response.data
+      return response
     },
     async transferCustody(custodyId, request, idempotencyKey) {
       const response = await transport.request<Custody>({
@@ -66,7 +66,7 @@ export function createCustodyService(transport: ApiTransport): CustodyService {
         body: request,
         headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
       })
-      return response.data
+      return response
     },
   }
 }

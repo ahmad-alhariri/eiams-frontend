@@ -53,18 +53,18 @@ export function createAdminService(transport: ApiTransport): AdminService {
         path: PERMISSIONS_PATH,
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async listRoles() {
       const response = await transport.request<readonly Role[]>({ path: ROLES_PATH, method: 'GET' })
-      return response.data
+      return response
     },
     async getRole(roleId) {
       const response = await transport.request<Role>({
         path: pathWithId(ROLE_PATH, '{roleId}', roleId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async createRole(request) {
       const response = await transport.request<Role>({
@@ -72,7 +72,7 @@ export function createAdminService(transport: ApiTransport): AdminService {
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
     async updateRole(roleId, request) {
       const response = await transport.request<Role>({
@@ -80,7 +80,7 @@ export function createAdminService(transport: ApiTransport): AdminService {
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
     async listUsers(query) {
       const page = await transport.requestPage<UserSummary>({
@@ -111,7 +111,7 @@ export function createAdminService(transport: ApiTransport): AdminService {
         path: pathWithId(USER_PATH, '{userId}', userId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async createUser(request) {
       const response = await transport.request<UserSummary>({
@@ -119,7 +119,7 @@ export function createAdminService(transport: ApiTransport): AdminService {
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
     async updateUser(userId, request) {
       const response = await transport.request<UserSummary>({
@@ -127,14 +127,14 @@ export function createAdminService(transport: ApiTransport): AdminService {
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
     async getUserRoleScopes(userId) {
       const response = await transport.request<readonly UserRoleScope[]>({
         path: pathWithId(USER_ROLE_SCOPES_PATH, '{userId}', userId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async replaceUserRoleScopes(userId, request) {
       const response = await transport.request<readonly UserRoleScope[]>({
@@ -142,7 +142,7 @@ export function createAdminService(transport: ApiTransport): AdminService {
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
   }
 }

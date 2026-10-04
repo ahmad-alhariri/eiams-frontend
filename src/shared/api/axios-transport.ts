@@ -6,9 +6,24 @@ import { normalizePagination } from './pagination'
 
 export function createAxiosTransport(client: AxiosInstance) {
   return {
-    async request<TResponse, TBody = unknown>(
-      request: ApiRequest<TBody>,
-    ): Promise<ApiSuccessResponse<TResponse>> {
+    /**
+     * Returns the PAYLOAD, not the envelope.
+     *
+     * `requestPage` and `requestEmpty` already return unwrapped values, so
+     * returning `ApiSuccessResponse<TResponse>` here made this one method of the
+     * three the odd one out. It was also the reason the defect class t77l exists
+     * to eliminate could not be closed: Axios's own response also exposes `.data`,
+     * so a service could read `response.data` off the envelope (correct) and a
+     * cast `AxiosInstance as ApiTransport` could pass review while throwing
+     * `requestPage is not a function` at runtime. With the payload returned
+     * directly, `.data` in a service is never legitimate, which makes the guard
+     * in `eslint.config.js` a single AST rule that needs no type information.
+     *
+     * Anything that needs envelope internals — `request_id`, `meta` — must go
+     * through `propagateRequestId()` or a dedicated method, never by reaching
+     * into the envelope here in a service.
+     */
+    async request<TResponse, TBody = unknown>(request: ApiRequest<TBody>): Promise<TResponse> {
       const config = {
         url: request.path,
         method: request.method,
@@ -20,9 +35,9 @@ export function createAxiosTransport(client: AxiosInstance) {
           : {}),
         ...(request.body !== undefined ? { data: request.body as AxiosRequestConfig['data'] } : {}),
       } as AxiosRequestConfig<TBody>
-      const response = await client.request<TResponse>(config)
+      const response = await client.request<ApiSuccessResponse<TResponse>>(config)
       propagateRequestId()
-      return response.data as ApiSuccessResponse<TResponse>
+      return response.data.data
     },
 
     async requestPage<TItem>(request: Readonly<ApiRequest>): Promise<ApiPage<TItem>> {

@@ -122,7 +122,7 @@ export function createAdjustmentService(transport: ApiTransport): AdjustmentServ
         path: pathWithAdjustmentId(ADJUSTMENT_PATH, adjustmentId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createAdjustment(request) {
@@ -131,7 +131,7 @@ export function createAdjustmentService(transport: ApiTransport): AdjustmentServ
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateAdjustment(adjustmentId, request) {
@@ -140,7 +140,7 @@ export function createAdjustmentService(transport: ApiTransport): AdjustmentServ
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async postAdjustment(adjustmentId, rowVersion, idempotencyKey) {
@@ -150,7 +150,7 @@ export function createAdjustmentService(transport: ApiTransport): AdjustmentServ
         body: { rowVersion },
         headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
       })
-      return response.data
+      return response
     },
 
     async reverseAdjustment(adjustmentId, rowVersion, reason, idempotencyKey) {
@@ -160,7 +160,7 @@ export function createAdjustmentService(transport: ApiTransport): AdjustmentServ
         body: { reason, rowVersion },
         headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
       })
-      return response.data
+      return response
     },
 
     async listDisposalEligibleAssets(query) {

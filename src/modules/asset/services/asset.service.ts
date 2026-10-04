@@ -70,14 +70,14 @@ export function createAssetService(transport: ApiTransport): AssetService {
         path: pathWithId(ASSET_PATH, '{assetId}', assetId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async getAssetCustodyTimeline(assetId) {
       const response = await transport.request<readonly AssetCustody[]>({
         path: pathWithId(ASSET_CUSTODY_PATH, '{assetId}', assetId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async listAssetMovements(assetId, query) {
       return toViewPage(

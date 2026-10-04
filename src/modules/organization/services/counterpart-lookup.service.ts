@@ -41,7 +41,7 @@ export function createCounterpartLookupService(transport: ApiTransport): Counter
         path: `${EXTERNAL_PARTIES_PATH}/${encodeURIComponent(id)}`,
         method: 'GET',
       })
-      return response.data
+      return response
     },
   }
 }

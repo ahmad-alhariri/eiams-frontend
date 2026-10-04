@@ -105,7 +105,7 @@ export function createCountService(transport: ApiTransport): CountService {
         path: pathWithId(COUNT_PATH, '{countId}', countId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async planCount(request, idempotencyKey) {
@@ -115,7 +115,7 @@ export function createCountService(transport: ApiTransport): CountService {
         body: request,
         headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
       })
-      return response.data
+      return response
     },
 
     async startCount(countId, rowVersion) {
@@ -124,7 +124,7 @@ export function createCountService(transport: ApiTransport): CountService {
         method: 'POST',
         body: { rowVersion } satisfies RowVersionAction,
       })
-      return response.data
+      return response
     },
 
     async listLines(countId, query) {
@@ -153,7 +153,7 @@ export function createCountService(transport: ApiTransport): CountService {
         body: { rowVersion } satisfies RowVersionAction,
         headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
       })
-      return response.data
+      return response
     },
 
     async closeCount(countId, rowVersion) {
@@ -162,7 +162,7 @@ export function createCountService(transport: ApiTransport): CountService {
         method: 'POST',
         body: { rowVersion } satisfies RowVersionAction,
       })
-      return response.data
+      return response
     },
   }
 }

@@ -59,7 +59,7 @@ export function createInventoryService(transport: ApiTransport): InventoryServic
         path: pathWithId(INVENTORY_BALANCE_PATH, '{balanceId}', balanceId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async listMovements(query) {
       const page = await transport.requestPage<StockMovement>({
@@ -74,7 +74,7 @@ export function createInventoryService(transport: ApiTransport): InventoryServic
         path: pathWithId(STOCK_MOVEMENT_PATH, '{movementId}', movementId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
   }
 }

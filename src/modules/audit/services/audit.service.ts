@@ -88,7 +88,7 @@ export function createAuditService(transport: ApiTransport): AuditService {
         path: pathWithId(AUDIT_LOG_PATH, '{auditLogId}', auditLogId),
         method: 'GET',
       })
-      return sanitizeAuditDetail(response.data)
+      return sanitizeAuditDetail(response)
     },
   }
 }

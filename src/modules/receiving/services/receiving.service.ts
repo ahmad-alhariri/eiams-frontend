@@ -28,7 +28,7 @@ export function createReceivingService(transport: ApiTransport): ReceivingServic
         method: 'GET',
         query: { search },
       })
-      return response.data
+      return response
     },
   }
 }

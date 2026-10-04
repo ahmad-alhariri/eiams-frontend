@@ -97,7 +97,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         path: pathWithId(SITE_PATH, '{siteId}', siteId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createSite(request) {
@@ -106,7 +106,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateSite(siteId, request) {
@@ -115,7 +115,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async listOrganizationalUnits(query) {
@@ -132,7 +132,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         path: pathWithId(ORGANIZATIONAL_UNIT_PATH, '{orgUnitId}', orgUnitId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createOrganizationalUnit(request) {
@@ -141,7 +141,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateOrganizationalUnit(orgUnitId, request) {
@@ -150,7 +150,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async listEmployees(query) {
@@ -167,7 +167,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         path: pathWithId(EMPLOYEE_PATH, '{employeeId}', employeeId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createEmployee(request) {
@@ -176,7 +176,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateEmployee(employeeId, request) {
@@ -185,7 +185,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async listExternalParties(query) {
@@ -202,7 +202,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         path: pathWithId(EXTERNAL_PARTY_PATH, '{externalPartyId}', externalPartyId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createExternalParty(request) {
@@ -211,7 +211,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async updateExternalParty(externalPartyId, request) {
@@ -220,7 +220,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async deactivateExternalParty(externalPartyId) {
@@ -228,7 +228,7 @@ export function createOrganizationService(transport: ApiTransport): Organization
         path: pathWithId(DEACTIVATE_EXTERNAL_PARTY_PATH, '{externalPartyId}', externalPartyId),
         method: 'POST',
       })
-      return response.data
+      return response
     },
   }
 }

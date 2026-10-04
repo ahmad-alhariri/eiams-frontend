@@ -32,14 +32,14 @@ export function createAuthService(transport: ApiTransport): AuthService {
         method: 'POST',
         body: request,
       })
-      return response.data
+      return response
     },
     async getSession() {
       const response = await transport.request<SessionResponse>({
         path: AUTH_SESSION_PATH,
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async logout() {
       // 204: no body, so `requestEmpty` rather than `request`.
