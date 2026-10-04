@@ -116,6 +116,26 @@ export function okPageJson<T>(
 export function apiJson(body: unknown, init?: ResponseInit): HttpResponse<Record<string, unknown>> {
   const status = init?.status
 
+  // An EXPLICIT 2xx status wins over the shape heuristic.
+  //
+  // `looksLikeProblemDetails` treats a body carrying any of
+  // `code`/`titleAr`/`detailAr`/`traceId`/`fieldErrors` as an error. That is a
+  // reasonable guess for a status-less call, but several legitimate EIAMS
+  // ENTITIES own a business `code` property — `Role.code` is
+  // `SYSTEM_ADMIN`, `Permission.code`, `Material.code`. So
+  // `apiJson(role, { status: 201 })` was classified as a 2xx SUCCESS body and
+  // silently rewritten into an error envelope with `error.code = role.code`,
+  // which made `admin.service.test.ts` fail with a resolved value of
+  // `undefined` while the transport, the handler and the request body were all
+  // correct.
+  //
+  // The caller stating a 2xx status is a stronger signal than a key-name guess,
+  // so the status decides whenever it is present; the shape heuristic only
+  // applies when no status was supplied.
+  if (status !== undefined && !isErrorStatus(status)) {
+    return HttpResponse.json(successEnvelope(body, null), init)
+  }
+
   if (isErrorStatus(status) || looksLikeProblemDetails(body)) {
     if (!isRecord(body)) {
       throw new Error(

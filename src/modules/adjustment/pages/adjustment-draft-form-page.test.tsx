@@ -1,19 +1,15 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import AdjustmentDraftFormPage from '@/modules/adjustment/pages/adjustment-draft-form-page'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
-import type {
-  InventoryAdjustment,
-  InventoryCount,
-  InventoryCountLinePage,
-  SessionResponse,
-} from '@/shared/types/generated/eiams-v1'
+import type { InventoryCount, SessionResponse } from '@/shared/types/generated/eiams-v1'
 
 const COUNT_ID = '223e4567-e89b-42d3-a456-426614174002'
 
@@ -21,8 +17,8 @@ const COUNT_ID = '223e4567-e89b-42d3-a456-426614174002'
 function useCountLinesHandler(status: InventoryCount['status'] = 'Completed') {
   server.use(
     http.get(`*/api/v1/inventory-counts/${COUNT_ID}/lines`, () =>
-      HttpResponse.json<InventoryCountLinePage>({
-        items: [
+      okPageJson(
+        [
           {
             countLineId: 'a23e4567-e89b-42d3-a456-426614174001',
             difference: -2,
@@ -42,11 +38,11 @@ function useCountLinesHandler(status: InventoryCount['status'] = 'Completed') {
             actualQuantity: 10,
           },
         ],
-        meta: { pageIndex: 0, pageSize: 200, totalItems: 2, totalPages: 1 },
-      }),
+        { page: 1, pageSize: 200, totalCount: 2, totalPages: 1 },
+      ),
     ),
     http.get(`*/api/v1/inventory-counts/${COUNT_ID}`, () =>
-      HttpResponse.json({
+      okJson({
         countId: COUNT_ID,
         status,
         warehouse: { id: '823e4567-e89b-42d3-a456-426614174008', displayName: 'المستودع المركزي' },
@@ -57,6 +53,17 @@ function useCountLinesHandler(status: InventoryCount['status'] = 'Completed') {
 
 function usePagedCountLinesHandler() {
   const requestedPages: number[] = []
+  // Both fixtures differ only in fields the contract types loosely.
+  type CountLineView = {
+    countLineId: string
+    difference: number
+    material: { id: string; displayName: string }
+    reason: string | null
+    rowVersion: number
+    snapshotQuantity: number
+    actualQuantity: number | null
+  }
+
   const matchingLines = Array.from({ length: 200 }, (_, index) => ({
     countLineId: `count-line-${index}`,
     difference: 0,
@@ -83,13 +90,15 @@ function usePagedCountLinesHandler() {
     http.get(`*/api/v1/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
       const pageIndex = Number(new URL(request.url).searchParams.get('pageIndex'))
       requestedPages.push(pageIndex)
-      return HttpResponse.json<InventoryCountLinePage>({
-        items: pageIndex === 0 ? matchingLines : [laterVariance],
-        meta: { pageIndex, pageSize: 200, totalItems: 201, totalPages: 2 },
+      return okPageJson<CountLineView>(pageIndex === 0 ? matchingLines : [laterVariance], {
+        page: pageIndex + 1,
+        pageSize: 200,
+        totalCount: 201,
+        totalPages: 2,
       })
     }),
     http.get(`*/api/v1/inventory-counts/${COUNT_ID}`, () =>
-      HttpResponse.json({
+      okJson({
         countId: COUNT_ID,
         status: 'Completed',
         warehouse: { id: '823e4567-e89b-42d3-a456-426614174008', displayName: 'المستودع المركزي' },
@@ -172,7 +181,7 @@ function useCreateHandler() {
   server.use(
     http.post('*/api/v1/adjustments', async ({ request }) => {
       capturedCreateBody = await request.json()
-      return HttpResponse.json<InventoryAdjustment>(
+      return okJson(
         {
           adjustmentId: '423e4567-e89b-42d3-a456-426614174004',
           countReference: null,
@@ -298,8 +307,8 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
       useCountLinesHandler()
       server.use(
         http.get(`*/api/v1/inventory-counts/${COUNT_ID}/lines`, () =>
-          HttpResponse.json<InventoryCountLinePage>({
-            items: [
+          okPageJson(
+            [
               {
                 countLineId: 'line',
                 material: { id: MATERIAL_ID, displayName: 'حاسوب مكتبي' },
@@ -308,8 +317,8 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
                 difference: 0,
               },
             ],
-            meta: { pageIndex: 0, pageSize: 200, totalItems: 1, totalPages: 1 },
-          }),
+            { page: 1, pageSize: 200, totalCount: 1, totalPages: 1 },
+          ),
         ),
       )
       renderForm(`/adjustments/new?countId=${COUNT_ID}&purpose=CountVariance`)
