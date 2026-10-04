@@ -37,13 +37,6 @@ function sessionWith(displayName: string, permissionCodes: readonly string[] = [
     },
     permissionCodes,
     activeScope: warehouseScope,
-    activeRoles: [
-      {
-        roleId: '40000000-0000-4000-8000-000000000001',
-        code: 'WH_MGR',
-        nameAr: 'أمين مستودع',
-      },
-    ],
   } satisfies SessionResponse
 }
 
@@ -96,16 +89,21 @@ describe('SessionUserMenu', () => {
     expect(screen.queryByRole('button', { name: 'قائمة المستخدم' })).not.toBeInTheDocument()
   })
 
-  it('shows the signed-in identity and role context on the caret trigger', async () => {
+  it('shows the signed-in identity on the caret trigger, with no role line', async () => {
     const user = userEvent.setup()
     renderMenu(sessionWith('أحمد الحريري'))
 
     const trigger = screen.getByRole('button', { name: 'قائمة المستخدم' })
     expect(trigger).toHaveTextContent('أح')
     expect(trigger).toHaveTextContent('أحمد الحريري')
-    expect(trigger).toHaveTextContent('أمين مستودع')
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+    // The session carries no role names, so the shell must not render a role
+    // line. This used to assert 'أمين مستودع' from `session.activeRoles`, which
+    // the backend does not send — the field is gone rather than guarded, so a
+    // role line could only ever come from a hardcoded string.
+    expect(trigger).not.toHaveTextContent('أمين مستودع')
 
     await openMenu(user)
     expect(screen.getAllByRole('menuitem')).toHaveLength(3)

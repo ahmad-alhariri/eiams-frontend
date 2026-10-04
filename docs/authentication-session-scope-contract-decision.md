@@ -158,9 +158,10 @@ The contract-backed session contains:
   Arabic display labels and hierarchy context;
 - `scopeState`: `Selected`, `SelectionRequired`, or `Unavailable`;
 - optional `activeScope`, present only when `scopeState = Selected`;
-- `activeRoles`: the roles contributing permissions at the selected scope; and
 - `permissionCodes`: a deduplicated set of exact backend permission codes for
   that active scope.
+
+`activeRoles` is deliberately NOT part of the projection. See Amendment 1.1.1.
 
 The frontend does not decode JWT claims to build this projection and does not
 merge role assignments itself. Token claims are authentication inputs, not a UI
@@ -243,8 +244,8 @@ D-AUTH-01 requires a provisional contract version increment and these changes:
 - add a cookie security scheme and refresh-cookie response header;
 - make refresh bodyless and cookie-authenticated; make logout idempotent and
   capable of clearing the cookie without a valid access token;
-- add `ScopeState`, `EffectiveRole`, and `NullableUuid` schemas;
-- expose `activeRoles` and `permissionCodes`, and omit `activeScope` unless one
+- add `ScopeState` and `NullableUuid` schemas;
+- expose `permissionCodes`, and omit `activeScope` unless one
   is selected;
 - permit `scopeId = null` only for Enterprise in session and switch payloads;
 - distinguish user account status from generic reference-data status; and
@@ -299,3 +300,38 @@ deployment decisions, not frontend constants. `eiams-frontend-e01.7` must
 ratify their contract effects, and the release security review must verify them
 before production. Their absence does not block mock/type generation because
 the frontend consumes server expiry metadata and generic problem codes.
+
+### Amendment 1.1.1 — `activeRoles` removed from the session projection
+
+D-AUTH-01 added `activeRoles: EffectiveRole[]` to the session. It is now
+removed, from the contract decision, the generated client, the frontend, and
+every fixture. `EffectiveRole` goes with it.
+
+Why: the backend does not emit it, and nothing needs it. D-SRS-01 already
+settled the shape of this projection around exactly one role-scope pair per
+user, with permissions carried by `permissionCodes` — so the field was both
+absent and redundant. Keeping it in the contract had produced three concrete
+defects rather than zero:
+
+- `src/modules/auth/components/session-user-menu.tsx` read
+  `session.activeRoles.map(...)` unguarded, so on the real backend that was a
+  `TypeError` on every authenticated render of the shell user menu.
+- `src/test/msw/factories.ts` had to invent a role to satisfy the generated
+  type, so the suite asserted a projection the API never sends and masked the
+  crash above.
+- `src/shared/types/generated/eiams-v1.ts` declared the field REQUIRED, with no
+  `?`, which is how a stale generated type became the reason the UI assumed a
+  field existed.
+
+Consequences, all intentional:
+
+- The shell user menu no longer renders a role line. Identity and the menu
+  itself are unchanged. The role information was never trustworthy, so removing
+  the line is more honest than rendering an empty or invented one.
+- `activeScope` stays optional, per D-SRS-01's `scopeState`.
+
+This is a divergence from the last generated client, so it must be confirmed
+against the backend's authoritative OpenAPI before the next regeneration;
+regenerating without the backend change will reintroduce the field. The
+handwritten-adapter prohibition in Amendment 1.1.0 is not violated: nothing
+here adapts or invents a response — the field is absent on both sides.

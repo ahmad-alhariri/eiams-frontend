@@ -1,4 +1,4 @@
-import { createAxiosTransport } from '@/shared/api/axios-transport'
+﻿import { createAxiosTransport } from '@/shared/api/axios-transport'
 import { apiJson, okJson } from '@/test/msw/envelope'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -26,7 +26,6 @@ const sessionFixture: SessionResponse = {
     rowVersion: 1,
   },
   permissionCodes: ['document.create'],
-  activeRoles: [],
 }
 
 const tokenResponse: AuthTokenResponse = {

@@ -38,7 +38,6 @@ function session(): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: ['count.view', 'count.enter'],
-    activeRoles: [],
   }
 }
 

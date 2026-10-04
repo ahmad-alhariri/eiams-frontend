@@ -1,4 +1,4 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -39,7 +39,6 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: [...permissionCodes],
-    activeRoles: [],
   }
 }
 

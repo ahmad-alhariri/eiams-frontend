@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { okPageJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
 import { http } from 'msw'
@@ -26,7 +26,6 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: [...permissionCodes],
-    activeRoles: [],
   }
 }
 

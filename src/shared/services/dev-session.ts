@@ -18,7 +18,6 @@ import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
  */
 
 const DEV_USER_ID = '00000000-0000-0000-0000-000000000001'
-const DEV_ROLE_ID = '00000000-0000-0000-0000-000000000002'
 const DEV_SCOPE_ID = '00000000-0000-0000-0000-000000000003'
 
 /**
@@ -50,7 +49,6 @@ export function createDevSession(): AuthTokenResponse {
         status: 'Active',
         rowVersion: 0,
       },
-      activeRoles: [{ roleId: DEV_ROLE_ID, code: 'sysadmin', nameAr: 'مدير النظام' }],
       activeScope: {
         scopeId: DEV_SCOPE_ID,
         scopeType: 'Enterprise',

@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   ActionAvailability,
   Asset,
   AssetCustody,
@@ -15,7 +15,6 @@ import type {
   DocumentStatus,
   Employee,
   ExternalParty,
-  EffectiveRole,
   FieldError,
   InventoryBalance,
   LifecycleActorSnapshot,
@@ -228,15 +227,6 @@ export function createUserRoleScope(
   )
 }
 
-export function createEffectiveRole(
-  overrides: FixtureOverrides<EffectiveRole> = {},
-): EffectiveRole {
-  return withOverrides(
-    { roleId: fixtureUuid(11), code: 'WH_KEEPER', nameAr: 'أمين المستودع' },
-    overrides,
-  )
-}
-
 export function createScopeContext(overrides: FixtureOverrides<ScopeContext> = {}): ScopeContext {
   return withOverrides(
     { scopeType: 'Warehouse', scopeId: fixtureUuid(12), displayName: 'المستودع المركزي' },
@@ -250,7 +240,6 @@ export function createSession(overrides: FixtureOverrides<SessionResponse> = {})
       user: createUserSummary(),
       permissionCodes: ['document.view'],
       activeScope: createScopeContext(),
-      activeRoles: [createEffectiveRole()],
     },
     overrides,
   )

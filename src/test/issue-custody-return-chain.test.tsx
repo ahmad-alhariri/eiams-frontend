@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
@@ -293,7 +293,6 @@ function readSession(): SessionResponse {
       rowVersion: 1,
     },
     permissionCodes: ['asset.view', 'custody.assign', 'document.view', 'inventory.view'],
-    activeRoles: [],
   }
 }
 

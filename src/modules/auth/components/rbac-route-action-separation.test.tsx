@@ -39,7 +39,6 @@ function selectedSession(permissionCodes: readonly string[]): SessionResponse {
     },
     permissionCodes,
     activeScope: warehouseScope,
-    activeRoles: [],
   }
 }
 

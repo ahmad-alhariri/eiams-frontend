@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -27,14 +27,12 @@ const activeScopeSession: SessionResponse = {
     scopeId: '20000000-0000-4000-8000-000000000001',
     displayName: 'المستودع المركزي',
   },
-  activeRoles: [],
 }
 
 function sessionWithoutScope(): SessionResponse {
   return {
     user: activeScopeSession.user,
     permissionCodes: activeScopeSession.permissionCodes,
-    activeRoles: activeScopeSession.activeRoles,
   }
 }
 

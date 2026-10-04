@@ -1,4 +1,4 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import { delay, HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -24,13 +24,6 @@ const sessionFixture: SessionResponse = {
     siteId: '30000000-0000-4000-8000-000000000001',
     displayName: 'المستودع المركزي',
   },
-  activeRoles: [
-    {
-      roleId: '40000000-0000-4000-8000-000000000001',
-      code: 'WH_KEEPER',
-      nameAr: 'أمين مستودع',
-    },
-  ],
 }
 
 function tokenResponse(accessToken: string): AuthTokenResponse {

@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query'
+﻿import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 
 import type { GallerySection } from '@/app/gallery/gallery-sections'
@@ -20,7 +20,6 @@ import { cn } from '@/shared/utils/class-names'
    that intentionally exports its sections registry alongside local components. */
 
 const DEMO_USER_ID = '10000000-0000-4000-8000-000000000001'
-const DEMO_ROLE_ID = '20000000-0000-4000-8000-000000000002'
 const DEMO_SCOPE_ID = '30000000-0000-4000-8000-000000000003'
 
 const DOCUMENT_PERMISSION_CODES: readonly PermissionCode[] = [
@@ -86,7 +85,6 @@ function buildDemoSession(
       status: 'Active',
       rowVersion: 1,
     },
-    activeRoles: [{ roleId: DEMO_ROLE_ID, code: 'demo-role', nameAr: roleLabelAr }],
     activeScope: { scopeId: DEMO_SCOPE_ID, scopeType: 'Enterprise', displayName: 'نطاق التطوير' },
     permissionCodes: [...permissionCodes],
   }

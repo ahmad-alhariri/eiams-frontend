@@ -23,7 +23,6 @@ const loginResponse: AuthTokenResponse = {
       rowVersion: 1,
     },
     permissionCodes: ['document.create'],
-    activeRoles: [],
   },
 }
 

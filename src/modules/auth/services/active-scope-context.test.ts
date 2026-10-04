@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 
 import {
   createActiveScopeContext,
@@ -40,12 +40,11 @@ function sessionWithScope(activeScope: ScopeContext = warehouseScope): SessionRe
     user,
     permissionCodes: ['document.create'],
     activeScope,
-    activeRoles: [],
   }
 }
 
 function sessionWithoutScope(): SessionResponse {
-  return { user, permissionCodes: ['document.create'], activeRoles: [] }
+  return { user, permissionCodes: ['document.create'] }
 }
 
 function setupContext(session?: SessionResponse) {

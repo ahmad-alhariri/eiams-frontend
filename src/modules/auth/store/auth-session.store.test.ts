@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+﻿import { describe, expect, it, vi } from 'vitest'
 
 import { createAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import type {
@@ -17,7 +17,6 @@ const sessionFixture: SessionResponse = {
     rowVersion: 1,
   },
   permissionCodes: ['document.create'],
-  activeRoles: [],
 }
 
 const tokenResponse: AuthTokenResponse = {

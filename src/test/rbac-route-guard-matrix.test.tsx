@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it } from 'vitest'
@@ -54,7 +54,6 @@ function sessionWith(codes: readonly string[]): SessionResponse {
       scopeId: '20000000-0000-4000-8000-000000000001',
       displayName: 'المستودع المركزي',
     },
-    activeRoles: [],
   }
 }
 

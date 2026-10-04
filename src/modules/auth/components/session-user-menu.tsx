@@ -33,13 +33,8 @@ function useCachedSession(): SessionResponse | undefined {
   return data
 }
 
-/** Arabic role context (D-AUTH-01 shell requirement) from the effective roles. */
-function roleContext(session: SessionResponse): string {
-  return session.activeRoles.map((role) => role.nameAr).join('، ')
-}
-
 /**
- * Session user block and its menu (ui-design.md 4.2): avatar, name, role, the
+ * Session user block and its menu (ui-design.md 4.2): avatar, name, the
  * dropdown caret, and the profile / settings / logout items.
  *
  * Sign-out is a single click with no confirmation dialog: D-AUTH-01 makes the
@@ -58,7 +53,6 @@ function SessionUserMenu() {
     return null
   }
 
-  const roleLabel = roleContext(session)
   const initials = session.user.displayName.trim().slice(0, 2)
 
   const handleLogout = async () => {
@@ -98,9 +92,6 @@ function SessionUserMenu() {
           <span className="block truncate text-sm font-medium text-white">
             {session.user.displayName}
           </span>
-          {roleLabel ? (
-            <span className="block truncate text-xs text-sidebar-border">{roleLabel}</span>
-          ) : null}
         </span>
         <IconChevronDown size={20} aria-hidden className="shrink-0" />
       </DropdownMenuTrigger>

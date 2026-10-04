@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react'
+﻿import { renderHook, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
@@ -24,7 +24,6 @@ const sessionFixture: SessionResponse = {
     rowVersion: 1,
   },
   permissionCodes: ['document.view', 'document.create', 'inventory.view', 'future.backend.code'],
-  activeRoles: [],
 }
 
 function createQueryWrapper() {

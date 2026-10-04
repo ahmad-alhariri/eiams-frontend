@@ -1,4 +1,4 @@
-import { HttpResponse, http } from 'msw'
+﻿import { HttpResponse, http } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { server } from './server'
 
@@ -13,7 +13,6 @@ describe('MSW test server baseline', () => {
         rowVersion: 1,
       },
       permissionCodes: ['document.view'],
-      activeRoles: [{ roleId: 'r-1', code: 'AUDITOR', nameAr: 'مدقق' }],
     }
 
     server.use(http.get('/api/v1/auth/session', () => HttpResponse.json(fixture)))
@@ -23,6 +22,5 @@ describe('MSW test server baseline', () => {
 
     const body = await response.json()
     expect(body).toEqual(fixture)
-    expect(body.activeRoles).toEqual([{ roleId: 'r-1', code: 'AUDITOR', nameAr: 'مدقق' }])
   })
 })

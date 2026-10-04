@@ -1847,11 +1847,6 @@ export type components = {
             /** @enum {string} */
             readonly trackingType: "Quantity" | "Serial";
         };
-        readonly EffectiveRole: {
-            readonly code: string;
-            readonly nameAr: string;
-            readonly roleId: components["schemas"]["Uuid"];
-        };
         readonly Employee: {
             readonly employeeId: components["schemas"]["Uuid"];
             readonly employeeNumber: string;
@@ -2406,7 +2401,6 @@ export type components = {
         /** @enum {string} */
         readonly ScopeType: "Enterprise" | "Site" | "Warehouse";
         readonly SessionResponse: {
-            readonly activeRoles: readonly components["schemas"]["EffectiveRole"][];
             readonly activeScope?: components["schemas"]["ScopeContext"];
             readonly permissionCodes: readonly string[];
             readonly user: components["schemas"]["UserSummary"];
@@ -2907,7 +2901,6 @@ export type DocumentPolicy = components['schemas']['DocumentPolicy'];
 export type DocumentStatus = components['schemas']['DocumentStatus'];
 export type DocumentType = components['schemas']['DocumentType'];
 export type DurableMaterialPolicy = components['schemas']['DurableMaterialPolicy'];
-export type EffectiveRole = components['schemas']['EffectiveRole'];
 export type Employee = components['schemas']['Employee'];
 export type EmployeePage = components['schemas']['EmployeePage'];
 export type EmployeeUpsertRequest = components['schemas']['EmployeeUpsertRequest'];
