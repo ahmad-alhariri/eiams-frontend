@@ -202,9 +202,35 @@ export default defineConfig([
             'Never call fetch directly. Use the injected Axios client so auth, trace and error normalization all apply.',
         },
         {
-          selector: "MemberExpression[property.name='interceptors']",
+          selector: 'MemberExpression[property.name="interceptors"]',
           message:
             'A feature must not add an interceptor or header. Cross-cutting transport policy belongs in the shared API client, and a global retry interceptor is separately forbidden by the standard.',
+        },
+        // ENVELOPE DISCIPLINE — the defect class `eiams-frontend-t77l` exists to
+        // eliminate. `ApiTransport.request` resolves to the PAYLOAD, so a `.data`
+        // read in a service can only mean one of two things, and both are bugs:
+        // a leftover hand-unwrap of the envelope, or a raw Axios response that
+        // never went through the transport at all.
+        //
+        // This rule is deliberately a single AST pattern with no type
+        // information. The earlier alternative — allow `.data` only when the
+        // receiver came from `transport.request` — needed type-aware linting
+        // this config does not use, because Axios's own response also has
+        // `.data`, so the two are indistinguishable from the syntax tree alone.
+        // Unwrapping in `axios-transport.ts` instead of at every call site makes
+        // the honest version of this rule expressible.
+        {
+          selector: 'MemberExpression[property.name="data"]',
+          message:
+            'A service must not read `.data`. `ApiTransport.request` resolves to the payload and `requestPage` to a normalized `ApiPage`, so there is no envelope left to unwrap. A `.data` here is either a leftover hand-unwrap or a raw Axios response that bypassed the transport. Add the endpoint to the transport instead.',
+        },
+        // The other half of the same defect: reaching the network without the
+        // transport. `transport.request` is the only sanctioned way out.
+        {
+          selector:
+            "CallExpression[callee.type='MemberExpression'][callee.property.name=/^(get|post|put|patch|delete|request)$/u][callee.object.name=/^(client|apiClient|axios|http)$/u]",
+          message:
+            'A service must not call an HTTP client directly. Go through `ApiTransport.request` / `requestPage` / `requestEmpty` so the envelope is unwrapped in one reviewed place (see docs/feature-service-composition-standard.md).',
         },
         {
           selector: "NewExpression[callee.name='QueryClient']",

@@ -70,8 +70,9 @@ export function createCountService(transport: ApiTransport): CountService {
   /**
    * Rebuilds a declared page view-model from the transport's normalized
    * `ApiPage`. The generated page types described a body the backend never
-   * sends on its own, so returning `response.data` made the declared type and
-   * the runtime value disagree.
+   * sends on its own, so unwrapping the envelope by hand here made the declared
+   * type and the runtime value disagree. `requestPage` now hands over the
+   * normalized page directly.
    */
   const toPage = <T>(page: ApiPage<T>) =>
     ({
