@@ -11,7 +11,18 @@ import { ContentCard } from '@/shared/layout/content-card'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { Role, ScopeType } from '@/shared/types/generated/eiams-v1'
+import type { ScopeType } from '@/shared/types/generated/eiams-v1'
+
+/**
+ * The role fields this editor actually reads. Declared structurally instead of importing the
+ * generated Role, which described a record the backend does not serve (
+oleId, code,
+ * status). Migrating the assignment projection itself is tracked separately.
+ */
+export interface RoleOption {
+  readonly id: string
+  readonly nameAr: string
+}
 
 const SCOPE_TYPE_LABELS: Readonly<Record<ScopeType, string>> = {
   Enterprise: 'المؤسسة',
@@ -32,7 +43,7 @@ interface UserRoleScopesEditorProps {
   isPending: boolean
   isRoleCatalogLoading: boolean
   onSubmit: (values: UserRoleScopesFormValues) => Promise<void>
-  roles: readonly Role[]
+  roles: readonly RoleOption[]
 }
 
 /** Contract-shaped field-array editor for a user's complete role-scope assignment set. */
@@ -47,10 +58,7 @@ export function UserRoleScopesEditor({
 }: UserRoleScopesEditorProps) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'assignments' })
   const watchedAssignments = useWatch({ control: form.control, name: 'assignments' }) ?? []
-  const roleNameById = useMemo(
-    () => new Map(roles.map((role) => [role.roleId, role.nameAr])),
-    [roles],
-  )
+  const roleNameById = useMemo(() => new Map(roles.map((role) => [role.id, role.nameAr])), [roles])
 
   return (
     <ContentCard
@@ -107,7 +115,7 @@ export function UserRoleScopesEditor({
                               </FormControl>
                               <SelectContent>
                                 {roles.map((role) => (
-                                  <SelectItem key={role.roleId} value={role.roleId}>
+                                  <SelectItem key={role.id} value={role.id}>
                                     {role.nameAr}
                                   </SelectItem>
                                 ))}

@@ -1,11 +1,10 @@
-﻿import type {
+import type {
   ActionAvailability,
   Asset,
   AssetCustody,
   AssetMovement,
   AuditLog,
   AuditLogEntry,
-  AuthTokenResponse,
   DocumentActionResult,
   DocumentActionType,
   DocumentAttachment,
@@ -32,7 +31,6 @@
   Permission,
   Role,
   ScopeContext,
-  SessionResponse,
   Site,
   StockMovement,
   OrganizationalUnit,
@@ -43,9 +41,17 @@
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
 import type {
+  AuthTokenResponse,
+  SessionResponse,
+  SessionRole,
+  SessionScope,
+  SessionUser,
+} from '@/modules/auth/types/session.types'
+import type {
   WarehouseCapability,
   WarehouseMaterialSetting,
 } from '@/modules/warehouse/types/warehouse.api-types'
+import type { PermissionCatalogEntry, RoleProjection } from '@/modules/admin/types/role.types'
 
 /** Contract-backed fixture helpers for MSW tests.
  *
@@ -209,6 +215,46 @@ export function createRole(overrides: FixtureOverrides<Role> = {}): Role {
   )
 }
 
+/**
+ * The role administration projection. Distinct from `createRole` above because the
+ * assignment surface still carries the stale generated shape (`roleId`, `code`,
+ * `status`), while the role catalogue and permission matrix consume the handwritten
+ * `RoleProjection`. Migrating the assignment projection is tracked separately.
+ */
+export function createRoleProjection(
+  overrides: FixtureOverrides<RoleProjection> = {},
+): RoleProjection {
+  return withOverrides(
+    {
+      id: fixtureUuid(14),
+      name: 'SYSTEM_ADMIN',
+      nameAr: 'مدير النظام',
+      description: 'Enterprise structural administration.',
+      allowedScopeTypes: ['Enterprise'],
+      permissionCodes: ['admin.user.view', 'admin.user.manage'],
+      rowVersion: 1,
+    },
+    overrides,
+  )
+}
+
+/** One entry of the server-owned permission catalogue, in its served shape. */
+export function createPermissionCatalogEntry(
+  overrides: FixtureOverrides<PermissionCatalogEntry> = {},
+): PermissionCatalogEntry {
+  return withOverrides(
+    {
+      id: fixtureUuid(13),
+      code: 'admin.user.view',
+      nameAr: 'عرض المستخدمين',
+      descriptionAr: 'عرض دليل حسابات المستخدمين.',
+      description: 'View users.',
+      allowedScopeTypes: ['Enterprise'],
+    },
+    overrides,
+  )
+}
+
 export function createUserRoleScope(
   overrides: FixtureOverrides<UserRoleScope> = {},
 ): UserRoleScope {
@@ -234,12 +280,58 @@ export function createScopeContext(overrides: FixtureOverrides<ScopeContext> = {
   )
 }
 
+export function createSessionUser(overrides: FixtureOverrides<SessionUser> = {}): SessionUser {
+  return withOverrides(
+    {
+      id: fixtureUuid(10),
+      email: 'fixture.user@eiams.local',
+      firstName: 'مستخدم',
+      lastName: 'اختباري',
+      employeeId: null,
+      employeeName: null,
+    },
+    overrides,
+  )
+}
+
+/**
+ * The session's SINGLE role. `nameAr` is what the UI renders; keeping it in the fixture is
+ * what catches a consumer that silently reads `name` instead.
+ */
+export function createSessionRole(overrides: FixtureOverrides<SessionRole> = {}): SessionRole {
+  return withOverrides(
+    {
+      id: fixtureUuid(11),
+      name: 'WarehouseKeeper',
+      nameAr: 'أمين مستودع',
+      description: null,
+    },
+    overrides,
+  )
+}
+
+/**
+ * The active scope as the session endpoint sends it: `scopeName`, not `displayName`.
+ * `scopeId` is null only for Enterprise.
+ */
+export function createSessionScope(overrides: FixtureOverrides<SessionScope> = {}): SessionScope {
+  return withOverrides(
+    {
+      scopeType: 'Warehouse',
+      scopeId: fixtureUuid(12),
+      scopeName: 'مستودع اختباري',
+    },
+    overrides,
+  )
+}
+
 export function createSession(overrides: FixtureOverrides<SessionResponse> = {}): SessionResponse {
   return withOverrides(
     {
-      user: createUserSummary(),
+      user: createSessionUser(),
+      role: createSessionRole(),
       permissionCodes: ['document.view'],
-      activeScope: createScopeContext(),
+      activeScope: createSessionScope(),
     },
     overrides,
   )

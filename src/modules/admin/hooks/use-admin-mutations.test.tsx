@@ -9,7 +9,7 @@ import { adminQueryKeys } from '@/modules/admin/hooks/use-admin-queries'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createQueryClient } from '@/shared/services/query.client'
 import { queryKeys } from '@/shared/services/query-keys'
-import { createRole, createUserRoleScope, createUserSummary } from '@/test/msw/factories'
+import { createRoleProjection, createUserRoleScope, createUserSummary } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -27,7 +27,7 @@ describe('admin mutation hooks', () => {
     const client = createQueryClient()
     const scope = { kind: 'enterprise' as const }
     const user = createUserSummary()
-    const role = createRole()
+    const role = createRoleProjection()
     const assignment = createUserRoleScope({ userId: user.userId, role })
     const usersKey = adminQueryKeys.users(scope, {})
     const assignmentsKey = adminQueryKeys.userRoleScopes(scope, user.userId)
@@ -56,7 +56,7 @@ describe('admin mutation hooks', () => {
       request: {
         assignments: [
           {
-            roleId: role.roleId,
+            roleId: role.id,
             scopeId: assignment.scope.scopeId,
             scopeType: assignment.scope.scopeType,
           },

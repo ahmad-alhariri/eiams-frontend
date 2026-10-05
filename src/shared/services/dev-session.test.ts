@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { PERMISSION_CODES } from '@/config/permissions'
+import {
+  toSessionScopeLabel,
+  toSessionUserDisplayName,
+} from '@/modules/auth/services/session-display'
 import { createDevSession, isDevAuthBypassEnabled } from '@/shared/services/dev-session'
 
 describe('Dev session fixture (auth bypass)', () => {
@@ -12,9 +16,21 @@ describe('Dev session fixture (auth bypass)', () => {
     expect(response.accessToken.length).toBeGreaterThan(0)
   })
 
-  it('names the fixture user in Arabic', () => {
+  it('names the fixture user and role in Arabic', () => {
     const session = createDevSession().session
-    expect(session.user.displayName).toBe('مطور النظام')
+
+    // The session projection carries first/last name and a single role's `nameAr`.
+    // It has no `displayName`; reading one previously type-checked against the stale
+    // generated type while being `undefined` on the wire.
+    expect(toSessionUserDisplayName(session.user)).toBe('مطور النظام')
+    expect(session.role.nameAr.length).toBeGreaterThan(0)
+  })
+
+  it('carries a scope name rather than the old displayName field', () => {
+    const session = createDevSession().session
+
+    expect(toSessionScopeLabel(session.activeScope)).toBe('نطاق التطوير')
+    expect('displayName' in session.activeScope).toBe(false)
   })
 
   it('is opt-in: an unset profile never enables the bypass', () => {

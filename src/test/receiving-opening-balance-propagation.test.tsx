@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
@@ -19,12 +19,17 @@ import { RouteSuspense } from '@/shared/layout/route-suspense'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
 import type {
   InventoryBalance,
-  SessionResponse,
   StockMovement,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
-import { createPage } from '@/test/msw/factories'
+import {
+  createPage,
+  createSessionUser,
+  createSessionRole,
+  createSessionScope,
+} from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -230,13 +235,9 @@ describe('receiving and opening balance propagation', () => {
 
 function readOnlySession(): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'cross.module.viewer',
-      displayName: 'مراجع التكامل',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مراجع التكامل' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: ['document.view', 'inventory.view'],
   }
 }

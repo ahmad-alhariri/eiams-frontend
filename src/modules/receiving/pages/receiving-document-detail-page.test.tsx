@@ -1,12 +1,19 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ROUTE_PATHS } from '@/config/routes'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
-import { createWarehouseDocument, deriveLifecycleEvents, fixtureUuid } from '@/test/msw/factories'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import {
+  createSessionRole,
+  createSessionScope,
+  createSessionUser,
+  createWarehouseDocument,
+  deriveLifecycleEvents,
+  fixtureUuid,
+} from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import {
   createWarehouseDocumentDetailHandler,
@@ -40,13 +47,9 @@ const ALL_DOCUMENT_CODES = [
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'document.manager',
-      displayName: 'مدير المستندات',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستندات' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
   }
 }

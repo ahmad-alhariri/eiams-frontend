@@ -6,6 +6,7 @@ import { useNavigate, useParams } from 'react-router'
 
 import { ROUTE_PATHS } from '@/config/routes'
 import { UserRoleScopesEditor } from '@/modules/admin/components/user-role-scopes-editor'
+import type { RoleProjection } from '@/modules/admin/types/role.types'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { useReplaceUserRoleScopesMutation } from '@/modules/admin/hooks/use-admin-mutations'
 import {
@@ -59,10 +60,25 @@ function UserDetailPage() {
   }, [form, roleScopesQuery.data, userQuery.data])
 
   const roles = useMemo(() => {
-    const roleById = new Map(
-      (roleScopesQuery.data ?? []).map((roleScope) => [roleScope.role.roleId, roleScope.role]),
-    )
-    for (const role of rolesQuery.data ?? []) roleById.set(role.roleId, role)
+    // rolesQuery is authoritative and complete, so it wins. The assignment response still
+    // carries the stale generated role shape (roleId/code/status, no scope types), so an
+    // assigned role missing from the catalogue is normalised into the projection rather
+    // than force-cast. Its scope list is empty because the assignment projection never
+    // carried one; the catalogue read fills it in on the next load.
+    const roleById = new Map<string, RoleProjection>()
+    for (const role of rolesQuery.data ?? []) roleById.set(role.id, role)
+    for (const roleScope of roleScopesQuery.data ?? []) {
+      if (roleById.has(roleScope.role.roleId)) continue
+      roleById.set(roleScope.role.roleId, {
+        id: roleScope.role.roleId,
+        name: roleScope.role.code,
+        nameAr: roleScope.role.nameAr,
+        description: null,
+        allowedScopeTypes: [],
+        permissionCodes: roleScope.role.permissionCodes,
+        rowVersion: roleScope.role.rowVersion,
+      })
+    }
     return [...roleById.values()]
   }, [roleScopesQuery.data, rolesQuery.data])
   const isLoading =

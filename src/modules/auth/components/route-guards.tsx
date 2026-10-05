@@ -9,7 +9,7 @@ import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { FullPageSpinner } from '@/shared/feedback/full-page-spinner'
 import { Button } from '@/shared/ui/button'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 type RouteGuardProps = {
   children: ReactNode
@@ -117,6 +117,12 @@ function RequireActiveScope({ children }: RouteGuardProps) {
     return <AuthLoadingBoundary />
   }
 
+  // Redundant against the type, and deliberately kept. `SessionResponse.activeScope` is
+  // required, so a well-typed payload cannot reach here without one; but this guard reads a
+  // runtime payload from the network. An earlier version tested `scopeState ===
+  // 'SelectionRequired'` and fell through to rendering children for every other value,
+  // including undefined, so a session with no scope rendered the protected tree. Denying
+  // on an absent scope is the fail-closed behaviour this bead exists to preserve.
   if (!session.activeScope) {
     return <ScopeUnavailable />
   }

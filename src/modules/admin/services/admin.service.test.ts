@@ -7,8 +7,9 @@ import { createAdminService } from '@/modules/admin/services/admin.service'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
-  createPermission,
+  createPermissionCatalogEntry,
   createRole,
+  createRoleProjection,
   createUserRoleScope,
   createUserSummary,
 } from '@/test/msw/factories'
@@ -33,22 +34,25 @@ afterEach(() => {
 describe('AdminService', () => {
   it('maps permission, role, and user reads to their typed contract endpoints', async () => {
     const service = setupService()
-    const permission = createPermission()
-    const role = createRole()
+    const permission = createPermissionCatalogEntry()
+    const role = createRoleProjection()
     const user = createUserSummary()
-    const assignment = createUserRoleScope({ userId: user.userId, role })
+    const assignment = createUserRoleScope({ userId: user.userId, role: createRole() })
     const requestedUrls: string[] = []
 
     server.use(
+      // The catalogue and role list are paged server-side with top-level pagination, so the
+      // mocks must answer with the paged envelope. Reading them as a bare array is exactly the
+      // shape mismatch that silently truncated the catalogue at the default page size.
       http.get(`${API_BASE_URL}/admin/permissions`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
-        return okJson([permission])
+        return okPageJson([permission])
       }),
       http.get(`${API_BASE_URL}/admin/roles`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
-        return okJson([role])
+        return okPageJson([role])
       }),
-      http.get(`${API_BASE_URL}/admin/roles/${role.roleId}`, ({ request }) => {
+      http.get(`${API_BASE_URL}/admin/roles/${role.id}`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
         return okJson(role)
       }),
@@ -69,7 +73,7 @@ describe('AdminService', () => {
 
     await expect(service.listPermissions()).resolves.toEqual([permission])
     await expect(service.listRoles()).resolves.toEqual([role])
-    await expect(service.getRole(role.roleId)).resolves.toEqual(role)
+    await expect(service.getRole(role.id)).resolves.toEqual(role)
     await expect(service.listUsers({ pageIndex: 2, search: 'مستخدم' })).resolves.toMatchObject({
       items: [user],
     })
@@ -79,26 +83,38 @@ describe('AdminService', () => {
     expect(requestedUrls).toEqual([
       `${API_BASE_URL}/admin/permissions`,
       `${API_BASE_URL}/admin/roles`,
-      `${API_BASE_URL}/admin/roles/${role.roleId}`,
+      `${API_BASE_URL}/admin/roles/${role.id}`,
       `${API_BASE_URL}/admin/users?pageIndex=2&search=%D9%85%D8%B3%D8%AA%D8%AE%D8%AF%D9%85`,
       `${API_BASE_URL}/admin/users/${user.userId}`,
       `${API_BASE_URL}/admin/users/${user.userId}/role-scopes`,
     ])
   })
 
-  it('encodes identifiers and forwards generated write payloads unchanged', async () => {
+  it('sends only the fields each role operation owns', async () => {
     const service = setupService()
-    const role = createRole({ code: 'AUDITOR' })
+    const role = createRoleProjection({ name: 'AUDITOR', nameAr: 'مدقق' })
+    const assignmentRole = createRole({ code: 'AUDITOR' })
     const user = createUserSummary({ username: 'auditor.user' })
-    const assignment = createUserRoleScope({ userId: user.userId, role })
+    const assignment = createUserRoleScope({ userId: user.userId, role: assignmentRole })
     const encodedRoleId = 'role / دمشق'
     const encodedUserId = 'user / دمشق'
-    const roleRequest = {
-      code: role.code,
+    const createRoleRequest = {
+      name: role.name,
       nameAr: role.nameAr,
+      description: role.description,
       permissionCodes: role.permissionCodes,
-      rowVersion: role.rowVersion,
-      status: role.status,
+      allowedScopeTypes: role.allowedScopeTypes,
+    }
+    const metadataRequest = {
+      name: role.name,
+      nameAr: role.nameAr,
+      description: role.description,
+      expectedRowVersion: role.rowVersion,
+      allowedScopeTypes: role.allowedScopeTypes,
+    }
+    const permissionsRequest = {
+      permissionCodes: role.permissionCodes,
+      expectedRowVersion: role.rowVersion,
     }
     const userRequest = {
       displayName: user.displayName,
@@ -110,7 +126,7 @@ describe('AdminService', () => {
     const roleScopesRequest = {
       assignments: [
         {
-          roleId: role.roleId,
+          roleId: assignmentRole.roleId,
           scopeType: assignment.scope.scopeType,
           scopeId: assignment.scope.scopeId,
         },
@@ -126,6 +142,13 @@ describe('AdminService', () => {
       }),
       http.put(
         `${API_BASE_URL}/admin/roles/${encodeURIComponent(encodedRoleId)}`,
+        async ({ request }) => {
+          receivedBodies.push(JSON.parse(await request.text()))
+          return okJson(role)
+        },
+      ),
+      http.put(
+        `${API_BASE_URL}/admin/roles/${encodeURIComponent(encodedRoleId)}/permissions`,
         async ({ request }) => {
           receivedBodies.push(JSON.parse(await request.text()))
           return okJson(role)
@@ -151,20 +174,29 @@ describe('AdminService', () => {
       ),
     )
 
-    await expect(service.createRole(roleRequest)).resolves.toEqual(role)
-    await expect(service.updateRole(encodedRoleId, roleRequest)).resolves.toEqual(role)
+    await expect(service.createRole(createRoleRequest)).resolves.toEqual(role)
+    await expect(service.updateRoleMetadata(encodedRoleId, metadataRequest)).resolves.toEqual(role)
+    await expect(
+      service.replaceRolePermissions(encodedRoleId, permissionsRequest),
+    ).resolves.toEqual(role)
     await expect(service.createUser(userRequest)).resolves.toEqual(user)
     await expect(service.updateUser(encodedUserId, userRequest)).resolves.toEqual(user)
     await expect(service.replaceUserRoleScopes(encodedUserId, roleScopesRequest)).resolves.toEqual([
       assignment,
     ])
+    // Each request body is exactly its own operation's fields: the metadata update carries no
+    // permissionCodes, and the permission replacement carries no metadata. The retired broad
+    // upsert resubmitted the whole role record for both.
     expect(receivedBodies).toEqual([
-      roleRequest,
-      roleRequest,
+      createRoleRequest,
+      metadataRequest,
+      permissionsRequest,
       userRequest,
       userRequest,
       roleScopesRequest,
     ])
+    expect(receivedBodies[1]).not.toHaveProperty('permissionCodes')
+    expect(receivedBodies[2]).not.toHaveProperty('nameAr')
   })
 
   it('leaves contract errors for the shared Arabic error normalizer', async () => {

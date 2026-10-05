@@ -14,7 +14,8 @@ import {
   type SessionAdapter,
 } from '@/shared/services/session-adapter'
 import type { ApiSuccessResponse } from '@/shared/api/envelope'
-import type { AuthTokenResponse, paths } from '@/shared/types/generated/eiams-v1'
+import type { paths } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse } from '@/modules/auth/types/session.types'
 
 const AUTH_LOGIN_PATH = '/auth/login' satisfies keyof paths
 const AUTH_REFRESH_PATH = '/auth/refresh' satisfies keyof paths

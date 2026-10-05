@@ -1,15 +1,19 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { SessionResponse, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   createActionAvailability,
   createDocumentAttachment,
   createDocumentPolicy,
+  createSessionRole,
+  createSessionScope,
+  createSessionUser,
   createWarehouseDocument,
   deriveLifecycleEvents,
   fixtureUuid,
@@ -51,13 +55,9 @@ const CONFLICT_TITLE_AR = 'تغيرت البيانات من قبل مستخدم 
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: fixtureUuid(10),
-      username: 'warehouse.keeper',
-      displayName: 'أمين المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'أمين المستودع' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
   }
 }

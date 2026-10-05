@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { okJson } from '@/test/msw/envelope'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -8,9 +8,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ROUTE_PATHS } from '@/config/routes'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { SessionResponse, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   createDocumentPolicy,
+  createSessionRole,
+  createSessionScope,
+  createSessionUser,
   createWarehouseDocument,
   deriveLifecycleEvents,
   fixtureUuid,
@@ -55,13 +59,9 @@ const KEEPER_DOCUMENT_CODES = [
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'document.manager',
-      displayName: 'مدير المستندات',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستندات' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
   }
 }

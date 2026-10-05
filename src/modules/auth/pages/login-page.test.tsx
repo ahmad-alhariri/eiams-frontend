@@ -1,4 +1,4 @@
-﻿import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppProviders } from '@/app/providers/app-providers'
 import LoginPage from '@/modules/auth/pages/login-page'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
-import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse } from '@/modules/auth/types/session.types'
+import { createSessionRole, createSessionScope, createSessionUser } from '@/test/msw/factories'
 import { errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
@@ -15,13 +16,9 @@ const loginResponse: AuthTokenResponse = {
   expiresInSeconds: 300,
   tokenType: 'Bearer',
   session: {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'warehouse.keeper',
-      displayName: 'أمين المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'أمين المستودع' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: ['document.create'],
   },
 }

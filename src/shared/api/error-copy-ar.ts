@@ -166,6 +166,14 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'اسم الدور مستخدم مسبقاً.',
     detailAr: null,
   },
+  // `Roles.SeededRoleScopeTypesImmutable` (Tranche C, owner ruling 2026-10-05).
+  // A seeded reference role's assignable scopes are fixed at creation. The wording names the
+  // constraint rather than the failure, because from the operator's side the request looked
+  // like an ordinary role edit.
+  ROLES_SEEDED_ROLE_SCOPE_TYPES_IMMUTABLE: {
+    titleAr: 'نطاقات هذا الدور المدمج ثابتة ولا يمكن تغييرها.',
+    detailAr: 'نطاقات الأدوار المدمجة تُحدَّد عند إنشائها ولا تتغيَّر لاحقاً.',
+  },
   // `Permissions.NotFound` — the requested permission id is not in the
   // catalog, so the submitted matrix cannot be saved as-is.
   PERMISSIONS_NOT_FOUND: {
@@ -183,6 +191,26 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
   ROLES_ALLOWED_SCOPE_TYPES_CONFLICT_WITH_ASSIGNMENTS: {
     titleAr: 'أنواع النطاق المسموحة للدور تتعارض مع إسناداته الحالية.',
     detailAr: 'راجع إسنادات الدور ثم أعد المحاولة.',
+  },
+  // Role metadata updates and permission replacement advance ONE aggregate version, so a
+  // stale write here can be either. Same shared wording as the other row-version codes:
+  // distinguishing them would leak whether someone else's change actually landed.
+  ROLES_ROW_VERSION_MISMATCH: {
+    titleAr: 'تغيرت البيانات من قبل مستخدم آخر. حدّث الصفحة ثم أعد المحاولة.',
+    detailAr: null,
+  },
+  // A submitted code is not part of the active vocabulary. The replacement is refused
+  // whole, so there is no field for the message to land on.
+  ROLES_UNKNOWN_PERMISSION_CODES: {
+    titleAr: 'إحدى رموز الصلاحيات غير معروفة.',
+    detailAr: 'حدّث كتالوج الصلاحيات ثم أعد المحاولة.',
+  },
+  // A submitted code is catalogued but can never take effect at any scope this role may be
+  // assigned at. Accepting it would record a grant that grants nothing while looking like a
+  // working one in the audit trail and in every permission surface.
+  ROLES_PERMISSION_CODES_NOT_ALLOWED_FOR_ROLE_SCOPES: {
+    titleAr: 'إحدى الصلاحيات لا يمكن إسنادها لهذا الدور.',
+    detailAr: 'نطاق الصلاحية لا يطابق نطاق الدور. راجع النطاقات المسموح بها لكل صلاحية.',
   },
   USERS_SELF_SUSPENSION_NOT_ALLOWED: {
     titleAr: 'لا يمكنك إيقاف حسابك بنفسك.',

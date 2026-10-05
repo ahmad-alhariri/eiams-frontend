@@ -6,10 +6,10 @@ import { useState, type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { RolePermissionDialog } from '@/modules/admin/components/role-permission-dialog'
-import { createPermission, createRole } from '@/test/msw/factories'
-import { errJson, okJson } from '@/test/msw/envelope'
+import { createPermissionCatalogEntry, createRoleProjection } from '@/test/msw/factories'
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
-import type { Role } from '@/shared/types/generated/eiams-v1'
+import type { RoleProjection } from '@/modules/admin/types/role.types'
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -22,10 +22,11 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 const API_BASE_URL = '/api/v1'
 const ROLE_ID = '00000000-0000-4000-8000-000000000014'
 
-const viewPermission = () => createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
+const viewPermission = () =>
+  createPermissionCatalogEntry({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
 const managePermission = () =>
-  createPermission({
-    permissionId: '00000000-0000-4000-8000-0000000000d1',
+  createPermissionCatalogEntry({
+    id: '00000000-0000-4000-8000-0000000000d1',
     code: 'admin.role.manage',
     nameAr: 'إدارة الأدوار',
     descriptionAr: null,
@@ -39,7 +40,7 @@ function createWrapper() {
 }
 
 /** Mirrors the roles catalog wiring: a row action opens the matrix dialog. */
-function DialogHost({ role }: { role: Role }) {
+function DialogHost({ role }: { role: RoleProjection }) {
   const [open, setOpen] = useState(false)
   return (
     <div>
@@ -58,8 +59,8 @@ afterEach(() => {
 describe('RolePermissionDialog', () => {
   it('opens prefilled with the assigned codes and replaces the complete contract role on save', async () => {
     const user = userEvent.setup()
-    const role = createRole({
-      roleId: ROLE_ID,
+    const role = createRoleProjection({
+      id: ROLE_ID,
       permissionCodes: ['admin.role.view'],
       rowVersion: 7,
     })
@@ -67,9 +68,9 @@ describe('RolePermissionDialog', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        okJson([viewPermission(), managePermission()]),
+        okPageJson([viewPermission(), managePermission()]),
       ),
-      http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, async ({ request }) => {
+      http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}/permissions`, async ({ request }) => {
         receivedBodies.push(await request.json())
         return okJson({
           ...role,
@@ -98,11 +99,8 @@ describe('RolePermissionDialog', () => {
     await waitFor(() =>
       expect(receivedBodies).toEqual([
         {
-          code: role.code,
-          nameAr: role.nameAr,
           permissionCodes: ['admin.role.view', 'admin.role.manage'],
-          rowVersion: 7,
-          status: role.status,
+          expectedRowVersion: 7,
         },
       ]),
     )
@@ -111,8 +109,8 @@ describe('RolePermissionDialog', () => {
 
   it('unassigns a permission by sending the reduced code list', async () => {
     const user = userEvent.setup()
-    const role = createRole({
-      roleId: ROLE_ID,
+    const role = createRoleProjection({
+      id: ROLE_ID,
       permissionCodes: ['admin.role.view', 'admin.role.manage'],
       rowVersion: 3,
     })
@@ -120,9 +118,9 @@ describe('RolePermissionDialog', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        okJson([viewPermission(), managePermission()]),
+        okPageJson([viewPermission(), managePermission()]),
       ),
-      http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, async ({ request }) => {
+      http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}/permissions`, async ({ request }) => {
         receivedBodies.push(await request.json())
         return okJson({ ...role, permissionCodes: ['admin.role.view'], rowVersion: 4 })
       }),
@@ -138,11 +136,8 @@ describe('RolePermissionDialog', () => {
     await waitFor(() =>
       expect(receivedBodies).toEqual([
         {
-          code: role.code,
-          nameAr: role.nameAr,
           permissionCodes: ['admin.role.view'],
-          rowVersion: 3,
-          status: role.status,
+          expectedRowVersion: 3,
         },
       ]),
     )
@@ -150,13 +145,15 @@ describe('RolePermissionDialog', () => {
 
   it('keeps the catalog error state actionable instead of offering an unsafe save', async () => {
     const user = userEvent.setup()
-    const role = createRole({ roleId: ROLE_ID })
+    const role = createRoleProjection({ id: ROLE_ID })
     let attempts = 0
 
     server.use(
       http.get(`${API_BASE_URL}/admin/permissions`, () => {
         attempts += 1
-        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson([viewPermission()])
+        return attempts === 1
+          ? new HttpResponse(null, { status: 500 })
+          : okPageJson([viewPermission()])
       }),
     )
 
@@ -177,21 +174,21 @@ describe('RolePermissionDialog', () => {
 
   it('reports an Arabic empty catalog and maps a contract field error inline', async () => {
     const user = userEvent.setup()
-    const emptyRole = createRole({ roleId: ROLE_ID, permissionCodes: [] })
+    const emptyRole = createRoleProjection({ id: ROLE_ID, permissionCodes: [] })
 
-    server.use(http.get(`${API_BASE_URL}/admin/permissions`, () => okJson([])))
+    server.use(http.get(`${API_BASE_URL}/admin/permissions`, () => okPageJson([])))
 
     const { unmount } = render(<DialogHost role={emptyRole} />, { wrapper: createWrapper() })
     await user.click(screen.getByRole('button', { name: `تعديل صلاحيات ${emptyRole.nameAr}` }))
     expect(await screen.findByText('لا توجد صلاحيات متاحة في الكتالوج الحالي.')).toBeInTheDocument()
     unmount()
 
-    const role = createRole({ roleId: ROLE_ID, permissionCodes: ['admin.role.view'] })
+    const role = createRoleProjection({ id: ROLE_ID, permissionCodes: ['admin.role.view'] })
     server.use(
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        okJson([viewPermission(), managePermission()]),
+        okPageJson([viewPermission(), managePermission()]),
       ),
-      http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () =>
+      http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}/permissions`, () =>
         errJson(422, {
           code: 'ROLES_NAME_NOT_UNIQUE',
           message: 'Role name is not unique.',

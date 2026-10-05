@@ -1,6 +1,6 @@
-﻿import { PERMISSION_CODES } from '@/config/permissions'
+import { PERMISSION_CODES } from '@/config/permissions'
 import type { AppEnvironment } from '@/config/env'
-import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse } from '@/modules/auth/types/session.types'
 
 /**
  * Dev-only session fixture (transport boundary).
@@ -18,6 +18,8 @@ import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
  */
 
 const DEV_USER_ID = '00000000-0000-0000-0000-000000000001'
+const DEV_EMPLOYEE_ID = '00000000-0000-0000-0000-000000000002'
+const DEV_ROLE_ID = '00000000-0000-0000-0000-000000000004'
 const DEV_SCOPE_ID = '00000000-0000-0000-0000-000000000003'
 
 /**
@@ -43,16 +45,23 @@ export function createDevSession(): AuthTokenResponse {
     tokenType: 'Bearer',
     session: {
       user: {
-        userId: DEV_USER_ID,
-        username: 'dev',
-        displayName: 'مطور النظام',
-        status: 'Active',
-        rowVersion: 0,
+        id: DEV_USER_ID,
+        email: 'dev@eiams.local',
+        firstName: 'مطور',
+        lastName: 'النظام',
+        employeeId: DEV_EMPLOYEE_ID,
+        employeeName: 'مطور النظام',
+      },
+      role: {
+        id: DEV_ROLE_ID,
+        name: 'SystemAdministrator',
+        nameAr: 'مدير النظام',
+        description: 'صلاحية كاملة على كل المواقع والمستودعات',
       },
       activeScope: {
         scopeId: DEV_SCOPE_ID,
         scopeType: 'Enterprise',
-        displayName: 'نطاق التطوير',
+        scopeName: 'نطاق التطوير',
       },
       permissionCodes: [...PERMISSION_CODES],
     },

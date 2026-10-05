@@ -84,8 +84,13 @@ import {
  * the number; only application code does. `9uuf` also added
  * `src/test/support/test-transport-harness.ts` and two `src/test/**` suites,
  * none of which belong to this set.
+ * Re-measured at 357 by `eiams-frontend-3m6o` / `0lkm`, which added
+ * `src/modules/auth/types/session.types.ts` and
+ * `src/modules/auth/services/session-display.ts` - the handwritten session wire
+ * contracts and the display helpers that replace the stale generated
+ * `SessionResponse` / `ScopeContext` shapes.
  */
-const SCANNED_FILE_COUNT = 354
+const SCANNED_FILE_COUNT = 357
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

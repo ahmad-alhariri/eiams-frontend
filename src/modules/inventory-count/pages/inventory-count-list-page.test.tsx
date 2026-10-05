@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { okPageJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
 import { http } from 'msw'
@@ -6,10 +6,15 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import InventoryCountListPage from './inventory-count-list-page'
-import { fixtureUuid } from '@/test/msw/factories'
+import {
+  fixtureUuid,
+  createSessionUser,
+  createSessionRole,
+  createSessionScope,
+} from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -23,13 +28,9 @@ const API_BASE_URL = '/api/v1'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'count.manager',
-      displayName: 'مدير الجرد',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير الجرد' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
   }
 }

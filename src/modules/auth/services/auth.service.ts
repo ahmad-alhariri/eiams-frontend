@@ -1,11 +1,7 @@
 ﻿import type { ApiTransport } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
-import type {
-  AuthTokenResponse,
-  LoginRequest,
-  SessionResponse,
-  paths,
-} from '@/shared/types/generated/eiams-v1'
+import type { LoginRequest, paths } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
 
 const AUTH_LOGIN_PATH = '/auth/login' satisfies keyof paths
 const AUTH_LOGOUT_PATH = '/auth/logout' satisfies keyof paths

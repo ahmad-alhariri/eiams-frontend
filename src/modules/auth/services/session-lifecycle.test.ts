@@ -1,4 +1,4 @@
-﻿import { createAxiosTransport } from '@/shared/api/axios-transport'
+import { createAxiosTransport } from '@/shared/api/axios-transport'
 import { apiJson, okJson } from '@/test/msw/envelope'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -12,19 +12,16 @@ import { createAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { createQueryClient } from '@/shared/services/query.client'
 import { queryKeys } from '@/shared/services/query-keys'
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionRole, createSessionScope, createSessionUser } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
 
 const sessionFixture: SessionResponse = {
-  user: {
-    userId: '10000000-0000-4000-8000-000000000001',
-    username: 'warehouse.keeper',
-    displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
-  },
+  user: createSessionUser({ firstName: 'أمين المستودع' }),
+  role: createSessionRole(),
+  activeScope: createSessionScope(),
   permissionCodes: ['document.create'],
 }
 

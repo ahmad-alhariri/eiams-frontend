@@ -205,3 +205,61 @@ backend change to a uniform `401`.
   seeded development credentials, so the evidence stops at
   `USERS_INVALID_REFRESH_TOKEN` — which proves the origin gate passes and the
   request reaches token validation, and nothing more.
+
+## 8. Two wire facts confirmed while adding role metadata concurrency (2026-10-04)
+
+Established by `IntegrationTests.Api.RoleMetadataConcurrencyTests` against the
+real API, not by reading source. Both are general, not role-specific, and both
+constrain how frontend error handling must be written.
+
+### 8.1 Error codes are UPPER_SNAKE_CASE on the wire
+
+Domain code declarations use dotted PascalCase —
+`Domain.Roles.RoleErrors.RowVersionMismatch` declares
+`"Roles.RowVersionMismatch"` — but the error envelope publishes
+`ROLES_ROW_VERSION_MISMATCH`. Any frontend error-copy table or `switch` keyed on
+the dotted form will never match. The error table (bead `eiams-frontend-z1hs`)
+must key on the UPPER_SNAKE form actually observed on the wire.
+
+### 8.2 A missing required member yields `details.body`, not a field error
+
+`[property: JsonRequired]` on a non-nullable value type rejects the request
+during model binding, but the reported detail is **not** keyed by field name:
+
+```json
+{"success":false,
+ "error":{"code":"REQUEST_VALIDATION_FAILED",
+          "message":"...",
+          "details":{"body":["The submitted value has an invalid format."]},
+          "request_id":"..."}}
+```
+
+So a client that omits a required field learns only that the request was
+rejected. The security property is intact — the value never silently defaults —
+but the frontend **cannot point at the offending field** and must fall back to a
+generic Arabic message. This matters for `expectedRowVersion` on
+`PUT /admin/roles/{roleId}` and for `nameAr` on the role write paths. Compare
+with a *type* mismatch on `allowedScopeTypes`, which **is** reported per field
+(`details.allowedScopeTypes`), so the two failure modes are not shaped alike and
+error handling cannot assume field-level detail is always available.
+
+## 9. Role contract shape after Tranches A and B
+
+Verified against the live API and the regenerated OpenAPI document
+(`eiams-backend-v1.openapi.json`, 134 paths / 172 operations / 291 schemas).
+
+| Field | Where | Required |
+| --- | --- | --- |
+| `nameAr` | role projection, session role DTO, create/update request bodies | yes |
+| `rowVersion` | role projection (list, detail, and now the update result) | yes |
+| `expectedRowVersion` | `PUT /admin/roles/{roleId}` request body | yes |
+
+`Role.name` is the stable role code (`WH_MGR`), **not** a display label — see
+[`role-arabic-label-contract-decision.md`](role-arabic-label-contract-decision.md)
+(D-RBAC-03). A list response's `data` member is the array itself; pagination is
+top level.
+
+Two RESOLUTION-027 obligations are **not** yet met and remain open under
+`eiams-frontend-718b`: role creation still returns `ResourceIdResponse{id}`
+rather than the full projection (§17), and role reads do not yet expose dotted
+`permissionCodes` (§15).

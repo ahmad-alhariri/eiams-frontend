@@ -1,9 +1,9 @@
-﻿import axios from 'axios'
+import axios from 'axios'
 import { delay, HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
 import { okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
@@ -11,19 +11,24 @@ const API_BASE_URL = '/api/v1'
 
 const sessionFixture: SessionResponse = {
   user: {
-    userId: '10000000-0000-4000-8000-000000000001',
-    username: 'warehouse.keeper',
-    displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
+    id: '10000000-0000-4000-8000-000000000001',
+    email: 'warehouse.keeper@eiams.local',
+    firstName: 'أمين',
+    lastName: 'المستودع',
+    employeeId: null,
+    employeeName: null,
+  },
+  role: {
+    id: '10000000-0000-4000-8000-000000000002',
+    name: 'WarehouseKeeper',
+    nameAr: 'أمين مستودع',
+    description: null,
   },
   permissionCodes: ['document.create'],
   activeScope: {
     scopeType: 'Warehouse',
     scopeId: '20000000-0000-4000-8000-000000000001',
-    warehouseId: '20000000-0000-4000-8000-000000000001',
-    siteId: '30000000-0000-4000-8000-000000000001',
-    displayName: 'المستودع المركزي',
+    scopeName: 'المستودع المركزي',
   },
 }
 

@@ -1,4 +1,4 @@
-﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { okJson, okPageJson } from '@/test/msw/envelope'
 import { renderHook, waitFor } from '@testing-library/react'
 import { http } from 'msw'
@@ -7,8 +7,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
 import {
-  createPermission,
-  createRole,
+  createPermissionCatalogEntry,
+  createRoleProjection,
   createUserRoleScope,
   createUserSummary,
 } from '@/test/msw/factories'
@@ -85,15 +85,15 @@ describe('admin query hooks', () => {
   })
 
   it('reads all administration resources through active-scope query keys', async () => {
-    const permission = createPermission()
-    const role = createRole()
+    const permission = createPermissionCatalogEntry()
+    const role = createRoleProjection()
     const user = createUserSummary()
     const assignment = createUserRoleScope({ userId: user.userId, role })
 
     server.use(
-      http.get(`${API_BASE_URL}/admin/permissions`, () => okJson([permission])),
-      http.get(`${API_BASE_URL}/admin/roles`, () => okJson([role])),
-      http.get(`${API_BASE_URL}/admin/roles/${role.roleId}`, () => okJson(role)),
+      http.get(`${API_BASE_URL}/admin/permissions`, () => okPageJson([permission])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okPageJson([role])),
+      http.get(`${API_BASE_URL}/admin/roles/${role.id}`, () => okJson(role)),
       http.get(`${API_BASE_URL}/admin/users`, () => okPageJson([user])),
       http.get(`${API_BASE_URL}/admin/users/${user.userId}`, () => okJson(user)),
       http.get(`${API_BASE_URL}/admin/users/${user.userId}/role-scopes`, () =>
@@ -103,7 +103,7 @@ describe('admin query hooks', () => {
 
     const permissions = renderHook(() => usePermissionsQuery(), { wrapper: createWrapper() })
     const roles = renderHook(() => useRolesQuery(), { wrapper: createWrapper() })
-    const roleDetail = renderHook(() => useRoleQuery(role.roleId), { wrapper: createWrapper() })
+    const roleDetail = renderHook(() => useRoleQuery(role.id), { wrapper: createWrapper() })
     const users = renderHook(() => useUsersQuery({ search: 'مدير' }), { wrapper: createWrapper() })
     const userDetail = renderHook(() => useUserQuery(user.userId), { wrapper: createWrapper() })
     const assignments = renderHook(() => useUserRoleScopesQuery(user.userId), {

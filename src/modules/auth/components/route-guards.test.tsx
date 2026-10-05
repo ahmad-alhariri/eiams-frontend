@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -11,29 +11,31 @@ import {
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import type { AuthSessionStatus } from '@/modules/auth/store/auth-session.store'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole } from '@/test/msw/factories'
 
 const activeScopeSession: SessionResponse = {
-  user: {
-    userId: '10000000-0000-4000-8000-000000000001',
-    username: 'warehouse.manager',
-    displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
-  },
+  user: createSessionUser({ firstName: 'أمين المستودع' }),
+  role: createSessionRole(),
   permissionCodes: ['inventory.view'],
   activeScope: {
     scopeType: 'Warehouse',
     scopeId: '20000000-0000-4000-8000-000000000001',
-    displayName: 'المستودع المركزي',
+    scopeName: 'المستودع المركزي',
   },
 }
 
+/**
+ * Deliberately builds a session carrying NO activeScope.
+ *
+ * `SessionResponse.activeScope` is required, so this payload cannot be expressed through the
+ * type — which is the point. It is the shape the guard must still refuse: the guard this bead
+ * closed compared `scopeState === 'SelectionRequired'` by equality, so undefined fell through
+ * to rendering the protected tree. The cast is the assertion under test, not a convenience,
+ * so it is confined to this one function.
+ */
 function sessionWithoutScope(): SessionResponse {
-  return {
-    user: activeScopeSession.user,
-    permissionCodes: activeScopeSession.permissionCodes,
-  }
+  return { ...activeScopeSession, activeScope: undefined } as unknown as SessionResponse
 }
 
 function renderRoutes({

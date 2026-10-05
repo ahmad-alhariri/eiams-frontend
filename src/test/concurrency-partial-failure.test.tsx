@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -11,13 +11,16 @@ import type {
   DocumentPolicy,
   InventoryAdjustment,
   ProblemDetails,
-  SessionResponse,
 } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   createActionAvailability,
   createDocumentPolicy,
   createMaterial,
   createProblemDetails,
+  createSessionRole,
+  createSessionScope,
+  createSessionUser,
   createWarehouseDocument,
   createWarehouseDocumentLine,
   deriveLifecycleEvents,
@@ -90,13 +93,9 @@ function policyErrorState(container: HTMLElement): HTMLElement | null {
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'concurrency.manager',
-      displayName: 'مدير المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستودع' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
   }
 }

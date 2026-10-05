@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it } from 'vitest'
@@ -9,7 +9,7 @@ import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { PERMISSION_CODES, type PermissionCode } from '@/config/permissions'
 import { ROUTE_METADATA, ROUTE_PATHS, type RouteKey } from '@/config/routes'
 import { hasRoutePermission } from '@/modules/auth/hooks/use-permission'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 /**
  * Cross-module route-guard verification (e24-t06).
@@ -42,17 +42,24 @@ function protectedRoutes(): RouteKey[] {
 function sessionWith(codes: readonly string[]): SessionResponse {
   return {
     user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'rbac.auditor',
-      displayName: 'مدقق الصلاحيات',
-      status: 'Active',
-      rowVersion: 1,
+      id: '10000000-0000-4000-8000-000000000001',
+      email: 'rbac.auditor@eiams.local',
+      firstName: 'مدقق الصلاحيات',
+      lastName: '',
+      employeeId: null,
+      employeeName: null,
+    },
+    role: {
+      id: '10000000-0000-4000-8000-0000000000ff',
+      name: 'TestRole',
+      nameAr: 'Ø¯ÙˆØ± Ø§Ø®ØªØ¨Ø§Ø±ÙŠ',
+      description: null,
     },
     permissionCodes: [...codes],
     activeScope: {
       scopeType: 'Warehouse',
       scopeId: '20000000-0000-4000-8000-000000000001',
-      displayName: 'المستودع المركزي',
+      scopeName: 'المستودع المركزي',
     },
   }
 }

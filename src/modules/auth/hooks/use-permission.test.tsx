@@ -1,4 +1,4 @@
-﻿import { renderHook, waitFor } from '@testing-library/react'
+import { renderHook, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
@@ -13,16 +13,13 @@ import {
 } from '@/modules/auth/hooks/use-permission'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 const sessionFixture: SessionResponse = {
-  user: {
-    userId: '10000000-0000-4000-8000-000000000001',
-    username: 'warehouse.manager',
-    displayName: 'مدير المستودع',
-    status: 'Active',
-    rowVersion: 1,
-  },
+  user: createSessionUser({ firstName: 'مدير المستودع' }),
+  role: createSessionRole(),
+  activeScope: createSessionScope(),
   permissionCodes: ['document.view', 'document.create', 'inventory.view', 'future.backend.code'],
 }
 

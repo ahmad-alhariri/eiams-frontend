@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { okPageJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
 import { http } from 'msw'
@@ -7,7 +7,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { ActiveCountWarning } from './active-count-warning'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: { kind: 'enterprise' as const } }),
@@ -18,13 +19,9 @@ const WAREHOUSE_ID = '553e4567-e89b-42d3-a456-426614174005'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'count.manager',
-      displayName: 'مدير الجرد',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير الجرد' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
   }
 }

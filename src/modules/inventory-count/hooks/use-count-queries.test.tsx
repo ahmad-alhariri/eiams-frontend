@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiJson, okPageJson } from '@/test/msw/envelope'
 import { render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -14,7 +14,8 @@ import {
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: { kind: 'enterprise' } }),
@@ -30,13 +31,9 @@ const ALL_LINES_PAGE_SIZE = 200
 
 function session(): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'count.operator',
-      displayName: 'مشغّل الجرد',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مشغّل الجرد' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: ['count.view', 'count.enter'],
   }
 }

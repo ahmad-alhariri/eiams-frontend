@@ -4,13 +4,17 @@ import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-con
 import { adminService } from '@/modules/admin/services/admin.service'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { queryKeys } from '@/shared/services/query-keys'
+import type { ReplaceRoleScopesRequest, UserUpsertRequest } from '@/shared/types/generated/eiams-v1'
 import type {
-  ReplaceRoleScopesRequest,
-  RoleUpsertRequest,
-  UserUpsertRequest,
-} from '@/shared/types/generated/eiams-v1'
+  ReplaceRolePermissionsRequest,
+  UpdateRoleMetadataRequest,
+} from '@/modules/admin/types/role.types'
 
-type UpdateRoleVariables = { roleId: string; request: RoleUpsertRequest }
+type UpdateRoleMetadataVariables = { roleId: string; request: UpdateRoleMetadataRequest }
+type ReplaceRolePermissionsVariables = {
+  roleId: string
+  request: ReplaceRolePermissionsRequest
+}
 type UpdateUserVariables = { userId: string; request: UserUpsertRequest }
 type ReplaceUserRoleScopesVariables = { userId: string; request: ReplaceRoleScopesRequest }
 
@@ -37,12 +41,36 @@ export function useCreateRoleMutation() {
   return useMutation({ mutationFn: adminService.createRole, onSuccess: invalidate })
 }
 
-export function useUpdateRoleMutation() {
+/**
+ * Role metadata only. Permission membership has its own mutation
+ * (`useReplaceRolePermissionsMutation`) because the two are separate server
+ * operations with separate authority, and because a broad upsert that carried
+ * both would let a metadata save silently rewrite permissions.
+ */
+export function useUpdateRoleMetadataMutation() {
   const invalidate = useInvalidateAdmin()
   return useMutation({
-    mutationFn: ({ roleId, request }: UpdateRoleVariables) =>
-      adminService.updateRole(roleId, request),
+    mutationFn: ({ roleId, request }: UpdateRoleMetadataVariables) =>
+      adminService.updateRoleMetadata(roleId, request),
     onSuccess: invalidate,
+  })
+}
+
+/**
+ * Wholesale permission replacement for one role.
+ *
+ * A 409 means someone else changed the role after this form was loaded. The
+ * response is discarded and the admin query is invalidated rather than the write
+ * being replayed: replaying a stale broad form is how a concurrent permission
+ * change gets overwritten.
+ */
+export function useReplaceRolePermissionsMutation() {
+  const invalidate = useInvalidateAdmin()
+  return useMutation({
+    mutationFn: ({ roleId, request }: ReplaceRolePermissionsVariables) =>
+      adminService.replaceRolePermissions(roleId, request),
+    onSuccess: invalidate,
+    onError: invalidate,
   })
 }
 

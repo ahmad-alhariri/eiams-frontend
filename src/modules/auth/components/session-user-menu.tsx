@@ -1,4 +1,4 @@
-﻿import { useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { IconChevronDown, IconLogout, IconSettings, IconUserCircle } from '@tabler/icons-react'
 import { useNavigate } from 'react-router'
 
@@ -14,7 +14,11 @@ import {
 } from '@/shared/ui/dropdown-menu'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { toast } from '@/shared/ui/toast-manager'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import {
+  toSessionUserDisplayName,
+  toSessionUserInitials,
+} from '@/modules/auth/services/session-display'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 /**
  * Observes the single query-backed session projection without triggering a
@@ -53,7 +57,7 @@ function SessionUserMenu() {
     return null
   }
 
-  const initials = session.user.displayName.trim().slice(0, 2)
+  const initials = toSessionUserInitials(session.user)
 
   const handleLogout = async () => {
     try {
@@ -90,7 +94,7 @@ function SessionUserMenu() {
         </span>
         <span className="hidden max-w-40 truncate text-start md:block">
           <span className="block truncate text-sm font-medium text-white">
-            {session.user.displayName}
+            {toSessionUserDisplayName(session.user)}
           </span>
         </span>
         <IconChevronDown size={20} aria-hidden className="shrink-0" />

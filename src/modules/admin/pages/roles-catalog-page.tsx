@@ -7,16 +7,24 @@ import { ROUTE_PATHS } from '@/config/routes'
 import { RolePermissionDialog } from '@/modules/admin/components/role-permission-dialog'
 import { usePermissionsQuery, useRolesQuery } from '@/modules/admin/hooks/use-admin-queries'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
 import { dataTableFeatures, DataTable } from '@/shared/ui/data-table'
 import { listRows } from '@/shared/utils/table-data'
-import type { Permission, Role } from '@/shared/types/generated/eiams-v1'
+import type { PermissionCatalogEntry, RoleProjection } from '@/modules/admin/types/role.types'
 
-const roleColumnHelper = createColumnHelper<typeof dataTableFeatures, Role>()
-const permissionColumnHelper = createColumnHelper<typeof dataTableFeatures, Permission>()
+const roleColumnHelper = createColumnHelper<typeof dataTableFeatures, RoleProjection>()
+const permissionColumnHelper = createColumnHelper<
+  typeof dataTableFeatures,
+  PermissionCatalogEntry
+>()
+
+const SCOPE_TYPE_LABELS_AR: Readonly<Record<string, string>> = {
+  Enterprise: 'مستوى المؤسسة',
+  Site: 'موقع',
+  Warehouse: 'مستودع',
+}
 
 const permissionColumns = permissionColumnHelper.columns([
   permissionColumnHelper.accessor('nameAr', {
@@ -42,9 +50,9 @@ function RolesCatalogPage() {
   const permissionsQuery = usePermissionsQuery()
   const { has } = usePermission()
   const canManage = has('admin.role.manage')
-  const [dialogRole, setDialogRole] = useState<Role | null>(null)
+  const [dialogRole, setDialogRole] = useState<RoleProjection | null>(null)
 
-  const openMatrix = useCallback((role: Role) => setDialogRole(role), [])
+  const openMatrix = useCallback((role: RoleProjection) => setDialogRole(role), [])
   const closeMatrix = useCallback((open: boolean) => {
     if (!open) setDialogRole(null)
   }, [])
@@ -57,23 +65,36 @@ function RolesCatalogPage() {
           header: 'اسم الدور',
           cell: (info) => (
             <Link
-              to={generatePath(ROUTE_PATHS.adminRoleDetail, { roleId: info.row.original.roleId })}
+              to={generatePath(ROUTE_PATHS.adminRoleDetail, { roleId: info.row.original.id })}
               className="font-semibold text-foreground underline-offset-4 hover:text-primary hover:underline"
             >
               {info.getValue()}
             </Link>
           ),
         }),
-        roleColumnHelper.accessor('code', { id: 'code', header: 'الرمز' }),
+        roleColumnHelper.accessor('name', {
+          id: 'name',
+          header: 'الرمز',
+          cell: (info) => <span dir="ltr">{info.getValue()}</span>,
+        }),
         roleColumnHelper.accessor('permissionCodes', {
           id: 'permissionCount',
           header: 'الصلاحيات',
           cell: (info) => `${info.getValue().length} صلاحية`,
         }),
-        roleColumnHelper.accessor('status', {
-          id: 'status',
-          header: 'الحالة',
-          cell: (info) => <StatusBadge entity="record" status={info.getValue()} />,
+        // The role projection carries no status field; the server has no role
+        // status concept. Assignment scope is what actually constrains a role,
+        // so that is what the table reports.
+        roleColumnHelper.accessor('allowedScopeTypes', {
+          id: 'allowedScopeTypes',
+          header: 'نطاقات الإسناد',
+          cell: (info) =>
+            info.getValue().length === 0
+              ? '—'
+              : info
+                  .getValue()
+                  .map((scopeType) => SCOPE_TYPE_LABELS_AR[scopeType] ?? scopeType)
+                  .join('، '),
         }),
         ...(canManage
           ? [

@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
@@ -7,9 +7,15 @@ import { AdjustmentActionBar } from '@/modules/adjustment/components/adjustment-
 import { AttachmentPanel } from '@/shared/documents/attachment-panel'
 import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import { createActionAvailability, createDocumentPolicy } from '@/test/msw/factories'
+import {
+  createActionAvailability,
+  createDocumentPolicy,
+  createSessionRole,
+  createSessionScope,
+  createSessionUser,
+} from '@/test/msw/factories'
 import { ACTIVE_SOFT_FREEZE_ADVISORY_CODE } from '@/shared/documents/policy-blocker-codes'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 /**
  * Cross-surface policy-failure presentation (e24-t07).
@@ -44,13 +50,9 @@ function advisoryLine(container: HTMLElement): string {
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'warehouse.manager',
-      displayName: 'أمين المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'أمين المستودع' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
   }
 }

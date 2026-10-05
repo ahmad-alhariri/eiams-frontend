@@ -6,17 +6,29 @@ import type {
   SessionAdapterEvent,
   SessionAdapterListener,
 } from '@/shared/services/session-adapter'
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
 
 const sessionFixture: SessionResponse = {
   user: {
-    userId: '10000000-0000-4000-8000-000000000001',
-    username: 'warehouse.keeper',
-    displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
+    id: '10000000-0000-4000-8000-000000000001',
+    email: 'warehouse.keeper@eiams.local',
+    firstName: 'أمين',
+    lastName: 'المستودع',
+    employeeId: null,
+    employeeName: null,
+  },
+  role: {
+    id: '10000000-0000-4000-8000-000000000002',
+    name: 'WarehouseKeeper',
+    nameAr: 'أمين مستودع',
+    description: null,
   },
   permissionCodes: ['document.create'],
+  activeScope: {
+    scopeType: 'Enterprise',
+    scopeId: null,
+    scopeName: 'الهيئة',
+  },
 }
 
 const tokenResponse: AuthTokenResponse = {

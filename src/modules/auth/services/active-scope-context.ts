@@ -2,16 +2,16 @@ import type { QueryClient } from '@tanstack/react-query'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
-import type { ScopeContext, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse, SessionScope } from '@/modules/auth/types/session.types'
 
 export interface ActiveScopeContext {
   getSession: () => SessionResponse | undefined
-  getActiveScope: () => ScopeContext | undefined
+  getActiveScope: () => SessionScope | undefined
   getActiveScopeCacheKey: () => ScopeCacheKey | undefined
 }
 
 /** Converts the server-owned scope projection into the shared scoped-cache namespace. */
-export function toScopeCacheKey(scope: ScopeContext): ScopeCacheKey {
+export function toScopeCacheKey(scope: SessionScope): ScopeCacheKey {
   if (scope.scopeType === 'Enterprise') {
     return { kind: 'enterprise' }
   }
@@ -25,8 +25,14 @@ export function toScopeCacheKey(scope: ScopeContext): ScopeCacheKey {
     : { kind: 'warehouse', id: scope.scopeId }
 }
 
-/** Returns the server-assigned active scope, if the session carries one. */
-export function selectedScope(session: SessionResponse | undefined): ScopeContext | undefined {
+/**
+ * Returns the server-assigned active scope.
+ *
+ * The session itself may be absent (not yet hydrated), which is why this accepts
+ * `undefined`. A session that *does* exist always carries a scope, so there is no
+ * "loaded but scope unknown" state to represent here.
+ */
+export function selectedScope(session: SessionResponse | undefined): SessionScope | undefined {
   return session?.activeScope
 }
 

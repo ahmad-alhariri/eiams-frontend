@@ -1,4 +1,4 @@
-﻿import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
@@ -9,7 +9,7 @@ import { Sidebar } from '@/shared/layout/sidebar/sidebar'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createQueryClient } from '@/shared/services/query.client'
 import { useUiStore } from '@/shared/store/ui.store'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 type Mql = {
   matches: boolean
@@ -49,16 +49,23 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   const activeScope = {
     scopeType: 'Warehouse' as const,
     scopeId: '20000000-0000-4000-8000-000000000001',
-    displayName: 'المستودع المركزي',
+    scopeName: 'المستودع المركزي',
   }
 
   return {
     user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'warehouse.manager',
-      displayName: 'مدير المستودع',
-      status: 'Active',
-      rowVersion: 1,
+      id: '10000000-0000-4000-8000-000000000001',
+      email: 'warehouse.manager@eiams.local',
+      firstName: 'مدير',
+      lastName: 'المستودع',
+      employeeId: null,
+      employeeName: null,
+    },
+    role: {
+      id: '10000000-0000-4000-8000-000000000002',
+      name: 'WarehouseManager',
+      nameAr: 'مدير مستودع',
+      description: null,
     },
     permissionCodes,
     activeScope,

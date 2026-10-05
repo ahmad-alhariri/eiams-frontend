@@ -3,7 +3,7 @@ import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import type { AuthService } from '@/modules/auth/services/auth.service'
 import type { AuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import type { SessionAdapter } from '@/shared/services/session-adapter'
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
 
 /** The sole cached server projection of the signed-in EIAMS session. */
 export const authSessionQueryKey = ['auth', 'session'] as const

@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiJson, okJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
 import { http } from 'msw'
@@ -8,7 +8,9 @@ import { describe, expect, it, vi } from 'vitest'
 import AdjustmentDetailPage from './adjustment-detail-page'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
-import type { InventoryAdjustment, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { InventoryAdjustment } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 vi.mock('@/shared/ui/toast-manager', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -26,13 +28,9 @@ const ADJUSTMENT_ID = '423e4567-e89b-42d3-a456-426614174004'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'adjustment.manager',
-      displayName: 'مدير المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستودع' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
   }
 }

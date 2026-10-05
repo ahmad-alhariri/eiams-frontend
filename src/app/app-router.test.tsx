@@ -8,8 +8,8 @@ import { ROUTE_PATHS } from '@/config/routes'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { queryClient } from '@/shared/services/query.client'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
-import { createScopeContext, createSession } from '@/test/msw/factories'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSession, createSessionScope } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -17,7 +17,7 @@ const USER_MENU_TRIGGER = 'قائمة المستخدم'
 
 function authenticatedSession(): SessionResponse {
   return createSession({
-    activeScope: createScopeContext({ scopeType: 'Warehouse' }),
+    activeScope: createSessionScope({ scopeType: 'Warehouse' }),
     permissionCodes: ['inventory.view'],
   })
 }

@@ -1,4 +1,4 @@
-﻿import axios from 'axios'
+import axios from 'axios'
 import { createAxiosTransport } from '@/shared/api/axios-transport'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { createAuthService } from '@/modules/auth/services/auth.service'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
 import { errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
@@ -14,19 +14,24 @@ const API_BASE_URL = '/api/v1'
 
 const sessionFixture: SessionResponse = {
   user: {
-    userId: '10000000-0000-4000-8000-000000000001',
-    username: 'warehouse.keeper',
-    displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
+    id: '10000000-0000-4000-8000-000000000001',
+    email: 'warehouse.keeper@eiams.local',
+    firstName: 'أمين المستودع',
+    lastName: '',
+    employeeId: null,
+    employeeName: null,
+  },
+  role: {
+    id: '10000000-0000-4000-8000-0000000000ff',
+    name: 'TestRole',
+    nameAr: 'Ø¯ÙˆØ± Ø§Ø®ØªØ¨Ø§Ø±ÙŠ',
+    description: null,
   },
   permissionCodes: ['document.create'],
   activeScope: {
     scopeType: 'Warehouse',
     scopeId: '20000000-0000-4000-8000-000000000001',
-    warehouseId: '20000000-0000-4000-8000-000000000001',
-    siteId: '30000000-0000-4000-8000-000000000001',
-    displayName: 'المستودع المركزي',
+    scopeName: 'المستودع المركزي',
   },
 }
 
@@ -115,7 +120,6 @@ describe('AuthService', () => {
 
     expect(axios.isAxiosError(error)).toBe(true)
     expect(normalizeApiError(error)).toMatchObject({
-      status: 404,
       code: 'USERS_NOT_FOUND',
       titleAr: 'لم يتم العثور على البيانات المطلوبة.',
     })

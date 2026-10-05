@@ -1,4 +1,4 @@
-﻿import { createAxiosTransport } from '@/shared/api/axios-transport'
+import { createAxiosTransport } from '@/shared/api/axios-transport'
 import { errJson, okJson } from '@/test/msw/envelope'
 import { http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createReceivingService } from '@/modules/receiving/services/receiving.service'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { createDevSession } from '@/shared/services/dev-session'
-import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
+
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -15,7 +15,7 @@ const bundles: ApiClientBundle[] = []
 function setupService() {
   const bundle = createApiClient({
     baseURL: API_BASE_URL,
-    refreshSession: async () => createDevSession() as AuthTokenResponse,
+    refreshSession: async () => createDevSession(),
   })
   bundles.push(bundle)
   return createReceivingService(createAxiosTransport(bundle.client))

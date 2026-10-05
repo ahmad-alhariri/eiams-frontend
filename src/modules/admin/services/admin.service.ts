@@ -2,34 +2,60 @@
 import { apiTransport } from '@/shared/api/transport'
 import type {
   paths,
-  Permission,
   ReplaceRoleScopesRequest,
-  Role,
-  RoleUpsertRequest,
   UserPage,
   UserRoleScope,
   UserSummary,
   UserUpsertRequest,
 } from '@/shared/types/generated/eiams-v1'
 import type { ListUsersQuery } from '@/modules/admin/types/admin.types'
+import type {
+  CreateRoleRequest,
+  PermissionCatalogEntry,
+  ReplaceRolePermissionsRequest,
+  RoleProjection,
+  UpdateRoleMetadataRequest,
+} from '@/modules/admin/types/role.types'
 
 const PERMISSIONS_PATH = '/admin/permissions' satisfies keyof paths
 const ROLES_PATH = '/admin/roles' satisfies keyof paths
-const ROLE_PATH = '/admin/roles/{roleId}' satisfies keyof paths
 const USERS_PATH = '/admin/users' satisfies keyof paths
 const USER_PATH = '/admin/users/{userId}' satisfies keyof paths
 const USER_ROLE_SCOPES_PATH = '/admin/users/{userId}/role-scopes' satisfies keyof paths
+
+// Declared locally rather than with `satisfies keyof paths`: the generated `paths`
+// map is the stale provisional artifact, and it still advertises the one-at-a-time
+// role-permission writes this surface no longer uses (D-INT-02 / ADR-0001).
+const ROLE_PATH = '/admin/roles/{roleId}'
+const ROLE_PERMISSIONS_PATH = '/admin/roles/{roleId}/permissions'
+
+/**
+ * The catalogue and role list are paged server-side with pagination carried at the
+ * top level of the envelope. Reading them through `request` would silently truncate
+ * at the default page size of 20, which is below the 29-permission catalogue, so
+ * both go through `requestPage`.
+ */
+const FULL_PAGE_QUERY = { page: 1, pageSize: 100 } as const
 
 function pathWithId(path: string, parameter: string, id: string): string {
   return path.replace(parameter, encodeURIComponent(id))
 }
 
 export interface AdminService {
-  listPermissions: () => Promise<readonly Permission[]>
-  listRoles: () => Promise<readonly Role[]>
-  getRole: (roleId: string) => Promise<Role>
-  createRole: (request: RoleUpsertRequest) => Promise<Role>
-  updateRole: (roleId: string, request: RoleUpsertRequest) => Promise<Role>
+  listPermissions: () => Promise<readonly PermissionCatalogEntry[]>
+  listRoles: () => Promise<readonly RoleProjection[]>
+  getRole: (roleId: string) => Promise<RoleProjection>
+  createRole: (request: CreateRoleRequest) => Promise<RoleProjection>
+  /** Metadata only; permission membership is `replaceRolePermissions`. */
+  updateRoleMetadata: (
+    roleId: string,
+    request: UpdateRoleMetadataRequest,
+  ) => Promise<RoleProjection>
+  /** Wholesale permission replacement; carries no metadata fields. */
+  replaceRolePermissions: (
+    roleId: string,
+    request: ReplaceRolePermissionsRequest,
+  ) => Promise<RoleProjection>
   listUsers: (query: ListUsersQuery) => Promise<UserPage>
   getUser: (userId: string) => Promise<UserSummary>
   createUser: (request: UserUpsertRequest) => Promise<UserSummary>
@@ -49,38 +75,49 @@ export interface AdminService {
 export function createAdminService(transport: ApiTransport): AdminService {
   return {
     async listPermissions() {
-      const response = await transport.request<readonly Permission[]>({
+      const page = await transport.requestPage<PermissionCatalogEntry>({
         path: PERMISSIONS_PATH,
         method: 'GET',
+        query: FULL_PAGE_QUERY,
       })
-      return response
+      return page.items
     },
     async listRoles() {
-      const response = await transport.request<readonly Role[]>({ path: ROLES_PATH, method: 'GET' })
-      return response
+      const page = await transport.requestPage<RoleProjection>({
+        path: ROLES_PATH,
+        method: 'GET',
+        query: FULL_PAGE_QUERY,
+      })
+      return page.items
     },
     async getRole(roleId) {
-      const response = await transport.request<Role>({
+      return await transport.request<RoleProjection>({
         path: pathWithId(ROLE_PATH, '{roleId}', roleId),
         method: 'GET',
       })
-      return response
     },
     async createRole(request) {
-      const response = await transport.request<Role>({
+      // Answers 201 with the authoritative role projection, not a bare id: the role
+      // and its grants are created as one atomic unit, so the response IS the aggregate.
+      return await transport.request<RoleProjection>({
         path: ROLES_PATH,
         method: 'POST',
         body: request,
       })
-      return response
     },
-    async updateRole(roleId, request) {
-      const response = await transport.request<Role>({
+    async updateRoleMetadata(roleId, request) {
+      return await transport.request<RoleProjection>({
         path: pathWithId(ROLE_PATH, '{roleId}', roleId),
         method: 'PUT',
         body: request,
       })
-      return response
+    },
+    async replaceRolePermissions(roleId, request) {
+      return await transport.request<RoleProjection>({
+        path: pathWithId(ROLE_PERMISSIONS_PATH, '{roleId}', roleId),
+        method: 'PUT',
+        body: request,
+      })
     },
     async listUsers(query) {
       const page = await transport.requestPage<UserSummary>({

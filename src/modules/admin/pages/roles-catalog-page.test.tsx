@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { okJson } from '@/test/msw/envelope'
+import { okPageJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PropsWithChildren } from 'react'
@@ -8,7 +8,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import { createPermission, createRole, createSession } from '@/test/msw/factories'
+import {
+  createPermissionCatalogEntry,
+  createRoleProjection,
+  createSession,
+} from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -44,12 +48,15 @@ afterEach(() => {
 
 describe('RolesCatalogPage', () => {
   it('renders contract-backed roles and the permission catalog as a read-only Arabic surface', async () => {
-    const role = createRole({ permissionCodes: ['admin.role.view', 'admin.role.manage'] })
-    const permission = createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
+    const role = createRoleProjection({ permissionCodes: ['admin.role.view', 'admin.role.manage'] })
+    const permission = createPermissionCatalogEntry({
+      code: 'admin.role.view',
+      nameAr: 'عرض الأدوار',
+    })
 
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles`, () => okJson([role])),
-      http.get(`${API_BASE_URL}/admin/permissions`, () => okJson([permission])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okPageJson([role])),
+      http.get(`${API_BASE_URL}/admin/permissions`, () => okPageJson([permission])),
     )
 
     render(<RolesCatalogPage />, { wrapper: createWrapper() })
@@ -58,7 +65,7 @@ describe('RolesCatalogPage', () => {
       await screen.findByRole('heading', { level: 1, name: 'الأدوار والصلاحيات' }),
     ).toBeInTheDocument()
     expect(await screen.findByText(role.nameAr)).toBeInTheDocument()
-    expect(screen.getByText(role.code)).toBeInTheDocument()
+    expect(screen.getByText(role.name)).toBeInTheDocument()
     expect(screen.getByText('2 صلاحية')).toBeInTheDocument()
     expect(await screen.findByText(permission.nameAr)).toBeInTheDocument()
     expect(screen.getByText(permission.code)).toBeInTheDocument()
@@ -67,14 +74,16 @@ describe('RolesCatalogPage', () => {
 
   it('retries a failed roles request from the Arabic error state without affecting the permission catalog', async () => {
     let roleAttempts = 0
-    const permission = createPermission()
+    const permission = createPermissionCatalogEntry()
 
     server.use(
       http.get(`${API_BASE_URL}/admin/roles`, () => {
         roleAttempts += 1
-        return roleAttempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson([createRole()])
+        return roleAttempts === 1
+          ? new HttpResponse(null, { status: 500 })
+          : okPageJson([createRoleProjection()])
       }),
-      http.get(`${API_BASE_URL}/admin/permissions`, () => okJson([permission])),
+      http.get(`${API_BASE_URL}/admin/permissions`, () => okPageJson([permission])),
     )
 
     render(<RolesCatalogPage />, { wrapper: createWrapper() })
@@ -89,8 +98,8 @@ describe('RolesCatalogPage', () => {
 
   it('renders independent Arabic empty states for both catalog resources', async () => {
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles`, () => okJson([])),
-      http.get(`${API_BASE_URL}/admin/permissions`, () => okJson([])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/admin/permissions`, () => okPageJson([])),
     )
 
     render(<RolesCatalogPage />, { wrapper: createWrapper() })
@@ -101,18 +110,21 @@ describe('RolesCatalogPage', () => {
 
   it('opens the role permission matrix prefilled from the row action for admin.role.manage holders', async () => {
     const user = userEvent.setup()
-    const role = createRole({ permissionCodes: ['admin.role.view'] })
-    const viewPermission = createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
-    const managePermission = createPermission({
-      permissionId: '00000000-0000-4000-8000-0000000000d1',
+    const role = createRoleProjection({ permissionCodes: ['admin.role.view'] })
+    const viewPermission = createPermissionCatalogEntry({
+      code: 'admin.role.view',
+      nameAr: 'عرض الأدوار',
+    })
+    const managePermission = createPermissionCatalogEntry({
+      id: '00000000-0000-4000-8000-0000000000d1',
       code: 'admin.role.manage',
       nameAr: 'إدارة الأدوار',
     })
 
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles`, () => okJson([role])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okPageJson([role])),
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        okJson([viewPermission, managePermission]),
+        okPageJson([viewPermission, managePermission]),
       ),
     )
 

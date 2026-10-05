@@ -6,11 +6,12 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
-import { errJson, okJson } from '@/test/msw/envelope'
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import {
   createRole,
+  createRoleProjection,
   createSession,
   createUserRoleScope,
   createUserSummary,
@@ -29,8 +30,11 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 const API_BASE_URL = '/api/v1'
 const USER_ID = '00000000-0000-4000-8000-000000000099'
 const SITE_ID = '00000000-0000-4000-8000-000000000071'
-const ROLE_A = createRole({ roleId: '00000000-0000-4000-8000-0000000000a1', nameAr: 'مدير النظام' })
-const ROLE_B = createRole({ roleId: '00000000-0000-4000-8000-0000000000b2', nameAr: 'مدقق' })
+const ROLE_A = createRoleProjection({
+  id: '00000000-0000-4000-8000-0000000000a1',
+  nameAr: 'مدير النظام',
+})
+const ROLE_B = createRoleProjection({ id: '00000000-0000-4000-8000-0000000000b2', nameAr: 'مدقق' })
 
 function PageWrapper({ children }: PropsWithChildren) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -71,12 +75,12 @@ function seedRoleScopes() {
     http.get(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, () =>
       okJson([
         createUserRoleScope({
-          role: createRole({ roleId: ROLE_A.roleId, nameAr: 'مدير النظام' }),
+          role: createRole({ roleId: ROLE_A.id, nameAr: 'مدير النظام' }),
           scope: { scopeType: 'Enterprise', scopeId: null, displayName: 'المؤسسة' },
         }),
       ]),
     ),
-    http.get(`${API_BASE_URL}/admin/roles`, () => okJson([ROLE_A, ROLE_B])),
+    http.get(`${API_BASE_URL}/admin/roles`, () => okPageJson([ROLE_A, ROLE_B])),
   )
 }
 
@@ -96,11 +100,11 @@ describe('UserDetailPage', () => {
         receivedBodies.push(await request.json())
         return okJson([
           createUserRoleScope({
-            role: createRole({ roleId: ROLE_A.roleId, nameAr: 'مدير النظام' }),
+            role: createRole({ roleId: ROLE_A.id, nameAr: 'مدير النظام' }),
             scope: { scopeType: 'Enterprise', scopeId: null, displayName: 'المؤسسة' },
           }),
           createUserRoleScope({
-            role: createRole({ roleId: ROLE_B.roleId, nameAr: 'مدقق' }),
+            role: createRole({ roleId: ROLE_B.id, nameAr: 'مدقق' }),
             scope: { scopeType: 'Site', scopeId: 'site-1', displayName: 'موقع' },
           }),
         ])
@@ -147,8 +151,8 @@ describe('UserDetailPage', () => {
       expect(receivedBodies).toEqual([
         {
           assignments: [
-            { roleId: ROLE_A.roleId, scopeId: null, scopeType: 'Enterprise' },
-            { roleId: ROLE_B.roleId, scopeId: SITE_ID, scopeType: 'Site' },
+            { roleId: ROLE_A.id, scopeId: null, scopeType: 'Enterprise' },
+            { roleId: ROLE_B.id, scopeId: SITE_ID, scopeType: 'Site' },
           ],
           rowVersion: 7,
         },
@@ -252,7 +256,7 @@ describe('UserDetailPage', () => {
         `${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`,
         () => new HttpResponse(null, { status: 500 }),
       ),
-      http.get(`${API_BASE_URL}/admin/roles`, () => okJson([ROLE_A])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okPageJson([ROLE_A])),
     )
 
     render(<UserDetailPage />, { wrapper: PageWrapper })

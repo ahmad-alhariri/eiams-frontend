@@ -162,3 +162,15 @@ backend-authoritative requirement above.
   the production session and OpenAPI contract.
 - `eiams-frontend-whhu.11` — enforce the exactly-one user role-scope
   lifecycle in the backend/database/API (dedicated prerequisite).
+
+## Amendments
+
+- **D-RBAC-03 (2026-10-04) — `Role.nameAr` is required.** The role read and
+  write contract carries a required Arabic display label, and the session role
+  DTO carries it too. `Role.Name` remains the role code (`WH_MGR`), not a
+  display label, so the Arabic-first UI had nothing to render before this. This
+  knowingly departs from RESOLUTION-027 §15 and RESOLUTION-019 §14; the
+  deviation and its accepted consequences are recorded in
+  [`role-arabic-label-contract-decision.md`](role-arabic-label-contract-decision.md).
+  Consequence for this decision's scope: any role-scoped session consumer must
+  expect `role.nameAr`, and the frontend role write path must send it.

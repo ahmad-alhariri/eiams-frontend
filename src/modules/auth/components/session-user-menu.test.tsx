@@ -1,4 +1,4 @@
-﻿import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { useLocation } from 'react-router'
@@ -11,29 +11,39 @@ import { SessionUserMenu } from '@/modules/auth/components/session-user-menu'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { queryClient } from '@/shared/services/query.client'
-import type { ScopeContext, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse, SessionScope } from '@/modules/auth/types/session.types'
 import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = '20000000-0000-4000-8000-000000000001'
 
-const warehouseScope: ScopeContext = {
+const warehouseScope: SessionScope = {
   scopeType: 'Warehouse',
   scopeId: WAREHOUSE_ID,
-  warehouseId: WAREHOUSE_ID,
-  siteId: '30000000-0000-4000-8000-000000000001',
-  displayName: 'المستودع المركزي',
+  scopeName: 'المستودع المركزي',
 }
 
+/**
+ * `displayName` is the name the header should SHOW, not a field the session carries. The
+ * session projection has `firstName`/`lastName` and no `displayName`, so the fixture puts
+ * the wanted label in `firstName` and leaves the family name empty.
+ */
 function sessionWith(displayName: string, permissionCodes: readonly string[] = ['inventory.view']) {
   return {
     user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'warehouse.manager',
-      displayName,
-      status: 'Active' as const,
-      rowVersion: 1,
+      id: '10000000-0000-4000-8000-000000000001',
+      email: 'warehouse.manager@eiams.local',
+      firstName: displayName,
+      lastName: '',
+      employeeId: null,
+      employeeName: null,
+    },
+    role: {
+      id: '10000000-0000-4000-8000-000000000002',
+      name: 'WarehouseManager',
+      nameAr: 'مدير مستودع',
+      description: null,
     },
     permissionCodes,
     activeScope: warehouseScope,

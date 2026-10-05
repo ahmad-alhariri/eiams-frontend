@@ -6,7 +6,8 @@ import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { cn } from '@/shared/utils/class-names'
 import { useUiStore } from '@/shared/store/ui.store'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import { toSessionScopeLabel } from '@/modules/auth/services/session-display'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   SIDEBAR_NAV_GROUPS,
   filterSidebarNav,
@@ -109,7 +110,7 @@ function SidebarScopeIndicator({ collapsed }: { collapsed: boolean }) {
     enabled: false,
     staleTime: Number.POSITIVE_INFINITY,
   })
-  const scopeName = session?.activeScope?.displayName
+  const scopeName = toSessionScopeLabel(session?.activeScope)
   const accessibleLabel =
     scopeName === undefined ? 'نطاق العمل غير محدد' : `نطاق العمل الحالي: ${scopeName}`
 

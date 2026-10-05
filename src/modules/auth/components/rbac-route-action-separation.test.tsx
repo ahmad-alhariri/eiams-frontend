@@ -1,4 +1,4 @@
-﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { okJson } from '@/test/msw/envelope'
 import userEvent from '@testing-library/user-event'
@@ -13,30 +13,24 @@ import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
 import { type ApiClientBundle } from '@/shared/services/api.client'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { DocumentPolicy, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { DocumentPolicy } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = '20000000-0000-4000-8000-000000000001'
-const SITE_ID = '30000000-0000-4000-8000-000000000001'
 
 const warehouseScope = {
   scopeType: 'Warehouse' as const,
   scopeId: WAREHOUSE_ID,
-  displayName: 'مستودع دمشق المركزي',
-  siteId: SITE_ID,
-  warehouseId: WAREHOUSE_ID,
+  scopeName: 'مستودع دمشق المركزي',
 }
 
 function selectedSession(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'warehouse.keeper',
-      displayName: 'أمين المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'أمين المستودع' }),
+    role: createSessionRole(),
     permissionCodes,
     activeScope: warehouseScope,
   }
