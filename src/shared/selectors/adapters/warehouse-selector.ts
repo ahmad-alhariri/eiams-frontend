@@ -18,8 +18,8 @@ export type WarehouseLoader = EntityLoader<Warehouse>
  */
 const warehouseAdapter: EntitySelectorAdapter<Warehouse> = createEntitySelectorAdapter<Warehouse>({
   toOption: (warehouse) => ({
-    value: warehouse.warehouseId,
-    label: warehouse.nameAr,
+    value: warehouse.id,
+    label: warehouse.name,
     disabled: warehouse.status !== 'Active',
     payload: warehouse,
   }),

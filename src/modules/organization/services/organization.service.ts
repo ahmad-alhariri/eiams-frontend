@@ -3,13 +3,16 @@ import { apiTransport } from '@/shared/api/transport'
 import type { ApiPage } from '@/shared/api/api-contracts'
 import type {
   Site,
-  SiteUpsertRequest,
+  SiteCreateRequest,
+  SiteUpdateRequest,
   SitePage,
   OrganizationalUnit,
-  OrganizationalUnitUpsertRequest,
+  OrganizationalUnitCreateRequest,
+  OrganizationalUnitUpdateRequest,
   OrganizationalUnitPage,
   Employee,
-  EmployeeUpsertRequest,
+  EmployeeCreateRequest,
+  EmployeeUpdateRequest,
   EmployeePage,
   ExternalParty,
   ExternalPartyUpsertRequest,
@@ -20,6 +23,7 @@ import type {
   ListExternalPartiesQuery,
   PageMeta,
 } from '@/modules/organization/types/organization.api-types'
+import type { ResourceIdResponse } from '@/shared/api/api-contracts'
 
 const SITES_PATH = '/sites'
 const SITE_PATH = '/sites/{siteId}'
@@ -53,24 +57,38 @@ function normalizePage<T>(apiPage: ApiPage<T>): { items: ReadonlyArray<T>; meta:
   }
 }
 
+/**
+ * Write shapes verified against the backend C# `RequestBody` records (txq4).
+ *
+ * Create and update are DELIBERATELY separate types, not one "upsert": the
+ * update routes accept a strictly smaller body (`code`, `organizationId`,
+ * `siteId`, `parentId`, `orgUnitId` and `employeeNumber` are all create-only)
+ * and none of these three aggregates is versioned. A single upsert type is what
+ * previously let the UI send `nameAr` plus a `rowVersion` no projection has.
+ *
+ * Return types follow `ResultExtensions`: a `Result<Guid>` handler answers
+ * `{ id }` (`ResourceIdResponse`), and a plain `Result` handler answers an EMPTY
+ * body. Declaring `Promise<Site>` for an update handed callers a phantom record
+ * the server never sent.
+ */
 export interface OrganizationService {
   listSites: (query: ListSitesQuery) => Promise<SitePage>
   getSite: (siteId: string) => Promise<Site>
-  createSite: (request: SiteUpsertRequest) => Promise<Site>
-  updateSite: (siteId: string, request: SiteUpsertRequest) => Promise<Site>
+  createSite: (request: SiteCreateRequest) => Promise<ResourceIdResponse>
+  updateSite: (siteId: string, request: SiteUpdateRequest) => Promise<void>
   listOrganizationalUnits: (query: ListOrganizationalUnitsQuery) => Promise<OrganizationalUnitPage>
   getOrganizationalUnit: (orgUnitId: string) => Promise<OrganizationalUnit>
   createOrganizationalUnit: (
-    request: OrganizationalUnitUpsertRequest,
-  ) => Promise<OrganizationalUnit>
+    request: OrganizationalUnitCreateRequest,
+  ) => Promise<ResourceIdResponse>
   updateOrganizationalUnit: (
     orgUnitId: string,
-    request: OrganizationalUnitUpsertRequest,
-  ) => Promise<OrganizationalUnit>
+    request: OrganizationalUnitUpdateRequest,
+  ) => Promise<void>
   listEmployees: (query: ListEmployeesQuery) => Promise<EmployeePage>
   getEmployee: (employeeId: string) => Promise<Employee>
-  createEmployee: (request: EmployeeUpsertRequest) => Promise<Employee>
-  updateEmployee: (employeeId: string, request: EmployeeUpsertRequest) => Promise<Employee>
+  createEmployee: (request: EmployeeCreateRequest) => Promise<ResourceIdResponse>
+  updateEmployee: (employeeId: string, request: EmployeeUpdateRequest) => Promise<void>
   listExternalParties: (query: ListExternalPartiesQuery) => Promise<ExternalPartyPage>
   getExternalParty: (externalPartyId: string) => Promise<ExternalParty>
   createExternalParty: (request: ExternalPartyUpsertRequest) => Promise<ExternalParty>
@@ -101,21 +119,19 @@ export function createOrganizationService(transport: ApiTransport): Organization
     },
 
     async createSite(request) {
-      const response = await transport.request<Site>({
+      return await transport.request<ResourceIdResponse>({
         path: SITES_PATH,
         method: 'POST',
         body: request,
       })
-      return response
     },
 
     async updateSite(siteId, request) {
-      const response = await transport.request<Site>({
+      await transport.requestEmpty({
         path: pathWithId(SITE_PATH, '{siteId}', siteId),
         method: 'PUT',
         body: request,
       })
-      return response
     },
 
     async listOrganizationalUnits(query) {
@@ -136,21 +152,19 @@ export function createOrganizationService(transport: ApiTransport): Organization
     },
 
     async createOrganizationalUnit(request) {
-      const response = await transport.request<OrganizationalUnit>({
+      return await transport.request<ResourceIdResponse>({
         path: ORGANIZATIONAL_UNITS_PATH,
         method: 'POST',
         body: request,
       })
-      return response
     },
 
     async updateOrganizationalUnit(orgUnitId, request) {
-      const response = await transport.request<OrganizationalUnit>({
+      await transport.requestEmpty({
         path: pathWithId(ORGANIZATIONAL_UNIT_PATH, '{orgUnitId}', orgUnitId),
         method: 'PUT',
         body: request,
       })
-      return response
     },
 
     async listEmployees(query) {
@@ -171,21 +185,19 @@ export function createOrganizationService(transport: ApiTransport): Organization
     },
 
     async createEmployee(request) {
-      const response = await transport.request<Employee>({
+      return await transport.request<ResourceIdResponse>({
         path: EMPLOYEES_PATH,
         method: 'POST',
         body: request,
       })
-      return response
     },
 
     async updateEmployee(employeeId, request) {
-      const response = await transport.request<Employee>({
+      await transport.requestEmpty({
         path: pathWithId(EMPLOYEE_PATH, '{employeeId}', employeeId),
         method: 'PUT',
         body: request,
       })
-      return response
     },
 
     async listExternalParties(query) {

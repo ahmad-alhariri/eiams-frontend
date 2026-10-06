@@ -1,4 +1,4 @@
-import type { Employee } from '@/shared/types/generated/eiams-v1'
+import type { Employee } from '@/modules/organization/types/organization.types'
 
 import {
   createEntitySelectorAdapter,
@@ -17,8 +17,8 @@ export type EmployeeLoader = EntityLoader<Employee>
  */
 const employeeAdapter: EntitySelectorAdapter<Employee> = createEntitySelectorAdapter<Employee>({
   toOption: (employee) => ({
-    value: employee.employeeId,
-    label: employee.fullNameAr,
+    value: employee.id,
+    label: employee.fullName,
     disabled: employee.status !== 'Active',
     payload: employee,
   }),

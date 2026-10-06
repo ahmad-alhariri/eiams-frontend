@@ -8,11 +8,12 @@ import type {
   WarehouseMaterialSettingPage,
   WarehouseMaterialSettingUpsertRequest,
   WarehousePage,
-  WarehouseUpsertRequest,
+  WarehouseCreateRequest,
+  WarehouseUpdateRequest,
   ListWarehousesQuery,
   ListWarehouseMaterialSettingsQuery,
 } from '@/modules/warehouse/types/warehouse.api-types'
-import type { ApiPage } from '@/shared/api/api-contracts'
+import type { ApiPage, ResourceIdResponse } from '@/shared/api/api-contracts'
 
 const WAREHOUSES_PATH = '/warehouses'
 const WAREHOUSE_PATH = '/warehouses/{warehouseId}'
@@ -62,8 +63,8 @@ function toMaterialSettingsPage(
 export interface WarehouseService {
   listWarehouses: (query: ListWarehousesQuery) => Promise<WarehousePage>
   getWarehouse: (warehouseId: string) => Promise<Warehouse>
-  createWarehouse: (request: WarehouseUpsertRequest) => Promise<Warehouse>
-  updateWarehouse: (warehouseId: string, request: WarehouseUpsertRequest) => Promise<Warehouse>
+  createWarehouse: (request: WarehouseCreateRequest) => Promise<ResourceIdResponse>
+  updateWarehouse: (warehouseId: string, request: WarehouseUpdateRequest) => Promise<void>
   getWarehouseCapabilities: (warehouseId: string) => Promise<readonly WarehouseCapability[]>
   replaceWarehouseCapabilities: (
     warehouseId: string,
@@ -100,21 +101,19 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
     },
 
     async createWarehouse(request) {
-      const response = await transport.request<Warehouse>({
+      return await transport.request<ResourceIdResponse>({
         path: WAREHOUSES_PATH,
         method: 'POST',
         body: request,
       })
-      return response
     },
 
     async updateWarehouse(warehouseId, request) {
-      const response = await transport.request<Warehouse>({
+      await transport.requestEmpty({
         path: pathWithId(WAREHOUSE_PATH, '{warehouseId}', warehouseId),
         method: 'PUT',
         body: request,
       })
-      return response
     },
 
     async getWarehouseCapabilities(warehouseId) {

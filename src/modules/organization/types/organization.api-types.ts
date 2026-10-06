@@ -1,12 +1,22 @@
 /**
  * Organization module API types — handwritten contracts for direct backend integration.
  *
- * These types match the backend's actual JSON serialization (field names, shapes, enums).
- * They replace the generated imports from `@/shared/types/generated/eiams-v1`.
+ * These mirror the backend's actual JSON serialization, verified twice:
+ *  1. against the C# response DTOs and `RequestBody` records, and
+ *  2. against the running API (2026-10-05), e.g. `GET /sites` returns
+ *     `{"id","organizationId","name","code","location","governorateCode","status"}`.
  *
- * Verified against:
- * - Backend C# response DTOs (SiteResponse, EmployeeResponse, ExternalPartyResponse)
- * - Generated OpenAPI types (eiams-v1.ts components.schemas)
+ * Do NOT "tidy" these back toward the frozen generated types in
+ * `@/shared/types/generated/eiams-v1`. That file was fictional for three of the
+ * four aggregates below: it named the identifier `siteId`/`orgUnitId`/
+ * `employeeId` (the wire says `id`), the label `nameAr` (the wire says `name`),
+ * declared a `rowVersion` on Site/OrgUnit/Employee that the backend never
+ * serves, and nested `site`/`orgUnit` reference objects that are flat
+ * `siteId`/`orgUnitId` fields. See txq4.
+ *
+ * `ExternalParty` is the exception: its projection genuinely serves `NameAr`
+ * and `RowVersion`, which is why the header of this file could once claim
+ * verification and be true four lines up and false three lines down.
  */
 
 // ---------------------------------------------------------------------------
@@ -46,23 +56,32 @@ export interface PageMeta {
 // ---------------------------------------------------------------------------
 
 export interface Site {
-  readonly siteId: Uuid
-  readonly nameAr: string
-  readonly code: string
-  readonly status: RecordStatus
-  readonly address?: string | null
-  readonly governorate?: string | null
+  readonly id: Uuid
   readonly organizationId: Uuid
-  readonly rowVersion: number
+  readonly name: string
+  readonly code: string
+  readonly location?: string | null
+  readonly governorateCode?: string | null
+  readonly status: RecordStatus
 }
 
-export interface SiteUpsertRequest {
-  readonly nameAr: string
+/** `POST /sites` body. `code` and `organizationId` are create-only: the update
+ *  route accepts neither, which is why create and update are separate types
+ *  rather than one "upsert". */
+export interface SiteCreateRequest {
+  readonly organizationId: Uuid
+  readonly name: string
   readonly code: string
-  readonly address?: string | null
-  readonly governorate?: string | null
-  readonly rowVersion: number
-  readonly status: RecordStatus
+  readonly location?: string | null
+  readonly governorateCode?: string | null
+}
+
+/** `PUT /sites/{siteId}` body. Note the absent `rowVersion` — Site is NOT a
+ *  versioned aggregate and its update command takes no ExpectedRowVersion. */
+export interface SiteUpdateRequest {
+  readonly name: string
+  readonly location?: string | null
+  readonly governorateCode?: string | null
 }
 
 export interface SitePage {
@@ -74,23 +93,29 @@ export interface SitePage {
 // Organizational Units
 // ---------------------------------------------------------------------------
 
+/** `unitType` is a free-form string on the wire (backend `string`, not an enum);
+ *  observed live as "Department". Deliberately not narrowed to a union. */
 export interface OrganizationalUnit {
-  readonly orgUnitId: Uuid
-  readonly nameAr: string
-  readonly code: string
-  readonly parentOrgUnitId?: Uuid | null
+  readonly id: Uuid
   readonly siteId: Uuid
+  readonly parentId?: Uuid | null
+  readonly name: string
+  readonly unitType: string
   readonly status: RecordStatus
-  readonly rowVersion: number
 }
 
-export interface OrganizationalUnitUpsertRequest {
-  readonly nameAr: string
-  readonly code: string
-  readonly parentOrgUnitId?: Uuid | null
+export interface OrganizationalUnitCreateRequest {
   readonly siteId: Uuid
-  readonly rowVersion: number
-  readonly status: RecordStatus
+  readonly parentId?: Uuid | null
+  readonly name: string
+  readonly unitType: string
+}
+
+/** `PUT /organizational-units/{id}` accepts neither `siteId` nor `parentId`:
+ *  re-parenting and re-siting are not exposed by the API. Not versioned. */
+export interface OrganizationalUnitUpdateRequest {
+  readonly name: string
+  readonly unitType: string
 }
 
 export interface OrganizationalUnitPage {
@@ -102,24 +127,28 @@ export interface OrganizationalUnitPage {
 // Employees
 // ---------------------------------------------------------------------------
 
+/** No `site` and no nested `orgUnit`: the projection carries a flat `orgUnitId`
+ *  only, so a site label cannot be derived from an employee record. */
 export interface Employee {
-  readonly employeeId: Uuid
+  readonly id: Uuid
+  readonly orgUnitId: Uuid
+  readonly fullName: string
   readonly employeeNumber: string
-  readonly fullNameAr: string
-  readonly jobTitleAr?: string | null
-  readonly orgUnit: NamedReference
-  readonly site: NamedReference
+  readonly jobTitle?: string | null
   readonly status: RecordStatus
-  readonly rowVersion: number
 }
 
-export interface EmployeeUpsertRequest {
-  readonly employeeNumber: string
-  readonly fullNameAr: string
-  readonly jobTitleAr?: string | null
+export interface EmployeeCreateRequest {
   readonly orgUnitId: Uuid
-  readonly rowVersion: number
-  readonly status: RecordStatus
+  readonly fullName: string
+  readonly employeeNumber: string
+  readonly jobTitle?: string | null
+}
+
+/** `PUT /employees/{id}` accepts neither `orgUnitId` nor `employeeNumber`. */
+export interface EmployeeUpdateRequest {
+  readonly fullName: string
+  readonly jobTitle?: string | null
 }
 
 export interface EmployeePage {
@@ -146,8 +175,8 @@ export interface ExternalPartyUpsertRequest {
   readonly code?: string | null
   readonly contactInfo?: string | null
   readonly notes?: string | null
-  readonly rowVersion: number
   readonly status: RecordStatus
+  readonly rowVersion: number
 }
 
 export interface ExternalPartyPage {
