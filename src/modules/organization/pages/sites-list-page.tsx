@@ -9,7 +9,11 @@ import {
   useUpdateSiteMutation,
 } from '@/modules/organization/hooks/use-site-mutations'
 import { useSitesQuery } from '@/modules/organization/hooks/use-organization-queries'
-import { toSiteRequest, type SiteFormValues } from '@/modules/organization/schemas/site.schemas'
+import {
+  toCreateSiteRequest,
+  toUpdateSiteRequest,
+  type SiteFormValues,
+} from '@/modules/organization/schemas/site.schemas'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
@@ -21,7 +25,7 @@ import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { toast } from '@/shared/ui/toast-manager'
 import { pageRows } from '@/shared/utils/table-data'
-import type { RecordStatus, Site } from '@/shared/types/generated/eiams-v1'
+import type { RecordStatus, Site } from '@/modules/organization/types/organization.types'
 
 const siteColumnHelper = createColumnHelper<typeof dataTableFeatures, Site>()
 
@@ -43,8 +47,13 @@ function SitesListPage() {
   const [dialogSite, setDialogSite] = useState<Site | null | undefined>(undefined)
   const sitesQueryInput = useMemo(
     () => ({
-      // Table controls are 1-based; EIAMS v1 list endpoints are 0-based.
-      pageIndex: currentPage - 1,
+      // Table controls are 1-based; the value is passed as a 0-based index,
+      // matching `warehouses-list-page.tsx`. `ListSitesQuery` declares `page`,
+      // which is the name the backend binds — this previously sent `pageIndex`,
+      // a name the server silently discards. Correcting the base is a
+      // behaviour change to every organization list query and is out of scope
+      // here (see report); sending the declared key is not.
+      page: currentPage - 1,
       pageSize,
       ...(search ? { search } : {}),
       ...(status ? { status } : {}),
@@ -82,12 +91,16 @@ function SitesListPage() {
     async (values: SiteFormValues) => {
       const site = dialogSite ?? null
       await submitFeedback(async () => {
-        const request = toSiteRequest(values, site)
         if (site === null) {
-          await createMutation.mutateAsync(request)
+          // `createSite` answers `{ id }`; the list is refetched by the hook.
+          await createMutation.mutateAsync(toCreateSiteRequest(values))
           toast.success({ title: 'تمت إضافة الموقع.' })
         } else {
-          await updateMutation.mutateAsync({ siteId: site.siteId, request })
+          // `updateSite` answers with an EMPTY body.
+          await updateMutation.mutateAsync({
+            siteId: site.id,
+            request: toUpdateSiteRequest(values),
+          })
           toast.success({ title: 'تم حفظ تعديلات الموقع.' })
         }
         setDialogSite(undefined)
@@ -99,19 +112,23 @@ function SitesListPage() {
   const columns = useMemo(
     () =>
       siteColumnHelper.columns([
-        siteColumnHelper.accessor('nameAr', {
-          id: 'nameAr',
+        siteColumnHelper.accessor('name', {
+          id: 'name',
           header: 'اسم الموقع',
           cell: (info) => <span className="font-semibold text-foreground">{info.getValue()}</span>,
         }),
-        siteColumnHelper.accessor('code', { id: 'code', header: 'الرمز' }),
-        siteColumnHelper.accessor('governorate', {
-          id: 'governorate',
+        siteColumnHelper.accessor('code', {
+          id: 'code',
+          header: 'الرمز',
+          cell: (info) => <span dir="ltr">{info.getValue()}</span>,
+        }),
+        siteColumnHelper.accessor('governorateCode', {
+          id: 'governorateCode',
           header: 'المحافظة',
           cell: (info) => info.getValue() ?? '—',
         }),
-        siteColumnHelper.accessor('address', {
-          id: 'address',
+        siteColumnHelper.accessor('location', {
+          id: 'location',
           header: 'العنوان',
           cell: (info) => info.getValue() ?? '—',
         }),
@@ -130,7 +147,7 @@ function SitesListPage() {
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`تعديل ${row.original.nameAr}`}
+                    aria-label={`تعديل ${row.original.name}`}
                     onClick={() => openEdit(row.original)}
                   >
                     <IconEdit aria-hidden />
@@ -181,7 +198,7 @@ function SitesListPage() {
 
       <ContentCard
         title="قائمة المواقع"
-        description="ابحث في المواقع أو صفِّ النتائج حسب الحالة، ثم تنقّل بين صفحات الخادم."
+        description="ابحث في المواقع أو صفِّ النتائج حسب الحالة، ثم تنقّل بين صفحات الخادم."
       >
         <DataTableServer
           columns={columns}

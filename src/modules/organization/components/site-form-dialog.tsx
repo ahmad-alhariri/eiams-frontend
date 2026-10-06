@@ -1,8 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 
-import { siteSchema, type SiteFormValues } from '@/modules/organization/schemas/site.schemas'
+import {
+  siteFormSchema,
+  toSiteFormValues,
+  type SiteFormValues,
+} from '@/modules/organization/schemas/site.schemas'
+import type { Site } from '@/modules/organization/types/organization.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -16,18 +21,12 @@ import {
   DialogTitle,
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { Textarea } from '@/shared/ui/textarea'
-import type { Site } from '@/shared/types/generated/eiams-v1'
 
-const EMPTY_VALUES: SiteFormValues = {
-  organizationId: '',
-  code: '',
-  nameAr: '',
-  governorate: '',
-  address: '',
-  status: 'Active',
-}
+const SERVER_ERROR_KEYS = ['organizationId', 'code', 'name', 'location', 'governorateCode'] as const
+
+/** Arabic note shown in place of an editable control on the create-only fields. */
+const CREATE_ONLY_NOTE = 'يُحدَّد معرّف الجهة والرمز عند إنشاء الموقع ولا يمكن تعديلهما بعد ذلك.'
 
 export interface SiteFormDialogProps {
   site: Site | null
@@ -37,7 +36,14 @@ export interface SiteFormDialogProps {
   onSubmit: (values: SiteFormValues) => Promise<void>
 }
 
-/** Creates and updates sites without introducing an uncontracted organization lookup. */
+/**
+ * Creates and updates sites.
+ *
+ * `organizationId` and `code` bind only to `POST /sites`, so on edit they render
+ * disabled and carry the record's own values; `toUpdateSiteRequest` drops them.
+ * There is no status control: `PUT /sites/{id}` accepts no status and Site has
+ * no activation route in this contract.
+ */
 export function SiteFormDialog({
   site,
   open,
@@ -45,9 +51,10 @@ export function SiteFormDialog({
   onOpenChange,
   onSubmit,
 }: SiteFormDialogProps) {
+  const isCreate = site === null
   const form = useForm<SiteFormValues>({
-    resolver: zodResolver(siteSchema),
-    defaultValues: EMPTY_VALUES,
+    resolver: zodResolver(siteFormSchema(isCreate)),
+    defaultValues: toSiteFormValues(null),
   })
 
   useEffect(() => {
@@ -55,15 +62,13 @@ export function SiteFormDialog({
       return
     }
 
-    form.reset({
-      organizationId: site?.organizationId ?? '',
-      code: site?.code ?? '',
-      nameAr: site?.nameAr ?? '',
-      governorate: site?.governorate ?? '',
-      address: site?.address ?? '',
-      status: site?.status ?? 'Active',
-    })
+    form.reset(toSiteFormValues(site))
   }, [form, open, site])
+
+  // One subscription for both fields the submit gate depends on. `useWatch`
+  // rather than `form.watch` keeps this out of the React Compiler's
+  // incompatible-library path.
+  const [name, code] = useWatch({ control: form.control, name: ['name', 'code'] })
 
   const submit = async (values: SiteFormValues) => {
     form.clearErrors()
@@ -71,19 +76,19 @@ export function SiteFormDialog({
       await onSubmit(values)
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['organizationId', 'code', 'nameAr', 'governorate', 'address', 'status'],
-      })
+      setFormServerErrors(form, apiError.fieldErrors, { schemaKeys: [...SERVER_ERROR_KEYS] })
     }
   }
+
+  const isSubmittable = name.trim().length >= 2 && (!isCreate || code.trim() !== '')
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>{site ? 'تعديل الموقع' : 'إضافة موقع'}</DialogTitle>
+          <DialogTitle>{isCreate ? 'إضافة موقع' : 'تعديل الموقع'}</DialogTitle>
           <DialogDescription>
-            أدخل بيانات الموقع المعتمدة. حقول المحافظة والعنوان اختيارية.
+            أدخل بيانات الموقع المعتمدة. حقل العنوان والمحافظة اختياريان.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -93,10 +98,17 @@ export function SiteFormDialog({
             className="grid gap-5"
             onSubmit={form.handleSubmit(submit)}
           >
+            {isCreate ? null : (
+              <p
+                role="note"
+                className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground"
+              >
+                {CREATE_ONLY_NOTE}
+              </p>
+            )}
             <FormField
               control={form.control}
               name="organizationId"
-              rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>معرّف الجهة المالكة</FormLabel>
@@ -104,7 +116,7 @@ export function SiteFormDialog({
                     <Input
                       {...field}
                       dir="ltr"
-                      disabled={isPending || site?.organizationId !== undefined}
+                      disabled={isPending || !isCreate}
                       placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                     />
                   </FormControl>
@@ -115,8 +127,7 @@ export function SiteFormDialog({
             <div className="grid gap-5 sm:grid-cols-2">
               <FormField
                 control={form.control}
-                name="nameAr"
-                rules={{ required: true }}
+                name="name"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>اسم الموقع</FormLabel>
@@ -130,12 +141,16 @@ export function SiteFormDialog({
               <FormField
                 control={form.control}
                 name="code"
-                rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>رمز الموقع</FormLabel>
                     <FormControl>
-                      <Input {...field} dir="ltr" disabled={isPending} placeholder="DAM-HQ" />
+                      <Input
+                        {...field}
+                        dir="ltr"
+                        disabled={isPending || !isCreate}
+                        placeholder="DAM-HQ"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -145,7 +160,7 @@ export function SiteFormDialog({
             <div className="grid gap-5 sm:grid-cols-2">
               <FormField
                 control={form.control}
-                name="governorate"
+                name="governorateCode"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>المحافظة</FormLabel>
@@ -156,36 +171,10 @@ export function SiteFormDialog({
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="status"
-                rules={{ required: true }}
-                render={({ field, fieldState }) => (
-                  <FormItem>
-                    <FormLabel>الحالة</FormLabel>
-                    <Select
-                      value={field.value}
-                      disabled={isPending}
-                      onValueChange={(value) => field.onChange(value)}
-                    >
-                      <FormControl>
-                        <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                          <SelectValue>{field.value === 'Active' ? 'نشط' : 'غير نشط'}</SelectValue>
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Active">نشط</SelectItem>
-                        <SelectItem value="Inactive">غير نشط</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </div>
             <FormField
               control={form.control}
-              name="address"
+              name="location"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>العنوان</FormLabel>
@@ -201,8 +190,8 @@ export function SiteFormDialog({
               )}
             />
             <DialogFooter>
-              <Button type="submit" loading={isPending}>
-                {site ? 'حفظ التعديلات' : 'إضافة الموقع'}
+              <Button type="submit" loading={isPending} disabled={!isSubmittable}>
+                {isCreate ? 'إضافة الموقع' : 'حفظ التعديلات'}
               </Button>
               <Button
                 type="button"

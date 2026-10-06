@@ -9,6 +9,7 @@ import { usePlanCountMutation } from '@/modules/inventory-count/hooks/use-count-
 import { ActiveCountWarning } from '@/modules/inventory-count/components/active-count-warning'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import type { InventoryCountScopeType, InventoryCountType } from '@/shared/types/generated/eiams-v1'
 import { PageHeader } from '@/shared/layout/page-header'
 import { AsyncSelect } from '@/shared/ui/async-select'
@@ -144,7 +145,7 @@ export default function CountPlanningFormPage() {
                 <label htmlFor="count-warehouse" className="text-sm font-medium text-foreground">
                   المستودع
                 </label>
-                <AsyncSelect<InventoryCountWarehouse>
+                <AsyncSelect<Warehouse>
                   value={field.value === '' ? null : field.value}
                   loadOptions={warehouseSelector.loadOptions}
                   onValueChange={(next) => field.onChange(next ?? '')}
@@ -324,9 +325,4 @@ const SCOPE_LABELS_AR: Readonly<Record<InventoryCountScopeType, string>> = {
   ByDomain: 'حسب المجال',
   ByCategory: 'حسب الصنف',
   ByMaterial: 'حسب المادة',
-}
-
-interface InventoryCountWarehouse {
-  warehouseId: string
-  nameAr: string
 }

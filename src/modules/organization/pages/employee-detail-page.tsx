@@ -1,14 +1,17 @@
 import { IconArrowRight, IconEdit } from '@tabler/icons-react'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 
 import { ROUTE_PATHS } from '@/config/routes'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { EmployeeFormDialog } from '@/modules/organization/components/employee-form-dialog'
 import { useUpdateEmployeeMutation } from '@/modules/organization/hooks/use-employee-mutations'
-import { useEmployeeQuery } from '@/modules/organization/hooks/use-organization-queries'
 import {
-  toEmployeeRequest,
+  useEmployeeQuery,
+  useOrganizationalUnitsQuery,
+} from '@/modules/organization/hooks/use-organization-queries'
+import {
+  toUpdateEmployeeRequest,
   type EmployeeFormValues,
 } from '@/modules/organization/schemas/employee.schemas'
 import { ErrorState } from '@/shared/feedback/error-state'
@@ -21,12 +24,24 @@ import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { Button } from '@/shared/ui/button'
 import { toast } from '@/shared/ui/toast-manager'
 
-/** Contract-backed employee profile; its only v1 relationship is the org unit reference. */
+const REFERENCE_PAGE = { page: 0, pageSize: 200 } as const
+
+/**
+ * Contract-backed employee profile.
+ *
+ * The only relationship an employee record carries is a FLAT `orgUnitId`, so the
+ * unit name is joined from the org-units list. There is deliberately NO "الموقع"
+ * field here: the projection serves no site reference and no site name, and
+ * `orgUnitId → siteId → site name` is only valid while the units list happens to
+ * be complete. Rendering a blank site label would be worse than omitting it, and
+ * deriving one would be a guess.
+ */
 function EmployeeDetailPage() {
   const { employeeId } = useParams<{ employeeId: string }>()
   const navigate = useNavigate()
   const { has } = usePermission()
   const employeeQuery = useEmployeeQuery(employeeId)
+  const unitsQuery = useOrganizationalUnitsQuery(REFERENCE_PAGE)
   const updateMutation = useUpdateEmployeeMutation()
   const submitFeedback = useSubmitFeedback()
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -37,13 +52,19 @@ function EmployeeDetailPage() {
     [navigate],
   )
 
+  const orgUnitName = useMemo(
+    () => unitsQuery.data?.items.find((unit) => unit.id === employee?.orgUnitId)?.name,
+    [employee?.orgUnitId, unitsQuery.data],
+  )
+
   const submitForm = useCallback(
     async (values: EmployeeFormValues) => {
       if (employee === undefined) return
       await submitFeedback(async () => {
+        // `updateEmployee` answers with an EMPTY body; nothing is read off it.
         await updateMutation.mutateAsync({
-          employeeId: employee.employeeId,
-          request: toEmployeeRequest(values, employee),
+          employeeId: employee.id,
+          request: toUpdateEmployeeRequest(values),
         })
         setIsEditDialogOpen(false)
         toast.success({ title: 'تم حفظ تعديلات الموظف.' })
@@ -100,7 +121,7 @@ function EmployeeDetailPage() {
   return (
     <div dir="rtl" className="min-w-0">
       <PageHeader
-        title={employee.fullNameAr}
+        title={employee.fullName}
         subtitle={`الرقم الوظيفي: ${employee.employeeNumber}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -119,16 +140,15 @@ function EmployeeDetailPage() {
       />
       <ContentCard title="بيانات الموظف" description="بيانات مرجعية للقراءة ضمن نطاق العمل الحالي.">
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-          <DetailField label="اسم الموظف">{employee.fullNameAr}</DetailField>
+          <DetailField label="اسم الموظف">{employee.fullName}</DetailField>
           <DetailField label="الرقم الوظيفي" ltr>
             {employee.employeeNumber}
           </DetailField>
-          <DetailField label="المسمى الوظيفي">{employee.jobTitleAr ?? '—'}</DetailField>
+          <DetailField label="المسمى الوظيفي">{employee.jobTitle ?? '—'}</DetailField>
           <DetailField label="الحالة">
             <StatusBadge entity="record" status={employee.status} />
           </DetailField>
-          <DetailField label="الوحدة التنظيمية">{employee.orgUnit.displayName}</DetailField>
-          <DetailField label="الموقع">{employee.site.displayName}</DetailField>
+          <DetailField label="الوحدة التنظيمية">{orgUnitName ?? '—'}</DetailField>
         </dl>
       </ContentCard>
       <EmployeeFormDialog

@@ -7,7 +7,10 @@ import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { SiteFormDialog } from '@/modules/organization/components/site-form-dialog'
 import { useUpdateSiteMutation } from '@/modules/organization/hooks/use-site-mutations'
 import { useSiteQuery } from '@/modules/organization/hooks/use-organization-queries'
-import { toSiteRequest, type SiteFormValues } from '@/modules/organization/schemas/site.schemas'
+import {
+  toUpdateSiteRequest,
+  type SiteFormValues,
+} from '@/modules/organization/schemas/site.schemas'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { StatusBadge } from '@/shared/feedback/status-badge'
@@ -21,6 +24,11 @@ import { toast } from '@/shared/ui/toast-manager'
 /**
  * Read-only, contract-backed site profile. Related operational records remain
  * outside this page until v1 exposes a dedicated site relationship endpoint.
+ *
+ * Every field rendered here is one the projection actually serves: `name`,
+ * `code`, `location`, `governorateCode`, `status` and `organizationId`. The
+ * previous version rendered `nameAr`, `governorate` and `address`, none of which
+ * the backend serves.
  */
 function SiteDetailPage() {
   const { siteId } = useParams<{ siteId: string }>()
@@ -43,9 +51,10 @@ function SiteDetailPage() {
       if (site === undefined) return
 
       await submitFeedback(async () => {
+        // `updateSite` answers with an EMPTY body; nothing is read off it.
         await updateMutation.mutateAsync({
-          siteId: site.siteId,
-          request: toSiteRequest(values, site),
+          siteId: site.id,
+          request: toUpdateSiteRequest(values),
         })
         setIsEditDialogOpen(false)
         toast.success({ title: 'تم حفظ تعديلات الموقع.' })
@@ -105,7 +114,7 @@ function SiteDetailPage() {
   return (
     <div dir="rtl" className="min-w-0">
       <PageHeader
-        title={site.nameAr}
+        title={site.name}
         subtitle={`رمز الموقع: ${site.code}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -125,17 +134,17 @@ function SiteDetailPage() {
 
       <ContentCard title="بيانات الموقع" description="بيانات مرجعية للقراءة ضمن نطاق العمل الحالي.">
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-          <DetailField label="اسم الموقع">{site.nameAr}</DetailField>
+          <DetailField label="اسم الموقع">{site.name}</DetailField>
           <DetailField label="رمز الموقع" ltr>
             {site.code}
           </DetailField>
-          <DetailField label="المحافظة">{site.governorate ?? '—'}</DetailField>
+          <DetailField label="المحافظة">{site.governorateCode ?? '—'}</DetailField>
           <DetailField label="الحالة">
             <StatusBadge entity="record" status={site.status} />
           </DetailField>
           <div className="border-b border-border pb-4 sm:col-span-2 sm:border-b-0">
             <dt className="text-sm font-medium text-muted-foreground">العنوان</dt>
-            <dd className="mt-1.5 text-base font-medium text-foreground">{site.address ?? '—'}</dd>
+            <dd className="mt-1.5 text-base font-medium text-foreground">{site.location ?? '—'}</dd>
           </div>
           <div className="sm:col-span-2">
             <dt className="text-sm font-medium text-muted-foreground">معرّف الجهة المالكة</dt>
