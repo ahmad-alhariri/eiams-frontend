@@ -7,7 +7,7 @@ import type {
   WarehouseDocument,
   WarehouseDocumentDraftRequest,
 } from '@/shared/types/generated/eiams-v1'
-import { createMaterial, createWarehouse, fixtureUuid } from '@/test/msw/factories'
+import { createMaterial, createSite, createWarehouse, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import {
   applyDraftToDocument,
@@ -27,7 +27,8 @@ const assetMaterial = createMaterial({
   materialKind: 'Asset',
   requiresAssetNumber: true,
 })
-const warehouse = createWarehouse({ warehouseId: WAREHOUSE_ID })
+const warehouse = createWarehouse({ id: WAREHOUSE_ID })
+const site = createSite({ id: warehouse.siteId })
 
 const lookups = {
   materialOf: (materialId: string) =>
@@ -38,6 +39,7 @@ const lookups = {
         : undefined,
   unitOf: (unitId: string | undefined) => (unitId === undefined ? undefined : material.baseUnit),
   warehouseOf: (warehouseId: string) => (warehouseId === WAREHOUSE_ID ? warehouse : undefined),
+  siteOf: (siteId: string) => (siteId === site.id ? site : undefined),
 }
 
 function draftRequest(
@@ -72,8 +74,8 @@ describe('buildDraftDocument', () => {
       receivingInfo: { receivingType: 'Supplier', supplierRef: 'مورد الشام' },
       rowVersion: 1,
       systemReferenceNumber: 'EIAMS-RCV-2024-0004',
-      warehouse: { id: WAREHOUSE_ID, displayName: warehouse.nameAr },
-      site: warehouse.site,
+      warehouse: { id: WAREHOUSE_ID, displayName: warehouse.name },
+      site: { id: site.id, displayName: site.name },
       attachments: [],
     })
     expect(document.policy).toMatchObject({ documentStatus: 'Draft', rowVersion: 1 })

@@ -10,12 +10,20 @@ import {
   createMaterial,
   createNamedReference,
   createPolicyBlocker,
+  createSite,
   createWarehouse,
   createWarehouseDocument,
   DOCUMENT_TRANSITIONS,
   fixtureUuid,
 } from '@/test/msw/factories'
 import { apiJson, okJson, okPageJson, toWireErrorResponse } from '@/test/msw/envelope'
+// `Warehouse`/`Site` are typed against the handwritten contracts, NOT the frozen
+// generated snapshot: the wire record serves `id` + a FLAT `siteId` and carries
+// no nested site snapshot, so the generated `Warehouse` (whose `site` object
+// this harness used to read a site label from) describes nothing the backend
+// ever returned.
+import type { Site } from '@/modules/organization/types/organization.api-types'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 import type {
   DocumentActionType,
   DocumentActionResult,
@@ -33,7 +41,6 @@ import type {
   ProblemDetails,
   ReasonedDocumentActionRequest,
   VersionOnlyDocumentActionRequest,
-  Warehouse,
   WarehouseDocument,
   WarehouseDocumentDraftRequest,
 } from '@/shared/types/generated/eiams-v1'
@@ -940,14 +947,23 @@ export interface DraftLookups {
   materialOf: (materialId: string) => Material | undefined
   /** Resolves a draft line's selected unit; `undefined` for the base unit. */
   unitOf: (unitId: string | undefined) => NamedReference | undefined
-  /** Resolves the document warehouse (site snapshot comes from it). */
+  /** Resolves the document warehouse. */
   warehouseOf: (warehouseId: string) => Warehouse | undefined
+  /**
+   * Resolves a site by id.
+   *
+   * A `Warehouse` carries a FLAT `siteId` and no nested site snapshot, so the
+   * document's `site` reference has to be joined against the sites list — the
+   * wire record a warehouse returns is not enough to name its own site.
+   */
+  siteOf: (siteId: string) => Site | undefined
 }
 
 const FALLBACK_LOOKUPS: DraftLookups = {
   materialOf: (materialId) => createMaterial({ materialId }),
   unitOf: (unitId) => (unitId === undefined ? undefined : createNamedReference({ id: unitId })),
-  warehouseOf: (warehouseId) => createWarehouse({ warehouseId }),
+  warehouseOf: (warehouseId) => createWarehouse({ id: warehouseId }),
+  siteOf: (siteId) => createSite({ id: siteId }),
 }
 
 function resolveLookups(lookups: Partial<DraftLookups> | undefined): DraftLookups {
@@ -992,6 +1008,23 @@ function namedActor(actor: LifecycleActorSnapshot): NamedReference {
 }
 
 /**
+ * The document spine's warehouse/site reference pair, derived from the flat wire
+ * shape: the warehouse reference reads `id`/`name`, and the site reference is
+ * joined from `warehouse.siteId` through the sites lookup because the warehouse
+ * record itself carries no site label.
+ */
+function draftWarehouseReferences(
+  warehouse: Warehouse,
+  lookups: DraftLookups,
+): { site: NamedReference; warehouse: NamedReference } {
+  const site = lookups.siteOf(warehouse.siteId) ?? createSite({ id: warehouse.siteId })
+  return {
+    site: createNamedReference({ id: site.id, displayName: site.name }),
+    warehouse: createNamedReference({ id: warehouse.id, displayName: warehouse.name }),
+  }
+}
+
+/**
  * Builds a complete Draft `WarehouseDocument` from a
  * `WarehouseDocumentDraftRequest` — the shared shape the create handler and
  * the dev mock both persist. Petals (receiving/issue/transfer/return) pass
@@ -1010,8 +1043,8 @@ export function buildDraftDocument(
   const lookups = resolveLookups(options.lookups)
   const actor = options.occurredBy ?? DEFAULT_DRAFT_ACTOR
   const warehouse =
-    lookups.warehouseOf(request.warehouseId) ??
-    createWarehouse({ warehouseId: request.warehouseId })
+    lookups.warehouseOf(request.warehouseId) ?? createWarehouse({ id: request.warehouseId })
+  const references = draftWarehouseReferences(warehouse, lookups)
   return {
     attachments: [],
     createdAt: options.createdAt ?? new Date().toISOString(),
@@ -1032,10 +1065,10 @@ export function buildDraftDocument(
     ...(request.receivingInfo === undefined ? {} : { receivingInfo: request.receivingInfo }),
     ...(request.returnInfo === undefined ? {} : { returnInfo: request.returnInfo }),
     rowVersion: 1,
-    site: warehouse.site,
+    site: references.site,
     systemReferenceNumber: options.systemReferenceNumber,
     ...(request.transferInfo === undefined ? {} : { transferInfo: request.transferInfo }),
-    warehouse: createNamedReference({ id: warehouse.warehouseId, displayName: warehouse.nameAr }),
+    warehouse: references.warehouse,
   }
 }
 
@@ -1051,8 +1084,8 @@ export function applyDraftToDocument(
 ): WarehouseDocument {
   const resolved = resolveLookups(lookups)
   const warehouse =
-    resolved.warehouseOf(request.warehouseId) ??
-    createWarehouse({ warehouseId: request.warehouseId })
+    resolved.warehouseOf(request.warehouseId) ?? createWarehouse({ id: request.warehouseId })
+  const references = draftWarehouseReferences(warehouse, resolved)
   const nextRowVersion = document.rowVersion + 1
   return {
     ...document,
@@ -1069,9 +1102,9 @@ export function applyDraftToDocument(
     ...(request.receivingInfo === undefined ? {} : { receivingInfo: request.receivingInfo }),
     ...(request.returnInfo === undefined ? {} : { returnInfo: request.returnInfo }),
     rowVersion: nextRowVersion,
-    site: warehouse.site,
+    site: references.site,
     ...(request.transferInfo === undefined ? {} : { transferInfo: request.transferInfo }),
-    warehouse: createNamedReference({ id: warehouse.warehouseId, displayName: warehouse.nameAr }),
+    warehouse: references.warehouse,
   }
 }
 

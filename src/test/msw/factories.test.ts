@@ -46,7 +46,7 @@ describe('contract-derived MSW factories', () => {
   })
 
   it('uses the shared v1 paging envelope and derives its totals from items', () => {
-    const page = createPage([createWarehouse(), createWarehouse({ warehouseId: fixtureUuid(32) })])
+    const page = createPage([createWarehouse(), createWarehouse({ id: fixtureUuid(32) })])
 
     expect(page.meta).toMatchObject({ pageIndex: 1, pageSize: 20, totalItems: 2, totalPages: 1 })
     expect(page.items).toHaveLength(2)
