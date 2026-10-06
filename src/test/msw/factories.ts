@@ -12,7 +12,6 @@ import type {
   DocumentLine,
   DocumentPolicy,
   DocumentStatus,
-  Employee,
   ExternalParty,
   FieldError,
   InventoryBalance,
@@ -30,11 +29,8 @@ import type {
   ProblemDetails,
   Permission,
   Role,
-  Site,
   StockMovement,
-  OrganizationalUnit,
   UnitOfMeasure,
-  Warehouse,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
 import type {
@@ -48,6 +44,17 @@ import type {
   WarehouseCapability,
   WarehouseMaterialSetting,
 } from '@/modules/warehouse/types/warehouse.api-types'
+// txq4: Site / OrganizationalUnit / Employee / Warehouse are typed against the
+// handwritten contracts, NOT the frozen generated snapshot. Importing them from
+// `@/shared/types/generated/eiams-v1` is what let these factories keep minting
+// `warehouseId` / `nameAr` / nested `site` fixtures while production code had
+// already moved to `id` / `name` — the suite validated fiction against itself.
+import type {
+  Site,
+  OrganizationalUnit,
+  Employee,
+} from '@/modules/organization/types/organization.api-types'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 import type {
   PermissionCatalogEntry,
   RoleProjection,
@@ -500,11 +507,13 @@ export function createMaterialUnitConversion(
 export function createWarehouse(overrides: FixtureOverrides<Warehouse> = {}): Warehouse {
   return withOverrides(
     {
-      warehouseId: fixtureUuid(30),
+      id: fixtureUuid(30),
+      siteId: fixtureUuid(50),
+      organizationalUnitId: fixtureUuid(52),
       code: 'WH-CENTRAL',
-      nameAr: 'المستودع المركزي',
-      locationAr: 'دمشق',
-      site: createNamedReference({ id: fixtureUuid(31), displayName: 'المقر الرئيسي' }),
+      name: 'المستودع المركزي',
+      warehouseType: 'Storage',
+      canHoldStock: true,
       rowVersion: 1,
       status: 'Active',
     },
@@ -547,13 +556,12 @@ export function createWarehouseMaterialSetting(
 export function createSite(overrides: FixtureOverrides<Site> = {}): Site {
   return withOverrides(
     {
-      siteId: fixtureUuid(50),
+      id: fixtureUuid(50),
       organizationId: fixtureUuid(51),
       code: 'DAM-HQ',
-      nameAr: 'المقر الرئيسي',
-      address: 'دمشق',
-      governorate: 'دمشق',
-      rowVersion: 1,
+      name: 'المقر الرئيسي',
+      location: 'دمشق',
+      governorateCode: 'DIM',
       status: 'Active',
     },
     overrides,
@@ -565,12 +573,11 @@ export function createOrganizationalUnit(
 ): OrganizationalUnit {
   return withOverrides(
     {
-      orgUnitId: fixtureUuid(52),
+      id: fixtureUuid(52),
       siteId: fixtureUuid(50),
-      code: 'DAM-ADMIN',
-      nameAr: 'الإدارة',
-      pathDisplay: 'المقر الرئيسي / الإدارة',
-      rowVersion: 1,
+      parentId: null,
+      name: 'الإدارة',
+      unitType: 'Department',
       status: 'Active',
     },
     overrides,
@@ -580,13 +587,11 @@ export function createOrganizationalUnit(
 export function createEmployee(overrides: FixtureOverrides<Employee> = {}): Employee {
   return withOverrides(
     {
-      employeeId: fixtureUuid(53),
+      id: fixtureUuid(53),
+      orgUnitId: fixtureUuid(52),
       employeeNumber: 'EMP-001',
-      fullNameAr: 'موظف تجريبي',
-      jobTitleAr: 'أمين مستودع',
-      orgUnit: createNamedReference({ id: fixtureUuid(52), displayName: 'الإدارة' }),
-      site: createNamedReference({ id: fixtureUuid(50), displayName: 'المقر الرئيسي' }),
-      rowVersion: 1,
+      fullName: 'موظف تجريبي',
+      jobTitle: 'أمين مستودع',
       status: 'Active',
     },
     overrides,
