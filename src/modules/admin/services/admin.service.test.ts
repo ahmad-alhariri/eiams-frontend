@@ -8,10 +8,9 @@ import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
   createPermissionCatalogEntry,
-  createRole,
   createRoleProjection,
   createUserRoleScope,
-  createUserSummary,
+  createUserDetail,
 } from '@/test/msw/factories'
 import { apiJson, errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
@@ -36,8 +35,8 @@ describe('AdminService', () => {
     const service = setupService()
     const permission = createPermissionCatalogEntry()
     const role = createRoleProjection()
-    const user = createUserSummary()
-    const assignment = createUserRoleScope({ userId: user.userId, role: createRole() })
+    const user = createUserDetail()
+    const assignment = createUserRoleScope({ roleId: role.id, roleName: role.name })
     const requestedUrls: string[] = []
 
     server.use(
@@ -61,41 +60,46 @@ describe('AdminService', () => {
         requestedUrls.push(`${url.pathname}${url.search}`)
         return okPageJson([user])
       }),
-      http.get(`${API_BASE_URL}/admin/users/${user.userId}`, ({ request }) => {
+      http.get(`${API_BASE_URL}/admin/users/${user.id}`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
         return okJson(user)
       }),
-      http.get(`${API_BASE_URL}/admin/users/${user.userId}/role-scopes`, ({ request }) => {
+      // Singular resource (D-SRS-01): the backend publishes only
+      // /admin/users/{userId}/role-scope, and it answers one assignment object.
+      http.get(`${API_BASE_URL}/admin/users/${user.id}/role-scope`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname)
-        return okJson([assignment])
+        return okJson(assignment)
       }),
     )
 
     await expect(service.listPermissions()).resolves.toEqual([permission])
     await expect(service.listRoles()).resolves.toEqual([role])
     await expect(service.getRole(role.id)).resolves.toEqual(role)
-    await expect(service.listUsers({ pageIndex: 2, search: 'مستخدم' })).resolves.toMatchObject({
+    await expect(service.listUsers({ page: 3, search: 'user' })).resolves.toMatchObject({
       items: [user],
     })
-    await expect(service.getUser(user.userId)).resolves.toEqual(user)
-    await expect(service.getUserRoleScopes(user.userId)).resolves.toEqual([assignment])
+    await expect(service.getUser(user.id)).resolves.toEqual(user)
+    await expect(service.getUserRoleScope(user.id)).resolves.toEqual(assignment)
 
     expect(requestedUrls).toEqual([
       `${API_BASE_URL}/admin/permissions`,
       `${API_BASE_URL}/admin/roles`,
       `${API_BASE_URL}/admin/roles/${role.id}`,
-      `${API_BASE_URL}/admin/users?pageIndex=2&search=%D9%85%D8%B3%D8%AA%D8%AE%D8%AF%D9%85`,
-      `${API_BASE_URL}/admin/users/${user.userId}`,
-      `${API_BASE_URL}/admin/users/${user.userId}/role-scopes`,
+      `${API_BASE_URL}/admin/users?page=3&search=user`,
+      `${API_BASE_URL}/admin/users/${user.id}`,
+      `${API_BASE_URL}/admin/users/${user.id}/role-scope`,
     ])
   })
 
   it('sends only the fields each role operation owns', async () => {
     const service = setupService()
     const role = createRoleProjection({ name: 'AUDITOR', nameAr: 'مدقق' })
-    const assignmentRole = createRole({ code: 'AUDITOR' })
-    const user = createUserSummary({ username: 'auditor.user' })
-    const assignment = createUserRoleScope({ userId: user.userId, role: assignmentRole })
+    const assignmentRole = createRoleProjection({ name: 'AUDITOR', nameAr: 'مدقق' })
+    const user = createUserDetail({ email: 'auditor.user@eiams.local' })
+    const assignment = createUserRoleScope({
+      roleId: assignmentRole.id,
+      roleName: assignmentRole.name,
+    })
     const encodedRoleId = 'role / دمشق'
     const encodedUserId = 'user / دمشق'
     const createRoleRequest = {
@@ -116,22 +120,49 @@ describe('AdminService', () => {
       permissionCodes: role.permissionCodes,
       expectedRowVersion: role.rowVersion,
     }
-    const userRequest = {
-      displayName: user.displayName,
-      rowVersion: user.rowVersion,
+    // Creation carries the account AND its sole assignment: D-SRS-01 makes them one
+    // server-owned operation, and the backend rejects a bare account.
+    const createUserRequest = {
+      email: user.email,
+      username: 'auditor.user',
+      firstName: user.firstName,
+      lastName: user.lastName,
       status: user.status,
-      username: user.username,
-      initialPassword: 'Initial-secret-123',
+      password: 'Initial-secret-123',
+      roleId: assignment.roleId,
+      scopeType: assignment.scopeType,
+      scopeId: assignment.scopeId,
     }
-    const roleScopesRequest = {
-      assignments: [
-        {
-          roleId: assignmentRole.roleId,
-          scopeType: assignment.scope.scopeType,
-          scopeId: assignment.scope.scopeId,
-        },
-      ],
-      rowVersion: user.rowVersion,
+    const createdUser = {
+      id: user.id,
+      email: user.email,
+      username: 'auditor.user',
+      firstName: user.firstName,
+      lastName: user.lastName,
+      assignment,
+    }
+    // Update carries only the account metadata, and NO username (immutable after
+    // creation) and NO status (its own operation).
+    const updateUserRequest = {
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      expectedRowVersion: user.rowVersion,
+    }
+    // Suspension is a dedicated operation with its own route and guards, and it
+    // carries the same concurrency token.
+    const setUserStatusRequest = {
+      status: 'Suspended' as const,
+      expectedRowVersion: user.rowVersion,
+    }
+    // The replacement carries exactly one assignment and the version it was read at.
+    // `expectedRowVersion` is required: the backend binds this body with
+    // additionalProperties:false, so omitting it is rejected outright.
+    const roleScopeRequest = {
+      roleId: assignment.roleId,
+      scopeType: assignment.scopeType,
+      scopeId: assignment.scopeId,
+      expectedRowVersion: assignment.rowVersion,
     }
     const receivedBodies: unknown[] = []
 
@@ -156,20 +187,29 @@ describe('AdminService', () => {
       ),
       http.post(`${API_BASE_URL}/admin/users`, async ({ request }) => {
         receivedBodies.push(JSON.parse(await request.text()))
-        return apiJson(user, { status: 201 })
+        // Creation answers 201 with the account plus its sole assignment.
+        return apiJson(createdUser, { status: 201 })
       }),
+      http.put(
+        `${API_BASE_URL}/admin/users/${encodeURIComponent(encodedUserId)}/status`,
+        async ({ request }) => {
+          receivedBodies.push(JSON.parse(await request.text()))
+          return okJson(undefined)
+        },
+      ),
       http.put(
         `${API_BASE_URL}/admin/users/${encodeURIComponent(encodedUserId)}`,
         async ({ request }) => {
           receivedBodies.push(JSON.parse(await request.text()))
-          return okJson(user)
+          // Update answers an empty body.
+          return okJson(undefined)
         },
       ),
       http.put(
-        `${API_BASE_URL}/admin/users/${encodeURIComponent(encodedUserId)}/role-scopes`,
+        `${API_BASE_URL}/admin/users/${encodeURIComponent(encodedUserId)}/role-scope`,
         async ({ request }) => {
           receivedBodies.push(JSON.parse(await request.text()))
-          return okJson([assignment])
+          return okJson(assignment)
         },
       ),
     )
@@ -179,11 +219,15 @@ describe('AdminService', () => {
     await expect(
       service.replaceRolePermissions(encodedRoleId, permissionsRequest),
     ).resolves.toEqual(role)
-    await expect(service.createUser(userRequest)).resolves.toEqual(user)
-    await expect(service.updateUser(encodedUserId, userRequest)).resolves.toEqual(user)
-    await expect(service.replaceUserRoleScopes(encodedUserId, roleScopesRequest)).resolves.toEqual([
+    await expect(service.createUser(createUserRequest)).resolves.toEqual(createdUser)
+    // Update answers an empty body, so it resolves to void and the caller re-reads.
+    await expect(service.updateUser(encodedUserId, updateUserRequest)).resolves.toBeUndefined()
+    await expect(
+      service.setUserStatus(encodedUserId, setUserStatusRequest),
+    ).resolves.toBeUndefined()
+    await expect(service.replaceUserRoleScope(encodedUserId, roleScopeRequest)).resolves.toEqual(
       assignment,
-    ])
+    )
     // Each request body is exactly its own operation's fields: the metadata update carries no
     // permissionCodes, and the permission replacement carries no metadata. The retired broad
     // upsert resubmitted the whole role record for both.
@@ -191,12 +235,74 @@ describe('AdminService', () => {
       createRoleRequest,
       metadataRequest,
       permissionsRequest,
-      userRequest,
-      userRequest,
-      roleScopesRequest,
+      createUserRequest,
+      updateUserRequest,
+      setUserStatusRequest,
+      roleScopeRequest,
     ])
     expect(receivedBodies[1]).not.toHaveProperty('permissionCodes')
     expect(receivedBodies[2]).not.toHaveProperty('nameAr')
+    // The metadata update carries neither the immutable login nor the lifecycle
+    // status, and always carries the concurrency token it was read at.
+    expect(receivedBodies[4]).not.toHaveProperty('username')
+    expect(receivedBodies[4]).not.toHaveProperty('status')
+    expect(receivedBodies[4]).toHaveProperty('expectedRowVersion')
+    // The status operation carries ONLY the status plus that token.
+    expect(receivedBodies[5]).toEqual({
+      status: 'Suspended',
+      expectedRowVersion: user.rowVersion,
+    })
+  })
+
+  it('reports no assignment as null instead of an error', async () => {
+    const service = setupService()
+    const user = createUserDetail()
+
+    server.use(
+      http.get(`${API_BASE_URL}/admin/users/${user.id}/role-scope`, () =>
+        errJson(404, {
+          code: 'UserRoleScopes.AssignmentNotFound',
+          message: 'The user does not have a role and scope assignment',
+        }),
+      ),
+    )
+
+    // An account can exist before its assignment does. That is a normal empty state,
+    // and the backend expects expectedRowVersion: 0 for the first write against it.
+    await expect(service.getUserRoleScope(user.id)).resolves.toBeNull()
+  })
+
+  it.each([
+    {
+      label: 'an unknown user',
+      status: 404,
+      code: 'USERS_NOT_FOUND',
+    },
+    {
+      // The real outside-scope refusal is 403 with its own code; the 404 absent-row
+      // code must NOT be reused to mean "forbidden".
+      label: 'an assignment outside the administrator scope',
+      status: 403,
+      code: 'UserRoleScopes.AssignmentOutsideAdministratorScope',
+    },
+    {
+      label: 'a forbidden assignment read',
+      status: 403,
+      code: 'UserRoleScopes.Forbidden',
+    },
+  ])('propagates $label rather than swallowing it', async ({ status, code }) => {
+    const service = setupService()
+    const user = createUserDetail()
+
+    server.use(
+      http.get(`${API_BASE_URL}/admin/users/${user.id}/role-scope`, () =>
+        errJson(status, { code, message: 'refused' }),
+      ),
+    )
+
+    // Only the exact "row is absent" code on a 404 is a null. Matching the status
+    // alone would hide a genuine unknown-user 404 behind an empty assignment.
+    await expect(service.getUserRoleScope(user.id)).rejects.toBeDefined()
   })
 
   it('leaves contract errors for the shared Arabic error normalizer', async () => {

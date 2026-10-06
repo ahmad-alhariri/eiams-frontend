@@ -6,11 +6,17 @@ import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { UserFormDialog } from '@/modules/admin/components/user-form-dialog'
 import {
   useCreateUserMutation,
+  useSetUserStatusMutation,
   useUpdateUserMutation,
 } from '@/modules/admin/hooks/use-admin-mutations'
-import { toUserRequest, type UserFormValues } from '@/modules/admin/schemas/user.schemas'
-import { useUsersQuery } from '@/modules/admin/hooks/use-admin-queries'
+import {
+  toCreateUserRequest,
+  toUpdateUserRequest,
+  type UserFormValues,
+} from '@/modules/admin/schemas/user.schemas'
+import { useRolesQuery, useUsersQuery } from '@/modules/admin/hooks/use-admin-queries'
 import type { ListUsersQuery } from '@/modules/admin/types/admin.types'
+import { userDisplayName, type UserDirectoryRow } from '@/modules/admin/types/user.types'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
@@ -21,10 +27,9 @@ import { Button } from '@/shared/ui/button'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { toast } from '@/shared/ui/toast-manager'
-import type { UserSummary, UserUpsertRequest } from '@/shared/types/generated/eiams-v1'
 import { pageRows } from '@/shared/utils/table-data'
 
-const userColumnHelper = createColumnHelper<typeof dataTableFeatures, UserSummary>()
+const userColumnHelper = createColumnHelper<typeof dataTableFeatures, UserDirectoryRow>()
 
 /**
  * Scoped directory of application accounts. The v1 API owns the pagination and
@@ -37,20 +42,25 @@ function UsersListPage() {
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [search, setSearch] = useState('')
-  const [dialogUser, setDialogUser] = useState<UserSummary | null | undefined>(undefined)
+  const [dialogUser, setDialogUser] = useState<UserDirectoryRow | null | undefined>(undefined)
 
   const usersQueryInput = useMemo<ListUsersQuery>(
     () => ({
-      // Shared table controls are 1-based while EIAMS v1 list endpoints are 0-based.
-      pageIndex: currentPage - 1,
+      // The backend binds a 1-based `page`. The generated operations map advertised
+      // `pageIndex`, which the server does not read: it was silently ignored and
+      // every "page 2" request returned page 1.
+      page: currentPage,
       pageSize,
       ...(search === '' ? {} : { search }),
     }),
     [currentPage, pageSize, search],
   )
   const usersQuery = useUsersQuery(usersQueryInput)
+  const canSelectRoles = canManage && has('admin.role.view')
+  const rolesQuery = useRolesQuery(canSelectRoles)
   const createMutation = useCreateUserMutation()
   const updateMutation = useUpdateUserMutation()
+  const statusMutation = useSetUserStatusMutation()
   const submitFeedback = useSubmitFeedback()
   const { confirm, element: confirmElement } = useConfirm()
 
@@ -63,7 +73,7 @@ function UsersListPage() {
   )
 
   const openCreate = useCallback(() => setDialogUser(null), [])
-  const openEdit = useCallback((user: UserSummary) => setDialogUser(user), [])
+  const openEdit = useCallback((user: UserDirectoryRow) => setDialogUser(user), [])
   const closeDialog = useCallback((open: boolean) => {
     if (!open) setDialogUser(undefined)
   }, [])
@@ -71,12 +81,14 @@ function UsersListPage() {
     async (values: UserFormValues) => {
       const user = dialogUser ?? null
       await submitFeedback(async () => {
-        const request = toUserRequest(values, user)
         if (user === null) {
-          await createMutation.mutateAsync(request)
+          await createMutation.mutateAsync(toCreateUserRequest(values))
           toast.success({ title: 'تمت إضافة المستخدم.' })
         } else {
-          await updateMutation.mutateAsync({ userId: user.userId, request })
+          await updateMutation.mutateAsync({
+            userId: user.id,
+            request: toUpdateUserRequest(values, user.rowVersion),
+          })
           toast.success({ title: 'تم حفظ تعديلات المستخدم.' })
         }
         setDialogUser(undefined)
@@ -86,46 +98,55 @@ function UsersListPage() {
   )
 
   const handleToggleStatus = useCallback(
-    async (user: UserSummary) => {
+    async (user: UserDirectoryRow) => {
       const nextStatus = user.status === 'Active' ? 'Suspended' : 'Active'
       const isSuspending = nextStatus === 'Suspended'
+      const name = userDisplayName(user)
       const result = await confirm({
         title: isSuspending ? 'تأكيد إيقاف المستخدم' : 'تأكيد تنشيط المستخدم',
         message: isSuspending
-          ? `هل تريد إيقاف حساب "${user.displayName}"؟ يفقد المستخدم الوصول حتى إعادة التنشيط.`
-          : `هل تريد تنشيط حساب "${user.displayName}"؟ يعود المستخدم للوصول حسب صلاحياته المعتمدة.`,
+          ? `هل تريد إيقاف حساب "${name}"؟ يفقد المستخدم الوصول حتى إعادة التنشيط.`
+          : `هل تريد تنشيط حساب "${name}"؟ يعود المستخدم للوصول حسب صلاحياته المعتمدة.`,
         confirmLabel: isSuspending ? 'إيقاف' : 'تنشيط',
         variant: isSuspending ? 'destructive' : 'confirm',
       })
       if (!result.confirmed) return
       await submitFeedback(async () => {
-        const request: UserUpsertRequest = {
-          displayName: user.displayName,
-          username: user.username,
-          status: nextStatus,
-          rowVersion: user.rowVersion,
-        }
-        await updateMutation.mutateAsync({ userId: user.userId, request })
+        // Suspension is its own operation: it carries the security guards and revokes
+        // refresh tokens, and it no longer needs fields the caller cannot read.
+        await statusMutation.mutateAsync({
+          userId: user.id,
+          request: { status: nextStatus, expectedRowVersion: user.rowVersion },
+        })
         toast.success({ title: isSuspending ? 'تم إيقاف المستخدم.' : 'تم تنشيط المستخدم.' })
       })
     },
-    [confirm, submitFeedback, updateMutation],
+    [confirm, statusMutation, submitFeedback],
   )
 
   const columns = useMemo(
     () =>
       userColumnHelper.columns([
-        userColumnHelper.accessor('displayName', {
+        userColumnHelper.accessor('firstName', {
           id: 'displayName',
           header: 'اسم المستخدم',
-          cell: ({ getValue }) => (
-            <span className="font-semibold text-foreground">{getValue()}</span>
+          // The backend stores the name as two fields and never composes one, so
+          // the table does the same rather than reading a `displayName` that does
+          // not exist on the wire.
+          cell: ({ row }) => (
+            <span className="font-semibold text-foreground">{userDisplayName(row.original)}</span>
           ),
         }),
-        userColumnHelper.accessor('username', {
-          id: 'username',
-          header: 'اسم الدخول',
+        userColumnHelper.accessor('email', {
+          id: 'email',
+          header: 'البريد الإلكتروني',
           cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
+        }),
+        userColumnHelper.accessor('roleName', {
+          id: 'roleName',
+          header: 'الدور',
+          // Carried on the directory row only; the single-user read omits it.
+          cell: ({ getValue }) => getValue() ?? <span className="text-muted-foreground">—</span>,
         }),
         userColumnHelper.accessor('status', {
           id: 'status',
@@ -139,6 +160,7 @@ function UsersListPage() {
                 header: 'إجراءات',
                 cell: ({ row }) => {
                   const user = row.original
+                  const name = userDisplayName(user)
                   const isSuspending = user.status === 'Active'
                   return (
                     <div className="flex items-center gap-1">
@@ -146,7 +168,7 @@ function UsersListPage() {
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={`تعديل ${user.displayName}`}
+                        aria-label={`تعديل ${name}`}
                         onClick={() => openEdit(user)}
                       >
                         <IconEdit aria-hidden />
@@ -155,9 +177,7 @@ function UsersListPage() {
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={
-                          isSuspending ? `إيقاف ${user.displayName}` : `تنشيط ${user.displayName}`
-                        }
+                        aria-label={isSuspending ? `إيقاف ${name}` : `تنشيط ${name}`}
                         onClick={() => void handleToggleStatus(user)}
                       >
                         {isSuspending ? <IconBan aria-hidden /> : <IconCircleCheck aria-hidden />}
@@ -218,9 +238,10 @@ function UsersListPage() {
       <UserFormDialog
         user={dialogUser ?? null}
         open={dialogUser !== undefined}
-        isPending={createMutation.isPending || updateMutation.isPending}
+        isPending={createMutation.isPending || updateMutation.isPending || statusMutation.isPending}
         onOpenChange={closeDialog}
         onSubmit={submitForm}
+        roles={rolesQuery.data ?? []}
       />
       {confirmElement}
     </div>

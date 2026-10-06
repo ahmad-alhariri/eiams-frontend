@@ -9,7 +9,7 @@ import { adminQueryKeys } from '@/modules/admin/hooks/use-admin-queries'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createQueryClient } from '@/shared/services/query.client'
 import { queryKeys } from '@/shared/services/query-keys'
-import { createRoleProjection, createUserRoleScope, createUserSummary } from '@/test/msw/factories'
+import { createRoleProjection, createUserRoleScope, createUserDetail } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -18,56 +18,50 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
 }))
 
-import { useReplaceUserRoleScopesMutation } from './use-admin-mutations'
+import { useReplaceUserRoleScopeMutation } from './use-admin-mutations'
 
 const API_BASE_URL = '/api/v1'
 
 describe('admin mutation hooks', () => {
-  it('invalidates admin resources and the authoritative session after replacing role scopes', async () => {
+  it('invalidates admin resources and the session after replacing a role scope', async () => {
     const client = createQueryClient()
     const scope = { kind: 'enterprise' as const }
-    const user = createUserSummary()
+    const user = createUserDetail()
     const role = createRoleProjection()
-    const assignment = createUserRoleScope({ userId: user.userId, role })
+    const assignment = createUserRoleScope({ roleId: role.id, roleName: role.name })
     const usersKey = adminQueryKeys.users(scope, {})
-    const assignmentsKey = adminQueryKeys.userRoleScopes(scope, user.userId)
+    const assignmentKey = adminQueryKeys.userRoleScope(scope, user.id)
     const warehouseKey = queryKeys.scoped(scope, 'warehouse', 'warehouses')
     client.setQueryData(usersKey, [])
-    client.setQueryData(assignmentsKey, [])
+    client.setQueryData(assignmentKey, null)
     client.setQueryData(warehouseKey, [])
     client.setQueryData(authSessionQueryKey, { permissionCodes: [] })
 
     server.use(
-      http.put(`${API_BASE_URL}/admin/users/${user.userId}/role-scopes`, () =>
-        okJson([assignment]),
-      ),
+      http.put(`${API_BASE_URL}/admin/users/${user.id}/role-scope`, () => okJson(assignment)),
     )
 
     function QueryWrapper({ children }: PropsWithChildren) {
       return <QueryClientProvider client={client}>{children}</QueryClientProvider>
     }
 
-    const { result } = renderHook(() => useReplaceUserRoleScopesMutation(), {
+    const { result } = renderHook(() => useReplaceUserRoleScopeMutation(), {
       wrapper: QueryWrapper,
     })
 
     await result.current.mutateAsync({
-      userId: user.userId,
+      userId: user.id,
       request: {
-        assignments: [
-          {
-            roleId: role.id,
-            scopeId: assignment.scope.scopeId,
-            scopeType: assignment.scope.scopeType,
-          },
-        ],
-        rowVersion: user.rowVersion,
+        roleId: assignment.roleId,
+        scopeType: assignment.scopeType,
+        scopeId: assignment.scopeId,
+        expectedRowVersion: assignment.rowVersion,
       },
     })
 
     await waitFor(() => {
       expect(client.getQueryState(usersKey)?.isInvalidated).toBe(true)
-      expect(client.getQueryState(assignmentsKey)?.isInvalidated).toBe(true)
+      expect(client.getQueryState(assignmentKey)?.isInvalidated).toBe(true)
       expect(client.getQueryState(authSessionQueryKey)?.isInvalidated).toBe(true)
     })
     expect(client.getQueryState(warehouseKey)?.isInvalidated).toBe(false)

@@ -31,6 +31,7 @@
  * 3. Paging is ONE-BASED on both sides: the request is `?page=1`, never `?page=0`.
  * 4. `details` is `{}` when there is nothing to report, never absent.
  */
+import axios from 'axios'
 
 /** Correlation id and server timestamp, present on EVERY response. */
 export interface ApiResponseMeta {
@@ -285,6 +286,37 @@ export function normalizeWireErrorCode(value: unknown): string | null {
 
   const trimmed = normalized.replace(/^_+|_+$/gu, '')
   return trimmed.length === 0 ? null : trimmed
+}
+
+/**
+ * Reads the HTTP status and normalized error code from a thrown transport error.
+ *
+ * Exists so a service can branch on the WIRE (does this 404 mean "absent" or
+ * "forbidden"?) without reaching into an Axios response itself. The service-layer
+ * lint rule forbids both `.data` in a service and `normalizeApiError` there, the
+ * latter because it resolves Arabic presentation copy — but a transport decision
+ * about whether a response is an error at all still needs the code. Both facts are
+ * therefore read here, in the one reviewed place that already parses the envelope.
+ *
+ * Returns `null` for anything that is not an Axios-shaped HTTP error, including
+ * network failures and non-HTTP throws.
+ */
+export function readTransportError(
+  error: unknown,
+): { readonly status: number; readonly code: string | null } | null {
+  if (!axios.isAxiosError(error)) {
+    return null
+  }
+
+  const response = error.response
+  if (response === undefined) {
+    return null
+  }
+
+  return {
+    status: response.status,
+    code: normalizeWireErrorCode(readApiError(response.data)?.code),
+  }
 }
 
 /** Reads the backend's `error` block from an unknown payload, if present. */

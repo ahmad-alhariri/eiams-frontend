@@ -86,9 +86,8 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
   it('scans a pinned set of production and test source files', () => {
     // Pinned, not `> 0`: a narrowed glob leaves a few files rather than none,
     // and every "no offenders" assertion below would then pass silently.
-    // 357 = 355 plus this work's src/modules/auth/types/session.types.ts and
-    // src/modules/auth/services/session-display.ts.
-    assertScannedFiles(PRODUCTION_FILES, 357)
+    // 359 = 358 plus this work's src/modules/admin/types/user.types.ts.
+    assertScannedFiles(PRODUCTION_FILES, 360)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

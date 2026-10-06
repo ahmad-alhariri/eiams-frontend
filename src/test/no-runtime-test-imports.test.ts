@@ -84,13 +84,12 @@ import {
  * the number; only application code does. `9uuf` also added
  * `src/test/support/test-transport-harness.ts` and two `src/test/**` suites,
  * none of which belong to this set.
- * Re-measured at 357 by `eiams-frontend-3m6o` / `0lkm`, which added
- * `src/modules/auth/types/session.types.ts` and
- * `src/modules/auth/services/session-display.ts` - the handwritten session wire
- * contracts and the display helpers that replace the stale generated
- * `SessionResponse` / `ScopeContext` shapes.
+ * Re-measured at 358 by `eiams-frontend-q4bv`, which added
+ * `src/modules/admin/hooks/use-assignment-scope-selector.ts` - the Arabic
+ * scope picker loader for the single role-scope assignment (D-SRS-01), which
+ * replaces the raw UUID field the collection editor used.
  */
-const SCANNED_FILE_COUNT = 357
+const SCANNED_FILE_COUNT = 360
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

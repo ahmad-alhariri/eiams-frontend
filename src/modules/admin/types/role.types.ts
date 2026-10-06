@@ -15,11 +15,18 @@
 /**
  * Assignment scope types. `UserAssignmentScopeType` on the backend;
  * OrganizationalUnit is never an assignment scope (RESOLUTION-013).
+ *
+ * The backend serialises this enum through an explicit `JsonStringEnumConverter`,
+ * so the wire value is the member name and never the ordinal.
  */
 export type RoleScopeType = 'Enterprise' | 'Site' | 'Warehouse'
 
-/** Scope type names as the role projection renders them. */
-export type RoleScopeTypeName = 'Enterprise' | 'Site' | 'Warehouse'
+/** Arabic display labels for the assignment scope types (ui-design.md, RTL-first). */
+export const ROLE_SCOPE_TYPE_LABELS_AR: Readonly<Record<RoleScopeType, string>> = {
+  Enterprise: 'مستوى المؤسسة',
+  Site: 'موقع',
+  Warehouse: 'مستودع',
+}
 
 /**
  * The single authoritative role projection. Served by the list read, the detail
@@ -38,7 +45,7 @@ export interface RoleProjection {
   readonly nameAr: string
   readonly description: string | null
   /** Scopes this role may be assigned at. */
-  readonly allowedScopeTypes: readonly RoleScopeTypeName[]
+  readonly allowedScopeTypes: readonly RoleScopeType[]
   /** The role's complete dotted permission-code set. */
   readonly permissionCodes: readonly string[]
   /**
@@ -63,7 +70,7 @@ export interface PermissionCatalogEntry {
    * this overlaps the role's `allowedScopeTypes`, which is how the matrix explains
    * why a code cannot be selected for a given role.
    */
-  readonly allowedScopeTypes: readonly RoleScopeTypeName[]
+  readonly allowedScopeTypes: readonly RoleScopeType[]
 }
 
 /**
@@ -97,5 +104,48 @@ export interface UpdateRoleMetadataRequest {
  */
 export interface ReplaceRolePermissionsRequest {
   readonly permissionCodes: readonly string[]
+  readonly expectedRowVersion: number
+}
+
+/**
+ * The user's sole role-and-scope assignment, exactly as the backend serves it.
+ *
+ * EIAMS v1 assigns every user exactly one role and one scope (D-SRS-01), so this
+ * is a single projection and never a collection. The generated `UserRoleScope`
+ * described a different record entirely (`role`, `scope`, `userId`,
+ * `userRoleScopeId`), and the generated `paths` map published only the retired
+ * plural route, so neither shape nor path is taken from it.
+ *
+ * `rowVersion` is the assignment's own version — it is NOT the user summary's
+ * counter, and the two move independently.
+ *
+ * Backend source of truth:
+ * `Application.UserRoleScopes.GetByUser.UserRoleScopeResponse`.
+ */
+export interface UserRoleScopeProjection {
+  readonly id: string
+  readonly roleId: string
+  /** The role code (`WH_MGR`) as the server resolved it for this assignment. */
+  readonly roleName: string
+  readonly scopeType: RoleScopeType
+  /** Null for an Enterprise assignment; the Site/Warehouse UUID otherwise. */
+  readonly scopeId: string | null
+  readonly rowVersion: number
+}
+
+/**
+ * Atomic replacement of a user's sole assignment (D-SRS-01). Not a grant and not
+ * a merge: the resulting user has exactly this one row.
+ *
+ * `expectedRowVersion` is required. A user with no assignment yet has current
+ * version 0, so the first replacement submits 0; any other stale value is
+ * refused with 409 `UserRoleScopes.RowVersionMismatch`.
+ *
+ * `scopeId` is null for Enterprise and required for Site and Warehouse.
+ */
+export interface ReplaceUserRoleScopeRequest {
+  readonly roleId: string
+  readonly scopeType: RoleScopeType
+  readonly scopeId: string | null
   readonly expectedRowVersion: number
 }

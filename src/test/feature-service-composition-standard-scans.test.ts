@@ -36,7 +36,7 @@ import {
 const HOOK_FILES = moduleHookFiles()
 
 /** Exact counts: if one of these moves, the scan set changed and must be re-examined. */
-const EXPECTED_HOOK_FILES = 40
+const EXPECTED_HOOK_FILES = 41
 
 // ---------------------------------------------------------------------------
 // Scan 1 — query keys must come from a factory

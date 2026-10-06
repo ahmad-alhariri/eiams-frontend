@@ -30,13 +30,10 @@ import type {
   ProblemDetails,
   Permission,
   Role,
-  ScopeContext,
   Site,
   StockMovement,
   OrganizationalUnit,
   UnitOfMeasure,
-  UserSummary,
-  UserRoleScope,
   Warehouse,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
@@ -51,7 +48,13 @@ import type {
   WarehouseCapability,
   WarehouseMaterialSetting,
 } from '@/modules/warehouse/types/warehouse.api-types'
-import type { PermissionCatalogEntry, RoleProjection } from '@/modules/admin/types/role.types'
+import type {
+  PermissionCatalogEntry,
+  RoleProjection,
+  UserRoleScopeProjection,
+} from '@/modules/admin/types/role.types'
+import type { UserDetailProjection, UserDirectoryRow } from '@/modules/admin/types/user.types'
+import type { ScopeContext } from '@/shared/types/generated/eiams-v1'
 
 /** Contract-backed fixture helpers for MSW tests.
  *
@@ -176,13 +179,48 @@ export function createProblemDetails(
   )
 }
 
-export function createUserSummary(overrides: FixtureOverrides<UserSummary> = {}): UserSummary {
+/**
+ * One row of the administration directory, in the served shape.
+ *
+ * Distinct from `createUserDetail` below because the backend serves two different
+ * records: the directory row additionally carries the user's sole role-and-scope
+ * assignment, while the single-user read omits it.
+ */
+export function createUserDirectoryRow(
+  overrides: FixtureOverrides<UserDirectoryRow> = {},
+): UserDirectoryRow {
   return withOverrides(
     {
-      userId: fixtureUuid(10),
+      id: fixtureUuid(10),
+      email: 'fixture.user@eiams.local',
       username: 'fixture.user',
-      displayName: 'مستخدم تجريبي',
+      firstName: 'مستخدم',
+      lastName: 'اختباري',
       status: 'Active',
+      createdAtUtc: '2026-01-01T00:00:00Z',
+      rowVersion: 1,
+      roleId: fixtureUuid(14),
+      roleName: 'SYSTEM_ADMIN',
+      scopeType: 'Enterprise',
+      scopeId: null,
+    },
+    overrides,
+  )
+}
+
+/** The single-user read: no `username`, no `rowVersion`, and no assignment. */
+export function createUserDetail(
+  overrides: FixtureOverrides<UserDetailProjection> = {},
+): UserDetailProjection {
+  return withOverrides(
+    {
+      id: fixtureUuid(10),
+      email: 'fixture.user@eiams.local',
+      username: 'fixture.user',
+      firstName: 'مستخدم',
+      lastName: 'اختباري',
+      status: 'Active',
+      createdAtUtc: '2026-01-01T00:00:00Z',
       rowVersion: 1,
     },
     overrides,
@@ -255,19 +293,24 @@ export function createPermissionCatalogEntry(
   )
 }
 
+/**
+ * The user's sole role-and-scope assignment, in the shape the backend serves.
+ *
+ * Deliberately NOT the generated `UserRoleScope` (`{role, scope, userId,
+ * userRoleScopeId}`): that describes a record the backend never returned, and a
+ * collection of them would contradict D-SRS-01's one-assignment invariant.
+ */
 export function createUserRoleScope(
-  overrides: FixtureOverrides<UserRoleScope> = {},
-): UserRoleScope {
+  overrides: FixtureOverrides<UserRoleScopeProjection> = {},
+): UserRoleScopeProjection {
   return withOverrides(
     {
-      userRoleScopeId: fixtureUuid(15),
-      userId: fixtureUuid(10),
-      role: createRole(),
-      scope: createScopeContext({
-        scopeType: 'Enterprise',
-        scopeId: null,
-        displayName: 'الهيئة العامة للرقابة والتفتيش',
-      }),
+      id: fixtureUuid(15),
+      roleId: fixtureUuid(14),
+      roleName: 'SYSTEM_ADMIN',
+      scopeType: 'Enterprise',
+      scopeId: null,
+      rowVersion: 1,
     },
     overrides,
   )

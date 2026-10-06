@@ -7,7 +7,7 @@ import type {
   PermissionCatalogEntry,
   ReplaceRolePermissionsRequest,
   RoleProjection,
-  RoleScopeTypeName,
+  RoleScopeType,
 } from '@/modules/admin/types/role.types'
 
 /**
@@ -94,7 +94,7 @@ export interface PermissionMatrixRow {
   readonly code: string
   readonly nameAr: string
   readonly descriptionAr: string | null
-  readonly allowedScopeTypes: readonly RoleScopeTypeName[]
+  readonly allowedScopeTypes: readonly RoleScopeType[]
   /**
    * False when the permission cannot take effect at any scope this role may be
    * assigned at. The server rejects such a grant outright, so the row is shown

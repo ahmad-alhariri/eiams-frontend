@@ -16,8 +16,20 @@ describe('development API proxy configuration', () => {
     expect(resolveDevApiProxy({})).toEqual({
       context: DEFAULT_API_BASE_URL,
       target: DEFAULT_DEV_API_PROXY_TARGET,
-      changeOrigin: true,
+      changeOrigin: false,
     })
+  })
+
+  it('forwards the original Host so the backend can validate the browser origin', () => {
+    // The backend's refresh-cookie origin check compares `Origin` against its own
+    // `{Scheme}://{Host}` (RefreshTokenTransport.IsCookieOriginAllowed). Rewriting
+    // Host to the proxy target makes that comparison fail for every same-origin
+    // browser request, so login and refresh are refused with 403
+    // REFRESH_TOKEN_ORIGIN_REJECTED. `changeOrigin` must never be true here.
+    expect(resolveDevApiProxy({})?.changeOrigin).toBe(false)
+    expect(
+      resolveDevApiProxy({ EIAMS_DEV_PROXY_TARGET: 'http://localhost:5210' })?.changeOrigin,
+    ).toBe(false)
   })
 
   it('targets the new live backend default on http://localhost:5000', () => {
