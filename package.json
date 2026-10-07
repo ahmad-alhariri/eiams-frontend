@@ -12,7 +12,6 @@
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:baseline": "node scripts/test-baseline.mjs",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "quality": "pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run test && pnpm run build",
