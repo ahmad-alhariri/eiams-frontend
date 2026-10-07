@@ -2,19 +2,16 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { ReactNode } from 'react'
 import { FormProvider, useForm, useWatch, type Resolver, type UseFormReturn } from 'react-hook-form'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import {
-  createMaterial,
-  createPage,
-  createWarehouseCapability,
-  fixtureUuid,
-} from '@/test/msw/factories'
+import { okJson, okPageJson } from '@/test/msw/envelope'
+import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
+import { createWarehouseCapability, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import {
   assetLinesSchema,
@@ -34,25 +31,35 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 const API_BASE_URL = '/api/v1'
 const IT_DOMAIN_ID = fixtureUuid(20)
 
-const PRINTER = createMaterial({
+/**
+ * Materials in the REAL catalog wire shape (`catalog.api-types`): `materialDomain`
+ * / `unit`, no `trackingType`, and `materialKind` narrowed to
+ * `'Consumable' | 'Asset'`. `wireMaterial` is the shared builder for that contract
+ * (see `catalog-wire-fixtures.ts`); the frozen generated `createMaterial` this
+ * file used before carries `domain` / `baseUnit` / `trackingType` and a
+ * `'Durable'` kind the wire does not have, so the editor's payload derivation
+ * found no domain or unit and no option was ever selected.
+ */
+const PRINTER = wireMaterial({
   materialId: fixtureUuid(61),
   code: 'IT-HW-PRT-001',
   nameAr: 'طابعة ليزر',
   materialKind: 'Asset',
   requiresAssetNumber: true,
-  trackingType: 'Serial',
-  domain: { id: IT_DOMAIN_ID, displayName: 'تقنية المعلومات', code: 'IT', status: 'Active' },
-  baseUnit: { id: fixtureUuid(23), displayName: 'قطعة', code: 'EA', status: 'Active' },
+  materialDomainId: IT_DOMAIN_ID,
+  materialDomain: { id: IT_DOMAIN_ID, displayName: 'تقنية المعلومات' },
+  unitId: fixtureUuid(23),
+  unit: { id: fixtureUuid(23), displayName: 'قطعة' },
 })
-const DURABLE = createMaterial({
+/** The excluded kind: this editor only offers `materialKind === 'Asset'` rows. */
+const DURABLE = wireMaterial({
   materialId: fixtureUuid(60),
   code: 'IT-HW-PC-001',
   nameAr: 'حاسوب مكتبي',
-  materialKind: 'Durable',
-  requiresAssetNumber: false,
-  trackingType: 'Serial',
-  domain: { id: IT_DOMAIN_ID, displayName: 'تقنية المعلومات', code: 'IT', status: 'Active' },
-  baseUnit: { id: fixtureUuid(23), displayName: 'قطعة', code: 'EA', status: 'Active' },
+  materialDomainId: IT_DOMAIN_ID,
+  materialDomain: { id: IT_DOMAIN_ID, displayName: 'تقنية المعلومات' },
+  unitId: fixtureUuid(23),
+  unit: { id: fixtureUuid(23), displayName: 'قطعة' },
 })
 
 const SEEDED_LINE = {
@@ -109,11 +116,7 @@ afterEach(() => {
 
 /** Catalog materials search the editor touches while picking a material. */
 function useCatalogHandlers() {
-  server.use(
-    http.get(`${API_BASE_URL}/catalog/materials`, () =>
-      HttpResponse.json(createPage([PRINTER, DURABLE])),
-    ),
-  )
+  server.use(http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([PRINTER, DURABLE])))
 }
 
 async function selectMaterial(name: string, index = 0) {
@@ -269,7 +272,7 @@ describe('AssetLineEditor', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${warehouseId}/capabilities`, () =>
-        HttpResponse.json([capability]),
+        okJson([capability]),
       ),
     )
     useCatalogHandlers()
@@ -280,7 +283,7 @@ describe('AssetLineEditor', () => {
 
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'المستودع لا يمتلك قدرة "استلام" لمجال "تقنية المعلومات".',
+        'العملية استلام غير مدعومة لهذا المستودع والمجال المطلوبين.',
       ),
     )
   })
@@ -296,7 +299,7 @@ describe('AssetLineEditor', () => {
     const onCapabilityGateChange = vi.fn()
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${warehouseId}/capabilities`, () =>
-        HttpResponse.json([capability]),
+        okJson([capability]),
       ),
     )
     useCatalogHandlers()
@@ -317,7 +320,7 @@ describe('AssetLineEditor', () => {
     await waitFor(() =>
       expect(onCapabilityGateChange).toHaveBeenLastCalledWith({
         status: 'blocked',
-        messageAr: 'المستودع لا يمتلك قدرة "استلام" لمجال "تقنية المعلومات".',
+        messageAr: 'العملية استلام غير مدعومة لهذا المستودع والمجال المطلوبين.',
       }),
     )
   })

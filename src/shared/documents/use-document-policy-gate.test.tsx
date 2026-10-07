@@ -1,12 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createQueryClient } from '@/shared/services/query.client'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { okJson } from '@/test/msw/envelope'
 import {
   createDocumentPolicy,
   createOperationalAdvisory,
@@ -111,7 +112,7 @@ describe('useDocumentPolicyGate', () => {
       ...createWarehouseDocumentDetailHandler(document),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => {
         policyRequests += 1
-        return HttpResponse.json(document.policy)
+        return okJson(document.policy)
       }),
     )
 
@@ -200,7 +201,7 @@ describe('useDocumentPolicyGate', () => {
       ...createWarehouseDocumentDetailHandler(document),
       ...createWarehouseDocumentPolicyHandler(document.policy),
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        HttpResponse.json([capability]),
+        okJson([capability]),
       ),
     )
 
@@ -224,9 +225,16 @@ describe('useDocumentPolicyGate', () => {
     )
 
     expect(result.current.preflight?.status).toBe('blocked')
+    // The shipped capability sentence. The retired per-domain phrasing
+    // ("المستودع لا يمتلك قدرة \"صرف\" لمجال \"تقنية المعلومات\".") came from the
+    // capability evaluator that interpolated the operation AND the domain name;
+    // `useWarehouseCapabilityValidation` now emits one domain-agnostic sentence
+    // (`use-warehouse-capability-validation.ts:93`), which is what
+    // `opening-document-form-page.test.tsx` already pins. Production copy is not
+    // the thing under test here, so the expectation moves to the shipped string.
     expect(
       result.current.preflight?.gates.find((gate) => gate.gate === 'capability')?.messageAr,
-    ).toBe('المستودع لا يمتلك قدرة "صرف" لمجال "تقنية المعلومات".')
+    ).toBe('العملية صرف غير مدعومة لهذا المستودع والمجال المطلوبين.')
   })
 
   it('composes policy presentation and permission into decisions and canSubmit/canPost', async () => {

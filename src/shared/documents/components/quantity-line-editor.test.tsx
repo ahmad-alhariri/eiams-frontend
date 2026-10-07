@@ -2,20 +2,16 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type ReactNode } from 'react'
 import { FormProvider, useForm, useWatch, type Resolver, type UseFormReturn } from 'react-hook-form'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import {
-  createMaterial,
-  createMaterialUnitConversion,
-  createPage,
-  createWarehouseCapability,
-  fixtureUuid,
-} from '@/test/msw/factories'
+import { okJson, okPageJson } from '@/test/msw/envelope'
+import { createWarehouseCapability, fixtureUuid } from '@/test/msw/factories'
+import { wireMaterial, wireMaterialUnitConversion } from '@/test/msw/catalog-wire-fixtures'
 import { server } from '@/test/msw/server'
 import {
   documentLinesSchema,
@@ -34,27 +30,34 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 const API_BASE_URL = '/api/v1'
 
-const DURABLE = createMaterial({
+/**
+ * The materials this editor searches are served in the REAL catalog wire shape
+ * (`catalog.api-types`): `materialDomain` / `unit`, not the frozen generated
+ * snapshot's `domain` / `baseUnit`. `wireMaterial` is the shared builder for that
+ * contract (see `catalog-wire-fixtures.ts`); the shared `createMaterial` cannot be
+ * used here because `MaterialSelectorControl` derives
+ * `materialDomain.id` / `unit.displayName` from the payload.
+ */
+const DURABLE = wireMaterial({
   materialId: fixtureUuid(24),
   nameAr: 'قماش قطني',
-  domain: {
-    id: fixtureUuid(20),
-    displayName: 'المستلزمات المنزلية',
-    code: 'DOM-20',
-    status: 'Active',
-  },
-  baseUnit: { id: fixtureUuid(23), displayName: 'متر', code: 'MTR', status: 'Active' },
+  materialDomainId: fixtureUuid(20),
+  materialDomain: { id: fixtureUuid(20), displayName: 'المستلزمات المنزلية' },
+  unitId: fixtureUuid(23),
+  unit: { id: fixtureUuid(23), displayName: 'متر' },
 })
-const ASSET = createMaterial({
+const ASSET = wireMaterial({
   materialId: fixtureUuid(26),
   materialKind: 'Asset',
   requiresAssetNumber: true,
   nameAr: 'حاسوب مكتبي',
 })
-const CARTON_CONVERSION = createMaterialUnitConversion({
-  conversionId: fixtureUuid(25),
-  factor: '10',
-  fromUnit: { id: fixtureUuid(27), displayName: 'لفة', code: 'RL', status: 'Active' },
+const CARTON_CONVERSION = wireMaterialUnitConversion({
+  materialUnitConversionId: fixtureUuid(25),
+  conversionFactor: 10,
+  materialId: DURABLE.materialId,
+  unitId: fixtureUuid(27),
+  unit: { id: fixtureUuid(27), displayName: 'لفة' },
 })
 
 function LinesOutput({ form }: { form: UseFormReturn<DocumentLinesContainer> }) {
@@ -114,11 +117,9 @@ async function selectMaterial(name: string, index = 0) {
 /** Catalog endpoints the editor touches while a material is selected. */
 function useCatalogHandlers() {
   server.use(
-    http.get(`${API_BASE_URL}/catalog/materials`, () =>
-      HttpResponse.json(createPage([DURABLE, ASSET])),
-    ),
+    http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([DURABLE, ASSET])),
     http.get(`${API_BASE_URL}/catalog/materials/${DURABLE.materialId}/unit-conversions`, () =>
-      HttpResponse.json([CARTON_CONVERSION]),
+      okPageJson([CARTON_CONVERSION]),
     ),
   )
 }
@@ -234,7 +235,7 @@ describe('QuantityLineEditor', () => {
     await waitFor(() => {
       const line = linesValue()[0]
       expect(line?.unitId).toBe(fixtureUuid(27))
-      expect(line?.conversionId).toBe(CARTON_CONVERSION.conversionId)
+      expect(line?.conversionId).toBe(CARTON_CONVERSION.materialUnitConversionId)
       expect(line?.baseQuantity).toBe(50)
     })
     expect(screen.getByText('لفة')).toBeInTheDocument()
@@ -255,7 +256,7 @@ describe('QuantityLineEditor', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${warehouseId}/capabilities`, () =>
-        HttpResponse.json([capability]),
+        okJson([capability]),
       ),
     )
     useCatalogHandlers()
@@ -274,12 +275,12 @@ describe('QuantityLineEditor', () => {
 
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'المستودع لا يمتلك قدرة "استلام" لمجال "المستلزمات المنزلية".',
+        'العملية استلام غير مدعومة لهذا المستودع والمجال المطلوبين.',
       ),
     )
     expect(onCapabilityGateChange).toHaveBeenLastCalledWith({
       status: 'blocked',
-      messageAr: 'المستودع لا يمتلك قدرة "استلام" لمجال "المستلزمات المنزلية".',
+      messageAr: 'العملية استلام غير مدعومة لهذا المستودع والمجال المطلوبين.',
     })
   })
 

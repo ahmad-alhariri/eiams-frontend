@@ -239,7 +239,7 @@ describe('WarehouseDetailPage', () => {
     await user.click(await screen.findByRole('button', { name: 'إدارة القدرات' }))
     const dialog = screen.getByRole('dialog', { name: 'إدارة قدرات المستودع' })
     await user.click(within(dialog).getByRole('checkbox', { name: 'Transfer' }))
-await user.click(within(dialog).getByRole('button', { name: 'حفظ القدرات' }))
+    await user.click(within(dialog).getByRole('button', { name: 'حفظ القدرات' }))
     const confirmation = screen.getByRole('alertdialog', { name: 'تأكيد حفظ القدرات' })
     await user.click(within(confirmation).getByRole('button', { name: 'حفظ التغييرات' }))
 

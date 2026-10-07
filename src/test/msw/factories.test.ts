@@ -91,7 +91,13 @@ describe('document-engine MSW factories', () => {
     })
 
     expect(line.material.materialId).toBe(fixtureUuid(60))
-    expect(line.material.materialKind).toBe('Durable')
+    // `Consumable`, not `Durable`. `'Durable'` only ever existed in the FROZEN
+    // GENERATED snapshot's `MaterialKind` union; the live handwritten catalog
+    // contract (`catalog.api-types.Material.materialKind`) is
+    // `'Consumable' | 'Asset'`, so a line whose material is `Durable` describes a
+    // record the API can never send — and `createMaterial()` correctly defaults to
+    // `Consumable`. The expectation was the stale side, so it moves to the factory.
+    expect(line.material.materialKind).toBe('Consumable')
     expect(line.quantity).toBe(3)
     expect(line.baseQuantity).toBe(3)
     expect(line.conversionFactor).toBe('1.000000')

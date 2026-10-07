@@ -9,15 +9,28 @@ interface CounterpartSelectFieldProps {
   disabled: boolean
 }
 
+/**
+ * Owns the combobox input's id so the field's `<label>` is bound to the input.
+ *
+ * A bare `<span>` cannot label anything: `getByLabelText('الموظف المكلف')` finds
+ * nothing, the required employee is announced with no accessible name, and the
+ * zod message for an unselected holder never reaches the user. The id is a
+ * constant rather than a generated one because this field has exactly one
+ * instance per dialog.
+ */
+const EMPLOYEE_FIELD_ID = 'assign-custody-holder'
+
 /** RHF bridge for the shared Employee counterpart lookup. */
 export function CounterpartSelectField({ control, disabled }: CounterpartSelectFieldProps) {
   return (
     <Controller
       control={control}
       name="holderId"
-      render={({ field: holderIdField }) => (
+      render={({ field: holderIdField, fieldState: holderIdState }) => (
         <div className="grid gap-2">
-          <span className="text-sm font-medium text-foreground">الموظف المكلف</span>
+          <label htmlFor={EMPLOYEE_FIELD_ID} className="text-sm font-medium text-foreground">
+            الموظف المكلف
+          </label>
           <Controller
             control={control}
             name="holderDisplayName"
@@ -29,9 +42,22 @@ export function CounterpartSelectField({ control, disabled }: CounterpartSelectF
                   nameField.onChange(reference === null ? '' : (counterpart?.nameAr ?? ''))
                 }}
                 disabled={disabled}
+                inputProps={{
+                  id: EMPLOYEE_FIELD_ID,
+                  'aria-invalid': holderIdState.invalid ? true : undefined,
+                  'aria-required': true,
+                }}
               />
             )}
           />
+          {/* `assignCustodySchema` makes the holder a uuid, so submitting without
+              one is the common case and its Arabic message must be visible here
+              rather than swallowed by the form. */}
+          {holderIdState.error !== undefined ? (
+            <p role="alert" className="text-sm text-destructive">
+              {holderIdState.error.message}
+            </p>
+          ) : null}
         </div>
       )}
     />

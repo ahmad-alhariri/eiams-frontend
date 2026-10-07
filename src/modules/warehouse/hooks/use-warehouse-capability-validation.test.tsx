@@ -124,7 +124,7 @@ describe('useWarehouseCapabilityValidation', () => {
 
     // `getOperationsForDomain` resolves membership, so it hands back a Set (the
     // hook's declared `ReadonlySet<CapabilityOperation>`), not the wire array.
-// A miss is the SAME shared empty Set, so a caller memoizing on the result is
+    // A miss is the SAME shared empty Set, so a caller memoizing on the result is
     // not re-run on every render for a domain with no capability row.
     expect(result.current.getOperationsForDomain(capability.domainId)).toStrictEqual(
       new Set(['Receiving', 'Issue', 'Transfer']),

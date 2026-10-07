@@ -4,9 +4,11 @@ import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { InventoryBalance } from '@/modules/inventory/types/inventory.api-types'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { InventoryBalance } from '@/shared/types/generated/eiams-v1'
-import { createInventoryBalance, createPage, fixtureUuid } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
+import { fixtureUuid } from '@/test/msw/factories'
+import { wireInventoryBalance } from '@/test/msw/inventory-wire-fixtures'
 import { server } from '@/test/msw/server'
 
 import { useIssueLineBalances } from './use-issue-line-balances'
@@ -21,10 +23,32 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = fixtureUuid(30)
+const COMPUTER_MATERIAL_ID = fixtureUuid(24)
+const PAPER_MATERIAL_ID = fixtureUuid(27)
 
+function materialOf(materialId: string, displayName: string) {
+  return { id: materialId, displayName, code: 'IT-HW-PC-001' }
+}
+
+/**
+ * A balance in the REAL wire shape (`inventory.api-types`), NOT the frozen
+ * generated snapshot `createInventoryBalance` mints.
+ *
+ * `createInventoryBalance` carries none of the flat `materialId` / `warehouseId`
+ * columns the backend projects, so a row built that way describes nothing
+ * `inventoryService.listBalances` could return. `wireInventoryBalance` is the
+ * same fixture the inventory service suite serves (see
+ * `inventory-wire-fixtures.ts` for the DTO evidence), and the flat id is kept in
+ * step with the nested reference a fixture can never disagree with.
+ */
 function createBalance(overrides: Partial<InventoryBalance> = {}): InventoryBalance {
-  return createInventoryBalance({
-    warehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي' },
+  return wireInventoryBalance({
+    materialId: COMPUTER_MATERIAL_ID,
+    materialCode: 'IT-HW-PC-001',
+    materialNameAr: 'حاسوب مكتبي',
+    material: materialOf(COMPUTER_MATERIAL_ID, 'حاسوب مكتبي'),
+    warehouseId: WAREHOUSE_ID,
+    warehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي', code: 'WH-CENTRAL' },
     ...overrides,
   })
 }
@@ -51,12 +75,11 @@ afterEach(() => {
 
 describe('useIssueLineBalances', () => {
   it('resolves one balance per distinct selected material in the given warehouse', async () => {
-    const computers = createBalance({
-      material: { id: fixtureUuid(24), displayName: 'حاسوب مكتبي' },
-      quantity: 15,
-    })
+    const computers = createBalance({ quantity: 15 })
     const paper = createBalance({
-      material: { id: fixtureUuid(27), displayName: 'ورق طباعة' },
+      materialId: PAPER_MATERIAL_ID,
+      materialNameAr: 'ورق طباعة',
+      material: materialOf(PAPER_MATERIAL_ID, 'ورق طباعة'),
       quantity: 12,
     })
     const requestedQueries: string[] = []
@@ -64,8 +87,8 @@ describe('useIssueLineBalances', () => {
       http.get(`${API_BASE_URL}/inventory/balances`, ({ request }) => {
         requestedQueries.push(new URL(request.url).search)
         const materialId = new URL(request.url).searchParams.get('materialId')
-        const row = [computers, paper].find((item) => item.material.id === materialId)
-        return HttpResponse.json(createPage(row === undefined ? [] : [row]))
+        const row = [computers, paper].find((item) => item.materialId === materialId)
+        return okPageJson(row === undefined ? [] : [row])
       }),
     )
 
@@ -87,12 +110,12 @@ describe('useIssueLineBalances', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, () => {
         callCount += 1
-        return HttpResponse.json(createPage([row]))
+        return okPageJson([row])
       }),
     )
 
     const { result } = renderHook(
-      () => useIssueLineBalances(WAREHOUSE_ID, [row.material.id, row.material.id]),
+      () => useIssueLineBalances(WAREHOUSE_ID, [row.materialId, row.materialId]),
       { wrapper: createWrapper() },
     )
 
@@ -101,9 +124,7 @@ describe('useIssueLineBalances', () => {
   })
 
   it('maps a material without any balance row to null (no stock held)', async () => {
-    server.use(
-      http.get(`${API_BASE_URL}/inventory/balances`, () => HttpResponse.json(createPage([]))),
-    )
+    server.use(http.get(`${API_BASE_URL}/inventory/balances`, () => okPageJson([])))
 
     const { result } = renderHook(() => useIssueLineBalances(WAREHOUSE_ID, [fixtureUuid(99)]), {
       wrapper: createWrapper(),
@@ -172,7 +193,7 @@ describe('useIssueLineBalances', () => {
         if (shouldFail) {
           return new HttpResponse(null, { status: 500 })
         }
-        return HttpResponse.json(createPage([createBalance({ quantity: 40 })]))
+        return okPageJson([createBalance({ quantity: 40 })])
       }),
     )
 
@@ -206,7 +227,7 @@ describe('useIssueLineBalances', () => {
         if (materialId === failingMaterialId) {
           return new HttpResponse(null, { status: 503 })
         }
-        return HttpResponse.json(createPage([good]))
+        return okPageJson([good])
       }),
     )
 
@@ -227,7 +248,14 @@ describe('useIssueLineBalances', () => {
       http.get(`${API_BASE_URL}/inventory/balances`, () => {
         balanceRequests += 1
         return balanceRequests === 1
-          ? HttpResponse.json(createPage([createBalance({ quantity: 9 })]))
+          ? okPageJson([
+              createBalance({
+                quantity: 9,
+                materialId: fixtureUuid(26),
+                materialNameAr: 'حبر طابعة',
+                material: materialOf(fixtureUuid(26), 'حبر طابعة'),
+              }),
+            ])
           : new HttpResponse(null, { status: 500 })
       }),
     )
