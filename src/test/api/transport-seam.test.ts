@@ -1,10 +1,10 @@
-﻿import { http } from 'msw'
+﻿import { HttpResponse, http } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { createCatalogService } from '@/modules/catalog/services/catalog.service'
 import { createWarehouseService } from '@/modules/warehouse/services/warehouse.service'
 import { isApiSuccessResponse } from '@/shared/api/envelope'
-import { okPageJson } from '@/test/msw/envelope'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { createMaterialDomain, createWarehouse } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
@@ -31,6 +31,7 @@ import { registerTestTransportHarness } from '@/test/support/test-transport-harn
  */
 
 const API_BASE_URL = '/api/v1'
+const WIRE_META = { request_id: 'transport-seam-request', timestamp: '2026-01-01T00:00:00.000Z' }
 const createHarness = registerTestTransportHarness(API_BASE_URL)
 
 describe('the ApiTransport seam is real, not a cast', () => {
@@ -64,7 +65,70 @@ describe('the ApiTransport seam is real, not a cast', () => {
     const page = await service.listWarehouses({})
 
     expect(page.items).toHaveLength(1)
-    expect(page.items[0]?.warehouseId).toBe(warehouse.warehouseId)
+    // The wire identifier is `id` (txq4); `warehouseId` was the frozen
+    // generated snapshot's fiction and is absent from every real record.
+    expect(page.items[0]?.id).toBe(warehouse.id)
+    expect(page.items[0]?.name).toBe(warehouse.name)
+  })
+
+  it('unwraps the envelope: request resolves to the payload, not the envelope', async () => {
+    const { transport } = createHarness()
+    const warehouse = createWarehouse()
+
+    server.use(http.get(`${API_BASE_URL}/warehouses/${warehouse.id}`, () => okJson(warehouse)))
+
+    // `okJson` wraps the record in `{ success, data, pagination, meta }`. If the
+    // transport returned the envelope, `record.id` would be undefined and the
+    // `success` key would be what the assertion below would find instead.
+    const record = await transport.request<{ id: string; name: string }>({
+      path: `/warehouses/${warehouse.id}`,
+      method: 'GET',
+    })
+
+    expect(record).toEqual(warehouse)
+    expect('success' in record).toBe(false)
+    expect('data' in record).toBe(false)
+  })
+
+  it('unwraps the envelope: requestPage resolves to a normalized page, requestEmpty to void', async () => {
+    const { transport } = createHarness()
+    const warehouse = createWarehouse()
+
+    server.use(
+      http.get(`${API_BASE_URL}/warehouses`, () =>
+        okPageJson([warehouse], { page: 2, pageSize: 25, totalCount: 51, totalPages: 3 }),
+      ),
+      http.put(`${API_BASE_URL}/warehouses/${warehouse.id}`, () =>
+        HttpResponse.json({ success: true, data: null, pagination: null, meta: WIRE_META }),
+      ),
+    )
+
+    const page = await transport.requestPage<typeof warehouse>({
+      path: '/warehouses',
+      method: 'GET',
+    })
+
+    // `ApiPage<T>`: camelCase counts derived from the wire's snake_case block,
+    // with the rows under `items` rather than `data`.
+    expect(page.items).toEqual([warehouse])
+    expect(page.page).toBe(2)
+    expect(page.pageSize).toBe(25)
+    expect(page.totalItems).toBe(51)
+    expect(page.totalPages).toBe(3)
+    expect(page.hasPreviousPage).toBe(true)
+    expect(page.hasNextPage).toBe(true)
+    expect('data' in page).toBe(false)
+    expect('pagination' in page).toBe(false)
+
+    // `PUT /warehouses/{id}` answers an empty body; the service reads nothing
+    // off the result, so the transport must resolve `void`, not `null`.
+    const result = await transport.requestEmpty({
+      path: `/warehouses/${warehouse.id}`,
+      method: 'PUT',
+      body: { name: 'المستودع المحدّث' },
+    })
+
+    expect(result).toBeUndefined()
   })
 
   it('normalizes the wire snake_case pagination into the frontend page shape', async () => {

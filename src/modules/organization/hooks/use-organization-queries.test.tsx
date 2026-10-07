@@ -1,15 +1,15 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import {
   createEmployee,
   createExternalParty,
   createOrganizationalUnit,
-  createPage,
   createSite,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
@@ -55,22 +55,37 @@ describe('organization query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/sites`, ({ request }) => {
         search = new URL(request.url).searchParams.get('search')
-        return HttpResponse.json(createPage([site]))
+        return okPageJson([site], { page: 3, pageSize: 10, totalCount: 41, totalPages: 5 })
       }),
     )
 
-    const query = { pageIndex: 3, pageSize: 10, search: 'دمشق' }
+    // `ListSitesQuery` declares `page` — the name the backend binds. `pageIndex`
+    // was the frozen generated snapshot's spelling and is silently discarded.
+    const query = { page: 3, pageSize: 10, search: 'دمشق' }
     const { result } = renderHook(() => useSitesQuery(query), { wrapper: createWrapper() })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.items).toEqual([site])
     expect(search).toBe('دمشق')
+    // The wire's snake_case pagination block is normalized into the module
+    // `PageMeta` the tables read.
+    expect(result.current.data?.meta).toEqual({
+      page: 3,
+      pageIndex: 3,
+      pageSize: 10,
+      itemCount: 41,
+      totalItems: 41,
+      totalCount: 41,
+      totalPages: 5,
+      hasNextPage: true,
+      hasPreviousPage: true,
+    })
     expect(result.current.dataUpdatedAt).toBeGreaterThan(0)
   })
 
   it('keeps site list and detail cache entries distinct inside the active scope', () => {
     const scope = { kind: 'enterprise' as const }
-    const query = { pageIndex: 1, search: 'دمشق' }
+    const query = { page: 1, search: 'دمشق' }
 
     expect(organizationQueryKeys.sites(scope, query)).toEqual([
       'scoped',
@@ -96,32 +111,26 @@ describe('organization query hooks', () => {
     const externalParty = createExternalParty()
 
     server.use(
-      http.get(`${API_BASE_URL}/organizational-units`, () => HttpResponse.json(createPage([unit]))),
-      http.get(`${API_BASE_URL}/organizational-units/${unit.orgUnitId}`, () =>
-        HttpResponse.json(unit),
-      ),
-      http.get(`${API_BASE_URL}/employees`, () => HttpResponse.json(createPage([employee]))),
-      http.get(`${API_BASE_URL}/employees/${employee.employeeId}`, () =>
-        HttpResponse.json(employee),
-      ),
-      http.get(`${API_BASE_URL}/external-parties`, () =>
-        HttpResponse.json(createPage([externalParty])),
-      ),
+      http.get(`${API_BASE_URL}/organizational-units`, () => okPageJson([unit])),
+      http.get(`${API_BASE_URL}/organizational-units/${unit.id}`, () => okJson(unit)),
+      http.get(`${API_BASE_URL}/employees`, () => okPageJson([employee])),
+      http.get(`${API_BASE_URL}/employees/${employee.id}`, () => okJson(employee)),
+      http.get(`${API_BASE_URL}/external-parties`, () => okPageJson([externalParty])),
       http.get(`${API_BASE_URL}/external-parties/${externalParty.externalPartyId}`, () =>
-        HttpResponse.json(externalParty),
+        okJson(externalParty),
       ),
     )
 
     const unitsList = renderHook(() => useOrganizationalUnitsQuery({ siteId: unit.siteId }), {
       wrapper: createWrapper(),
     })
-    const unitDetail = renderHook(() => useOrganizationalUnitQuery(unit.orgUnitId), {
+    const unitDetail = renderHook(() => useOrganizationalUnitQuery(unit.id), {
       wrapper: createWrapper(),
     })
     const employeesList = renderHook(() => useEmployeesQuery({ siteId: unit.siteId }), {
       wrapper: createWrapper(),
     })
-    const employeeDetail = renderHook(() => useEmployeeQuery(employee.employeeId), {
+    const employeeDetail = renderHook(() => useEmployeeQuery(employee.id), {
       wrapper: createWrapper(),
     })
     const externalPartiesList = renderHook(() => useExternalPartiesQuery({ search: 'خارجي' }), {
@@ -156,7 +165,7 @@ describe('organization query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/employees`, () => {
         requestCount += 1
-        return HttpResponse.json(createPage([createEmployee()]))
+        return okPageJson([createEmployee()])
       }),
     )
 
@@ -173,9 +182,9 @@ describe('organization query hooks', () => {
   it('reads a scoped site detail resource', async () => {
     const site = createSite()
 
-    server.use(http.get(`${API_BASE_URL}/sites/${site.siteId}`, () => HttpResponse.json(site)))
+    server.use(http.get(`${API_BASE_URL}/sites/${site.id}`, () => okJson(site)))
 
-    const { result } = renderHook(() => useSiteQuery(site.siteId), { wrapper: createWrapper() })
+    const { result } = renderHook(() => useSiteQuery(site.id), { wrapper: createWrapper() })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data).toEqual(site)

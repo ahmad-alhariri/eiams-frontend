@@ -6,7 +6,8 @@ import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createEmployee, createPage, createSite } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
+import { createEmployee, createOrganizationalUnit, createSite } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -42,28 +43,52 @@ afterEach(() => {
 describe('EmployeesListPage', () => {
   it('renders contract-backed employee rows and sends zero-based server pagination', async () => {
     const employee = createEmployee()
-    let receivedPageIndex: string | null = null
+    const orgUnit = createOrganizationalUnit()
+    let receivedPage: string | null = null
     let receivedPageSize: string | null = null
 
     server.use(
       http.get(`${API_BASE_URL}/employees`, ({ request }) => {
         const url = new URL(request.url)
-        receivedPageIndex = url.searchParams.get('pageIndex')
+        receivedPage = url.searchParams.get('page')
         receivedPageSize = url.searchParams.get('pageSize')
-        return HttpResponse.json(createPage([employee], { totalItems: 11, totalPages: 2 }))
+        return okPageJson([employee], { page: 1, pageSize: 10, totalCount: 11, totalPages: 2 })
       }),
-      http.get(`${API_BASE_URL}/sites`, () => HttpResponse.json(createPage([createSite()]))),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([createSite()])),
+      http.get(`${API_BASE_URL}/organizational-units`, () => okPageJson([orgUnit])),
     )
 
     render(<EmployeesListPage />, { wrapper: createWrapper() })
 
     expect(await screen.findByRole('heading', { level: 1, name: 'الموظفون' })).toBeInTheDocument()
-    expect(await screen.findByText(employee.fullNameAr)).toBeInTheDocument()
+    expect(await screen.findByText(employee.fullName)).toBeInTheDocument()
     expect(screen.getByText(employee.employeeNumber)).toBeInTheDocument()
+    // The org-unit label is joined from `employee.orgUnitId` against the
+    // org-units list, because the projection carries no nested unit.
+    expect(await screen.findByText(orgUnit.name)).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'الوحدة التنظيمية' })).toBeInTheDocument()
+    // There is deliberately NO site column: an employee record cannot supply a
+    // site name. The site names the directory knows about live in the filter.
+    expect(screen.queryByRole('columnheader', { name: 'الموقع' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /إضافة موظف|تعديل/ })).not.toBeInTheDocument()
-    expect(receivedPageIndex).toBe('0')
+    expect(receivedPage).toBe('0')
     expect(receivedPageSize).toBe('10')
+  })
+
+  it('shows a dash when the employee org unit is missing from the loaded units list', async () => {
+    const employee = createEmployee({ orgUnitId: '00000000-0000-4000-8000-00000000ffff' })
+
+    server.use(
+      http.get(`${API_BASE_URL}/employees`, () => okPageJson([employee])),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([])),
+      // The units list answers without the employee's unit, so the join misses.
+      http.get(`${API_BASE_URL}/organizational-units`, () => okPageJson([])),
+    )
+
+    render(<EmployeesListPage />, { wrapper: createWrapper() })
+
+    expect(await screen.findByText(employee.fullName)).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
   })
 
   it('sends selected site and status filters to the server', async () => {
@@ -72,16 +97,17 @@ describe('EmployeesListPage', () => {
     const receivedFilters: Array<{ siteId: string | null; status: string | null }> = []
 
     server.use(
-      http.get(`${API_BASE_URL}/sites`, () => HttpResponse.json(createPage([site]))),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([site])),
+      http.get(`${API_BASE_URL}/organizational-units`, () => okPageJson([])),
       http.get(`${API_BASE_URL}/employees`, ({ request }) => {
         const url = new URL(request.url)
         receivedFilters.push({
           siteId: url.searchParams.get('siteId'),
           status: url.searchParams.get('status'),
         })
-        return HttpResponse.json(
-          createPage([createEmployee({ site: { ...createEmployee().site, id: site.siteId } })]),
-        )
+        // An employee record carries no site reference at all, so the filtered
+        // response is built from the factory defaults regardless of `siteId`.
+        return okPageJson([createEmployee()])
       }),
     )
 
@@ -89,12 +115,12 @@ describe('EmployeesListPage', () => {
 
     await screen.findByText('موظف تجريبي')
     await user.click(screen.getByRole('combobox', { name: 'تصفية حسب الموقع' }))
-    await user.click(await screen.findByRole('option', { name: site.nameAr }))
+    await user.click(await screen.findByRole('option', { name: site.name }))
     await user.click(screen.getByRole('combobox', { name: 'تصفية حسب حالة الموظف' }))
     await user.click(await screen.findByRole('option', { name: 'غير نشط' }))
 
     await waitFor(() =>
-      expect(receivedFilters).toContainEqual({ siteId: site.siteId, status: 'Inactive' }),
+      expect(receivedFilters).toContainEqual({ siteId: site.id, status: 'Inactive' }),
     )
   })
 
@@ -102,12 +128,13 @@ describe('EmployeesListPage', () => {
     let attempts = 0
 
     server.use(
-      http.get(`${API_BASE_URL}/sites`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/organizational-units`, () => okPageJson([])),
       http.get(`${API_BASE_URL}/employees`, () => {
         attempts += 1
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(createPage([createEmployee()]))
+          : okPageJson([createEmployee()])
       }),
     )
 
