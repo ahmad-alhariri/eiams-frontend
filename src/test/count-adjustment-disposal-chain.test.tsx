@@ -30,7 +30,8 @@ import type {
   StockMovement,
 } from '@/shared/types/generated/eiams-v1'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
-import { createDocumentPolicy, createPage, createSession } from '@/test/msw/factories'
+import { createDocumentPolicy, createSession } from '@/test/msw/factories'
+import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
@@ -159,9 +160,9 @@ function postResult(
 
 function countHandlers() {
   server.use(
-    http.get(`*/api/v1/inventory-counts/${count.countId}`, () => HttpResponse.json(count)),
+    http.get(`*/api/v1/inventory-counts/${count.countId}`, () => apiJson(count)),
     http.get(`*/api/v1/inventory-counts/${count.countId}/lines`, () =>
-      HttpResponse.json(createPage(scenario.adjustments.countLines)),
+      okPageJson(scenario.adjustments.countLines),
     ),
   )
 }
@@ -196,25 +197,21 @@ describe('count adjustment and disposal chain', () => {
     server.use(
       http.post('*/api/v1/adjustments', async ({ request }) => {
         creates.push(await request.json())
-        return HttpResponse.json(draft, { status: 201 })
+        return apiJson(draft, { status: 201 })
       }),
-      http.get('*/api/v1/adjustments', () =>
-        HttpResponse.json(createPage([posted ? adjustment : draft])),
-      ),
+      http.get('*/api/v1/adjustments', () => okPageJson([posted ? adjustment : draft])),
       http.get(`*/api/v1/adjustments/${adjustment.adjustmentId}`, () =>
-        HttpResponse.json(posted ? adjustment : draft),
+        apiJson(posted ? adjustment : draft),
       ),
       http.post(`*/api/v1/adjustments/${adjustment.adjustmentId}/post`, async ({ request }) => {
         posts.push({ body: await request.json(), key: request.headers.get('Idempotency-Key') })
         posted = true
-        return HttpResponse.json<AdjustmentPostResult>(postResult(adjustment, [movement]))
+        return apiJson(postResult(adjustment, [movement]))
       }),
       http.get(`*/api/v1/inventory/balances/${balance.balanceId}`, () =>
-        HttpResponse.json(posted ? balance : { ...balance, quantity: 7 }),
+        apiJson(posted ? balance : { ...balance, quantity: 7 }),
       ),
-      http.get('*/api/v1/inventory/movements', () =>
-        HttpResponse.json(createPage(posted ? [movement] : [])),
-      ),
+      http.get('*/api/v1/inventory/movements', () => okPageJson(posted ? [movement] : [])),
     )
     const journey = setupJourney(ROUTE_PATHS.countDetail.replace(':countId', count.countId))
     const projections = renderHook(
@@ -279,7 +276,7 @@ describe('count adjustment and disposal chain', () => {
     const post = vi.fn()
     server.use(
       http.get(`*/api/v1/adjustments/${adjustment.adjustmentId}`, () =>
-        HttpResponse.json(draftOf(adjustment, false)),
+        apiJson(draftOf(adjustment, false)),
       ),
       http.post(`*/api/v1/adjustments/${adjustment.adjustmentId}/post`, post),
     )
@@ -293,7 +290,7 @@ describe('count adjustment and disposal chain', () => {
     expect(post).not.toHaveBeenCalled()
     server.use(
       http.get(`*/api/v1/adjustments/${adjustment.adjustmentId}`, () =>
-        HttpResponse.json(draftOf(adjustment)),
+        apiJson(draftOf(adjustment)),
       ),
     )
     await act(async () => {
@@ -380,33 +377,29 @@ describe('count adjustment and disposal chain', () => {
       const posts: unknown[] = []
       server.use(
         http.get(`*/api/v1/adjustments/${disposal.adjustmentId}`, () =>
-          HttpResponse.json(posted ? postedAdjustment : draftOf(postedAdjustment)),
+          apiJson(posted ? postedAdjustment : draftOf(postedAdjustment)),
         ),
         http.post(`*/api/v1/adjustments/${disposal.adjustmentId}/post`, async ({ request }) => {
           posts.push(await request.json())
           posted = true
-          return HttpResponse.json<AdjustmentPostResult>(response)
+          return apiJson(response)
         }),
         http.get(`*/api/v1/assets/${originalAsset.assetId}`, () =>
-          HttpResponse.json(posted ? disposedAsset : originalAsset),
+          apiJson(posted ? disposedAsset : originalAsset),
         ),
         http.get(`*/api/v1/assets/${originalAsset.assetId}/custody`, () =>
-          HttpResponse.json(posted ? closedCustodies : activeCustody ? [activeCustody] : []),
+          okJson(posted ? closedCustodies : activeCustody ? [activeCustody] : []),
         ),
         http.get(`*/api/v1/assets/${originalAsset.assetId}/movements`, () =>
-          HttpResponse.json(
-            createPage(posted ? [...existingEvents, disposedEvent] : existingEvents),
-          ),
+          okPageJson(posted ? [...existingEvents, disposedEvent] : existingEvents),
         ),
         http.get('*/api/v1/custodies', () =>
-          HttpResponse.json(createPage(!posted && activeCustody ? [activeCustody] : [])),
+          okPageJson(!posted && activeCustody ? [activeCustody] : []),
         ),
         http.get(`*/api/v1/inventory/balances/${balance.balanceId}`, () =>
-          HttpResponse.json({ ...balance, quantity: posted || issued ? 2 : 3 }),
+          apiJson({ ...balance, quantity: posted || issued ? 2 : 3 }),
         ),
-        http.get('*/api/v1/inventory/movements', () =>
-          HttpResponse.json(createPage(posted ? stockRows : [])),
-        ),
+        http.get('*/api/v1/inventory/movements', () => okPageJson(posted ? stockRows : [])),
       )
       const journey = setupJourney(detailPath(disposal))
       const projections = renderHook(

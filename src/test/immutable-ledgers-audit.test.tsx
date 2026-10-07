@@ -27,6 +27,7 @@ import {
   createSession,
   fixtureUuid,
 } from '@/test/msw/factories'
+import { apiJson, errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import {
   applicationSourceFiles,
@@ -362,21 +363,15 @@ describe('the cross-module ledger graph is consumable through the production ser
     const { ledgers } = SCENARIO
     const requested: string[] = []
     server.use(
-      http.get(`${API_BASE_URL}/inventory/balances`, () =>
-        HttpResponse.json(createPage(ledgers.balances)),
-      ),
-      http.get(`${API_BASE_URL}/inventory/movements`, () =>
-        HttpResponse.json(createPage(ledgers.stockMovements)),
-      ),
+      http.get(`${API_BASE_URL}/inventory/balances`, () => okPageJson(ledgers.balances)),
+      http.get(`${API_BASE_URL}/inventory/movements`, () => okPageJson(ledgers.stockMovements)),
       http.get(`${API_BASE_URL}/assets/:assetId/movements`, () =>
-        HttpResponse.json(createPage(ledgers.assetMovements)),
+        okPageJson(ledgers.assetMovements),
       ),
-      http.get(`${API_BASE_URL}/assets/:assetId/custody`, () =>
-        HttpResponse.json(ledgers.custodies),
-      ),
+      http.get(`${API_BASE_URL}/assets/:assetId/custody`, () => okJson(ledgers.custodies)),
       http.get(`${API_BASE_URL}/audit-logs`, ({ request }) => {
         requested.push(new URL(request.url).searchParams.get('pageIndex') ?? '')
-        return HttpResponse.json(createPage(ledgers.auditLogs))
+        return okPageJson(ledgers.auditLogs)
       }),
     )
 
@@ -409,7 +404,9 @@ describe('the cross-module ledger graph is consumable through the production ser
     const redactedEntry = redactedLog.entries.find((entry) => entry.redacted)!
 
     server.use(
-      http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, () => HttpResponse.json(redactedLog)),
+      http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, () =>
+        apiJson(redactedLog, { status: 200 }),
+      ),
     )
 
     const detail = await auditService.getAuditLog(redactedLog.auditLogId)
@@ -445,11 +442,11 @@ describe('AuditDetail read branches', () => {
     server.use(
       http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, ({ params }) =>
         params['auditLogId'] === UNKNOWN_AUDIT_LOG_ID
-          ? HttpResponse.json(
-              { code: 'audit.not_found', titleAr: 'السجل غير موجود', status: 404 },
-              { status: 404 },
-            )
-          : HttpResponse.json(createAuditLog()),
+          ? errJson(404, {
+              code: 'audit.not_found',
+              message: 'لم يُعثر على سجل التدقيق المطلوب.',
+            })
+          : apiJson(createAuditLog(), { status: 200 }),
       ),
     )
 
@@ -464,7 +461,7 @@ describe('AuditDetail read branches', () => {
   it('renders the empty branch for an audit log with zero field entries', async () => {
     const auditLog = createAuditLog({ auditLogId: fixtureUuid(4301), entries: [] })
     server.use(
-      http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, () => HttpResponse.json(auditLog)),
+      http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, () => apiJson(auditLog, { status: 200 })),
     )
 
     renderWithProviders(<AuditLogExplorerPage />, `/audit?auditLogId=${auditLog.auditLogId}`)
@@ -490,7 +487,7 @@ describe('AuditDetail read branches', () => {
       ],
     })
     server.use(
-      http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, () => HttpResponse.json(auditLog)),
+      http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, () => apiJson(auditLog, { status: 200 })),
     )
 
     renderWithProviders(<AuditLogExplorerPage />, `/audit?auditLogId=${auditLog.auditLogId}`)
@@ -514,10 +511,10 @@ describe('AuditDetail read branches', () => {
     })
     const detailRequests: string[] = []
     server.use(
-      http.get(`${API_BASE_URL}/audit-logs`, () => HttpResponse.json(createPage([auditLog]))),
+      http.get(`${API_BASE_URL}/audit-logs`, () => okPageJson([auditLog])),
       http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, ({ params }) => {
         detailRequests.push(String(params['auditLogId']))
-        return HttpResponse.json(auditLog)
+        return apiJson(auditLog, { status: 200 })
       }),
     )
 
@@ -546,11 +543,11 @@ describe('AuditDetail read branches', () => {
     const detailRequests: string[] = []
     server.use(
       http.get(`${API_BASE_URL}/audit-logs`, () =>
-        HttpResponse.json(createPage([createAuditLog({ auditLogId: fixtureUuid(4304) })])),
+        okPageJson([createAuditLog({ auditLogId: fixtureUuid(4304) })]),
       ),
       http.get(/\/api\/v1\/audit-logs\//u, ({ request }) => {
         detailRequests.push(new URL(request.url).pathname)
-        return HttpResponse.json({ code: 'audit.not_found', status: 404 }, { status: 404 })
+        return errJson(404, { code: 'audit.not_found' })
       }),
     )
 
@@ -602,11 +599,7 @@ describe('the custody timeline surfaces a closed row end time', () => {
   }
 
   it('renders the closed row end time as an Arabic timestamp, never a raw ISO string', async () => {
-    server.use(
-      http.get(`${API_BASE_URL}/assets/:assetId/custody`, () =>
-        HttpResponse.json([closed, active]),
-      ),
-    )
+    server.use(http.get(`${API_BASE_URL}/assets/:assetId/custody`, () => okJson([closed, active])))
     renderTimeline()
 
     expect(await screen.findByText('مديرية المعلوماتية')).toBeInTheDocument()
@@ -616,11 +609,7 @@ describe('the custody timeline surfaces a closed row end time', () => {
   })
 
   it('shows no end time for a still-open custody row', async () => {
-    server.use(
-      http.get(`${API_BASE_URL}/assets/:assetId/custody`, () =>
-        HttpResponse.json([closed, active]),
-      ),
-    )
+    server.use(http.get(`${API_BASE_URL}/assets/:assetId/custody`, () => okJson([closed, active])))
     renderTimeline()
 
     const activeRow = (await screen.findByText('أحمد الخالد')).closest('tr')
@@ -633,9 +622,7 @@ describe('the custody timeline surfaces a closed row end time', () => {
     server.use(
       http.get(`${API_BASE_URL}/assets/:assetId/custody`, () => {
         attempts += 1
-        return attempts === 1
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json([closed, active])
+        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson([closed, active])
       }),
     )
     const user = userEvent.setup()
@@ -682,7 +669,13 @@ describe('the asset movement ledger pages against the server', () => {
       http.get(`${API_BASE_URL}/assets/:assetId/movements`, ({ request }) => {
         const pageIndex = new URL(request.url).searchParams.get('pageIndex') ?? ''
         requested.push(pageIndex)
-        return HttpResponse.json(movementPage(Number(pageIndex)))
+        const movementResponse = movementPage(Number(pageIndex))
+        return okPageJson(movementResponse.items, {
+          page: pageIndex === '' ? 1 : Number(pageIndex) + 1,
+          pageSize: movementResponse.meta.pageSize,
+          totalCount: movementResponse.meta.totalItems,
+          totalPages: movementResponse.meta.totalPages,
+        })
       }),
     )
     renderWithProviders(<AssetMovementLedger assetId={ASSET_ID} />, '/assets/1')
@@ -699,9 +692,15 @@ describe('the asset movement ledger pages against the server', () => {
   })
 
   it('formats the event timestamp instead of rendering the raw ISO value', async () => {
+    const movementResponse = movementPage(0)
     server.use(
       http.get(`${API_BASE_URL}/assets/:assetId/movements`, () =>
-        HttpResponse.json(movementPage(0)),
+        okPageJson(movementResponse.items, {
+          page: 1,
+          pageSize: movementResponse.meta.pageSize,
+          totalCount: movementResponse.meta.totalItems,
+          totalPages: movementResponse.meta.totalPages,
+        }),
       ),
     )
     renderWithProviders(<AssetMovementLedger assetId={ASSET_ID} />, '/assets/1')
