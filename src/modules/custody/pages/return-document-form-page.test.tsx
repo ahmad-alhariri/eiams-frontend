@@ -7,12 +7,8 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import ReturnDocumentFormPage from './return-document-form-page'
-import {
-  createMaterial,
-  createWarehouse,
-  createWarehouseCapability,
-  fixtureUuid,
-} from '@/test/msw/factories'
+import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
+import { createWarehouse, createWarehouseCapability, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { ROUTE_PATHS } from '@/config/routes'
 import { createQueryClient } from '@/shared/services/query.client'
@@ -34,7 +30,7 @@ vi.mock('@/modules/auth/hooks/use-permission', () => ({
 const WAREHOUSE_ID = fixtureUuid(30)
 const WAREHOUSE = createWarehouse({ id: WAREHOUSE_ID })
 const MATERIAL_ID = fixtureUuid(40)
-const MATERIAL = createMaterial({ materialId: MATERIAL_ID })
+const MATERIAL = wireMaterial({ materialId: MATERIAL_ID })
 
 async function fillHeader(user: ReturnType<typeof userEvent.setup>) {
   const warehouseCombo = screen.getByRole('combobox', { name: 'المستودع' })
@@ -55,7 +51,7 @@ function useDocumentHandlers() {
       okJson([
         createWarehouseCapability({
           warehouseId: WAREHOUSE_ID,
-          domain: MATERIAL.domain,
+          domain: MATERIAL.materialDomain,
           operations: ['Return', 'Issue', 'Receiving'],
         }),
       ]),
