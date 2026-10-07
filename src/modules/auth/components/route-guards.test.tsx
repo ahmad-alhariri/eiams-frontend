@@ -5,32 +5,37 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 
 import {
   AnonymousRoute,
-  NoAccessRoute,
-  RequireSelectedScope,
+  RequireActiveScope,
   RouteAccessGuard,
-  ScopeSelectionRoute,
 } from '@/modules/auth/components/route-guards'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import type { AuthSessionStatus } from '@/modules/auth/store/auth-session.store'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole } from '@/test/msw/factories'
 
-const selectedSession: SessionResponse = {
-  user: {
-    userId: '10000000-0000-4000-8000-000000000001',
-    username: 'warehouse.manager',
-    displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
-  },
+const activeScopeSession: SessionResponse = {
+  user: createSessionUser({ firstName: 'أمين المستودع' }),
+  role: createSessionRole(),
   permissionCodes: ['inventory.view'],
-  availableScopes: [],
-  scopeState: 'Selected',
-  activeRoles: [],
+  activeScope: {
+    scopeType: 'Warehouse',
+    scopeId: '20000000-0000-4000-8000-000000000001',
+    scopeName: 'المستودع المركزي',
+  },
 }
 
-function withScopeState(scopeState: SessionResponse['scopeState']): SessionResponse {
-  return { ...selectedSession, scopeState }
+/**
+ * Deliberately builds a session carrying NO activeScope.
+ *
+ * `SessionResponse.activeScope` is required, so this payload cannot be expressed through the
+ * type — which is the point. It is the shape the guard must still refuse: the guard this bead
+ * closed compared `scopeState === 'SelectionRequired'` by equality, so undefined fell through
+ * to rendering the protected tree. The cast is the assertion under test, not a convenience,
+ * so it is confined to this one function.
+ */
+function sessionWithoutScope(): SessionResponse {
+  return { ...activeScopeSession, activeScope: undefined } as unknown as SessionResponse
 }
 
 function renderRoutes({
@@ -62,14 +67,12 @@ function renderRoutes({
               </AnonymousRoute>
             }
           />
-          <Route path="/session/scope" element={<ScopeSelectionRoute />} />
-          <Route path="/session/no-access" element={<NoAccessRoute />} />
           <Route
             path="/protected"
             element={
-              <RequireSelectedScope>
+              <RequireActiveScope>
                 <p>محتوى محمي</p>
-              </RequireSelectedScope>
+              </RequireActiveScope>
             }
           />
           <Route
@@ -108,33 +111,30 @@ describe('authentication route guards', () => {
     expect(screen.queryByText('محتوى محمي')).not.toBeInTheDocument()
   })
 
-  it('redirects authenticated users without a selected scope to the scope gate', () => {
-    renderRoutes({ status: 'authenticated', session: withScopeState('SelectionRequired') })
-
-    expect(screen.getByRole('heading', { name: 'اختيار نطاق العمل مطلوب' })).toBeInTheDocument()
-    expect(screen.queryByText('محتوى محمي')).not.toBeInTheDocument()
-  })
-
-  it('redirects authenticated users with no effective scope to the contact-administrator state', () => {
-    renderRoutes({ status: 'authenticated', session: withScopeState('Unavailable') })
+  it('denies an authenticated session that carries no active scope', () => {
+    renderRoutes({ status: 'authenticated', session: sessionWithoutScope() })
 
     expect(screen.getByRole('heading', { name: 'لا يتوفر نطاق عمل' })).toBeInTheDocument()
     expect(screen.queryByText('محتوى محمي')).not.toBeInTheDocument()
   })
 
-  it('renders selected-scope content and keeps permission denial separate from logout', () => {
+  it('renders scoped content and keeps permission denial separate from logout', () => {
     renderRoutes({
       initialPath: '/inventory',
       status: 'authenticated',
-      session: { ...selectedSession, permissionCodes: [] },
+      session: { ...activeScopeSession, permissionCodes: [] },
     })
 
     expect(screen.getByRole('heading', { name: 'ليست لديك صلاحية الوصول' })).toBeInTheDocument()
     expect(useAuthSessionStore.getState().status).toBe('authenticated')
   })
 
-  it('allows a selected-scope route when the canonical route permission passes', () => {
-    renderRoutes({ initialPath: '/inventory', status: 'authenticated', session: selectedSession })
+  it('allows a scoped route when the canonical route permission passes', () => {
+    renderRoutes({
+      initialPath: '/inventory',
+      status: 'authenticated',
+      session: activeScopeSession,
+    })
 
     expect(screen.getByText('أرصدة المخزون')).toBeInTheDocument()
   })

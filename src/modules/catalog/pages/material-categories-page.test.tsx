@@ -1,11 +1,16 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createMaterialCategory, createMaterialDomain } from '@/test/msw/factories'
+import {
+  wireMaterialCategory,
+  wireMaterialDomain,
+  wireNamedReference,
+} from '@/test/msw/catalog-wire-fixtures'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -37,10 +42,10 @@ afterEach(() => {
 
 describe('MaterialCategoriesPage', () => {
   it('keeps category mutations hidden without catalog.manage', async () => {
-    const category = createMaterialCategory()
+    const category = wireMaterialCategory()
     server.use(
-      http.get(`${API_BASE_URL}/catalog/categories`, () => HttpResponse.json([category])),
-      http.get(`${API_BASE_URL}/catalog/domains`, () => HttpResponse.json([])),
+      http.get(`${API_BASE_URL}/catalog/material-categories`, () => okPageJson([category])),
+      http.get(`${API_BASE_URL}/catalog/material-domains`, () => okPageJson([])),
     )
 
     render(<MaterialCategoriesPage />, { wrapper: createWrapper() })
@@ -54,15 +59,15 @@ describe('MaterialCategoriesPage', () => {
 
   it('creates the contract payload from the accessible RTL form', async () => {
     permissions.canManage = true
-    const domain = createMaterialDomain()
+    const domain = wireMaterialDomain()
     const receivedBodies: unknown[] = []
     const user = userEvent.setup()
     server.use(
-      http.get(`${API_BASE_URL}/catalog/categories`, () => HttpResponse.json([])),
-      http.get(`${API_BASE_URL}/catalog/domains`, () => HttpResponse.json([domain])),
-      http.post(`${API_BASE_URL}/catalog/categories`, async ({ request }) => {
+      http.get(`${API_BASE_URL}/catalog/material-categories`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/catalog/material-domains`, () => okPageJson([domain])),
+      http.post(`${API_BASE_URL}/catalog/material-categories`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json(createMaterialCategory())
+        return okJson(wireMaterialCategory())
       }),
     )
 
@@ -80,8 +85,11 @@ describe('MaterialCategoriesPage', () => {
       expect(receivedBodies).toEqual([
         {
           code: 'IT-HW',
-          domainId: domain.domainId,
+          materialDomainId: domain.materialDomainId,
           nameAr: 'الأجهزة',
+          // A category with no parent sends an explicit null: the field is part
+          // of the request contract, not an omission the client may choose.
+          parentCategoryId: null,
           rowVersion: 0,
           status: 'Active',
         },
@@ -91,20 +99,23 @@ describe('MaterialCategoriesPage', () => {
 
   it('updates a tree node with its row version', async () => {
     permissions.canManage = true
-    const domain = createMaterialDomain()
-    const category = createMaterialCategory({
-      domain: { id: domain.domainId, displayName: domain.nameAr },
+    const domain = wireMaterialDomain()
+    const category = wireMaterialCategory({
+      materialDomain: wireNamedReference(domain.materialDomainId, domain.nameAr),
       rowVersion: 7,
     })
     let receivedBody: unknown = null
     const user = userEvent.setup()
     server.use(
-      http.get(`${API_BASE_URL}/catalog/categories`, () => HttpResponse.json([category])),
-      http.get(`${API_BASE_URL}/catalog/domains`, () => HttpResponse.json([domain])),
-      http.put(`${API_BASE_URL}/catalog/categories/${category.categoryId}`, async ({ request }) => {
-        receivedBody = await request.json()
-        return HttpResponse.json({ ...category, nameAr: 'أجهزة محدثة' })
-      }),
+      http.get(`${API_BASE_URL}/catalog/material-categories`, () => okPageJson([category])),
+      http.get(`${API_BASE_URL}/catalog/material-domains`, () => okPageJson([domain])),
+      http.put(
+        `${API_BASE_URL}/catalog/material-categories/${category.materialCategoryId}`,
+        async ({ request }) => {
+          receivedBody = await request.json()
+          return okJson({ ...category, nameAr: 'أجهزة محدثة' })
+        },
+      ),
     )
 
     render(<MaterialCategoriesPage />, { wrapper: createWrapper() })
@@ -119,8 +130,9 @@ describe('MaterialCategoriesPage', () => {
     await waitFor(() =>
       expect(receivedBody).toEqual({
         code: category.code,
-        domainId: domain.domainId,
+        materialDomainId: domain.materialDomainId,
         nameAr: 'أجهزة محدثة',
+        parentCategoryId: null,
         rowVersion: 7,
         status: category.status,
       }),

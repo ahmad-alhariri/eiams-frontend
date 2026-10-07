@@ -1,15 +1,20 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ROUTE_PATHS } from '@/config/routes'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { SessionResponse, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   createDocumentPolicy,
+  createSessionRole,
+  createSessionScope,
+  createSessionUser,
   createWarehouseDocument,
   deriveLifecycleEvents,
   fixtureUuid,
@@ -54,23 +59,10 @@ const KEEPER_DOCUMENT_CODES = [
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'document.manager',
-      displayName: 'مدير المستندات',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستندات' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      {
-        scopeType: 'Warehouse',
-        scopeId: '00000000-0000-4000-8000-00000000000c',
-        displayName: 'المستودع المركزي',
-      },
-    ],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -115,12 +107,10 @@ function useMutableDocumentHandlers(store: WarehouseDocument[], signedOriginalSa
     }),
   }
   server.use(
-    http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-      HttpResponse.json(store[0]),
-    ),
+    http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store[0])),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => {
       const document = store[0]!
-      return HttpResponse.json({
+      return okJson({
         documentId: DOCUMENT_ID,
         currentStatus: document.documentStatus,
         currentRowVersion: document.rowVersion,
@@ -129,7 +119,7 @@ function useMutableDocumentHandlers(store: WarehouseDocument[], signedOriginalSa
     }),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => {
       const document = store[0]!
-      return HttpResponse.json(
+      return okJson(
         createDocumentPolicy({
           documentId: DOCUMENT_ID,
           documentStatus: document.documentStatus,
@@ -157,11 +147,9 @@ describe('receiving lifecycle and policy gates (e13-t07)', () => {
       rowVersion: 2,
     })
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(document)),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: 'Submitted',
           currentRowVersion: 2,
@@ -169,7 +157,7 @@ describe('receiving lifecycle and policy gates (e13-t07)', () => {
         }),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(
+        okJson(
           createDocumentPolicy({
             documentId: DOCUMENT_ID,
             documentStatus: 'Submitted',
@@ -202,11 +190,9 @@ describe('receiving lifecycle and policy gates (e13-t07)', () => {
       policy: submittedPolicy,
     })
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(document)),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: 'Submitted',
           currentRowVersion: 2,
@@ -214,7 +200,7 @@ describe('receiving lifecycle and policy gates (e13-t07)', () => {
         }),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(document.policy),
+        okJson(document.policy),
       ),
     )
 

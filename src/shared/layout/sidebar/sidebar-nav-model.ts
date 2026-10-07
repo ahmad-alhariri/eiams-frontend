@@ -20,11 +20,14 @@ import {
   IconRotateClockwise,
   IconRuler2,
   IconScale,
+  IconSettings,
   IconShieldCheck,
   IconTags,
   IconUserCheck,
+  IconUserCircle,
   IconUserCog,
   IconUserShare,
+  IconUserShield,
   IconUsers,
 } from '@tabler/icons-react'
 
@@ -117,6 +120,7 @@ export const SIDEBAR_NAV_GROUPS: readonly SidebarNavGroup[] = [
     items: [
       { routeKey: 'assets', icon: IconArchive },
       { routeKey: 'custodyPending', icon: IconUserCheck },
+      { routeKey: 'custodyActive', icon: IconUserShield },
     ],
   },
   {
@@ -135,6 +139,14 @@ export const SIDEBAR_NAV_GROUPS: readonly SidebarNavGroup[] = [
     items: [
       { routeKey: 'adminUsers', icon: IconUserCog },
       { routeKey: 'adminRoles', icon: IconShieldCheck },
+    ],
+  },
+  {
+    id: 'account',
+    labelAr: 'الحساب',
+    items: [
+      { routeKey: 'profile', icon: IconUserCircle },
+      { routeKey: 'settings', icon: IconSettings },
     ],
   },
 ]

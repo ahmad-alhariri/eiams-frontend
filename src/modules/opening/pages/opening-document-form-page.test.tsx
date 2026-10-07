@@ -1,15 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { apiJson, errJson, okJson, okPageJson } from '@/test/msw/envelope'
+
 import { ROUTE_PATHS } from '@/config/routes'
+import type { Material } from '@/modules/catalog/types/catalog.api-types'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import {
   createMaterial,
-  createPage,
   createWarehouse,
   createWarehouseCapability,
   createWarehouseDocument,
@@ -33,23 +35,73 @@ const WAREHOUSE_ID = fixtureUuid(500)
 const MATERIAL_ID = fixtureUuid(501)
 const ASSET_MATERIAL_ID = fixtureUuid(502)
 
-const warehouse = createWarehouse({ warehouseId: WAREHOUSE_ID })
-const material = createMaterial({ materialId: MATERIAL_ID })
-const assetMaterial = createMaterial({
+/**
+ * Re-projects the shared `createMaterial()` fixture onto the HANDWRITTEN catalog
+ * contract the production line editor actually parses.
+ *
+ * `createMaterial()` still mints the frozen generated shape (`domain` /
+ * `category` / `family` / `baseUnit`); `catalog/api-types` `Material` carries
+ * `materialDomain` / `materialCategory` / `materialFamily` / `unit`. Without this
+ * projection `quantity-line-editor.tsx` dereferences `payload.materialDomain.id`
+ * on `undefined` and every material pick throws.
+ */
+function contractMaterial(overrides: Partial<Material> = {}): Material {
+  const base = createMaterial()
+  return {
+    code: base.code,
+    descriptionAr: base.descriptionAr ?? null,
+    materialCategory: base.category,
+    materialCategoryId: base.category.id,
+    materialDomain: base.domain,
+    materialDomainId: base.domain.id,
+    materialFamily: base.family,
+    materialFamilyId: base.family.id,
+    materialId: base.materialId,
+    materialKind: base.materialKind === 'Asset' ? 'Asset' : 'Consumable',
+    nameAr: base.nameAr,
+    nominalConversionFactor: 1,
+    requiresAssetNumber: base.requiresAssetNumber,
+    rowVersion: base.rowVersion,
+    status: 'Active',
+    unit: base.baseUnit,
+    unitId: base.baseUnit.id,
+    ...overrides,
+  }
+}
+
+/**
+ * The shared document-create handler mints its created document from the FROZEN
+ * generated `Material`, so its `materialOf` lookup answers in that shape while the
+ * page and the wire answer in the handwritten one.
+ */
+function generatedMaterialOf(materialId: string) {
+  if (materialId === ASSET_MATERIAL_ID) {
+    return createMaterial({
+      materialId,
+      code: 'IT-HW-PRT-201',
+      nameAr: 'طابعة ليزر',
+      materialKind: 'Asset',
+      requiresAssetNumber: true,
+      trackingType: 'Serial',
+    })
+  }
+  return materialId === MATERIAL_ID ? createMaterial({ materialId }) : undefined
+}
+
+const warehouse = createWarehouse({ id: WAREHOUSE_ID })
+const material = contractMaterial({ materialId: MATERIAL_ID })
+const assetMaterial = contractMaterial({
   materialId: ASSET_MATERIAL_ID,
   code: 'IT-HW-PRT-201',
   nameAr: 'طابعة ليزر',
   materialKind: 'Asset',
   requiresAssetNumber: true,
-  trackingType: 'Serial',
-  domain: material.domain,
-  category: material.category,
-  family: material.family,
-  baseUnit: { id: fixtureUuid(23), displayName: 'قطعة', code: 'EA', status: 'Active' },
+  unitId: fixtureUuid(23),
+  unit: { id: fixtureUuid(23), displayName: 'قطعة' },
 })
 const capability = createWarehouseCapability({
   warehouseId: WAREHOUSE_ID,
-  domain: material.domain,
+  domain: material.materialDomain,
   operations: ['Receiving', 'Issue'],
 })
 
@@ -81,25 +133,16 @@ function usePageHandlers(
   capabilityResponse = [capability],
 ) {
   server.use(
-    http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([warehouse]))),
-    http.get(`${API_BASE_URL}/catalog/materials`, () =>
-      HttpResponse.json(createPage([material, assetMaterial])),
-    ),
+    http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
+    http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material, assetMaterial])),
     http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () =>
-      HttpResponse.json(capabilityResponse),
+      okJson(capabilityResponse),
     ),
-    http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () =>
-      HttpResponse.json([]),
-    ),
+    http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () => okJson([])),
     ...createWarehouseDocumentCreateHandler({
       documentStore: () => store,
       lookups: {
-        materialOf: (materialId) =>
-          materialId === MATERIAL_ID
-            ? material
-            : materialId === ASSET_MATERIAL_ID
-              ? assetMaterial
-              : undefined,
+        materialOf: generatedMaterialOf,
         unitOf: () => undefined,
         warehouseOf: (warehouseId) => (warehouseId === WAREHOUSE_ID ? warehouse : undefined),
       },
@@ -125,7 +168,7 @@ async function fillHeader(user: ReturnType<typeof userEvent.setup>) {
   const warehouseCombo = screen.getByRole('combobox', { name: 'المستودع' })
   await user.click(warehouseCombo)
   await user.type(warehouseCombo, 'central')
-  await user.click(await screen.findByRole('option', { name: warehouse.nameAr }))
+  await user.click(await screen.findByRole('option', { name: warehouse.name }))
 
   await user.type(screen.getByLabelText('رقم المستند الورقي'), '2024/151')
   await user.type(screen.getByLabelText('السنة الورقية'), '2024')
@@ -281,7 +324,7 @@ describe('OpeningDocumentFormPage', () => {
     const store: WarehouseDocument[] = []
     const unsupportedCapability = createWarehouseCapability({
       warehouseId: WAREHOUSE_ID,
-      domain: material.domain,
+      domain: material.materialDomain,
       operations: ['Issue'],
     })
     usePageHandlers(store, () => 'EIAMS-OPN-2024-0003', [unsupportedCapability])
@@ -292,9 +335,13 @@ describe('OpeningDocumentFormPage', () => {
     await fillValidForm(user)
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeDisabled())
-    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toContain(
-      `المستودع لا يمتلك قدرة "استلام" لمجال "${material.domain.displayName}".`,
-    )
+    // The REAL capability-block copy comes from the line editor's
+    // `validates(domainId, 'Receiving')` gate — the old expectation named a
+    // per-domain sentence the product never renders.
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toStrictEqual([
+      'العملية استلام غير مدعومة لهذا المستودع والمجال المطلوبين.',
+      'العملية استلام غير مدعومة لهذا المستودع والمجال المطلوبين.',
+    ])
 
     fireEvent.submit(openingForm())
     await waitFor(() => expect(store).toHaveLength(0))
@@ -305,7 +352,7 @@ describe('OpeningDocumentFormPage', () => {
     const store: WarehouseDocument[] = []
     const unsupportedCapability = createWarehouseCapability({
       warehouseId: WAREHOUSE_ID,
-      domain: assetMaterial.domain,
+      domain: assetMaterial.materialDomain,
       operations: ['Issue'],
     })
     usePageHandlers(store, () => 'EIAMS-OPN-2024-0007', [unsupportedCapability])
@@ -318,9 +365,10 @@ describe('OpeningDocumentFormPage', () => {
     await fillAssetLine(user)
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeDisabled())
-    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toContain(
-      `المستودع لا يمتلك قدرة "استلام" لمجال "${assetMaterial.domain.displayName}".`,
-    )
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toStrictEqual([
+      'العملية استلام غير مدعومة لهذا المستودع والمجال المطلوبين.',
+      'العملية استلام غير مدعومة لهذا المستودع والمجال المطلوبين.',
+    ])
 
     fireEvent.submit(openingForm())
     await waitFor(() => expect(store).toHaveLength(0))
@@ -336,7 +384,7 @@ describe('OpeningDocumentFormPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, async () => {
         await pendingCapabilityResponse
-        return HttpResponse.json([capability])
+        return okJson([capability])
       }),
     )
 
@@ -371,7 +419,7 @@ describe('OpeningDocumentFormPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, async () => {
         await pendingCapabilityResponse
-        return HttpResponse.json([capability])
+        return okJson([capability])
       }),
     )
 
@@ -401,28 +449,16 @@ describe('OpeningDocumentFormPage', () => {
   it('shows a server-authoritative one-time policy rejection and remains on the draft page', async () => {
     server.use(
       http.post(`${API_BASE_URL}/warehouse-documents`, () =>
-        HttpResponse.json(
-          {
-            code: 'validation.failed',
-            detailAr: null,
-            fieldErrors: [],
-            status: 409,
-            titleAr: 'تعذر حفظ المستند: سبق تهيئة الرصيد الافتتاحي لهذا المستودع.',
-            traceId: 'mock-trace',
-          },
-          { status: 409 },
-        ),
+        // "Already initialized" is a real, specific backend policy rejection:
+        // OPENING_DOCUMENTS_ALREADY_INITIALIZED, 409 (OpeningDocumentsErrors.cs).
+        // The invented `validation.failed` matched no code in the API, and the
+        // bespoke titleAr hand-wrote Arabic the server cannot produce.
+        errJson(409, { code: 'OPENING_DOCUMENTS_ALREADY_INITIALIZED' }),
       ),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([warehouse]))),
-      http.get(`${API_BASE_URL}/catalog/materials`, () =>
-        HttpResponse.json(createPage([material])),
-      ),
-      http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () =>
-        HttpResponse.json([capability]),
-      ),
-      http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () =>
-        HttpResponse.json([]),
-      ),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
+      http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material])),
+      http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () => okJson([capability])),
+      http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () => okJson([])),
     )
 
     const user = userEvent.setup()
@@ -431,9 +467,7 @@ describe('OpeningDocumentFormPage', () => {
     await fillValidForm(user)
     await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
 
-    expect(
-      await screen.findByText('تعذر حفظ المستند: سبق تهيئة الرصيد الافتتاحي لهذا المستودع.'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('سبق تهيئة الرصيد الافتتاحي لهذا المستودع.')).toBeInTheDocument()
     expect(
       screen.getByText(
         'الرصيد الافتتاحي إجراء تهيئة لمرة واحدة وليس مستنداً دورياً. يعرض النظام نتيجة التحقق المعتمدة عند حفظ المسودة أو متابعة دورة المستند.',
@@ -454,7 +488,7 @@ describe('OpeningDocumentFormPage', () => {
       http.post(`${API_BASE_URL}/warehouse-documents`, async () => {
         requestCount += 1
         await pendingResponse
-        return HttpResponse.json(
+        return apiJson(
           createWarehouseDocument({
             documentId: fixtureUuid(502),
             documentStatus: 'Draft',

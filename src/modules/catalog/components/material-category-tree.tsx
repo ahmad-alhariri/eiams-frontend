@@ -8,7 +8,7 @@ import {
 } from '@/modules/catalog/components/material-category-tree.model'
 import { HierarchyTree } from '@/shared/ui/hierarchy-tree'
 import type { HierarchyTreeNode } from '@/shared/ui/hierarchy-tree.model'
-import type { MaterialCategory } from '@/shared/types/generated/eiams-v1'
+import type { MaterialCategory } from '@/modules/catalog/types/catalog.types'
 
 type MaterialCategoryTreeProps = {
   categories: readonly MaterialCategory[]
@@ -41,7 +41,7 @@ function CategoryDomainSection({
         nodes={toHierarchyNodes(domain.nodes)}
         ariaLabel={`شجرة تصنيفات ${domain.domainName}`}
         leadIcon={<IconFolder aria-hidden className="size-4 shrink-0 text-golden-wheat" />}
-        getKey={(category) => category.categoryId}
+        getKey={(category) => category.materialCategoryId}
         getLabel={(category) => category.nameAr}
         getCode={(category) => category.code}
         getStatus={(category) => category.status}

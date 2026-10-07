@@ -6,8 +6,9 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
-import type { StockMovement } from '@/shared/types/generated/eiams-v1'
-import { createNamedReference, createPage, fixtureUuid } from '@/test/msw/factories'
+import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
+import { okPageJson } from '@/test/msw/envelope'
+import { wireStockMovement } from '@/test/msw/inventory-wire-fixtures'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -22,20 +23,15 @@ import StockMovementsPage from './stock-movements-page'
 
 const API_BASE_URL = '/api/v1'
 
+/**
+ * The ledger reads the handwritten wire contract, so the fixture is
+ * `wireStockMovement` rather than the generated `createStockMovement`. The
+ * material difference is `postedBy`: the C# `StockMovementResponse` projects
+ * `Guid PostedBy`, so the wire value is a bare UUID string. The ledger's
+ * "رُحّلت بواسطة" column renders exactly that string.
+ */
 function createMovement(overrides: Partial<StockMovement> = {}): StockMovement {
-  return {
-    documentId: fixtureUuid(60),
-    documentLineId: fixtureUuid(61),
-    documentReference: 'RCP-2026-0001',
-    material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
-    movementId: fixtureUuid(70),
-    movementType: 'Receipt',
-    postedAt: '2026-08-21T10:00:00.000Z',
-    postedBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مدير المستودع' }),
-    quantityDelta: 5,
-    warehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
-    ...overrides,
-  }
+  return wireStockMovement(overrides)
 }
 
 function createWrapper(options: { retry?: false } = {}) {
@@ -62,7 +58,7 @@ describe('StockMovementsPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/movements`, ({ request }) => {
         requestQuery = Object.fromEntries(new URL(request.url).searchParams)
-        return HttpResponse.json(createPage([movement], { totalItems: 11, totalPages: 2 }))
+        return okPageJson([movement], { page: 1, pageSize: 10, totalCount: 11, totalPages: 2 })
       }),
     )
 
@@ -76,6 +72,9 @@ describe('StockMovementsPage', () => {
     expect(screen.getByText('استلام')).toBeInTheDocument()
     expect(screen.getByText('+٥')).toBeInTheDocument()
     expect(screen.getByText('RCP-2026-0001')).toBeInTheDocument()
+    // `postedBy` is the UUID string the backend serves, so the ledger shows it
+    // verbatim — there is no nested display name on the projection.
+    expect(screen.getByText(movement.postedBy)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'عرض تفاصيل حركة 00000000…' })).toHaveAttribute(
       'href',
       `/inventory/movements/${movement.movementId}`,
@@ -95,7 +94,12 @@ describe('StockMovementsPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/movements`, ({ request }) => {
         requests.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json(createPage([createMovement()], { totalItems: 21, totalPages: 3 }))
+        return okPageJson([createMovement()], {
+          page: 1,
+          pageSize: 10,
+          totalCount: 21,
+          totalPages: 3,
+        })
       }),
     )
 
@@ -131,7 +135,7 @@ describe('StockMovementsPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/movements`, ({ request }) => {
         requests.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json(createPage([createMovement()]))
+        return okPageJson([createMovement()])
       }),
     )
 
@@ -149,9 +153,7 @@ describe('StockMovementsPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/movements`, () => {
         attempts += 1
-        return attempts === 1
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(createPage([]))
+        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okPageJson([])
       }),
     )
 

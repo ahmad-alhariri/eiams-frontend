@@ -14,6 +14,11 @@ export interface RolePermissionMatrixFieldProps {
   rows: readonly PermissionMatrixRow[]
 }
 
+/** Renders a permission's allowed scope types as an Arabic phrase. */
+function scopeTypesLabel(row: PermissionMatrixRow): string {
+  return row.allowedScopeTypes.join('، ')
+}
+
 /** Shared editable matrix seam used by both role-permission surfaces. */
 export function RolePermissionMatrixField({
   control,
@@ -38,6 +43,16 @@ export function RolePermissionMatrixField({
             </div>
             {rows.map((permission) => {
               const inputId = `${idPrefix}-${permission.code}`
+              const checked = field.value.includes(permission.code)
+              // A permission that cannot take effect at any scope this role may be
+              // assigned at is left selectable if it is already granted, so the
+              // administrator can see and remove a pre-existing grant rather than
+              // being unable to touch the row at all.
+              const rowDisabled = disabled || (!permission.grantable && !checked)
+              const notGrantableReason =
+                permission.grantable || checked
+                  ? null
+                  : `لا يمكن إسنادها لهذا الدور لأن صلاحيتها محدودة بنطاق ${scopeTypesLabel(permission)}.`
               return (
                 <div
                   key={permission.code}
@@ -58,11 +73,17 @@ export function RolePermissionMatrixField({
                         {permission.descriptionAr}
                       </span>
                     ) : null}
+                    {notGrantableReason ? (
+                      <span id={`${inputId}-reason`} className="text-sm text-muted-foreground">
+                        {notGrantableReason}
+                      </span>
+                    ) : null}
                   </div>
                   <Checkbox
                     id={inputId}
-                    checked={field.value.includes(permission.code)}
-                    disabled={disabled}
+                    checked={checked}
+                    disabled={rowDisabled}
+                    aria-describedby={notGrantableReason ? `${inputId}-reason` : undefined}
                     onCheckedChange={(nextChecked) => {
                       field.onChange(
                         nextChecked

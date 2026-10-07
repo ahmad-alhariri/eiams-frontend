@@ -39,7 +39,7 @@ function ExternalPartiesPage() {
 
   const partiesQuery = useExternalPartiesQuery({
     // Table controls are 1-based; EIAMS v1 list endpoints are 0-based.
-    pageIndex: pagination.page - 1,
+    page: pagination.page - 1,
     pageSize: pagination.pageSize,
     ...(search === '' ? {} : { search }),
   })

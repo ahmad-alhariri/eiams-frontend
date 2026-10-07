@@ -27,25 +27,39 @@ src/modules/<domain>/
 └── components/ or pages/         # presentation and Arabic feedback
 ```
 
-Services may import only generated API types and the shared Axios client. Query
-and mutation hooks compose a feature service with the shared query client and
-query-key conventions. Components and pages call hooks; they never call Axios,
-encode endpoint URLs, or assemble protected headers.
+Services may import only generated API types and the shared transport
+interface. Query and mutation hooks compose a feature service with the shared
+query client and query-key conventions. Components and pages call hooks; they
+never call Axios, encode endpoint URLs, or assemble protected headers.
 
 Each service exposes an injectable factory plus one application singleton:
 
 ```ts
-export function createFeatureService(client: AxiosInstance): FeatureService {
+export function createFeatureService(transport: ApiTransport): FeatureService {
   // typed contract operations only
 }
 
-export const featureService = createFeatureService(apiClient)
+export const featureService = createFeatureService(transport)
 ```
 
-The factory is the test seam. Tests create an isolated Axios client with
-`createApiClient`, then pass it to the factory. A service must not create an
-Axios instance, own authentication/token state, instantiate a `QueryClient`,
-or import UI primitives.
+The factory is the test seam. Tests build a transport with
+`createAxiosTransport(createApiClient({ baseURL }))`, then pass it to the
+factory. A service must not create an Axios instance, receive an `AxiosInstance`,
+own authentication/token state, instantiate a `QueryClient`, or import UI
+primitives.
+
+**A service takes `ApiTransport`, never `AxiosInstance`.** The transport is the
+single seam over HTTP: `transport.request` for a payload,
+`transport.requestPage` for a paged list, `transport.requestEmpty` for a bodyless
+response. This is what lets the envelope be unwrapped in one reviewed place
+instead of at every call site — the arrangement ratified as Architecture A in
+`eiams-frontend-9uuf`, where a global unwrapping interceptor was rejected as the
+alternative. Injecting the raw Axios instance reintroduces exactly the
+per-call-site `response.data.data` reading that made the drift invisible, and
+`src/test/no-transport-mask.test.ts` fails the build if a service takes one.
+The three auth session modules (`api.client.ts`, `session-adapter.ts`,
+`dev-session.ts`) remain Axios-aware by design: they own the token lifecycle the
+transport sits on top of.
 
 ## Contract-only service rules
 
@@ -94,11 +108,24 @@ may assume a particular recovery or retry it automatically.
 
 For an operation whose generated OpenAPI parameters require `Idempotency-Key`:
 
-1. Create `createIdempotentRequest()` once when the user starts the action.
-2. Pass its `config` to Axios and retain that same object/key for an explicit
-   retry of the same action after an uncertain transport outcome.
-3. Start a distinct user action with a new idempotency context. Do not add a
-   global Axios retry interceptor for these mutations.
+1. The **hook** creates the key with `createIdempotencyKey()` once when the user
+   starts the action, and holds it (a `useRef` is the established pattern) so an
+   explicit retry of the same action reuses the same key. Start a distinct user
+   action with a new key, and clear the held key only on success.
+2. The **service** owns the transport and attaches the header with
+   `withIdempotencyKey(idempotencyKey)`. A feature must never write the
+   `Idempotency-Key` header itself: a feature-local header literal bypasses the
+   shared retry-safety contract, which is why the service-purity rules forbid
+   the literal.
+3. Do not add a global Axios retry interceptor for these mutations.
+
+The split matters. A hook cannot hand an Axios config to a service — the service
+is the only thing that holds the client — so the key and the header are attached
+at different layers by design. The previous wording described a single
+`createIdempotentRequest()` object flowing from the hook into Axios; no such
+helper is reachable from that position, which is why it accumulated zero
+production call sites while a test asserted it existed
+(eiams-frontend-xlfs).
 
 For mutable aggregates, pass the current server-provided `rowVersion` in the
 request body/query as required by that operation. `withRowVersion(payload,

@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+﻿import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createAxiosTransport } from '@/shared/api/axios-transport'
+import { okJson } from '@/test/msw/envelope'
 import { createReceivingSuppliersHandler } from '@/test/msw/receiving-handlers'
 import { server } from '@/test/msw/server'
 import { apiClient } from '@/shared/services/api.client'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { renderHook } from '@testing-library/react'
 import { type PropsWithChildren } from 'react'
 
@@ -39,7 +41,7 @@ afterEach(() => {
 describe('createReceivingSuppliersHandler', () => {
   it('answers the contract endpoint with distinct, search-filtered suggestions', async () => {
     server.use(...createReceivingSuppliersHandler([...SUPPLIERS, 'مورد الشام']))
-    const service = createReceivingService(apiClient)
+    const service = createReceivingService(createAxiosTransport(apiClient))
 
     await expect(service.searchReceivingSuppliers('شام')).resolves.toEqual(['مورد الشام'])
     await expect(service.searchReceivingSuppliers('مؤسسة')).resolves.toEqual(['مؤسسة الإمداد'])
@@ -49,7 +51,7 @@ describe('createReceivingSuppliersHandler', () => {
   it('caps suggestions at ten items', async () => {
     const many = Array.from({ length: 15 }, (_, index) => `مورد رقم ${index + 1}`)
     server.use(...createReceivingSuppliersHandler(many))
-    const service = createReceivingService(apiClient)
+    const service = createReceivingService(createAxiosTransport(apiClient))
 
     await expect(service.searchReceivingSuppliers('مورد رقم')).resolves.toHaveLength(10)
   })
@@ -95,7 +97,7 @@ describe('useReceivingSuppliersLoader', () => {
     server.use(
       http.get(`${environment.apiBaseUrl}/receiving/suppliers`, () => {
         calls += 1
-        return HttpResponse.json(['مورد الشام'])
+        return okJson(['مورد الشام'])
       }),
     )
 

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
 import { createNamedReference, createWarehouseCapability, fixtureUuid } from '@/test/msw/factories'
+import { okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -41,7 +42,7 @@ describe('useWarehouseCapabilityValidation', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        HttpResponse.json([capability]),
+        okJson([capability]),
       ),
     )
 
@@ -66,7 +67,7 @@ describe('useWarehouseCapabilityValidation', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        HttpResponse.json([capability]),
+        okJson([capability]),
       ),
     )
 
@@ -76,16 +77,19 @@ describe('useWarehouseCapabilityValidation', () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.validates(capability.domain.id, 'Issue')).toEqual({
+    // The block copy is the single sentence the product renders — the line editors
+    // and the Opening preflight all surface this exact string from this one
+    // gate, so a per-domain variant here would be copy no user ever sees.
+    expect(result.current.validates(capability.domainId, 'Issue')).toEqual({
       status: 'blocked',
-      messageAr: `المستودع لا يمتلك قدرة "صرف" لمجال "تقنية المعلومات".`,
+      messageAr: 'العملية صرف غير مدعومة لهذا المستودع والمجال المطلوبين.',
     })
   })
 
   it('blocks a domain with no capability row using the fallback material message', async () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        HttpResponse.json([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })]),
+        okJson([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })]),
       ),
     )
 
@@ -97,7 +101,7 @@ describe('useWarehouseCapabilityValidation', () => {
 
     expect(result.current.validates(fixtureUuid(99), 'Issue')).toEqual({
       status: 'blocked',
-      messageAr: `المستودع لا يمتلك قدرة "صرف" لمجال هذه المادة.`,
+      messageAr: 'العملية صرف غير مدعومة لهذا المستودع والمجال المطلوبين.',
     })
   })
 
@@ -108,7 +112,7 @@ describe('useWarehouseCapabilityValidation', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        HttpResponse.json([capability]),
+        okJson([capability]),
       ),
     )
 
@@ -118,14 +122,16 @@ describe('useWarehouseCapabilityValidation', () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.getOperationsForDomain(capability.domain.id)).toStrictEqual([
-      'Receiving',
-      'Issue',
-      'Transfer',
-    ])
+    // `getOperationsForDomain` resolves membership, so it hands back a Set (the
+    // hook's declared `ReadonlySet<CapabilityOperation>`), not the wire array.
+    // A miss is the SAME shared empty Set, so a caller memoizing on the result is
+    // not re-run on every render for a domain with no capability row.
+    expect(result.current.getOperationsForDomain(capability.domainId)).toStrictEqual(
+      new Set(['Receiving', 'Issue', 'Transfer']),
+    )
     const emptyFirst = result.current.getOperationsForDomain(fixtureUuid(99))
-    const emptySecond = result.current.getOperationsForDomain(undefined)
-    expect(emptyFirst).toStrictEqual([])
+    const emptySecond = result.current.getOperationsForDomain('')
+    expect(emptyFirst.size).toBe(0)
     expect(emptySecond).toBe(emptyFirst)
   })
 
@@ -134,7 +140,7 @@ describe('useWarehouseCapabilityValidation', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () => {
         requestCount += 1
-        return HttpResponse.json([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })])
+        return okJson([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })])
       }),
     )
 
@@ -156,7 +162,7 @@ describe('useWarehouseCapabilityValidation', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, async () => {
         await deferred
-        return HttpResponse.json([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })])
+        return okJson([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })])
       }),
     )
 
@@ -196,7 +202,7 @@ describe('useWarehouseCapabilityValidation', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        HttpResponse.json([capability]),
+        okJson([capability]),
       ),
     )
 
@@ -214,15 +220,19 @@ describe('useWarehouseCapabilityValidation', () => {
       warehouseId: WAREHOUSE_ID,
       operations: ['Receiving', 'Issue', 'Transfer'],
     })
+    // `domainId` is the key the hook resolves on; `domain` is only the label it
+    // would display. Overriding the label alone left both rows keyed on the
+    // default domainId(20), so the finance row silently replaced the IT row
+    // instead of yielding two independent domains.
     const financeCapability = createWarehouseCapability({
       warehouseId: WAREHOUSE_ID,
-      capabilityId: fixtureUuid(33),
+      domainId: fixtureUuid(21),
       domain: createNamedReference({ id: fixtureUuid(21), displayName: 'الشؤون المالية' }),
       operations: ['Count'],
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        HttpResponse.json([itCapability, financeCapability]),
+        okJson([itCapability, financeCapability]),
       ),
     )
 
@@ -235,12 +245,12 @@ describe('useWarehouseCapabilityValidation', () => {
     expect(result.current.validates(fixtureUuid(20), 'Issue')).toEqual({ status: 'supported' })
     expect(result.current.validates(fixtureUuid(20), 'Count')).toEqual({
       status: 'blocked',
-      messageAr: `المستودع لا يمتلك قدرة "جرد" لمجال "تقنية المعلومات".`,
+      messageAr: 'العملية جرد غير مدعومة لهذا المستودع والمجال المطلوبين.',
     })
     expect(result.current.validates(fixtureUuid(21), 'Count')).toEqual({ status: 'supported' })
     expect(result.current.validates(fixtureUuid(21), 'Issue')).toEqual({
       status: 'blocked',
-      messageAr: `المستودع لا يمتلك قدرة "صرف" لمجال "الشؤون المالية".`,
+      messageAr: 'العملية صرف غير مدعومة لهذا المستودع والمجال المطلوبين.',
     })
   })
 })

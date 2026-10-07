@@ -1,4 +1,5 @@
-import type { AxiosInstance } from 'axios'
+﻿import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 
 import type {
   AdjustmentDraftRequest,
@@ -6,35 +7,36 @@ import type {
   ListDisposalEligibleAssetsQuery,
   UpdateAdjustmentRequest,
 } from '@/modules/adjustment/types/adjustment.types'
-import { apiClient } from '@/shared/services/api.client'
-import { withIdempotencyKey } from '@/shared/services/mutation-safety'
+import { toWirePaginationParams } from '@/shared/api/pagination'
+import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import type {
   AdjustmentPostResult,
   AdjustmentReverseResult,
   AssetPage,
   InventoryAdjustment,
   InventoryAdjustmentPage,
+  paths,
 } from '@/shared/types/generated/eiams-v1'
 
-const ADJUSTMENTS_PATH = '/adjustments'
-const ADJUSTMENT_PATH = '/adjustments/{adjustmentId}'
-const ADJUSTMENT_POST_PATH = '/adjustments/{adjustmentId}/post'
-const ADJUSTMENT_REVERSE_PATH = '/adjustments/{adjustmentId}/reverse'
-const DISPOSAL_ELIGIBLE_ASSETS_PATH = '/adjustments/disposal-eligible-assets'
+const ADJUSTMENTS_PATH = '/adjustments' satisfies keyof paths
+const ADJUSTMENT_PATH = '/adjustments/{adjustmentId}' satisfies keyof paths
+const ADJUSTMENT_POST_PATH = '/adjustments/{adjustmentId}/post' satisfies keyof paths
+const ADJUSTMENT_REVERSE_PATH = '/adjustments/{adjustmentId}/reverse' satisfies keyof paths
+const DISPOSAL_ELIGIBLE_ASSETS_PATH = '/adjustments/disposal-eligible-assets' satisfies keyof paths
 
 function pathWithAdjustmentId(path: string, adjustmentId: string): string {
   return path.replace('{adjustmentId}', encodeURIComponent(adjustmentId))
 }
 
 /**
- * Builds axios params with conditional spreads so optional filters never leak
- * `undefined` keys onto the wire, keeping the request exactOptional-safe
- * (mirrors the shared document transport).
+ * Builds axios params so optional filters never leak `undefined` keys onto the
+ * wire, keeping the request exactOptional-safe (mirrors the shared document
+ * transport). Page conversion is delegated to the shared boundary so the
+ * one-based UI model and the zero-based wire index are converted in one place.
  */
 function toListParams(query: Readonly<ListAdjustmentsQuery>) {
   return {
-    ...(query.pageIndex === undefined ? {} : { pageIndex: query.pageIndex }),
-    ...(query.pageSize === undefined ? {} : { pageSize: query.pageSize }),
+    ...toWirePaginationParams(query),
     ...(query.purpose === undefined ? {} : { purpose: query.purpose }),
     ...(query.status === undefined ? {} : { status: query.status }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
@@ -43,8 +45,7 @@ function toListParams(query: Readonly<ListAdjustmentsQuery>) {
 
 function toDisposalEligibleParams(query: Readonly<ListDisposalEligibleAssetsQuery>) {
   return {
-    ...(query.pageIndex === undefined ? {} : { pageIndex: query.pageIndex }),
-    ...(query.pageSize === undefined ? {} : { pageSize: query.pageSize }),
+    ...toWirePaginationParams(query),
     ...(query.search === undefined ? {} : { search: query.search }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
   }
@@ -89,60 +90,101 @@ export interface AdjustmentService {
  * optimistic-concurrency conflicts, and the terminal non-reversible disposal
  * state.
  */
-export function createAdjustmentService(client: AxiosInstance): AdjustmentService {
+export function createAdjustmentService(transport: ApiTransport): AdjustmentService {
   return {
     async listAdjustments(query) {
-      const response = await client.get<InventoryAdjustmentPage>(ADJUSTMENTS_PATH, {
-        params: toListParams(query),
+      const page = await transport.requestPage<InventoryAdjustment>({
+        path: ADJUSTMENTS_PATH,
+        method: 'GET',
+        query: toListParams(query),
       })
-      return response.data
+      // The generated `InventoryAdjustmentPage` described a body the backend
+      // never sends on its own. Rebuild the documented view-model from the
+      // normalized `ApiPage` so the declared type and the runtime value agree.
+      return {
+        items: page.items,
+        meta: {
+          pageIndex: page.page - 1,
+          page: page.page,
+          pageSize: page.pageSize,
+          itemCount: page.totalItems,
+          totalItems: page.totalItems,
+          totalCount: page.totalItems,
+          totalPages: page.totalPages,
+          hasNextPage: page.hasNextPage,
+          hasPreviousPage: page.hasPreviousPage,
+        },
+      } as InventoryAdjustmentPage
     },
 
     async getAdjustment(adjustmentId) {
-      const response = await client.get<InventoryAdjustment>(
-        pathWithAdjustmentId(ADJUSTMENT_PATH, adjustmentId),
-      )
-      return response.data
+      const response = await transport.request<InventoryAdjustment>({
+        path: pathWithAdjustmentId(ADJUSTMENT_PATH, adjustmentId),
+        method: 'GET',
+      })
+      return response
     },
 
     async createAdjustment(request) {
-      const response = await client.post<InventoryAdjustment>(ADJUSTMENTS_PATH, request)
-      return response.data
+      const response = await transport.request<InventoryAdjustment>({
+        path: ADJUSTMENTS_PATH,
+        method: 'POST',
+        body: request,
+      })
+      return response
     },
 
     async updateAdjustment(adjustmentId, request) {
-      const response = await client.put<InventoryAdjustment>(
-        pathWithAdjustmentId(ADJUSTMENT_PATH, adjustmentId),
-        request,
-      )
-      return response.data
+      const response = await transport.request<InventoryAdjustment>({
+        path: pathWithAdjustmentId(ADJUSTMENT_PATH, adjustmentId),
+        method: 'PUT',
+        body: request,
+      })
+      return response
     },
 
     async postAdjustment(adjustmentId, rowVersion, idempotencyKey) {
-      const response = await client.post<AdjustmentPostResult>(
-        pathWithAdjustmentId(ADJUSTMENT_POST_PATH, adjustmentId),
-        { rowVersion },
-        withIdempotencyKey(idempotencyKey).config,
-      )
-      return response.data
+      const response = await transport.request<AdjustmentPostResult>({
+        path: pathWithAdjustmentId(ADJUSTMENT_POST_PATH, adjustmentId),
+        method: 'POST',
+        body: { rowVersion },
+        headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
+      })
+      return response
     },
 
     async reverseAdjustment(adjustmentId, rowVersion, reason, idempotencyKey) {
-      const response = await client.post<AdjustmentReverseResult>(
-        pathWithAdjustmentId(ADJUSTMENT_REVERSE_PATH, adjustmentId),
-        { reason, rowVersion },
-        withIdempotencyKey(idempotencyKey).config,
-      )
-      return response.data
+      const response = await transport.request<AdjustmentReverseResult>({
+        path: pathWithAdjustmentId(ADJUSTMENT_REVERSE_PATH, adjustmentId),
+        method: 'POST',
+        body: { reason, rowVersion },
+        headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
+      })
+      return response
     },
 
     async listDisposalEligibleAssets(query) {
-      const response = await client.get<AssetPage>(DISPOSAL_ELIGIBLE_ASSETS_PATH, {
-        params: toDisposalEligibleParams(query),
+      const page = await transport.requestPage<AssetPage['items'][number]>({
+        path: DISPOSAL_ELIGIBLE_ASSETS_PATH,
+        method: 'GET',
+        query: toDisposalEligibleParams(query),
       })
-      return response.data
+      return {
+        items: page.items,
+        meta: {
+          pageIndex: page.page - 1,
+          page: page.page,
+          pageSize: page.pageSize,
+          itemCount: page.totalItems,
+          totalItems: page.totalItems,
+          totalCount: page.totalItems,
+          totalPages: page.totalPages,
+          hasNextPage: page.hasNextPage,
+          hasPreviousPage: page.hasPreviousPage,
+        },
+      } as AssetPage
     },
   }
 }
 
-export const adjustmentService = createAdjustmentService(apiClient)
+export const adjustmentService = createAdjustmentService(apiTransport)

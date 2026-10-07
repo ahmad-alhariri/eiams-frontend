@@ -1,48 +1,38 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { okJson } from '@/test/msw/envelope'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router'
 
 import { RouteAccessGuard } from '@/modules/auth/components/route-guards'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { createActiveScopeContext } from '@/modules/auth/services/active-scope-context'
-import { createAuthService } from '@/modules/auth/services/auth.service'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
+import { type ApiClientBundle } from '@/shared/services/api.client'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { DocumentPolicy, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { DocumentPolicy } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = '20000000-0000-4000-8000-000000000001'
-const SITE_ID = '30000000-0000-4000-8000-000000000001'
 
 const warehouseScope = {
   scopeType: 'Warehouse' as const,
   scopeId: WAREHOUSE_ID,
-  displayName: 'مستودع دمشق المركزي',
-  siteId: SITE_ID,
-  warehouseId: WAREHOUSE_ID,
+  scopeName: 'مستودع دمشق المركزي',
 }
 
 function selectedSession(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'warehouse.keeper',
-      displayName: 'أمين المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'أمين المستودع' }),
+    role: createSessionRole(),
     permissionCodes,
-    availableScopes: [warehouseScope],
     activeScope: warehouseScope,
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -132,23 +122,12 @@ describe('RBAC route and action separation', () => {
     expect(onExecute).not.toHaveBeenCalled()
   })
 
-  it('re-evaluates the route from the server-returned permission set after an MSW-backed scope switch', async () => {
-    const bundle = createApiClient({ baseURL: API_BASE_URL })
-    bundles.push(bundle)
+  it('re-evaluates the route from a server-returned session after it is refetched', async () => {
     const queryClient = createQueryClient()
-    const context = createActiveScopeContext({
-      authService: createAuthService(bundle.client),
-      queryClient,
-    })
     const onExecute = vi.fn()
     const nextSession = selectedSession(['document.post'])
 
-    server.use(
-      http.put(`${API_BASE_URL}/auth/active-scope`, async ({ request }) => {
-        expect(await request.json()).toEqual({ scopeType: 'Warehouse', scopeId: WAREHOUSE_ID })
-        return HttpResponse.json(nextSession)
-      }),
-    )
+    server.use(http.get(`${API_BASE_URL}/auth/session`, () => okJson(nextSession)))
 
     queryClient.setQueryData(authSessionQueryKey, selectedSession(['inventory.view']))
     useAuthSessionStore.setState({ status: 'authenticated' })
@@ -173,7 +152,8 @@ describe('RBAC route and action separation', () => {
     expect(screen.getByText('أرصدة المخزون')).toBeInTheDocument()
 
     await act(async () => {
-      await context.switchScope({ scopeType: 'Warehouse', scopeId: WAREHOUSE_ID })
+      // The root owns session hydration; guards only observe the cached entry.
+      queryClient.setQueryData(authSessionQueryKey, nextSession)
     })
 
     await waitFor(() => {

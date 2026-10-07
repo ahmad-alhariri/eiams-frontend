@@ -1,10 +1,12 @@
-import { HttpResponse, http } from 'msw'
+import { createAxiosTransport } from '@/shared/api/axios-transport'
+import { errJson, okJson } from '@/test/msw/envelope'
+import { http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createReceivingService } from '@/modules/receiving/services/receiving.service'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { createDevSession } from '@/shared/services/dev-session'
-import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
+
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -13,10 +15,10 @@ const bundles: ApiClientBundle[] = []
 function setupService() {
   const bundle = createApiClient({
     baseURL: API_BASE_URL,
-    refreshSession: async () => createDevSession() as AuthTokenResponse,
+    refreshSession: async () => createDevSession(),
   })
   bundles.push(bundle)
-  return createReceivingService(bundle.client)
+  return createReceivingService(createAxiosTransport(bundle.client))
 }
 
 afterEach(() => {
@@ -31,7 +33,7 @@ describe('ReceivingService', () => {
     server.use(
       http.get(`${API_BASE_URL}/receiving/suppliers`, ({ request }) => {
         requestedUrls.push(new URL(request.url).pathname + new URL(request.url).search)
-        return HttpResponse.json(['مورد الشام', 'مورد النور'])
+        return okJson(['مورد الشام', 'مورد النور'])
       }),
     )
 
@@ -48,12 +50,16 @@ describe('ReceivingService', () => {
     const service = setupService()
     server.use(
       http.get(`${API_BASE_URL}/receiving/suppliers`, () =>
-        HttpResponse.json({ title: 'غير مصرح', status: 401 }, { status: 401 }),
+        errJson(401, {
+          code: 'auth.session_expired',
+          message: 'Unauthorized.',
+          detail: 'غير مصرح',
+        }),
       ),
     )
 
     await expect(service.searchReceivingSuppliers('شام')).rejects.toMatchObject({
-      response: { status: 401, data: { status: 401, title: 'غير مصرح' } },
+      response: { status: 401 },
     })
   })
 
@@ -64,7 +70,7 @@ describe('ReceivingService', () => {
     server.use(
       http.get(`${API_BASE_URL}/receiving/suppliers`, ({ request }) => {
         requestedUrls.push(new URL(request.url).search)
-        return HttpResponse.json(['مورد الشام'])
+        return okJson(['مورد الشام'])
       }),
     )
 

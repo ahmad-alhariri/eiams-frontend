@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
+import { ROUTE_METADATA, ROUTE_PATHS, type RouteKey } from '@/config/routes'
 import {
   filterSidebarNav,
   getNavItemGuards,
@@ -15,10 +15,10 @@ const ALLOW_ALL = () => true
 const DENY_ALL = () => false
 
 describe('Sidebar nav model', () => {
-  it('exposes 12 groups and 26 items', () => {
-    expect(SIDEBAR_NAV_GROUPS).toHaveLength(12)
-    expect(SIDEBAR_NAV_ITEM_COUNT).toBe(26)
-    expect(SIDEBAR_NAV_GROUP_IDS).toHaveLength(12)
+  it('exposes 13 groups and 29 items', () => {
+    expect(SIDEBAR_NAV_GROUPS).toHaveLength(13)
+    expect(SIDEBAR_NAV_ITEM_COUNT).toBe(29)
+    expect(SIDEBAR_NAV_GROUP_IDS).toHaveLength(13)
   })
 
   it('references only declared list routes and resolves their labels from the route table', () => {
@@ -45,6 +45,22 @@ describe('Sidebar nav model', () => {
     expect(keys.some((key) => ROUTE_PATHS[key].includes('/:'))).toBe(false)
   })
 
+  it('links every list route that is guarded, so no list page is reachable only by URL', () => {
+    // e24-t06: `custodyActive` was guarded and wired but had no navigation
+    // entry and no inbound link anywhere, so it was reachable only by typing
+    // the URL while `custodyDetail` breadcrumbed back into it.
+    const navKeys: string[] = SIDEBAR_NAV_GROUPS.flatMap((group) =>
+      group.items.map((item) => item.routeKey),
+    )
+    for (const key of Object.keys(ROUTE_METADATA) as RouteKey[]) {
+      const meta = ROUTE_METADATA[key]
+      if (meta.public === true || meta.devOnly === true) continue
+      const isListRoute = !ROUTE_PATHS[key].endsWith('/new') && !ROUTE_PATHS[key].includes('/:')
+      if (!isListRoute) continue
+      expect(navKeys, `list route ${key} must be reachable from navigation`).toContain(key)
+    }
+  })
+
   it('lifts guard metadata from the route table for every item', () => {
     for (const group of SIDEBAR_NAV_GROUPS) {
       for (const item of group.items) {
@@ -58,8 +74,8 @@ describe('Sidebar nav model', () => {
 describe('filterSidebarNav', () => {
   it('keeps everything when all permissions are granted', () => {
     const filtered = filterSidebarNav(SIDEBAR_NAV_GROUPS, ALLOW_ALL)
-    expect(filtered).toHaveLength(12)
-    expect(filtered.reduce((sum, g) => sum + g.items.length, 0)).toBe(26)
+    expect(filtered).toHaveLength(13)
+    expect(filtered.reduce((sum, g) => sum + g.items.length, 0)).toBe(29)
   })
 
   it('requires every listed code for "all" mode', () => {

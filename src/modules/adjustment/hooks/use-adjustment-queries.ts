@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
@@ -8,7 +9,9 @@ import type {
   UpdateAdjustmentRequest,
 } from '@/modules/adjustment/types/adjustment.types'
 import { adjustmentService } from '@/modules/adjustment/services/adjustment.service'
-import { createIdempotencyKey } from '@/shared/services/mutation-safety'
+import { normalizeApiError } from '@/shared/services/api-error'
+import { toast } from '@/shared/ui/toast-manager'
+import { createIdempotencyKey, type IdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 
@@ -60,13 +63,12 @@ function useAdjustmentInvalidation() {
       CUSTODY_RESOURCE,
     ] as const
     for (const resource of resources) {
+      // Built by the shared factory rather than by hand. A hand-derived prefix
+      // can silently diverge from `queryKeys.scoped`'s shape and then match
+      // nothing at all, which is the failure filed as eiams-frontend-jkel
+      // (eiams-frontend-xlfs).
       void queryClient.invalidateQueries({
-        queryKey: [
-          'scoped',
-          scope.activeScopeCacheKey.kind,
-          'id' in scope.activeScopeCacheKey ? scope.activeScopeCacheKey.id : null,
-          resource,
-        ],
+        queryKey: queryKeys.scoped(scope.activeScopeCacheKey, resource),
       })
     }
   }
@@ -128,7 +130,14 @@ export function useCreateAdjustmentMutation() {
   const invalidate = useAdjustmentInvalidation()
   return useMutation({
     mutationFn: (request: AdjustmentDraftRequest) => adjustmentService.createAdjustment(request),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate()
+      toast.success({ title: 'تم حفظ مسودة سند التسوية' })
+    },
+    onError: (error) => {
+      const apiError = normalizeApiError(error)
+      toast.error({ title: apiError.titleAr, description: apiError.detailAr ?? undefined })
+    },
   })
 }
 
@@ -142,22 +151,53 @@ export function useUpdateAdjustmentMutation(adjustmentId: string) {
   })
 }
 
-/** Posts the Draft (`post`, idempotent). Server owns the SignedOriginal gate. */
+/**
+ * Posts the Draft (`post`, idempotent). Server owns the SignedOriginal gate.
+ *
+ * The idempotency key is minted once per user-approved execution and held in a
+ * ref, so an explicit retry after an uncertain outcome reuses the SAME key the
+ * server already saw. Minting it as a call argument made every invocation a new
+ * key, which is exactly the case replay protection exists for: after a lost
+ * response the user clicks again, and a fresh key lets the server treat it as a
+ * second, separate post (eiams-frontend-xlfs; same contract as
+ * `usePostAdjustmentAction` in `use-adjustment-actions.ts`).
+ */
 export function usePostAdjustmentMutation(adjustmentId: string) {
   const invalidate = useAdjustmentInvalidation()
+  const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
   return useMutation({
-    mutationFn: (rowVersion: number) =>
-      adjustmentService.postAdjustment(adjustmentId, rowVersion, createIdempotencyKey()),
-    onSuccess: invalidate,
+    mutationFn: (rowVersion: number) => {
+      idempotencyKeyRef.current ??= createIdempotencyKey()
+      return adjustmentService.postAdjustment(adjustmentId, rowVersion, idempotencyKeyRef.current)
+    },
+    onSuccess: () => {
+      idempotencyKeyRef.current = null
+      invalidate()
+    },
   })
 }
 
-/** Reverses a Posted ordinary adjustment through a compensating document. */
+/**
+ * Reverses a Posted ordinary adjustment through a compensating document.
+ *
+ * Retry-safe idempotency key, as in `usePostAdjustmentMutation` above.
+ */
 export function useReverseAdjustmentMutation(adjustmentId: string) {
   const invalidate = useAdjustmentInvalidation()
+  const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
   return useMutation({
-    mutationFn: ({ reason, rowVersion }: ReverseAdjustmentInput) =>
-      adjustmentService.reverseAdjustment(adjustmentId, rowVersion, reason, createIdempotencyKey()),
-    onSuccess: invalidate,
+    mutationFn: ({ reason, rowVersion }: ReverseAdjustmentInput) => {
+      idempotencyKeyRef.current ??= createIdempotencyKey()
+      return adjustmentService.reverseAdjustment(
+        adjustmentId,
+        rowVersion,
+        reason,
+        idempotencyKeyRef.current,
+      )
+    },
+    onSuccess: () => {
+      idempotencyKeyRef.current = null
+      invalidate()
+    },
   })
 }

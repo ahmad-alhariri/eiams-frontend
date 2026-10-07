@@ -2,9 +2,9 @@ import { useState } from 'react'
 
 import type { GallerySection } from '@/app/gallery/gallery-sections'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import type { AsyncSelectOption } from '@/shared/ui/async-select'
 import { AsyncSelect } from '@/shared/ui/async-select'
-import type { Warehouse } from '@/shared/types/generated/eiams-v1'
 
 /* eslint-disable react-refresh/only-export-components -- dev-only gallery demo
    that intentionally exports its sections registry alongside local components. */
@@ -22,12 +22,15 @@ function SelectedWarehouseDetails({ option }: { option: AsyncSelectOption<Wareho
   if (option === null || option.payload === undefined) {
     return <p className="text-xs text-muted-foreground">لم يتم اختيار مستودع بعد.</p>
   }
+  // The wire serves `name`, `warehouseType`, `canHoldStock`, `rowVersion` and a
+  // flat `siteId` — there is no `nameAr`, no `locationAr`, and no nested `site`
+  // label to show here.
   const warehouse = option.payload
   return (
     <dl className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/40 p-3 text-sm">
       <DetailRow label="الكود" value={warehouse.code} />
-      <DetailRow label="الموقع التفصيلي" value={warehouse.locationAr ?? '—'} />
-      <DetailRow label="المبنى التابع" value={warehouse.site.displayName} />
+      <DetailRow label="نوع المستودع" value={warehouse.warehouseType} />
+      <DetailRow label="السماح بالتخزين" value={warehouse.canHoldStock ? 'نعم' : 'لا'} />
       <DetailRow label="الحالة" value={warehouse.status === 'Active' ? 'نشط' : 'غير نشط'} />
     </dl>
   )

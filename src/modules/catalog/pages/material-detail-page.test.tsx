@@ -6,7 +6,8 @@ import { type PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createMaterial } from '@/test/msw/factories'
+import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 import MaterialDetailPage from './material-detail-page'
@@ -37,42 +38,63 @@ function PageWrapper({ children }: PropsWithChildren) {
   )
 }
 
+/**
+ * The detail screen embeds the per-material conversion table, which reads the
+ * conversion list and the unit reference list on mount. Both answers must be
+ * enveloped, and an unhandled request is a hard error under
+ * `server.listen({ onUnhandledRequest: 'error' })`.
+ */
+function registerReferenceHandlers() {
+  server.use(
+    http.get(`${API_BASE_URL}/catalog/materials/${MATERIAL_ID}/unit-conversions`, () =>
+      okPageJson([]),
+    ),
+    http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => okPageJson([])),
+  )
+}
+
 describe('MaterialDetailPage', () => {
   it('renders the read-only hierarchy and D-MAT-01 asset policy', async () => {
-    const material = createMaterial({
+    const material = wireMaterial({
       materialKind: 'Asset',
       requiresAssetNumber: true,
-      trackingType: 'Serial',
     })
+    registerReferenceHandlers()
     server.use(
-      http.get(`${API_BASE_URL}/catalog/materials/${material.materialId}`, () =>
-        HttpResponse.json(material),
-      ),
+      http.get(`${API_BASE_URL}/catalog/materials/${material.materialId}`, () => okJson(material)),
     )
 
     render(<MaterialDetailPage />, { wrapper: PageWrapper })
 
     expect(await screen.findByRole('heading', { name: material.nameAr })).toBeInTheDocument()
-    expect(screen.getByText(material.domain.displayName)).toBeInTheDocument()
-    expect(screen.getByText(material.category.displayName)).toBeInTheDocument()
-    expect(screen.getByText(material.family.displayName)).toBeInTheDocument()
+    // Every level of the hierarchy arrives as a `NamedReference`; the generated
+    // snapshot's nested `domain` / `category` / `family` are not on the wire.
+    expect(screen.getByText(material.materialDomain.displayName)).toBeInTheDocument()
+    expect(screen.getByText(material.materialCategory.displayName)).toBeInTheDocument()
+    expect(screen.getByText(material.materialFamily.displayName)).toBeInTheDocument()
+    expect(screen.getByText(material.unit.displayName)).toBeInTheDocument()
+    expect(screen.getByText(material.descriptionAr ?? '')).toBeInTheDocument()
     expect(screen.getByText('أصل ثابت')).toBeInTheDocument()
-    expect(screen.getByText('بالرقم التسلسلي')).toBeInTheDocument()
     expect(screen.getByText('مطلوب (رقم أصل داخلي)')).toBeInTheDocument()
+    // D-MAT-01 custody consequence for an asset, and the asset-registry record
+    // it creates. The classification is `materialKind` + `requiresAssetNumber`;
+    // `trackingType` was the retired generated field.
+    expect(
+      screen.getByText('تُنشأ عهدة إلزامية، ويُسجّل كل أصل في سجل الأصول بمعرّف داخلي للمؤسسة.'),
+    ).toBeInTheDocument()
     expect(screen.getByText(/سجل الأصول/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /تعديل/ })).not.toBeInTheDocument()
   })
 
   it('retries an unavailable material and provides a return path', async () => {
-    const material = createMaterial()
+    const material = wireMaterial()
     const user = userEvent.setup()
     let attempts = 0
+    registerReferenceHandlers()
     server.use(
       http.get(`${API_BASE_URL}/catalog/materials/${MATERIAL_ID}`, () => {
         attempts += 1
-        return attempts === 1
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(material)
+        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson(material)
       }),
     )
 
@@ -89,9 +111,8 @@ describe('MaterialDetailPage', () => {
 
   it('shows a safe empty state when a successful response contains no material', async () => {
     const user = userEvent.setup()
-    server.use(
-      http.get(`${API_BASE_URL}/catalog/materials/${MATERIAL_ID}`, () => HttpResponse.json(null)),
-    )
+    registerReferenceHandlers()
+    server.use(http.get(`${API_BASE_URL}/catalog/materials/${MATERIAL_ID}`, () => okJson(null)))
 
     render(<MaterialDetailPage />, { wrapper: PageWrapper })
     expect(

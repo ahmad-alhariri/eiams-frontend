@@ -6,6 +6,7 @@ import {
   createMaterialCategorySchema,
   type MaterialCategoryFormValues,
 } from '@/modules/catalog/schemas/material-category.schemas'
+import type { MaterialCategory, MaterialDomain } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -20,12 +21,11 @@ import {
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { MaterialCategory, MaterialDomain } from '@/shared/types/generated/eiams-v1'
 
 const NO_PARENT = '__none__'
 const EMPTY_VALUES: MaterialCategoryFormValues = {
   code: '',
-  domainId: '',
+  materialDomainId: '',
   nameAr: '',
   status: 'Active',
 }
@@ -58,9 +58,9 @@ export function MaterialCategoryFormDialog({
     resolver: zodResolver(schema),
     defaultValues: EMPTY_VALUES,
   })
-  const selectedDomainId = useWatch({ control: form.control, name: 'domainId' })
+  const selectedDomainId = useWatch({ control: form.control, name: 'materialDomainId' })
   const parentOptions = useMemo(
-    () => categories.filter((candidate) => candidate.domain.id === selectedDomainId),
+    () => categories.filter((candidate) => candidate.materialDomainId === selectedDomainId),
     [categories, selectedDomainId],
   )
 
@@ -68,9 +68,9 @@ export function MaterialCategoryFormDialog({
     if (!open) return
     form.reset({
       code: category?.code ?? '',
-      domainId: category?.domain.id ?? '',
+      materialDomainId: category?.materialDomainId ?? '',
       nameAr: category?.nameAr ?? '',
-      parentCategoryId: category?.parentCategoryId,
+      parentCategoryId: category?.parentCategoryId ?? undefined,
       status: category?.status ?? 'Active',
     })
   }, [category, form, open])
@@ -82,7 +82,7 @@ export function MaterialCategoryFormDialog({
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['code', 'domainId', 'nameAr', 'parentCategoryId', 'status'],
+        schemaKeys: ['code', 'materialDomainId', 'nameAr', 'parentCategoryId', 'status'],
       })
     }
   }
@@ -168,7 +168,7 @@ export function MaterialCategoryFormDialog({
             </div>
             <FormField
               control={form.control}
-              name="domainId"
+              name="materialDomainId"
               rules={{ required: true }}
               render={({ field, fieldState }) => (
                 <FormItem>
@@ -183,7 +183,8 @@ export function MaterialCategoryFormDialog({
                         parent !== undefined &&
                         !categories.some(
                           (candidate) =>
-                            candidate.categoryId === parent && candidate.domain.id === value,
+                            candidate.materialCategoryId === parent &&
+                            candidate.materialDomainId === value,
                         )
                       ) {
                         form.setValue('parentCategoryId', undefined, { shouldValidate: true })
@@ -193,14 +194,14 @@ export function MaterialCategoryFormDialog({
                     <FormControl>
                       <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
                         <SelectValue>
-                          {domains.find((domain) => domain.domainId === field.value)?.nameAr ??
-                            'اختر المجال'}
+                          {domains.find((domain) => domain.materialDomainId === field.value)
+                            ?.nameAr ?? 'اختر المجال'}
                         </SelectValue>
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {domains.map((domain) => (
-                        <SelectItem key={domain.domainId} value={domain.domainId}>
+                        <SelectItem key={domain.materialDomainId} value={domain.materialDomainId}>
                           {domain.nameAr}
                         </SelectItem>
                       ))}
@@ -231,7 +232,10 @@ export function MaterialCategoryFormDialog({
                     <SelectContent>
                       <SelectItem value={NO_PARENT}>بدون تصنيف أب</SelectItem>
                       {parentOptions.map((candidate) => (
-                        <SelectItem key={candidate.categoryId} value={candidate.categoryId}>
+                        <SelectItem
+                          key={candidate.materialCategoryId}
+                          value={candidate.materialCategoryId}
+                        >
                           {candidate.nameAr}
                         </SelectItem>
                       ))}

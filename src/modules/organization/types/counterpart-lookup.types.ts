@@ -1,50 +1,42 @@
-import type {
-  CounterpartOption,
-  CounterpartType,
-  operations,
-} from '@/shared/types/generated/eiams-v1'
+import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
+import type { operations } from '@/shared/types/generated/eiams-v1'
 
 /** Contract-derived, server-scoped filters for active write choices. */
 export type SearchCounterpartsQuery = NonNullable<
   operations['searchCounterparts']['parameters']['query']
 >
 
-/** Stable polymorphic identity carried by Issue and Custody write payloads. */
-export type CounterpartReference = Pick<CounterpartOption, 'type' | 'id'>
+/** A resolved counterpart reference for write flows. */
+export type CounterpartReference = {
+  type?: string
+  id: string
+}
 
+/** Server-side filter shape for counterpart list queries. */
 export interface CounterpartSearchOptions {
-  type?: CounterpartType
+  search?: string
   siteId?: string
+  scopeSenderId?: string
+  filters?: string
 }
 
-export interface CounterpartWriteValidation {
-  isValid: boolean
-  messageAr?: string
+/** Map a counterpart status value to its Arabic UI label. */
+export function counterpartStatusLabelAr(counterpart: ExternalParty): string {
+  return counterpart.status === 'Inactive' ? 'غير نشط' : 'نشط'
 }
 
-/** Arabic status text for read-only historical displays. */
-export function counterpartStatusLabelAr(counterpart: CounterpartOption): string {
-  return counterpart.status === 'Active' ? 'نشط' : 'غير نشط'
-}
-
-/**
- * A browser may only submit an option that is still active. The document and
- * custody APIs repeat this validation server-side for scope, existence, and
- * race safety; this guard only gives the form an immediate Arabic response.
- */
+/** Returns a write-ready counterpart reference or null when the option is unusable. */
 export function validateCounterpartForWrite(
-  counterpart: CounterpartOption | undefined,
-): CounterpartWriteValidation {
-  if (counterpart === undefined) {
+  counterpart: ExternalParty | undefined,
+): { isValid: true; reference: CounterpartReference } | { isValid: false; messageAr: string } {
+  if (!counterpart) {
     return { isValid: false, messageAr: 'اختر جهة مستلمة أو حائزة نشطة.' }
   }
-
   if (counterpart.status !== 'Active') {
     return {
       isValid: false,
       messageAr: 'الجهة المختارة غير نشطة. اختر جهة نشطة أخرى قبل المتابعة.',
     }
   }
-
-  return { isValid: true }
+  return { isValid: true, reference: { type: 'ExternalParty', id: counterpart.externalPartyId } }
 }

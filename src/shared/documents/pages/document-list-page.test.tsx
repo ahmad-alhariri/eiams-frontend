@@ -5,10 +5,17 @@ import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createPage, createWarehouse, createWarehouseDocument } from '@/test/msw/factories'
+import {
+  createSessionRole,
+  createSessionScope,
+  createSessionUser,
+  createWarehouse,
+  createWarehouseDocument,
+} from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -26,23 +33,10 @@ const DOCUMENT_ROUTES = ['/documents/receiving', '/documents/opening', '/documen
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'document.manager',
-      displayName: 'مدير المستندات',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستندات' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      {
-        scopeType: 'Enterprise',
-        scopeId: null,
-        displayName: 'الهيئة العامة للرقابة والتفتيش',
-      },
-    ],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -91,12 +85,13 @@ describe('DocumentListPage', () => {
         const url = new URL(request.url)
         received.push({
           documentType: url.searchParams.get('documentType'),
-          pageIndex: url.searchParams.get('pageIndex'),
+          // The wire parameter is one-based `page`, not the zero-based `pageIndex`.
+          page: url.searchParams.get('page'),
           pageSize: url.searchParams.get('pageSize'),
         })
-        return HttpResponse.json(createPage([document], { totalItems: 11, totalPages: 2 }))
+        return okPageJson([document], { page: 1, pageSize: 10, totalCount: 11, totalPages: 2 })
       }),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )
 
     render(<DocumentListPage />, { wrapper: createWrapper('/documents/receiving') })
@@ -114,7 +109,8 @@ describe('DocumentListPage', () => {
 
     expect(received).toContainEqual({
       documentType: 'Receiving',
-      pageIndex: '0',
+      // One-based on the wire; the zero-based `pageIndex: 0` starts as `page: 1`.
+      page: '1',
       pageSize: '10',
     })
   })
@@ -127,11 +123,9 @@ describe('DocumentListPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
         receivedQueries.push(new URL(request.url).searchParams.toString())
-        return HttpResponse.json(
-          createPage([createWarehouseDocument({ documentStatus: 'Submitted' })]),
-        )
+        return okPageJson([createWarehouseDocument({ documentStatus: 'Submitted' })])
       }),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([warehouse]))),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
     )
 
     render(<DocumentListPage />, { wrapper: createWrapper('/documents/receiving') })
@@ -143,14 +137,14 @@ describe('DocumentListPage', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'تصفية حسب المستودع' }), {
       target: { value: 'مركزي' },
     })
-    await user.click(await screen.findByRole('option', { name: warehouse.nameAr }))
+    await user.click(await screen.findByRole('option', { name: warehouse.name }))
 
     await waitFor(() =>
       expect(
         receivedQueries.some(
           (query) =>
             query.includes('documentStatus=Submitted') &&
-            query.includes(`warehouseId=${warehouse.warehouseId}`),
+            query.includes(`warehouseId=${warehouse.id}`),
         ),
       ).toBe(true),
     )
@@ -163,9 +157,9 @@ describe('DocumentListPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
         receivedSearches.push(new URL(request.url).searchParams.get('search'))
-        return HttpResponse.json(createPage([createWarehouseDocument()]))
+        return okPageJson([createWarehouseDocument()])
       }),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )
 
     render(<DocumentListPage />, { wrapper: createWrapper('/documents/receiving') })
@@ -184,9 +178,9 @@ describe('DocumentListPage', () => {
         attempts += 1
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(createPage([createWarehouseDocument()]))
+          : okPageJson([createWarehouseDocument()])
       }),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )
 
     render(<DocumentListPage />, { wrapper: createWrapper('/documents/receiving') })
@@ -200,8 +194,8 @@ describe('DocumentListPage', () => {
 
   it('shows the Arabic empty state when the scoped server page has no documents', async () => {
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents`, () => HttpResponse.json(createPage([]))),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/warehouse-documents`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )
 
     render(<DocumentListPage />, { wrapper: createWrapper('/documents/receiving') })
@@ -217,9 +211,9 @@ describe('DocumentListPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
         received.documentType = new URL(request.url).searchParams.get('documentType')
-        return HttpResponse.json(createPage([document]))
+        return okPageJson([document])
       }),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )
 
     render(<DocumentListPage />, { wrapper: createWrapper('/documents/issue') })
@@ -237,8 +231,8 @@ describe('DocumentListPage', () => {
     const user = userEvent.setup()
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents`, () => HttpResponse.json(createPage([]))),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/warehouse-documents`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )
 
     render(<DocumentListPage />, {
@@ -255,8 +249,8 @@ describe('DocumentListPage', () => {
 
   it('hides the create action from a user without document.create', async () => {
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents`, () => HttpResponse.json(createPage([]))),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/warehouse-documents`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )
 
     render(<DocumentListPage />, {

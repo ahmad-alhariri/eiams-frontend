@@ -13,7 +13,8 @@ import {
 import { useSitesQuery } from '@/modules/organization/hooks/use-organization-queries'
 import { useWarehousesQuery } from '@/modules/warehouse/hooks/use-warehouse-queries'
 import {
-  toWarehouseRequest,
+  toCreateWarehouseRequest,
+  toUpdateWarehouseRequest,
   type WarehouseFormValues,
 } from '@/modules/warehouse/schemas/warehouse.schemas'
 import type { ListWarehousesQuery } from '@/modules/warehouse/types/warehouse.types'
@@ -26,9 +27,8 @@ import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Button } from '@/shared/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import { toast } from '@/shared/ui/toast-manager'
 import { pageRows } from '@/shared/utils/table-data'
-import type { RecordStatus, Warehouse } from '@/shared/types/generated/eiams-v1'
+import type { RecordStatus, Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 
 const warehouseColumnHelper = createColumnHelper<typeof dataTableFeatures, Warehouse>()
 
@@ -54,7 +54,7 @@ function WarehousesListPage() {
   const warehousesQueryInput = useMemo<ListWarehousesQuery>(
     () => ({
       // DataTable controls are 1-based; EIAMS v1 list endpoints are 0-based.
-      pageIndex: currentPage - 1,
+      page: currentPage - 1,
       pageSize,
       ...(search === '' ? {} : { search }),
       ...(siteId === undefined ? {} : { siteId }),
@@ -63,10 +63,18 @@ function WarehousesListPage() {
     [currentPage, pageSize, search, siteId, status],
   )
   const warehousesQuery = useWarehousesQuery(warehousesQueryInput)
-  const sitesQuery = useSitesQuery({ pageIndex: 0, pageSize: 200, status: 'Active' })
+  const sitesQuery = useSitesQuery({ page: 0, pageSize: 200 })
   const createMutation = useCreateWarehouseMutation()
   const updateMutation = useUpdateWarehouseMutation()
   const submitFeedback = useSubmitFeedback()
+
+  // `siteId` is a FLAT field on a warehouse record — the wire carries no nested
+  // site object and no site label. The sites list already feeds the filter, so
+  // the same dataset joins the label by id.
+  const siteNameById = useMemo(
+    () => new Map((sitesQuery.data?.items ?? []).map((site) => [site.id, site.name])),
+    [sitesQuery.data],
+  )
 
   const handleSearchChange = useCallback(
     (nextSearch: string) => {
@@ -101,13 +109,13 @@ function WarehousesListPage() {
     async (values: WarehouseFormValues) => {
       const warehouse = dialogWarehouse ?? null
       await submitFeedback(async () => {
-        const request = toWarehouseRequest(values, warehouse)
         if (warehouse === null) {
-          await createMutation.mutateAsync(request)
-          toast.success({ title: 'تمت إضافة المستودع.' })
+          await createMutation.mutateAsync(toCreateWarehouseRequest(values))
         } else {
-          await updateMutation.mutateAsync({ warehouseId: warehouse.warehouseId, request })
-          toast.success({ title: 'تم حفظ تعديلات المستودع.' })
+          await updateMutation.mutateAsync({
+            warehouseId: warehouse.id,
+            request: toUpdateWarehouseRequest(values, warehouse),
+          })
         }
         setDialogWarehouse(undefined)
       })
@@ -118,13 +126,13 @@ function WarehousesListPage() {
   const columns = useMemo(
     () =>
       warehouseColumnHelper.columns([
-        warehouseColumnHelper.accessor('nameAr', {
-          id: 'nameAr',
+        warehouseColumnHelper.accessor('name', {
+          id: 'name',
           header: 'اسم المستودع',
           cell: ({ getValue, row }) => (
             <Link
               className="font-semibold text-foreground underline-offset-4 hover:underline"
-              to={ROUTE_PATHS.warehouseDetail.replace(':warehouseId', row.original.warehouseId)}
+              to={ROUTE_PATHS.warehouseDetail.replace(':warehouseId', row.original.id)}
             >
               {getValue()}
             </Link>
@@ -135,14 +143,13 @@ function WarehousesListPage() {
           header: 'الرمز',
           cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
         }),
-        warehouseColumnHelper.accessor((warehouse) => warehouse.site.displayName, {
+        warehouseColumnHelper.accessor((warehouse) => siteNameById.get(warehouse.siteId) ?? '—', {
           id: 'site',
           header: 'الموقع',
         }),
-        warehouseColumnHelper.accessor('locationAr', {
-          id: 'locationAr',
-          header: 'الموقع التفصيلي',
-          cell: ({ getValue }) => getValue() ?? '—',
+        warehouseColumnHelper.accessor('warehouseType', {
+          id: 'warehouseType',
+          header: 'نوع المستودع',
         }),
         warehouseColumnHelper.accessor('status', {
           id: 'status',
@@ -159,7 +166,7 @@ function WarehousesListPage() {
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`تعديل ${row.original.nameAr}`}
+                    aria-label={`تعديل ${row.original.name}`}
                     onClick={() => openEdit(row.original)}
                   >
                     <IconEdit aria-hidden />
@@ -169,7 +176,7 @@ function WarehousesListPage() {
             ]
           : []),
       ]),
-    [canManage, openEdit],
+    [canManage, openEdit, siteNameById],
   )
 
   const page = warehousesQuery.data
@@ -190,8 +197,8 @@ function WarehousesListPage() {
                 <SelectContent>
                   <SelectItem value="all">كل المواقع</SelectItem>
                   {sitesQuery.data?.items.map((site) => (
-                    <SelectItem key={site.siteId} value={site.siteId}>
-                      {site.nameAr}
+                    <SelectItem key={site.id} value={site.id}>
+                      {site.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

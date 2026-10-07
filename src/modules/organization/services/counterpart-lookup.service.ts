@@ -1,40 +1,59 @@
-import type { AxiosInstance } from 'axios'
+import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
+import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 
-import { apiClient } from '@/shared/services/api.client'
-import type { CounterpartOption, CounterpartPage, paths } from '@/shared/types/generated/eiams-v1'
-import type {
-  CounterpartReference,
-  SearchCounterpartsQuery,
-} from '@/modules/organization/types/counterpart-lookup.types'
+const EXTERNAL_PARTIES_PATH = '/external-parties'
 
-const COUNTERPARTS_PATH = '/counterparts' satisfies keyof paths
-const COUNTERPART_PATH = '/counterparts/{type}/{counterpartId}' satisfies keyof paths
-
-function counterpartPath(reference: CounterpartReference): string {
-  return COUNTERPART_PATH.replace('{type}', encodeURIComponent(reference.type)).replace(
-    '{counterpartId}',
-    encodeURIComponent(reference.id),
-  )
-}
+export type CounterpartReference = { readonly type: 'ExternalParty'; readonly id: string }
 
 export interface CounterpartLookupService {
-  /** Searches active options only; effective scope is enforced by the server. */
-  searchCounterparts: (query: SearchCounterpartsQuery) => Promise<CounterpartPage>
-  /** Resolves an active or inactive reference for immutable historical reads. */
-  resolveCounterpart: (reference: CounterpartReference) => Promise<CounterpartOption>
+  searchCounterparts: (query: {
+    search?: string
+    status?: 'Active' | 'Inactive'
+  }) => Promise<readonly ExternalParty[]>
+  resolveCounterpart: (reference: CounterpartReference | string) => Promise<ExternalParty>
 }
 
-export function createCounterpartLookupService(client: AxiosInstance): CounterpartLookupService {
+export function createCounterpartLookupService(transport: ApiTransport): CounterpartLookupService {
   return {
-    async searchCounterparts(query) {
-      const response = await client.get<CounterpartPage>(COUNTERPARTS_PATH, { params: query })
-      return response.data
+    async searchCounterparts({
+      search,
+      status,
+    }: {
+      search?: string
+      status?: 'Active' | 'Inactive'
+    }) {
+      const result = await transport.requestPage<ExternalParty>({
+        path: EXTERNAL_PARTIES_PATH,
+        method: 'GET',
+        query: {
+          ...(search !== undefined ? { search } : {}),
+          ...(status !== undefined ? { status } : {}),
+          pageSize: 100,
+        } as Record<string, string | number | boolean | undefined>,
+      })
+      return result.items
     },
+
     async resolveCounterpart(reference) {
-      const response = await client.get<CounterpartOption>(counterpartPath(reference))
-      return response.data
+      const id = typeof reference === 'string' ? reference : reference.id
+      const response = await transport.request<ExternalParty>({
+        path: `${EXTERNAL_PARTIES_PATH}/${encodeURIComponent(id)}`,
+        method: 'GET',
+      })
+      return response
     },
   }
 }
 
-export const counterpartLookupService = createCounterpartLookupService(apiClient)
+// Eager singleton over the application's single transport (9uuf). Never `{} as
+// any` — that default is what made the first runtime list call throw. Replaced
+// during tests by `setCounterpartLookupService`.
+let counterpartLookupService: CounterpartLookupService =
+  createCounterpartLookupService(apiTransport)
+
+export function setCounterpartLookupService(transport: ApiTransport) {
+  counterpartLookupService = createCounterpartLookupService(transport)
+}
+
+export { counterpartLookupService }

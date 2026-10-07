@@ -1,4 +1,4 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { type PropsWithChildren } from 'react'
@@ -9,6 +9,7 @@ import { apiClient } from '@/shared/services/api.client'
 import type { DocumentAttachment } from '@/shared/types/generated/eiams-v1'
 import { createWarehouseDocument, fixtureUuid } from '@/test/msw/factories'
 import { readRequestForm } from '@/test/msw/multipart-parser'
+import { apiJson, errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 // jsdom's XHR serializer preserves File names; undici's fetch adapter drops
@@ -84,7 +85,7 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(store.document)
+        return okJson(store.document)
       }),
       http.post(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`,
@@ -92,7 +93,7 @@ describe('useDocumentAttachmentManager', () => {
           const form = await readRequestForm(request)
           expect(form.get('attachmentType')).toBe('SignedOriginal')
           store.document = makeDraftDocument([signedAttachment()])
-          return HttpResponse.json(store.document.attachments[0], { status: 201 })
+          return apiJson(store.document.attachments[0], { status: 201 })
         },
       ),
     )
@@ -116,20 +117,12 @@ describe('useDocumentAttachmentManager', () => {
   it('keeps the pending entry failed and surfaces the Arabic upload error', async () => {
     const store = { document: makeDraftDocument() }
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(store.document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () =>
-        HttpResponse.json(
-          {
-            code: 'attachment.file_too_large',
-            status: 413,
-            titleAr: 'حجم الملف يتجاوز الحد الأقصى المسموح.',
-            detailAr: null,
-            traceId: 'fixture-trace-id',
-          },
-          { status: 413 },
-        ),
+        errJson(413, {
+          code: 'DOCUMENT_ATTACHMENTS_FILE_TOO_LARGE',
+          message: 'The uploaded file exceeds the allowed size.',
+        }),
       ),
     )
 
@@ -143,7 +136,7 @@ describe('useDocumentAttachmentManager', () => {
 
     await waitFor(() => expect(result.current.pendingUploads[0]?.failed).toBe(true))
     expect(result.current.pendingUploads[0]?.file).toBe(file)
-    expect(result.current.uploadError).toBe('حجم الملف يتجاوز الحد الأقصى المسموح.')
+    expect(result.current.uploadError).toBe('حجم الملف يتجاوز الحد المسموح.')
     expect(result.current.attachments).toHaveLength(0)
   })
 
@@ -151,19 +144,17 @@ describe('useDocumentAttachmentManager', () => {
     const store = { document: makeDraftDocument() }
     let uploadCalls = 0
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(store.document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, async () => {
         uploadCalls += 1
         if (uploadCalls === 1) {
-          return HttpResponse.json(
-            { code: 'attachment.failed', status: 422, titleAr: 'تعذر الرفع.', traceId: 't' },
-            { status: 422 },
-          )
+          return errJson(422, {
+            code: 'DOCUMENT_ATTACHMENTS_STORAGE_FAILURE',
+            message: 'The file could not be stored.',
+          })
         }
         store.document = makeDraftDocument([signedAttachment()])
-        return HttpResponse.json(store.document.attachments[0], { status: 201 })
+        return apiJson(store.document.attachments[0], { status: 201 })
       }),
     )
 
@@ -192,7 +183,7 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(store.document)
+        return okJson(store.document)
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
@@ -223,12 +214,10 @@ describe('useDocumentAttachmentManager', () => {
     let posts = 0
     let deletes = 0
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(store.document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () => {
         posts += 1
-        return HttpResponse.json(signedAttachment(), { status: 201 })
+        return apiJson(signedAttachment(), { status: 201 })
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
@@ -254,29 +243,31 @@ describe('useDocumentAttachmentManager', () => {
     expect(deletes).toBe(0)
   })
 
-  it('exposes the Arabic delete error on a 409 and keeps the attachment', async () => {
+  // e24-t10 / B2: the manager used to keep only `titleAr` and never refetched
+  // on a 409. It now keeps the server's `detailAr` and, on a conflict only,
+  // invalidates the scoped detail branch so the panel stops describing a
+  // document the server has already changed.
+  it('exposes the server Arabic detail on a 409, keeps the attachment, and refetches the detail', async () => {
     const store = { document: makeDraftDocument([signedAttachment()]) }
+    let detailRequests = 0
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(store.document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
+        detailRequests += 1
+        return okJson(store.document)
+      }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
         ({ request }) => {
           expect(new URL(request.url).searchParams.get('rowVersion')).toBe('1')
-          return HttpResponse.json(
-            {
-              code: 'document.version_conflict',
+          return errJson(409, {
+            code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+            message: 'The document row version did not match.',
+            details: {
               currentRowVersion: 1,
               currentStatus: 'Draft',
               policy: store.document.policy,
-              status: 409,
-              titleAr: 'تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.',
-              detailAr: 'تعذر تنفيذ الإجراء: المستند عدَّله مستخدم آخر.',
-              traceId: 'fixture-trace-id',
             },
-            { status: 409 },
-          )
+          })
         },
       ),
     )
@@ -285,13 +276,77 @@ describe('useDocumentAttachmentManager', () => {
       wrapper: createWrapper(),
     })
     await waitFor(() => expect(result.current.attachments).toHaveLength(1))
+    const before = detailRequests
 
     act(() => result.current.onRemove(result.current.attachments[0]!))
 
     await waitFor(() =>
-      expect(result.current.deleteError).toBe('تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.'),
+      expect(result.current.deleteError).toBe(
+        'تغيرت البيانات من قبل مستخدم آخر. حدّث الصفحة ثم أعد المحاولة.',
+      ),
     )
     expect(result.current.attachments).toHaveLength(1)
+    // D-LIFE-01 rule 6: the cached document was stale, so it is refetched.
+    await waitFor(() => expect(detailRequests).toBeGreaterThan(before))
+  })
+
+  it('falls back to the problem title when the failure carries no Arabic detail', async () => {
+    const store = { document: makeDraftDocument([signedAttachment()]) }
+    let detailRequests = 0
+    server.use(
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
+        detailRequests += 1
+        return okJson(store.document)
+      }),
+      http.delete(
+        `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
+        // A 403 carries the ERROR envelope. Emitting it through apiJson would
+        // send `success: true` with HTTP 403, a shape the backend never
+        // produces - so the Arabic title travels as `detailAr`.
+        () =>
+          errJson(403, {
+            code: 'attachment.forbidden',
+            message: 'Attachment deletion is not permitted.',
+          }),
+      ),
+    )
+
+    const { result } = renderHook(() => useDocumentAttachmentManager(DOCUMENT_ID), {
+      wrapper: createWrapper(),
+    })
+    await waitFor(() => expect(result.current.attachments).toHaveLength(1))
+    const before = detailRequests
+
+    act(() => result.current.onRemove(result.current.attachments[0]!))
+
+    await waitFor(() =>
+      expect(result.current.deleteError).toBe('لا تملك الصلاحية اللازمة لتنفيذ هذا الإجراء.'),
+    )
+    // A 403 says nothing about document freshness, so it must not refetch.
+    expect(detailRequests).toBe(before)
+  })
+
+  it('surfaces the server Arabic detail of a failed upload, not the generic title', async () => {
+    const store = { document: makeDraftDocument() }
+    server.use(
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
+      http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () =>
+        errJson(409, {
+          code: 'DOCUMENT_ATTACHMENTS_SIGNED_ORIGINAL_ALREADY_EXISTS',
+          message: 'A signed original already exists for this document.',
+        }),
+      ),
+    )
+
+    const { result } = renderHook(() => useDocumentAttachmentManager(DOCUMENT_ID), {
+      wrapper: createWrapper(),
+    })
+    await waitFor(() => expect(result.current.readOnly).toBe(false))
+
+    act(() => result.current.onUpload([makeFile('signed.pdf')], 'SignedOriginal'))
+
+    await waitFor(() => expect(result.current.uploadError).not.toBeNull())
+    expect(result.current.uploadError).toBe('أرشف النسخة الموقعة الحالية ثم أعد المحاولة.')
   })
 
   it('renders a zero-network manager for a null documentId', async () => {
@@ -301,11 +356,11 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(makeDraftDocument())
+        return okJson(makeDraftDocument())
       }),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () => {
         posts += 1
-        return HttpResponse.json(signedAttachment(), { status: 201 })
+        return apiJson(signedAttachment(), { status: 201 })
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,

@@ -2,9 +2,57 @@
 
 **Status:** Approved frontend and provisional API contract decision
 **Decision ID:** D-RBAC-01
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Beads:** `eiams-frontend-e01-t07`
 **Decision date:** 2026-08-09
+**Last reconciled:** 2026-09-27 (`eiams-frontend-e24-t07`)
+
+## Provenance and authority
+
+This file is the **frontend repository's decision record**. It is not the
+canonical text of any ratified decision.
+
+Ratified authorization decisions are owned by the EIAMS system repository
+(`C:\EIAMS-SYSTEM\docs`). This repository **cites them by Decision ID and date
+and does not copy their prose.** The rule exists because copying is exactly how
+this file fell behind: D-RBAC-03 was approved by the human owner on 2026-09-13
+and written into the system repository's copy of this document, and it never
+reached this repository at all. The divergence was invisible until 2026-09-27,
+when a test suite built from this file was found to contradict the approved
+policy — and the root cause turned out to be that this file was two commits
+behind `main` plus missing a ratified addendum.
+
+Consequences of the rule:
+
+- If this file and the system repository disagree, **the system repository
+  wins**, and this file is wrong until reconciled.
+- The body below (canonical vocabulary, route matrix, guard behavior, role seed
+  reference) is owned and maintained **here**, and is kept accurate against the
+  decisions it cites.
+- Addendum prose already copied into this file (D-RBAC-02, D-WH-01) is retained
+  as historical record and marked as non-canonical. New decisions are cited, not
+  pasted.
+- Re-reconcile before relying on any row here, and re-run
+  `src/test/rbac-role-separation.test.ts`, which encodes the role × scope sets.
+
+## Cited decisions
+
+| Decision | Title | Date | Status | Canonical text |
+| --- | --- | --- | --- | --- |
+| D-RBAC-01 | Route permission and scope matrix | 2026-08-09 | Approved (this document) | this file |
+| D-RBAC-02 | Enterprise scope is oversight only | ratified `e01.9` | Ratified addendum below | system repo |
+| D-RBAC-03 | Site scope is oversight only | 2026-09-13 | **Approved human decision** | system repo |
+| D-WH-01 | Warehouse is a separation-of-duties boundary | ratified `e01.11` | Ratified addendum below | system repo |
+| D-LIFE-01 | Document lifecycle `Hidden/Disabled/Enabled` | — | Approved | system repo |
+| D-ATT-01 | Signed-original gate is server-authoritative | — | Approved | system repo |
+
+**D-RBAC-03 has never been present in this file.** Site scope is supervisory
+only: a site manager may follow the warehouses, documents, movements, balances,
+and reports of that site, but must not create, edit, submit, post, reject,
+revise, cancel, reverse, count, adjust, dispose, receive, issue, transfer, or
+assign custody through a warehouse in it. Routine and exception inventory work
+occurs only at Warehouse scope. This is enforced by
+`src/test/rbac-role-separation.test.ts` and cited by ID rather than copied.
 
 ## Decision
 
@@ -172,15 +220,25 @@ Unlisted URLs → `404`-style not-found, not a permissions experiment.
 ## Role seed reference (v1)
 
 These are the reference permission sets the backend seeds (`e22-t06`
-administration UI can edit them; the matrix below is the v1 baseline):
+administration UI can edit them). Rows are **per role × assigned scope**,
+because a role's effective set depends on its scope: D-RBAC-02 makes Enterprise
+supervisory, D-RBAC-03 makes Site supervisory, and only Warehouse is
+operational. A user holds exactly one of these rows (D-SRS-01).
 
-| Role code | Purpose | Permission codes |
-| --- | --- | --- |
-| `SYSTEM_ADMIN` | Full administration | All v1 codes. |
-| `DATA_MANAGER` | Master-data steward (enterprise) | `catalog.manage`, `catalog.view`, `organization.manage`, `organization.view`, `warehouse.manage`, `warehouse.view`, `admin.user.view`, `admin.role.view` + `admin.user.manage`, `admin.role.manage`. |
-| `WH_MGR` | Warehouse manager (can be granted at Warehouse, Site, or Enterprise scope) | All engine codes: `catalog.view`, `organization.view`, `warehouse.view`, `inventory.view`, `document.view/create/update/submit/post/reject/revise/cancel/reverse`, `count.view/plan/enter/complete/close`, `asset.view`, `custody.assign`, `report.view`. |
-| `WH_KEEPER` | Warehouse keeper | `catalog.view`, `organization.view`, `warehouse.view`, `inventory.view`, `document.view/create/update/submit/revise/cancel`, `count.view/enter`, `asset.view`, `custody.assign`, `report.view`. |
-| `AUDITOR` | Read-only auditor | `inventory.view`, `document.view`, `count.view`, `asset.view`, `audit.view`, `report.view` (+ `catalog.view`, `organization.view`, `warehouse.view` for context). |
+Authority for these values is the approved effective-permission sets in the
+system repository's authorization policy §3, read together with the decisions
+cited above. Where an earlier revision of this table disagreed, the corrected
+value is shown and the change is noted.
+
+| Role | Scope | Permission codes | Authority |
+| --- | --- | --- | --- |
+| `SYSTEM_ADMIN` | Enterprise | `catalog.view`, `catalog.manage`, `organization.view`, `organization.manage`, `warehouse.view`, `warehouse.manage`, `admin.user.view`, `admin.user.manage`, `admin.role.view`, `admin.role.manage` | policy §3; D-RBAC-02 ADMIN axis |
+| `DATA_MANAGER` | — | **Not seeded in v1** (deferred) | policy §3 |
+| `WH_MGR` | Enterprise | `catalog.view`, `organization.view`, `warehouse.view`, `inventory.view`, `document.view`, `count.view`, `asset.view`, `report.view` | policy §3; D-RBAC-02 |
+| `WH_MGR` | Site | same GOVERN set as Enterprise, restricted to the site's descendant warehouses | policy §3; D-RBAC-03 |
+| `WH_MGR` | Warehouse | GOVERN set for that warehouse **plus** `document.create`, `document.update`, `document.post`, `document.reject`, `document.cancel`, `document.reverse`, `count.plan`, `count.complete`, `count.close` | policy §3; D-WH-01 |
+| `WH_KEEPER` | Warehouse | `catalog.view`, `organization.view`, `warehouse.view`, `inventory.view`, `document.view`, `document.create`, `document.update`, `document.submit`, `document.revise`, `document.cancel`, `count.view`, `count.enter`, `asset.view`, `custody.assign`, `report.view` | policy §3 |
+| `AUDITOR` | Enterprise, Site, or Warehouse (optional) | `catalog.view`, `organization.view`, `warehouse.view`, `inventory.view`, `document.view`, `count.view`, `asset.view`, `audit.view`, `report.view` | policy §3 |
 
 Notes:
 
@@ -188,12 +246,40 @@ Notes:
   managers Cancel any pre-post state. Exact per-actor presentation of
   `submit/reject/post/cancel/revise/reverse` is the D-LIFE-01 server policy
   (`Hidden/Disabled/Enabled`); the codes are its permission layer.
-- `WH_MGR` granted at Enterprise scope == the Architecture Overview's
-  "Enterprise WH Manager"; at Site scope == "Site Manager"; at Warehouse
-  scope == "Warehouse Manager". One role code is assignable at one of three
-  scope levels; each user receives exactly one such assignment (D-SRS-01).
-- Data entry roles are deliberately narrow: `DATA_MANAGER` cannot post
-  documents; `WH_KEEPER` cannot post; `WH_MGR` sees no `admin.*` — default.
+- One role code, three assignable scopes, one assignment per user (D-SRS-01).
+  What changes across scopes is the *effective set*, not the role: a `WH_MGR` at
+  Enterprise or Site is GOVERN only and cannot operate; only the Warehouse
+  assignment carries OPERATE.
+- Generic document preparation is a **keeper** workflow. A warehouse manager
+  holds neither `document.submit` nor `document.revise`, and managers do not
+  hold `count.enter`. This is separation of duties (D-WH-01), and it holds even
+  at Warehouse scope.
+- `SYSTEM_ADMIN` is **structural administration only**: it configures
+  organization, sites, warehouses, capabilities, catalog, employees, users, and
+  roles, and it must not create, submit, post, reject, reverse, count, adjust,
+  or dispose inventory documents. In particular it holds neither `audit.view`
+  nor `report.view`.
+- `DATA_MANAGER` is deliberately excluded from the v1 operational model and is
+  **not seeded**. A master-data steward is covered structurally by
+  `SYSTEM_ADMIN`'s `catalog.manage` / `organization.manage` / `warehouse.manage`.
+- Nobody holds `admin.*` except `SYSTEM_ADMIN`.
+
+Corrections applied on 2026-09-27 (`e24-t07`), each superseding the previous
+row in this table:
+
+| Row | Was | Now | Why |
+| --- | --- | --- | --- |
+| `SYSTEM_ADMIN` | "All v1 codes" | 10 structural codes | The ADMIN axis is `SYSTEM_ADMIN`-only (D-RBAC-02) and excludes operational, audit and report access. "All v1 codes" also contradicted the "no `admin.*` for others" note below the old table. |
+| `DATA_MANAGER` | seeded with 10 codes | not seeded | Deferred in v1; the old row described a role the backend does not create. |
+| `WH_MGR` | one row, "all engine codes", any scope | three rows, per scope | D-RBAC-02 and D-RBAC-03 make Enterprise and Site supervisory. The old row granted a Site- or Enterprise-scoped manager the power to post and count, which is the opposite of both addenda. |
+| `WH_MGR` (Warehouse) | included `submit/revise/count.enter` | excludes them | D-WH-01 separation of duties; preparation is a keeper workflow. |
+
+The approved policy document is itself marked *partially approved; not yet an
+authorization, catalog, or role-grant migration*. The `SYSTEM_ADMIN` and
+`DATA_MANAGER` rows are therefore aligned to the approved intent but await
+formal owner ratification — tracked in
+`eiams-frontend-8haa`. Do not treat those two rows as settled; the
+`WH_MGR` and `WH_KEEPER` rows follow ratified decisions.
 
 ## Downstream frontend behavior
 
@@ -275,6 +361,9 @@ navigation, and actions are derived from one approved vocabulary.
 
 **Status:** Ratified
 **Decision ID:** D-RBAC-02
+**Canonical text:** system repository. The prose below is a retained copy kept
+as historical record; it is not the source of truth. See *Provenance and
+authority*.
 **Version:** 1.0.0
 **Beads:** `eiams-frontend-e01.9`
 **Decision date:** 2026-09-02
@@ -325,6 +414,9 @@ D-RBAC-02 introduces no new permission codes and no new artifacts; it narrows th
 
 **Status:** Approved frontend and provisional API contract decision
 **Decision ID:** D-WH-01
+**Canonical text:** system repository. The prose below is a retained copy kept
+as historical record; it is not the source of truth. See *Provenance and
+authority*.
 **Version:** 1.0.0
 **Beads:** `eiams-frontend-e01.11`
 **Decision date:** 2026-09-02

@@ -1,9 +1,11 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okPageJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
 import { assignCustodySchema } from '@/modules/custody/schemas/assign-custody.schema'
 import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
@@ -40,23 +42,36 @@ const custody = {
   subjectType: 'Asset',
 } as const
 
+/**
+ * The employee choice is a `GET /external-parties` row in the handwritten
+ * organization contract, not a generated `CounterpartOption`: the shared
+ * `CounterpartLookupService` reads `externalPartyId` / `nameAr` / `status`, and
+ * `counterpartSelectorAdapter` builds the selectable option from exactly those
+ * fields. A generated-shaped row is disabled-or-absent rather than selectable.
+ */
+const EMPLOYEE: ExternalParty = {
+  externalPartyId: EMPLOYEE_ID,
+  nameAr: 'محمد السيد',
+  code: null,
+  contactInfo: null,
+  notes: null,
+  status: 'Active',
+  rowVersion: 1,
+}
+
+/**
+ * The typed search term has to be a substring of the served employee's name:
+ * the selector renders the label the server returned for that query, so a term
+ * that matches nothing cannot produce a selectable option.
+ */
+const EMPLOYEE_SEARCH_TERM = 'محمد'
+
 function useEmployeeHandler() {
   server.use(
-    http.get(`${API_BASE_URL}/counterparts`, ({ request }) => {
+    http.get(`${API_BASE_URL}/external-parties`, ({ request }) => {
       const url = new URL(request.url)
-      expect(url.searchParams.get('type')).toBe('Employee')
-      return HttpResponse.json({
-        items: [
-          {
-            displayName: 'أحمد محمد',
-            id: EMPLOYEE_ID,
-            secondaryLabelAr: null,
-            status: 'Active' as const,
-            type: 'Employee' as const,
-          },
-        ],
-        meta: { page: 0, pageSize: 10, total: 1 },
-      })
+      expect(url.searchParams.get('search')).toBe(EMPLOYEE_SEARCH_TERM)
+      return okPageJson([EMPLOYEE], { page: 1, pageSize: 100, totalCount: 1, totalPages: 1 })
     }),
   )
 }
@@ -71,9 +86,10 @@ function renderDialog() {
 }
 
 async function selectEmployee(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByLabelText('الموظف المكلف'))
-  await user.type(screen.getByLabelText('الموظف المكلف'), 'أحمد')
-  await user.click(await screen.findByRole('option', { name: /أحمد/ }))
+  const employeeInput = screen.getByLabelText('الموظف المكلف')
+  await user.click(employeeInput)
+  await user.type(employeeInput, EMPLOYEE_SEARCH_TERM)
+  await user.click(await screen.findByRole('option', { name: new RegExp(EMPLOYEE_SEARCH_TERM) }))
 }
 
 describe('AssignCustodyDialog (e19-t03)', () => {
@@ -92,7 +108,7 @@ describe('AssignCustodyDialog (e19-t03)', () => {
       http.post(`${API_BASE_URL}/custodies/assign`, async ({ request }) => {
         postedBody = (await request.json()) as Record<string, unknown>
         idempotencyKey = request.headers.get('Idempotency-Key') ?? undefined
-        return HttpResponse.json(
+        return apiJson(
           { custodyId: fixtureUuid(60), status: 'Active', custodyKind: 'Personal' },
           { status: 201 },
         )
@@ -122,7 +138,7 @@ describe('AssignCustodyDialog (e19-t03)', () => {
     server.use(
       http.post(`${API_BASE_URL}/custodies/assign`, async ({ request }) => {
         postedBody = (await request.json()) as Record<string, unknown>
-        return HttpResponse.json({}, { status: 201 })
+        return apiJson({}, { status: 201 })
       }),
     )
 

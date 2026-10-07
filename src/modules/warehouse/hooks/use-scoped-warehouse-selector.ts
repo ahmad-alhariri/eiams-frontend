@@ -2,13 +2,12 @@ import { useCallback } from 'react'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { warehouseService } from '@/modules/warehouse/services/warehouse.service'
-import type { ListWarehousesQuery } from '@/modules/warehouse/types/warehouse.types'
+import type { ListWarehousesQuery, Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import {
   useWarehouseSelector,
   type WarehouseLoader,
 } from '@/shared/selectors/adapters/warehouse-selector'
 import type { EntitySelectorResult } from '@/shared/selectors/selector-adapter'
-import type { Warehouse } from '@/shared/types/generated/eiams-v1'
 
 export interface ScopedWarehouseSelectorResult extends EntitySelectorResult<Warehouse> {
   /** False until the session has a selected active scope; callers disable the control. */
@@ -39,7 +38,7 @@ export function useScopedWarehouseSelector(
         return []
       }
       const listQuery: ListWarehousesQuery = {
-        pageIndex: 0,
+        page: 0,
         pageSize: Math.max(1, maxResults),
         ...(query.trim() === '' ? {} : { search: query.trim() }),
       }

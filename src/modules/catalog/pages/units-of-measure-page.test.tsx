@@ -1,13 +1,14 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import UnitsOfMeasurePage from '@/modules/catalog/pages/units-of-measure-page'
 import { createQueryClient } from '@/shared/services/query.client'
-import { createUnitOfMeasure } from '@/test/msw/factories'
+import { wireUnitOfMeasure } from '@/test/msw/catalog-wire-fixtures'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const scope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -32,15 +33,16 @@ function PageWrapper({ children }: PropsWithChildren) {
 describe('UnitsOfMeasurePage', () => {
   it('lists active and inactive contract records and hides write actions without catalog.manage', async () => {
     permissions.canManage = false
-    const activeUnit = createUnitOfMeasure({ nameAr: 'قطعة', symbolAr: 'قط', status: 'Active' })
-    const inactiveUnit = createUnitOfMeasure({
+    const activeUnit = wireUnitOfMeasure({ nameAr: 'قطعة', status: 'Active' })
+    const inactiveUnit = wireUnitOfMeasure({
       unitId: '00000000-0000-4000-8000-000000000024',
       nameAr: 'صندوق',
+      nominalConversionFactor: 12,
       status: 'Inactive',
     })
     server.use(
       http.get(`${API_BASE_URL}/catalog/units-of-measure`, () =>
-        HttpResponse.json([activeUnit, inactiveUnit]),
+        okPageJson([activeUnit, inactiveUnit]),
       ),
     )
 
@@ -48,6 +50,10 @@ describe('UnitsOfMeasurePage', () => {
 
     await waitFor(() => expect(screen.getByText('صندوق')).toBeInTheDocument())
     expect(screen.getAllByText('قطعة').length).toBeGreaterThan(0)
+    // A unit carries a numeric `nominalConversionFactor`, not the generated
+    // `symbolAr` the retired snapshot described.
+    expect(screen.getByText(String(activeUnit.nominalConversionFactor))).toBeInTheDocument()
+    expect(screen.getByText(String(inactiveUnit.nominalConversionFactor))).toBeInTheDocument()
     expect(screen.getByText('نشط')).toBeInTheDocument()
     expect(screen.getByText('غير نشط')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'إضافة وحدة قياس' })).not.toBeInTheDocument()
@@ -57,13 +63,13 @@ describe('UnitsOfMeasurePage', () => {
   it('sends an exact contract create request for catalog managers', async () => {
     permissions.canManage = true
     const user = userEvent.setup()
-    const createdUnit = createUnitOfMeasure({ code: 'BOX', nameAr: 'صندوق', symbolAr: 'ص' })
+    const createdUnit = wireUnitOfMeasure({ code: 'BOX', nameAr: 'صندوق' })
     let requestBody: unknown
     server.use(
-      http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => HttpResponse.json([])),
+      http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => okPageJson([])),
       http.post(`${API_BASE_URL}/catalog/units-of-measure`, async ({ request }) => {
         requestBody = await request.json()
-        return HttpResponse.json(createdUnit, { status: 201 })
+        return okJson(createdUnit)
       }),
     )
 
@@ -72,7 +78,6 @@ describe('UnitsOfMeasurePage', () => {
     const createButton = await screen.findByRole('button', { name: 'إضافة وحدة قياس' })
     await user.click(createButton)
     await user.type(screen.getByLabelText('اسم الوحدة'), ' صندوق ')
-    await user.type(screen.getByLabelText('رمز العرض'), ' ص ')
     await user.type(screen.getByLabelText('الرمز'), ' BOX ')
     await user.click(screen.getByRole('button', { name: 'إضافة الوحدة' }))
 
@@ -80,7 +85,9 @@ describe('UnitsOfMeasurePage', () => {
       expect(requestBody).toEqual({
         code: 'BOX',
         nameAr: 'صندوق',
-        symbolAr: 'ص',
+        descriptionAr: null,
+        nominalConversionFactor: 1,
+        baseUnitId: null,
         rowVersion: 0,
         status: 'Active',
       }),

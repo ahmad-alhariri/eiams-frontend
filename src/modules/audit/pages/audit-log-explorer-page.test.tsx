@@ -1,4 +1,5 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okPageJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PropsWithChildren } from 'react'
@@ -6,7 +7,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
-import { createAuditLog, createPage } from '@/test/msw/factories'
+import { createAuditLog } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -46,7 +47,7 @@ describe('AuditLogExplorerPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/audit-logs`, ({ request }) => {
         requestQuery = Object.fromEntries(new URL(request.url).searchParams)
-        return HttpResponse.json(createPage([auditLog], { totalItems: 11, totalPages: 2 }))
+        return okPageJson([auditLog], { page: 1, pageSize: 20, totalCount: 11, totalPages: 2 })
       }),
     )
 
@@ -71,9 +72,7 @@ describe('AuditLogExplorerPage', () => {
 
   it('renders an unratified action as its raw contract code instead of guessing an Arabic label', async () => {
     const auditLog = createAuditLog({ action: 'ResetSession' })
-    server.use(
-      http.get(`${API_BASE_URL}/audit-logs`, () => HttpResponse.json(createPage([auditLog]))),
-    )
+    server.use(http.get(`${API_BASE_URL}/audit-logs`, () => okPageJson([auditLog])))
 
     render(<AuditLogExplorerPage />, { wrapper: createWrapper() })
 
@@ -87,7 +86,12 @@ describe('AuditLogExplorerPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/audit-logs`, ({ request }) => {
         requests.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json(createPage([createAuditLog()], { totalItems: 21, totalPages: 3 }))
+        return okPageJson([createAuditLog()], {
+          page: 1,
+          pageSize: 20,
+          totalCount: 21,
+          totalPages: 3,
+        })
       }),
     )
 
@@ -126,7 +130,7 @@ describe('AuditLogExplorerPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/audit-logs`, ({ request }) => {
         requests.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json(createPage([createAuditLog()]))
+        return okPageJson([createAuditLog()])
       }),
     )
 
@@ -145,9 +149,7 @@ describe('AuditLogExplorerPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/audit-logs`, () => {
         attempts += 1
-        return attempts === 1
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(createPage([]))
+        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okPageJson([])
       }),
     )
 

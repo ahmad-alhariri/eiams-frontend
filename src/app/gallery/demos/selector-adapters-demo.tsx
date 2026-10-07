@@ -1,10 +1,12 @@
 import { useState } from 'react'
 
 import type { GallerySection } from '@/app/gallery/gallery-sections'
+import type { Employee } from '@/modules/organization/types/organization.types'
 import { useEmployeeSelector } from '@/shared/selectors/adapters/employee-selector'
 import { useWarehouseSelector } from '@/shared/selectors/adapters/warehouse-selector'
-import type { Employee, RecordStatus, Warehouse } from '@/shared/types/generated/eiams-v1'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
+import type { WarehouseLoader } from '@/shared/selectors/adapters/warehouse-selector'
 import { Badge } from '@/shared/ui/badge'
 
 /* eslint-disable react-refresh/only-export-components -- dev-only gallery demo
@@ -14,24 +16,28 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/**
+ * Demo records are typed against the REAL wire contracts: a warehouse carries
+ * `name` (not `nameAr`), `warehouseType`, `canHoldStock` and a flat `siteId`
+ * with no nested site label.
+ */
 function demoWarehouse(
-  warehouseId: string,
+  id: string,
   code: string,
-  nameAr: string,
-  locationAr: string,
-  status: RecordStatus,
+  name: string,
+  siteId: string,
+  warehouseType: string,
+  canHoldStock: boolean,
+  status: 'Active' | 'Inactive',
 ): Warehouse {
   return {
-    warehouseId,
+    id,
+    siteId,
+    organizationalUnitId: `ou-${code}`,
+    name,
     code,
-    nameAr,
-    locationAr,
-    site: {
-      id: `site-${code}`,
-      code: `S-${code}`,
-      displayName: `فرع ${locationAr}`,
-      status: 'Active',
-    },
+    warehouseType,
+    canHoldStock,
     status,
     rowVersion: 1,
   }
@@ -42,23 +48,45 @@ const demoWarehouses: Warehouse[] = [
     '11111111-1111-4111-8111-111111111111',
     'W-01',
     'مستودع دمشق الرئيسي',
-    'دمشق',
+    'site-S-01',
+    'Storage',
+    true,
     'Active',
   ),
-  demoWarehouse('22222222-2222-4222-8222-222222222222', 'W-02', 'مستودع حلب', 'حلب', 'Active'),
-  demoWarehouse('33333333-3333-4333-8333-333333333333', 'W-03', 'مستودع حمص', 'حمص', 'Inactive'),
+  demoWarehouse(
+    '22222222-2222-4222-8222-222222222222',
+    'W-02',
+    'مستودع حلب',
+    'site-S-02',
+    'Storage',
+    true,
+    'Active',
+  ),
+  demoWarehouse(
+    '33333333-3333-4333-8333-333333333333',
+    'W-03',
+    'مستودع حمص',
+    'site-S-03',
+    'Transhipment',
+    true,
+    'Inactive',
+  ),
   demoWarehouse(
     '44444444-4444-4444-8444-444444444444',
     'W-04',
     'مستودع اللاذقية',
-    'اللاذقية',
+    'site-S-04',
+    'Storage',
+    true,
     'Active',
   ),
   demoWarehouse(
     '55555555-5555-4555-8555-555555555555',
     'W-05',
     'مستودع الحسكة',
-    'الحسكة',
+    'site-S-05',
+    'Storage',
+    false,
     'Active',
   ),
 ]
@@ -67,32 +95,26 @@ async function loadDemoWarehouses(query: string): Promise<Warehouse[]> {
   await delay(400)
   const needle = query.trim().toLocaleLowerCase()
   return demoWarehouses.filter((warehouse) =>
-    `${warehouse.nameAr} ${warehouse.code}`.toLocaleLowerCase().includes(needle),
+    `${warehouse.name} ${warehouse.code}`.toLocaleLowerCase().includes(needle),
   )
 }
 
+/** The wire serves `fullName`, `jobTitle` and a flat `orgUnitId` with no label. */
 function demoEmployee(
-  employeeId: string,
+  id: string,
   employeeNumber: string,
-  fullNameAr: string,
-  jobTitleAr: string | null,
-  orgUnitName: string,
-  status: RecordStatus,
+  fullName: string,
+  jobTitle: string | null,
+  orgUnitId: string,
+  status: 'Active' | 'Inactive',
 ): Employee {
   return {
-    employeeId,
+    id,
+    orgUnitId,
     employeeNumber,
-    fullNameAr,
-    jobTitleAr,
-    orgUnit: {
-      id: `ou-${employeeNumber}`,
-      code: employeeNumber,
-      displayName: orgUnitName,
-      status: 'Active',
-    },
-    site: { id: 'site-S-01', code: 'S-01', displayName: 'فرع دمشق', status: 'Active' },
+    fullName,
+    ...(jobTitle === null ? {} : { jobTitle }),
     status,
-    rowVersion: 1,
   }
 }
 
@@ -100,33 +122,9 @@ const demoEmployees: Employee[] = [
   demoEmployee(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     'EMP-001',
-    'أحمد علي',
-    'أمين مستودع',
-    'قسم المستودعات',
-    'Active',
-  ),
-  demoEmployee(
-    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-    'EMP-002',
-    'مريم خليل',
-    'مسؤولة جرد',
-    'قسم الجرد',
-    'Active',
-  ),
-  demoEmployee(
-    'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-    'EMP-003',
-    'خالد حسن',
-    'مشرف توريدات',
-    'قسم المشتريات',
-    'Inactive',
-  ),
-  demoEmployee(
-    'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-    'EMP-004',
-    'سامية يوسف',
-    'أمينة عهد',
-    'قسم الأصول',
+    'أحمد علي الأحريري',
+    'مهندس برمجيات',
+    'ou-EMP-001',
     'Active',
   ),
 ]
@@ -135,24 +133,16 @@ async function loadDemoEmployees(query: string): Promise<Employee[]> {
   await delay(250)
   const needle = query.trim().toLocaleLowerCase()
   return demoEmployees.filter((employee) =>
-    `${employee.fullNameAr} ${employee.employeeNumber}`.toLocaleLowerCase().includes(needle),
+    `${employee.fullName} ${employee.employeeNumber}`.toLocaleLowerCase().includes(needle),
   )
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="grid grid-cols-2 gap-2 text-left">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium text-foreground">{value}</dd>
+      <dd className="text-foreground">{value}</dd>
     </div>
-  )
-}
-
-function StatusBadge({ status }: { status: RecordStatus }) {
-  return (
-    <Badge variant={status === 'Active' ? 'success' : 'outline'}>
-      {status === 'Active' ? 'نشط' : 'غير نشط'}
-    </Badge>
   )
 }
 
@@ -164,12 +154,14 @@ function WarehouseDetails({ option }: { option: AsyncSelectOption<Warehouse> | n
   return (
     <dl className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/40 p-3 text-sm">
       <DetailRow label="الكود" value={warehouse.code} />
-      <DetailRow label="الموقع" value={warehouse.locationAr ?? '—'} />
-      <DetailRow label="المبنى التابع" value={warehouse.site.displayName} />
+      <DetailRow label="نوع المستودع" value={warehouse.warehouseType} />
+      <DetailRow label="السماح بالتخزين" value={warehouse.canHoldStock ? 'نعم' : 'لا'} />
       <div className="flex items-center justify-between gap-4">
         <dt className="text-muted-foreground">الحالة</dt>
         <dd>
-          <StatusBadge status={warehouse.status} />
+          <Badge variant={warehouse.status === 'Active' ? 'default' : 'secondary'}>
+            {warehouse.status === 'Active' ? 'نشط' : 'غير نشط'}
+          </Badge>
         </dd>
       </div>
     </dl>
@@ -184,12 +176,13 @@ function EmployeeDetails({ option }: { option: AsyncSelectOption<Employee> | nul
   return (
     <dl className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/40 p-3 text-sm">
       <DetailRow label="رقم الموظف" value={employee.employeeNumber} />
-      <DetailRow label="المسمى الوظيفي" value={employee.jobTitleAr ?? '—'} />
-      <DetailRow label="الوحدة التنظيمية" value={employee.orgUnit.displayName} />
+      <DetailRow label="المسمى الوظيفي" value={employee.jobTitle ?? '—'} />
       <div className="flex items-center justify-between gap-4">
         <dt className="text-muted-foreground">الحالة</dt>
         <dd>
-          <StatusBadge status={employee.status} />
+          <Badge variant={employee.status === 'Active' ? 'default' : 'secondary'}>
+            {employee.status === 'Active' ? 'نشط' : 'غير نشط'}
+          </Badge>
         </dd>
       </div>
     </dl>
@@ -199,15 +192,15 @@ function EmployeeDetails({ option }: { option: AsyncSelectOption<Employee> | nul
 function SelectorAdaptersDemo() {
   const [warehouse, setWarehouse] = useState<AsyncSelectOption<Warehouse> | null>(null)
   const [employee, setEmployee] = useState<AsyncSelectOption<Employee> | null>(null)
-  const warehouseSelector = useWarehouseSelector(loadDemoWarehouses)
+  const warehouseSelector = useWarehouseSelector(loadDemoWarehouses as unknown as WarehouseLoader)
   const employeeSelector = useEmployeeSelector(loadDemoEmployees)
 
   return (
     <div className="flex flex-col gap-6">
       <p className="text-sm text-muted-foreground">
         محوّل كيان جاهز يحوّل محمّل المستودعات (مهلة ٤٠٠ مللي ثانية) ومحمّل الموظفين (مهلة ٢٥٠ مللي
-        ثانية) إلى خيارات AsyncSelect مع رمز تلميح وقاعدة تعطيل عند عدم النشاط، ويُعرض حمولة الخيار
-        المختار تحت كل محدد.
+        ثانية) إلى خيارات AsyncSelect موحّدة: تسمية عربية، رمز تلميح، وتعطيل الكيانات غير النشطة، مع
+        عرض حمولة الخيار المختار.
       </p>
       <div className="grid gap-6 md:grid-cols-2">
         <div className="flex flex-col gap-3">
@@ -240,7 +233,7 @@ function SelectorAdaptersDemo() {
               <span className="flex w-full items-center justify-between gap-2">
                 <span className="truncate">{option.label}</span>
                 <span className="shrink-0 text-xs text-muted-foreground">
-                  {option.payload?.jobTitleAr ?? '—'}
+                  {option.payload?.jobTitle ?? '—'}
                 </span>
               </span>
             )}

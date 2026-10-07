@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
@@ -9,11 +10,13 @@ import {
   type UpdateCountLinesRequest,
 } from '@/modules/inventory-count/types/inventory-count.types'
 import { countService } from '@/modules/inventory-count/services/count.service'
-import { createIdempotencyKey } from '@/shared/services/mutation-safety'
+import { createIdempotencyKey, type IdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
 
 const COUNT_RESOURCE = 'inventory-counts'
+const ALL_COUNT_LINES_PAGE_SIZE = 200
 
 export const countQueryKeys = {
   counts: (scope: ScopeCacheKey, query: ListInventoryCountsQuery) =>
@@ -25,6 +28,33 @@ export const countQueryKeys = {
     countId: string,
     query: { pageIndex?: number; pageSize?: number; search?: string },
   ) => queryKeys.scoped(scope, COUNT_RESOURCE, 'lines', countId, query),
+  allLines: (scope: ScopeCacheKey, countId: string) =>
+    queryKeys.scoped(scope, COUNT_RESOURCE, 'lines', countId, 'all'),
+}
+
+/**
+ * Reads every page of one count snapshot before publishing any lines. A
+ * count-linked adjustment must never be seeded from a partial page: later
+ * variance lines carry the same material/asset provenance as the first page.
+ */
+async function listAllCountLines(countId: string): Promise<readonly InventoryCountLine[]> {
+  const firstPage = await countService.listLines(countId, {
+    pageIndex: 0,
+    pageSize: ALL_COUNT_LINES_PAGE_SIZE,
+  })
+  const remainingPages = await Promise.all(
+    Array.from({ length: Math.max(0, firstPage.meta.totalPages - 1) }, (_, index) =>
+      countService.listLines(countId, {
+        pageIndex: index + 1,
+        pageSize: ALL_COUNT_LINES_PAGE_SIZE,
+      }),
+    ),
+  )
+
+  return [
+    ...firstPage.items,
+    ...remainingPages.flatMap((page) => page.items),
+  ] satisfies readonly InventoryCountLine[]
 }
 
 export {
@@ -101,13 +131,46 @@ export function useCountLinesQuery(
   })
 }
 
-/** Plans a new count session (`count.plan`). Navigates on success at the page. */
+/**
+ * Complete count-line snapshot for variance review and adjustment seeding.
+ * TanStack Query publishes the aggregate only after every advertised server
+ * page succeeds, so consumers cannot mistake a partial response for the full
+ * count.
+ */
+export function useAllCountLinesQuery(countId: string | undefined | null) {
+  const { activeScopeCacheKey: scope } = useActiveScopeContext()
+  return useQuery({
+    queryKey:
+      scope === undefined || countId == null
+        ? ['inventory-counts', 'lines', 'all', 'unscoped', countId]
+        : countQueryKeys.allLines(scope, countId),
+    queryFn: () => listAllCountLines(countId ?? ''),
+    enabled: scope !== undefined && countId != null && countId !== '',
+    staleTime: OPERATIONAL_STALE_TIME,
+  })
+}
+
+/**
+ * Plans a new count session (`count.plan`). Navigates on success at the page.
+ *
+ * The idempotency key is minted once per user-approved execution and held in a
+ * ref, so an explicit retry after an uncertain outcome reuses the SAME key. A
+ * key minted as a call argument is fresh on every invocation, so a retry the
+ * operator makes after a lost response is indistinguishable to the server from a
+ * second plan (eiams-frontend-xlfs).
+ */
 export function usePlanCountMutation() {
   const invalidate = useCountInvalidation()
+  const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
   return useMutation({
-    mutationFn: (request: InventoryCountPlanRequest) =>
-      countService.planCount(request, createIdempotencyKey()),
-    onSuccess: invalidate,
+    mutationFn: (request: InventoryCountPlanRequest) => {
+      idempotencyKeyRef.current ??= createIdempotencyKey()
+      return countService.planCount(request, idempotencyKeyRef.current)
+    },
+    onSuccess: () => {
+      idempotencyKeyRef.current = null
+      invalidate()
+    },
   })
 }
 
@@ -121,6 +184,26 @@ export function useStartCountMutation(countId: string) {
 }
 
 /** Batches actual-quantity entry onto count lines (`count.enter`). */
+/**
+ * Saves the batch of changed count lines.
+ *
+ * There is deliberately **no `onError` invalidation** here, and that absence is
+ * load-bearing rather than an oversight. The quantity-entry workspace feeds the
+ * loaded page to react-hook-form through the `values` prop, and react-hook-form
+ * treats a deep-unequal `values` change as a full reset. Invalidating on the
+ * error path would therefore reload the lines — including on a `409`, which is
+ * the case where keeping the operator's work matters most — and silently
+ * discard every quantity they had typed, immediately after the toast told them
+ * to try again.
+ *
+ * A `409` is surfaced instead through `isConflictError(error)` at the call
+ * boundary, which hands it to `useCountConflictRecovery`. That refetches the
+ * authoritative count and lines only when the operator explicitly asks for the
+ * newer version. The save is never retried automatically: this operation
+ * accepts no `Idempotency-Key` (unlike its `/start`, `/complete` and `/close`
+ * siblings), so a retry cannot be made safe, and
+ * `docs/feature-service-composition-standard.md:90-91` forbids it.
+ */
 export function useUpdateCountLinesMutation(countId: string) {
   const invalidate = useCountInvalidation()
   return useMutation({
@@ -129,13 +212,19 @@ export function useUpdateCountLinesMutation(countId: string) {
   })
 }
 
-/** Marks the session Completed (`count.complete`, idempotent). */
+/** Marks the session Completed (`count.complete`, idempotent). Retry-safe key, as in `usePlanCountMutation`. */
 export function useCompleteCountMutation(countId: string) {
   const invalidate = useCountInvalidation()
+  const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
   return useMutation({
-    mutationFn: (rowVersion: number) =>
-      countService.completeCount(countId, rowVersion, createIdempotencyKey()),
-    onSuccess: invalidate,
+    mutationFn: (rowVersion: number) => {
+      idempotencyKeyRef.current ??= createIdempotencyKey()
+      return countService.completeCount(countId, rowVersion, idempotencyKeyRef.current)
+    },
+    onSuccess: () => {
+      idempotencyKeyRef.current = null
+      invalidate()
+    },
   })
 }
 

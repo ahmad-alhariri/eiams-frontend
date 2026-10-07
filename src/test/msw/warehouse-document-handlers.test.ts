@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+﻿import { beforeEach, describe, expect, it } from 'vitest'
 
+import type { ApiSuccessResponse } from '@/shared/api/api-contracts'
+import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import { apiClient } from '@/shared/services/api.client'
 import {
   actionRequiresReason,
@@ -11,11 +13,15 @@ import {
 import { server } from '@/test/msw/server'
 import {
   applyDocumentAction,
+  applyIdempotentDocumentAction,
+  createIdempotencyMemo,
   createWarehouseDocumentActionHandler,
   createWarehouseDocumentDetailHandler,
   createWarehouseDocumentHistoryHandler,
   createWarehouseDocumentListHandler,
   createWarehouseDocumentPolicyHandler,
+  documentActionIdempotency,
+  readIdempotencyKey,
 } from '@/test/msw/warehouse-document-handlers'
 import type { DocumentActionType, DocumentStatus } from '@/shared/types/generated/eiams-v1'
 
@@ -97,39 +103,64 @@ describe('document-engine scenario handlers', () => {
     ]
     server.use(...createWarehouseDocumentListHandler(documents))
 
-    const { data: all } = await apiClient.get<{
-      items: Array<{ documentId: string }>
-      meta: { pageIndex: number; pageSize: number; totalItems: number; totalPages: number }
-    }>('/warehouse-documents')
-    expect(all.items).toHaveLength(3)
-    expect(all.meta).toEqual({ pageIndex: 0, pageSize: 20, totalItems: 3, totalPages: 1 })
+    // The harness now serves the real envelope: `data` is the item ARRAY and
+    // `pagination` is the snake_case block. Asserting `{items, meta:{pageIndex}}`
+    // would pin the UI shape the backend never sends.
+    const first =
+      await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>('/warehouse-documents')
+    expect(first.data.data).toHaveLength(3)
+    expect(first.data.pagination).toMatchObject({
+      page: 1,
+      page_size: 20,
+      total_items: 3,
+      total_pages: 1,
+      has_previous_page: false,
+      // 3 items in one 20-per-page page, so `page < totalPages` is 1 < 1 = false.
+      // The flags are server-owned and read, never derived client-side.
+      has_next_page: false,
+    })
 
-    const { data: submitted } = await apiClient.get<{ items: Array<{ documentId: string }> }>(
+    const submitted = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
       '/warehouse-documents?documentStatus=Submitted',
     )
-    expect(submitted.items.map((item) => item.documentId)).toEqual([fixtureUuid(151)])
+    expect(submitted.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(151)])
 
-    const { data: transfers } = await apiClient.get<{ items: Array<{ documentId: string }> }>(
+    const transfers = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
       '/warehouse-documents?documentType=Transfer',
     )
-    expect(transfers.items.map((item) => item.documentId)).toEqual([fixtureUuid(152)])
+    expect(transfers.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(152)])
 
-    const { data: byWarehouse } = await apiClient.get<{ items: Array<{ documentId: string }> }>(
+    const byWarehouse = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
       `/warehouse-documents?warehouseId=${fixtureUuid(31)}`,
     )
-    expect(byWarehouse.items.map((item) => item.documentId)).toEqual([fixtureUuid(152)])
+    expect(byWarehouse.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(152)])
 
-    const { data: bySearch } = await apiClient.get<{ items: Array<{ documentId: string }> }>(
+    const bySearch = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
       '/warehouse-documents?search=2024/102',
     )
-    expect(bySearch.items.map((item) => item.documentId)).toEqual([fixtureUuid(151)])
+    expect(bySearch.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(151)])
 
-    const { data: page } = await apiClient.get<{
-      items: unknown[]
-      meta: { totalItems: number; totalPages: number }
-    }>('/warehouse-documents?pageSize=2&pageIndex=1')
-    expect(page.items).toHaveLength(1)
-    expect(page.meta).toEqual({ pageIndex: 1, pageSize: 2, totalItems: 3, totalPages: 2 })
+    // One-based `page`, matching `PaginationQueryParameters.Page`. The old
+    // `pageIndex=1` meant the SECOND slice; `page=2` means the same thing in the
+    // convention the backend actually binds.
+    const secondPage = await apiClient.get<ApiSuccessResponse<unknown[]>>(
+      '/warehouse-documents?pageSize=2&page=2',
+    )
+    expect(secondPage.data.data).toHaveLength(1)
+    expect(secondPage.data.pagination).toMatchObject({
+      page: 2,
+      page_size: 2,
+      total_items: 3,
+      total_pages: 2,
+    })
+
+    // `page=0` is below the backend's `Range(1, ...)` and clamps to page 1
+    // rather than producing a negative slice offset.
+    const clamped = await apiClient.get<ApiSuccessResponse<unknown[]>>(
+      '/warehouse-documents?page=0',
+    )
+    expect(clamped.data.data).toHaveLength(3)
+    expect(clamped.data.pagination?.page).toBe(1)
   })
 
   it('serves detail, history, and policy; unknown ids return an Arabic 404 problem', async () => {
@@ -156,23 +187,31 @@ describe('document-engine scenario handlers', () => {
       ...createWarehouseDocumentPolicyHandler(document.policy),
     )
 
-    const { data: detail } = await apiClient.get<{ documentStatus: DocumentStatus }>(
+    const {
+      data: { data: detail },
+    } = await apiClient.get<ApiSuccessResponse<{ documentStatus: DocumentStatus }>>(
       `/warehouse-documents/${document.documentId}`,
     )
     expect(detail.documentStatus).toBe('Submitted')
 
-    const { data: history } = await apiClient.get<{
-      currentStatus: DocumentStatus
-      currentRowVersion: number
-      events: Array<{ eventType: string }>
-    }>(`/warehouse-documents/${document.documentId}/history`)
+    const {
+      data: { data: history },
+    } = await apiClient.get<
+      ApiSuccessResponse<{
+        currentStatus: DocumentStatus
+        currentRowVersion: number
+        events: Array<{ eventType: string }>
+      }>
+    >(`/warehouse-documents/${document.documentId}/history`)
     expect(history).toMatchObject({
       currentStatus: 'Submitted',
       currentRowVersion: 2,
     })
     expect(history.events.map((event) => event.eventType)).toEqual(['Created', 'Submitted'])
 
-    const { data: policy } = await apiClient.get<{ documentStatus: DocumentStatus }>(
+    const {
+      data: { data: policy },
+    } = await apiClient.get<ApiSuccessResponse<{ documentStatus: DocumentStatus }>>(
       `/warehouse-documents/${document.documentId}/policy`,
     )
     expect(policy.documentStatus).toBe('Submitted')
@@ -181,7 +220,7 @@ describe('document-engine scenario handlers', () => {
       .get(`/warehouse-documents/${UNKNOWN_ID}`)
       .catch((error: unknown) => error)
     expect(missing).toHaveProperty('response.status', 404)
-    expect(missing).toHaveProperty('response.data.code', 'record.not_found')
+    expect(missing).toHaveProperty('response.data.error.code', 'WAREHOUSE_DOCUMENTS_NOT_FOUND')
 
     const missingHistory = await apiClient
       .get(`/warehouse-documents/${UNKNOWN_ID}/history`)
@@ -235,7 +274,7 @@ describe('document-engine scenario handlers', () => {
       })
       expect(stale.kind).toBe('conflict')
       if (stale.kind === 'conflict') {
-        expect(stale.problem.code).toBe('document.version_conflict')
+        expect(stale.problem.code).toBe('WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH')
         expect(stale.problem.currentRowVersion).toBe(document.rowVersion)
         expect(stale.problem.policy.documentId).toBe(document.documentId)
       }
@@ -252,9 +291,9 @@ describe('document-engine scenario handlers', () => {
     })
     expect(cancel.kind).toBe('validation')
     if (cancel.kind === 'validation') {
-      expect(cancel.problem.code).toBe('document.reason_required')
+      expect(cancel.problem.code).toBe('REQUEST_VALIDATION_FAILED')
       expect(cancel.problem.fieldErrors).toEqual([
-        expect.objectContaining({ field: 'reason', code: 'document.reason_required' }),
+        expect.objectContaining({ field: 'reason', code: 'REQUEST_VALIDATION_FAILED' }),
       ])
     }
 
@@ -265,7 +304,7 @@ describe('document-engine scenario handlers', () => {
     })
     expect(unsupported.kind).toBe('validation')
     if (unsupported.kind === 'validation') {
-      expect(unsupported.problem.code).toBe('document.action_unsupported')
+      expect(unsupported.problem.code).toBe('WAREHOUSE_DOCUMENTS_INVALID_TRANSITION')
     }
     expect(actionRequiresReason('Cancel')).toBe(true)
     expect(actionRequiresReason('Reverse')).toBe(true)
@@ -281,10 +320,14 @@ describe('document-engine scenario handlers', () => {
       }),
     )
 
-    const { data: result } = await apiClient.post<{
-      document: { documentStatus: DocumentStatus; rowVersion: number }
-      lifecycleEvent: { eventType: string; fromStatus: DocumentStatus }
-    }>(
+    const {
+      data: { data: result },
+    } = await apiClient.post<
+      ApiSuccessResponse<{
+        document: { documentStatus: DocumentStatus; rowVersion: number }
+        lifecycleEvent: { eventType: string; fromStatus: DocumentStatus }
+      }>
+    >(
       `/warehouse-documents/${fixtureUuid(150)}/submit`,
       { rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -295,18 +338,20 @@ describe('document-engine scenario handlers', () => {
     expect(result.lifecycleEvent.fromStatus).toBe('Draft')
     expect(documents[0]).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
 
-    const cancelled = await apiClient.post<{
-      document: { documentStatus: DocumentStatus; rowVersion: number }
-      lifecycleEvent: { eventType: string; fromStatus: DocumentStatus }
-    }>(
+    const cancelled = await apiClient.post<
+      ApiSuccessResponse<{
+        document: { documentStatus: DocumentStatus; rowVersion: number }
+        lifecycleEvent: { eventType: string; fromStatus: DocumentStatus }
+      }>
+    >(
       `/warehouse-documents/${fixtureUuid(150)}/cancel`,
       { rowVersion: 2, reason: 'إلغاء' },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
     )
-    expect(cancelled.data.document.documentStatus).toBe('Cancelled')
-    expect(cancelled.data.document.rowVersion).toBe(3)
-    expect(cancelled.data.lifecycleEvent.eventType).toBe('Cancelled')
-    expect(cancelled.data.lifecycleEvent.fromStatus).toBe('Submitted')
+    expect(cancelled.data.data.document.documentStatus).toBe('Cancelled')
+    expect(cancelled.data.data.document.rowVersion).toBe(3)
+    expect(cancelled.data.data.lifecycleEvent.eventType).toBe('Cancelled')
+    expect(cancelled.data.data.lifecycleEvent.fromStatus).toBe('Submitted')
     expect(documents[0]).toMatchObject({ documentStatus: 'Cancelled', rowVersion: 3 })
     expect(documents[0]?.policy.documentStatus).toBe('Cancelled')
 
@@ -318,9 +363,15 @@ describe('document-engine scenario handlers', () => {
       )
       .catch((caught: unknown) => caught)
     expect(replayCancel).toHaveProperty('response.status', 409)
-    expect(replayCancel).toHaveProperty('response.data.code', 'document.action_not_allowed')
-    expect(replayCancel).toHaveProperty('response.data.currentStatus', 'Cancelled')
-    expect(replayCancel).toHaveProperty('response.data.policy.documentStatus', 'Cancelled')
+    expect(replayCancel).toHaveProperty(
+      'response.data.error.code',
+      'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+    )
+    expect(replayCancel).toHaveProperty('response.data.error.details.currentStatus', 'Cancelled')
+    expect(replayCancel).toHaveProperty(
+      'response.data.error.details.policy.documentStatus',
+      'Cancelled',
+    )
     expect(documents[0]).toMatchObject({ documentStatus: 'Cancelled', rowVersion: 3 })
   })
 
@@ -341,11 +392,15 @@ describe('document-engine scenario handlers', () => {
       )
       .catch((caught: unknown) => caught)
     expect(stale).toHaveProperty('response.status', 409)
-    expect(stale).toHaveProperty('response.data.code', 'document.version_conflict')
-    expect(stale).toHaveProperty('response.data.status', 409)
-    expect(stale).toHaveProperty('response.data.currentRowVersion', 1)
-    expect(stale).toHaveProperty('response.data.currentStatus', 'Draft')
-    expect(stale).toHaveProperty('response.data.policy.documentId', fixtureUuid(150))
+    expect(stale).toHaveProperty(
+      'response.data.error.code',
+      'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+    )
+    // `status` lives in the HTTP status line, never in the body.
+    expect(stale).toHaveProperty('response.status', 409)
+    expect(stale).toHaveProperty('response.data.error.details.currentRowVersion', 1)
+    expect(stale).toHaveProperty('response.data.error.details.currentStatus', 'Draft')
+    expect(stale).toHaveProperty('response.data.error.details.policy.documentId', fixtureUuid(150))
     expect(documents[0]).toMatchObject({ documentStatus: 'Draft', rowVersion: 1 })
 
     const submitted = [documentInStatus('Submitted', fixtureUuid(151))]
@@ -363,7 +418,7 @@ describe('document-engine scenario handlers', () => {
       )
       .catch((caught: unknown) => caught)
     expect(missingReason).toHaveProperty('response.status', 422)
-    expect(missingReason).toHaveProperty('response.data.code', 'document.reason_required')
+    expect(missingReason).toHaveProperty('response.data.error.code', 'REQUEST_VALIDATION_FAILED')
   })
 
   it('posts only after submit and records the pair of lifecycle events in order', async () => {
@@ -383,17 +438,24 @@ describe('document-engine scenario handlers', () => {
       )
       .catch((caught: unknown) => caught)
     expect(premature).toHaveProperty('response.status', 409)
-    expect(premature).toHaveProperty('response.data.code', 'document.action_not_allowed')
+    expect(premature).toHaveProperty(
+      'response.data.error.code',
+      'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+    )
 
     await apiClient.post(
       `/warehouse-documents/${fixtureUuid(150)}/submit`,
       { rowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
     )
-    const { data: posted } = await apiClient.post<{
-      document: { rowVersion: number }
-      lifecycleEvent: { eventType: string }
-    }>(
+    const {
+      data: { data: posted },
+    } = await apiClient.post<
+      ApiSuccessResponse<{
+        document: { rowVersion: number }
+        lifecycleEvent: { eventType: string }
+      }>
+    >(
       `/warehouse-documents/${fixtureUuid(150)}/post`,
       { rowVersion: 2 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
@@ -403,5 +465,202 @@ describe('document-engine scenario handlers', () => {
     expect(documents[0]).toMatchObject({ documentStatus: 'Posted', rowVersion: 3 })
     expect(documents[0]?.policy.documentStatus).toBe('Posted')
     expect(documents[0]?.postedAt).toBeDefined()
+  })
+})
+
+/**
+ * The `Idempotency-Key` memo WIRING (D-LIFE-01 §94-97), the half of the route
+ * that used to exist only in the deleted `src/mocks/handlers.ts`.
+ *
+ * `createIdempotencyMemo` and `idempotencyMismatchProblem` are primitives; on
+ * their own they prove nothing about the route. What the backend depends on is
+ * the sequence around them: read the header, replay a matching earlier success
+ * verbatim, refuse a non-equivalent same-key retry, and record only successes.
+ * That sequence is what `applyIdempotentDocumentAction` owns, and these tests
+ * drive it directly so deleting the dev mock cannot take it with it.
+ */
+describe('idempotency-key memo wiring', () => {
+  const MEMO_DOCUMENT_ID = fixtureUuid(160)
+
+  it('replays the byte-identical original result for a repeated key and answers a same-key/different-body retry with 422 (D-LIFE-01 §94-97)', () => {
+    const document = documentInStatus('Draft', MEMO_DOCUMENT_ID)
+    const memo = createIdempotencyMemo()
+    const request = {
+      action: 'Cancel' as DocumentActionType,
+      document,
+      idempotencyKey: IDEMPOTENCY_KEY,
+      idempotency: memo,
+      occurredAt: '2026-03-01T00:00:00.000Z',
+      reason: 'إلغاء',
+      rowVersion: document.rowVersion,
+    }
+
+    const first = applyIdempotentDocumentAction(request)
+    if (first.kind !== 'ok') {
+      throw new Error(`expected the first attempt to succeed, received ${first.kind}`)
+    }
+
+    // Same key, same body: the original result object, not a re-applied one.
+    const replay = applyIdempotentDocumentAction({ ...request, document: first.document })
+    expect(replay.kind).toBe('replay')
+    if (replay.kind !== 'replay') {
+      throw new Error(`expected a replay of the original result, received ${replay.kind}`)
+    }
+    expect(replay.result).toBe(first.result)
+    expect(replay.result).toEqual(first.result)
+    expect(replay.result.lifecycleEvent.eventId).toBe(first.result.lifecycleEvent.eventId)
+    expect(replay.result.document).toMatchObject({
+      documentStatus: 'Cancelled',
+      rowVersion: document.rowVersion + 1,
+    })
+
+    // Same key, different body (the reason changed): refused, never applied.
+    const mismatch = applyIdempotentDocumentAction({
+      ...request,
+      document: first.document,
+      reason: 'سبب مختلف',
+    })
+    expect(mismatch).toMatchObject({ kind: 'mismatch', status: 422 })
+    if (mismatch.kind !== 'mismatch') {
+      throw new Error(`expected a mismatch, received ${mismatch.kind}`)
+    }
+    expect(mismatch.problem.code).toBe('REQUEST_IDEMPOTENCY_MISMATCH')
+    expect(mismatch.problem.fieldErrors).toEqual([
+      {
+        code: 'REQUEST_IDEMPOTENCY_MISMATCH',
+        field: 'idempotencyKey',
+        messageAr: expect.any(String),
+      },
+    ])
+
+    // A different rowVersion under the same key is a mismatch too, not a fresh
+    // attempt: the key names the intent, and the intent is now different.
+    const rowVersionMismatch = applyIdempotentDocumentAction({
+      ...request,
+      document: first.document,
+      reason: 'إلغاء',
+      rowVersion: 7,
+    })
+    expect(rowVersionMismatch.kind).toBe('mismatch')
+  })
+
+  it('never memoizes a failure, so a same-key retry proceeds fresh after a 409', () => {
+    const document = documentInStatus('Draft', MEMO_DOCUMENT_ID)
+    const memo = createIdempotencyMemo()
+
+    const stale = applyIdempotentDocumentAction({
+      action: 'Submit',
+      document,
+      idempotencyKey: SECOND_IDEMPOTENCY_KEY,
+      idempotency: memo,
+      reason: null,
+      rowVersion: document.rowVersion + 5,
+    })
+    expect(stale).toMatchObject({ kind: 'conflict', status: 409 })
+
+    const retry = applyIdempotentDocumentAction({
+      action: 'Submit',
+      document,
+      idempotencyKey: SECOND_IDEMPOTENCY_KEY,
+      idempotency: memo,
+      reason: null,
+      rowVersion: document.rowVersion,
+    })
+    expect(retry.kind).toBe('ok')
+    if (retry.kind !== 'ok') throw new Error(`expected success, received ${retry.kind}`)
+    expect(retry.document).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
+  })
+
+  it('skips the memo entirely when the caller sent no Idempotency-Key', () => {
+    const document = documentInStatus('Draft', MEMO_DOCUMENT_ID)
+
+    const first = applyIdempotentDocumentAction({
+      action: 'Submit',
+      document,
+      idempotencyKey: null,
+      rowVersion: document.rowVersion,
+    })
+    expect(first.kind).toBe('ok')
+    if (first.kind !== 'ok') throw new Error(`expected success, received ${first.kind}`)
+
+    // Without a key there is nothing to replay: the same body against the now
+    // updated document must hit the rowVersion guard, not a stored result.
+    const second = applyIdempotentDocumentAction({
+      action: 'Submit',
+      document: first.document,
+      idempotencyKey: null,
+      rowVersion: document.rowVersion,
+    })
+    expect(second).toMatchObject({ kind: 'conflict', status: 409 })
+  })
+
+  it('records into the module-scoped memo by default, so a key outlives a route re-registration', () => {
+    // The dev mock holds ONE memo for the lifetime of the page: a retry that
+    // arrives after the routes were re-registered still recognises the earlier
+    // success, instead of falling through to the rowVersion guard and answering
+    // 409 for work that already happened. Per-handler memo instances cannot
+    // express that, which is why `documentActionIdempotency` is module-scoped.
+    const document = documentInStatus('Submitted', fixtureUuid(161))
+    const action = 'Post' as DocumentActionType
+    const request = {
+      action,
+      document,
+      idempotencyKey: UNKNOWN_ID,
+      reason: null,
+      rowVersion: document.rowVersion,
+    }
+
+    const first = applyIdempotentDocumentAction(request)
+    expect(first.kind).toBe('ok')
+    if (first.kind !== 'ok') throw new Error(`expected success, received ${first.kind}`)
+
+    // "A later request" — same key, same body, reached from an unrelated
+    // call site that passes no memo of its own.
+    const replay = applyIdempotentDocumentAction({ ...request, document: first.document })
+    expect(replay.kind).toBe('replay')
+    if (replay.kind !== 'replay') {
+      throw new Error(`expected the module-scoped memo to replay, received ${replay.kind}`)
+    }
+    expect(replay.result).toEqual(first.result)
+
+    // Decisive: the entry really is in the module-scoped instance, and NOT in a
+    // fresh one. Without this, a per-call memo would satisfy every assertion above.
+    expect(
+      documentActionIdempotency.check({
+        action,
+        documentId: fixtureUuid(161),
+        idempotencyKey: UNKNOWN_ID,
+        reason: null,
+        rowVersion: document.rowVersion,
+      }),
+    ).toEqual({ kind: 'replay', result: first.result })
+    expect(
+      createIdempotencyMemo().check({
+        action,
+        documentId: fixtureUuid(161),
+        idempotencyKey: UNKNOWN_ID,
+        reason: null,
+        rowVersion: document.rowVersion,
+      }),
+    ).toEqual({ kind: 'miss' })
+  })
+
+  it('reads the header the backend reads and nothing else', () => {
+    expect(
+      readIdempotencyKey(
+        new Request('http://localhost/api/v1/x', {
+          method: 'POST',
+          headers: { [IDEMPOTENCY_KEY_HEADER]: IDEMPOTENCY_KEY },
+        }),
+      ),
+    ).toBe(IDEMPOTENCY_KEY)
+    expect(readIdempotencyKey(new Request('http://localhost/api/v1/x'))).toBeNull()
+  })
+
+  it('exposes a memo that is independent per instance but shared by the module default', () => {
+    const isolated = createIdempotencyMemo()
+    expect(documentActionIdempotency).not.toBe(isolated)
+    expect(typeof documentActionIdempotency.check).toBe('function')
+    expect(typeof documentActionIdempotency.store).toBe('function')
   })
 })

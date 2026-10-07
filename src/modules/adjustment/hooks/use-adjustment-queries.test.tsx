@@ -1,6 +1,7 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -16,7 +17,6 @@ import type {
   AdjustmentPurpose,
   AdjustmentStatus,
   InventoryAdjustment,
-  InventoryAdjustmentPage,
 } from '@/shared/types/generated/eiams-v1'
 import { server } from '@/test/msw/server'
 
@@ -41,7 +41,7 @@ function createWrapper() {
 }
 
 function notFound() {
-  return HttpResponse.json({ title: 'Not Found', status: 404 }, { status: 404 })
+  return apiJson({ title: 'Not Found', status: 404 }, { status: 404 })
 }
 
 function adjustmentFixture(overrides: {
@@ -127,10 +127,7 @@ describe('useAdjustmentsListQuery (e21-t02 seam)', () => {
         const url = new URL(request.url)
         expect(url.searchParams.get('purpose')).toBe('Disposal')
         expect(url.searchParams.get('status')).toBe('Posted')
-        return HttpResponse.json<InventoryAdjustmentPage>({
-          items,
-          meta: { pageIndex: 0, pageSize: 20, totalItems: 1, totalPages: 1 },
-        })
+        return okPageJson(items, { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 })
       }),
     )
 
@@ -170,7 +167,7 @@ describe('useAdjustmentDetailQuery (e21-t07 seam)', () => {
     server.use(
       http.get(`${API_BASE}/:adjustmentId`, ({ params }) => {
         if (params['adjustmentId'] !== ADJUSTMENT_ID) return notFound()
-        return HttpResponse.json(adjustmentFixture({}))
+        return okJson(adjustmentFixture({}))
       }),
     )
 
@@ -195,7 +192,7 @@ describe('adjustment mutations (e21-t06 seams)', () => {
       http.post(`${API_BASE}/:adjustmentId/post`, ({ request }) => {
         postCalls += 1
         seenIdempotencyKey = request.headers.get('Idempotency-Key')
-        return HttpResponse.json({
+        return okJson({
           adjustment: adjustmentFixture({ status: 'Posted' }),
           assetMovements: [],
           lifecycleEvent: { eventId: 'evt-post' },
@@ -238,7 +235,7 @@ describe('adjustment mutations (e21-t06 seams)', () => {
     server.use(
       http.post(`${API_BASE}/:adjustmentId/reverse`, async ({ request }) => {
         reverseBody = await request.json()
-        return HttpResponse.json({
+        return okJson({
           compensatingAdjustment: adjustmentFixture({ status: 'Posted' }),
           lifecycleEvent: { eventId: 'evt-reverse' },
           originalAdjustment: adjustmentFixture({ status: 'Reversed' }),

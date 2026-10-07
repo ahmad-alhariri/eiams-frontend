@@ -6,8 +6,13 @@ import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { StockMovement } from '@/shared/types/generated/eiams-v1'
-import { createNamedReference, createProblemDetails, fixtureUuid } from '@/test/msw/factories'
+import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
+import { errJson, okJson } from '@/test/msw/envelope'
+import {
+  INVENTORY_MOVEMENT_ID,
+  INVENTORY_POSTED_BY_ID,
+  wireStockMovement,
+} from '@/test/msw/inventory-wire-fixtures'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -21,22 +26,25 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 import StockMovementDetailPage from './stock-movement-detail-page'
 
 const API_BASE_URL = '/api/v1'
-const MOVEMENT_ID = fixtureUuid(70)
+const MOVEMENT_ID = INVENTORY_MOVEMENT_ID
 
+/**
+ * `postedBy` is a UUID STRING, not a nested reference.
+ *
+ * `Application/StockMovements/GetList/StockMovementResponse.cs` declares
+ * `Guid PostedBy`, and `StockMovementQuerySupport.Build` projects
+ * `movement.PostedBy` straight into that slot; the GetByDocument and
+ * GetByWarehouse DTOs declare it the same way. So the wire value is a bare GUID
+ * string and `inventory.api-types.StockMovement.postedBy: Uuid` is correct. The
+ * FROZEN GENERATED snapshot's `postedBy: NamedReference` was the fiction — it is
+ * what made React throw "Objects are not valid as a React child" when this page
+ * rendered `{movement.postedBy}` (stock-movement-detail-page.tsx:127).
+ *
+ * `wireStockMovement` is therefore the fixture for this page: it mints the real
+ * wire record with `postedBy: INVENTORY_POSTED_BY_ID`.
+ */
 function createMovement(overrides: Partial<StockMovement> = {}): StockMovement {
-  return {
-    documentId: fixtureUuid(60),
-    documentLineId: fixtureUuid(61),
-    documentReference: 'RCP-2026-0001',
-    material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
-    movementId: MOVEMENT_ID,
-    movementType: 'Receipt',
-    postedAt: '2026-08-21T10:00:00.000Z',
-    postedBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مدير المستودع' }),
-    quantityDelta: 5,
-    warehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
-    ...overrides,
-  }
+  return wireStockMovement({ movementId: MOVEMENT_ID, ...overrides })
 }
 
 function LocationProbe() {
@@ -77,7 +85,7 @@ describe('StockMovementDetailPage', () => {
     const movement = createMovement({ quantityDelta: -2.125, movementType: 'AdjustmentOut' })
     server.use(
       http.get(`${API_BASE_URL}/inventory/movements/${movement.movementId}`, () =>
-        HttpResponse.json(movement),
+        okJson(movement),
       ),
     )
 
@@ -90,10 +98,13 @@ describe('StockMovementDetailPage', () => {
     expect(screen.getByText(movement.material.displayName)).toBeInTheDocument()
     expect(screen.getByText('تسوية بالنقص')).toBeInTheDocument()
     expect(screen.getByText('-٢٫١٢٥')).toBeInTheDocument()
-    expect(screen.getByText(movement.documentReference as string)).toBeInTheDocument()
+    expect(screen.getByText(movement.documentReference)).toBeInTheDocument()
     expect(screen.getByText(movement.documentId)).toBeInTheDocument()
     expect(screen.getByText(movement.documentLineId)).toBeInTheDocument()
     expect(screen.getByText(movement.movementId)).toBeInTheDocument()
+    // `postedBy` is the UUID string the backend serves, so the read-only
+    // "رُحّلت بواسطة" row renders it as a string child — never as an object.
+    expect(screen.getByText(INVENTORY_POSTED_BY_ID)).toBeInTheDocument()
     expect(screen.queryByText('00000000…')).not.toBeInTheDocument()
     expect(
       screen.getByText('بيانات للقراءة فقط ضمن نطاق العمل الحالي، كما يعرضها الخادم.'),
@@ -106,15 +117,11 @@ describe('StockMovementDetailPage', () => {
     const user = userEvent.setup()
     server.use(
       http.get(`${API_BASE_URL}/inventory/movements/${MOVEMENT_ID}`, () =>
-        HttpResponse.json(
-          createProblemDetails({
-            status: 404,
-            code: 'inventory.movement.not_found',
-            titleAr: 'الحركة غير موجودة',
-            detailAr: 'يجب عدم عرض هذه الرسالة التفصيلية.',
-          }),
-          { status: 404 },
-        ),
+        errJson(404, {
+          code: 'INVENTORY_MOVEMENTS_NOT_FOUND',
+          message: 'Movement not found.',
+          detail: 'يجب عدم عرض هذه الرسالة التفصيلية.',
+        }),
       ),
     )
 
@@ -138,9 +145,7 @@ describe('StockMovementDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/movements/${MOVEMENT_ID}`, () => {
         attempts += 1
-        return attempts === 1
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(movement)
+        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson(movement)
       }),
     )
 
@@ -159,7 +164,7 @@ describe('StockMovementDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/movements/:movementId`, () => {
         requests += 1
-        return HttpResponse.json(createMovement())
+        return okJson(createMovement())
       }),
     )
 

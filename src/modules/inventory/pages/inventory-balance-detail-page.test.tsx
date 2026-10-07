@@ -6,7 +6,8 @@ import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createInventoryBalance, createProblemDetails, fixtureUuid } from '@/test/msw/factories'
+import { errJson, okJson } from '@/test/msw/envelope'
+import { INVENTORY_BALANCE_ID, wireInventoryBalance } from '@/test/msw/inventory-wire-fixtures'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -20,7 +21,20 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 import InventoryBalanceDetailPage from './inventory-balance-detail-page'
 
 const API_BASE_URL = '/api/v1'
-const BALANCE_ID = fixtureUuid(40)
+const BALANCE_ID = INVENTORY_BALANCE_ID
+
+/**
+ * The production service is typed against the HANDWRITTEN
+ * `inventory.api-types.InventoryBalance`, so this page reads the real wire
+ * projection — flat `warehouseId` / `materialId` / `lastUpdatedUtc` columns plus
+ * the server-computed `lowStock` block. `createInventoryBalance` in
+ * `@/test/msw/factories` is typed against the FROZEN GENERATED snapshot and
+ * carries none of the flat columns, so `wireInventoryBalance` is the fixture
+ * here. See that module's header for the full divergence note.
+ */
+function createBalance(overrides: Parameters<typeof wireInventoryBalance>[0] = {}) {
+  return wireInventoryBalance({ balanceId: BALANCE_ID, ...overrides })
+}
 
 function LocationProbe() {
   const { pathname } = useLocation()
@@ -57,14 +71,12 @@ afterEach(() => {
 
 describe('InventoryBalanceDetailPage', () => {
   it('renders only the contract-backed balance projection in Arabic RTL', async () => {
-    const balance = createInventoryBalance({
+    const balance = createBalance({
       lowStock: { state: 'Low', thresholdQuantity: 2.125 },
       quantity: 2.125,
     })
     server.use(
-      http.get(`${API_BASE_URL}/inventory/balances/${balance.balanceId}`, () =>
-        HttpResponse.json(balance),
-      ),
+      http.get(`${API_BASE_URL}/inventory/balances/${balance.balanceId}`, () => okJson(balance)),
     )
 
     render(<InventoryBalanceDetailPage />, { wrapper: PageWrapper })
@@ -77,6 +89,8 @@ describe('InventoryBalanceDetailPage', () => {
     expect(screen.getAllByText('٢٫١٢٥')).toHaveLength(2)
     expect(screen.getByText('منخفض')).toBeInTheDocument()
     expect(screen.getByText('حدّ التنبيه')).toBeInTheDocument()
+    // `formatUuid` shortens the balance id for display; the page renders no
+    // other identifier, so this is the masked projection row.
     expect(screen.getByText('00000000…')).toBeInTheDocument()
     expect(
       screen.getByText('بيانات للقراءة فقط ضمن نطاق العمل الحالي، كما يعرضها الخادم.'),
@@ -88,15 +102,11 @@ describe('InventoryBalanceDetailPage', () => {
     const user = userEvent.setup()
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances/${BALANCE_ID}`, () =>
-        HttpResponse.json(
-          createProblemDetails({
-            status: 404,
-            code: 'inventory.balance.not_found',
-            titleAr: 'الرصيد غير موجود',
-            detailAr: 'يجب عدم عرض هذه الرسالة التفصيلية.',
-          }),
-          { status: 404 },
-        ),
+        errJson(404, {
+          code: 'INVENTORY_BALANCES_NOT_FOUND',
+          message: 'Balance not found.',
+          detail: 'يجب عدم عرض هذه الرسالة التفصيلية.',
+        }),
       ),
     )
 
@@ -115,12 +125,12 @@ describe('InventoryBalanceDetailPage', () => {
 
   it('retries a non-404 detail failure and preserves the return action', async () => {
     const user = userEvent.setup()
-    const balance = createInventoryBalance()
+    const balance = createBalance()
     let attempts = 0
     server.use(
-      http.get(`${API_BASE_URL}/inventory/balances/${balance.balanceId}`, () => {
+      http.get(`${API_BASE_URL}/inventory/balances/${BALANCE_ID}`, () => {
         attempts += 1
-        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : HttpResponse.json(balance)
+        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson(balance)
       }),
     )
 
@@ -139,7 +149,7 @@ describe('InventoryBalanceDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances/:balanceId`, () => {
         requests += 1
-        return HttpResponse.json(createInventoryBalance())
+        return okJson(createBalance())
       }),
     )
 

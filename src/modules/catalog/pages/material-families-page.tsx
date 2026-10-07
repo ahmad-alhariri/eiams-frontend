@@ -26,7 +26,7 @@ import { dataTableFeatures, DataTable } from '@/shared/ui/data-table'
 import { Input } from '@/shared/ui/input'
 import { toast } from '@/shared/ui/toast-manager'
 import { listRows } from '@/shared/utils/table-data'
-import type { MaterialFamily } from '@/shared/types/generated/eiams-v1'
+import type { MaterialFamily } from '@/modules/catalog/types/catalog.types'
 
 const familyColumnHelper = createColumnHelper<typeof dataTableFeatures, MaterialFamily>()
 
@@ -57,7 +57,7 @@ function MaterialFamiliesPage() {
           await createMutation.mutateAsync(request)
           toast.success({ title: 'تمت إضافة عائلة المادة.' })
         } else {
-          await updateMutation.mutateAsync({ familyId: family.familyId, request })
+          await updateMutation.mutateAsync({ familyId: family.materialFamilyId, request })
           toast.success({ title: 'تم حفظ تعديلات عائلة المادة.' })
         }
         setDialogFamily(undefined)
@@ -88,11 +88,7 @@ function MaterialFamiliesPage() {
           header: 'الرمز',
           cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
         }),
-        familyColumnHelper.accessor((family) => family.domain.displayName, {
-          id: 'domain',
-          header: 'المجال',
-        }),
-        familyColumnHelper.accessor((family) => family.category.displayName, {
+        familyColumnHelper.accessor((family) => family.materialCategory.displayName, {
           id: 'category',
           header: 'التصنيف',
         }),
@@ -159,7 +155,7 @@ function MaterialFamiliesPage() {
         </div>
         <DataTable
           columns={columns}
-          data={listRows(familiesQuery.data, familiesQuery.isError)}
+          data={listRows(familiesQuery.data?.items, familiesQuery.isError)}
           isLoading={familiesQuery.isLoading}
           isError={familiesQuery.isError}
           onRetry={() => void familiesQuery.refetch()}
@@ -177,7 +173,7 @@ function MaterialFamiliesPage() {
       <MaterialFamilyFormDialog
         open={dialogFamily !== undefined}
         family={dialogFamily ?? null}
-        categories={categoriesQuery.data ?? []}
+        categories={categoriesQuery.data?.items ?? []}
         isCategoriesLoading={categoriesQuery.isLoading}
         isCategoriesError={categoriesQuery.isError}
         isPending={createMutation.isPending || updateMutation.isPending}

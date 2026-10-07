@@ -1,12 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
 import { apiClient } from '@/shared/services/api.client'
 import { createWarehouseDocument, fixtureUuid } from '@/test/msw/factories'
+import { apiJson, errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 apiClient.defaults.adapter = 'xhr'
@@ -73,11 +74,11 @@ describe('useCreateDocumentMutation', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, () => {
         listRequests += 1
-        return HttpResponse.json(PAGE)
+        return okJson(PAGE)
       }),
       http.post(`${API_BASE_URL}/warehouse-documents`, async ({ request }) => {
         postedBody = await request.json()
-        return HttpResponse.json(created, { status: 201 })
+        return apiJson(created, { status: 201 })
       }),
     )
 
@@ -105,15 +106,15 @@ describe('useUpdateDocumentMutation', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, () => {
         listRequests += 1
-        return HttpResponse.json(PAGE)
+        return okJson(PAGE)
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(updated)
+        return okJson(updated)
       }),
       http.put(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, ({ request }) => {
         putUrl = new URL(request.url).pathname
-        return HttpResponse.json(updated)
+        return okJson(updated)
       }),
     )
 
@@ -135,17 +136,10 @@ describe('useUpdateDocumentMutation', () => {
     const wrapper = createWrapper()
     server.use(
       http.put(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(
-          {
-            code: 'document.version_conflict',
-            detailAr: null,
-            fieldErrors: [],
-            status: 409,
-            titleAr: 'تعارض في نسخة المستند.',
-            traceId: 'trace-1',
-          },
-          { status: 409 },
-        ),
+        errJson(409, {
+          code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+          message: 'The document row version did not match.',
+        }),
       ),
     )
 
@@ -153,6 +147,8 @@ describe('useUpdateDocumentMutation', () => {
     act(() => update.result.current.mutate({ documentId: DOCUMENT_ID, request: draftRequest() }))
 
     await waitFor(() => expect(update.result.current.isError).toBe(true))
-    expect(documentDraftMutationError(update.result.current.error)).toBe('تعارض في نسخة المستند.')
+    expect(documentDraftMutationError(update.result.current.error)).toBe(
+      'تغيرت البيانات من قبل مستخدم آخر. حدّث الصفحة ثم أعد المحاولة.',
+    )
   })
 })

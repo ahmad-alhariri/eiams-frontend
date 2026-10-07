@@ -1,18 +1,20 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type {
-  SessionResponse,
-  VersionOnlyDocumentActionRequest,
-} from '@/shared/types/generated/eiams-v1'
+import type { VersionOnlyDocumentActionRequest } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   createDocumentPolicy,
   createMaterial,
   createPolicyBlocker,
+  createSessionRole,
+  createSessionScope,
+  createSessionUser,
   createWarehouseDocument,
   createWarehouseDocumentLine,
   deriveLifecycleEvents,
@@ -53,23 +55,10 @@ const ALL_DOCUMENT_CODES = [
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'document.manager',
-      displayName: 'مدير المستندات',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستندات' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      {
-        scopeType: 'Warehouse',
-        scopeId: '00000000-0000-4000-8000-00000000000c',
-        displayName: 'المستودع المركزي',
-      },
-    ],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -239,6 +228,56 @@ describe('DocumentDetailPage', () => {
     expect(screen.getByRole('status')).toHaveTextContent('النسخة الأصلية الموقعة مطلوبة للترحيل')
     expect(screen.queryByRole('button', { name: /حذف المرفق/ })).not.toBeInTheDocument()
     expect(screen.getByText('signed-submitted.pdf')).toBeInTheDocument()
+  })
+
+  it('renders a compensating-style Posted document without any signed-original advisory (D-ATT-01)', async () => {
+    const document = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Issue',
+      documentStatus: 'Posted',
+      rowVersion: 1,
+      systemReferenceNumber: 'EIAMS-RVS-0001',
+      postedAt: '2026-01-02T00:00:00.000Z',
+      postedBy: { id: '00000000-0000-4000-8000-00000000000a', displayName: 'مدير المستودع' },
+      lines: [],
+      attachments: [],
+      policy: {
+        ...createSubmittedPostedPolicy('Posted'),
+        signedOriginalSatisfied: true,
+      },
+    })
+
+    server.use(
+      ...createWarehouseDocumentDetailHandler(document),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
+      ...createWarehouseDocumentPolicyHandler(document.policy),
+    )
+
+    render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/issue/${DOCUMENT_ID}`),
+    })
+
+    await screen.findByRole('heading', { level: 1, name: /EIAMS-RVS-0001/ })
+
+    // The mirror is posted by the reversing transaction (D-ATT-01): the
+    // preflight summary must not flag the signed-original gate, and the
+    // attachment panel must never render the missing/advisory state, even with
+    // zero attachments on the mirror.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('النسخة الموقعة من المستند مطلوبة قبل الترحيل.'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('يجب إرفاق النسخة الموقعة من المستند قبل الرصد.'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('النسخة الأصلية الموقعة مطلوبة للترحيل')).not.toBeInTheDocument()
+    // This branch renders the gate as moot for Posted documents (the gate only
+    // constrains the pre-post workflow), so the mirror shows the moot badge and
+    // never the missing/advisory state — the behaviour the fix asks for.
+    expect(screen.getByTestId('attachment-gate-moot')).toHaveTextContent(
+      'النسخة الموقعة غير مطلوبة بعد الآن',
+    )
+    expect(screen.queryByTestId('attachment-gate-missing')).not.toBeInTheDocument()
   })
 
   it('renders Opening line types and asset identifiers from the server detail without an Opening wrapper', async () => {
@@ -414,11 +453,9 @@ describe('DocumentDetailPage', () => {
     let relatedDocumentReference: { systemReferenceNumber: string } | undefined
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(store.document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: store.document.documentStatus,
           currentRowVersion: store.document.rowVersion,
@@ -426,7 +463,7 @@ describe('DocumentDetailPage', () => {
         }),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(store.document.policy),
+        okJson(store.document.policy),
       ),
       http.post(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/reverse`,
@@ -440,15 +477,15 @@ describe('DocumentDetailPage', () => {
             rowVersion: body.rowVersion,
           })
           if (outcome.kind === 'conflict') {
-            return HttpResponse.json(outcome.problem, { status: 409 })
+            return apiJson(outcome.problem, { status: 409 })
           }
           if (outcome.kind === 'validation') {
-            return HttpResponse.json(outcome.problem, { status: 422 })
+            return apiJson(outcome.problem, { status: 422 })
           }
           store.document = outcome.document
           store.events = [...store.events, outcome.result.lifecycleEvent]
           relatedDocumentReference = outcome.result.relatedDocument
-          return HttpResponse.json(outcome.result)
+          return okJson(outcome.result)
         },
       ),
     )
@@ -550,9 +587,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         attempts += 1
-        return attempts === 1
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(document)
+        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson(document)
       }),
       ...createWarehouseDocumentPolicyHandler(document.policy),
     )
@@ -651,10 +686,10 @@ describe('DocumentDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(store.documents[0])
+        return okJson(store.documents[0])
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: store.documents[0]?.documentStatus ?? 'Draft',
           currentRowVersion: store.documents[0]?.rowVersion ?? 0,
@@ -662,7 +697,7 @@ describe('DocumentDetailPage', () => {
         }),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(store.documents[0]?.policy),
+        okJson(store.documents[0]?.policy),
       ),
       ...createWarehouseDocumentActionHandler({
         initialDocument: store.documents[0]!,
@@ -752,7 +787,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(document)
+        return okJson(document)
       }),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
       ...createWarehouseDocumentPolicyHandler(document.policy),
@@ -804,14 +839,14 @@ describe('DocumentDetailPage', () => {
             rowVersion: body.rowVersion,
           })
           if (outcome.kind === 'conflict') {
-            return HttpResponse.json(outcome.problem, { status: 409 })
+            return apiJson(outcome.problem, { status: 409 })
           }
           if (outcome.kind === 'validation') {
-            return HttpResponse.json(outcome.problem, { status: 422 })
+            return apiJson(outcome.problem, { status: 422 })
           }
           submitCalls += 1
           store.documents[0] = outcome.document
-          return HttpResponse.json(outcome.result)
+          return okJson(outcome.result)
         },
       ),
       ...createWarehouseDocumentActionHandler({
@@ -820,10 +855,10 @@ describe('DocumentDetailPage', () => {
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(store.documents[0])
+        return okJson(store.documents[0])
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: store.documents[0]?.documentStatus ?? 'Draft',
           currentRowVersion: store.documents[0]?.rowVersion ?? 0,
@@ -831,7 +866,7 @@ describe('DocumentDetailPage', () => {
         }),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(store.documents[0]?.policy),
+        okJson(store.documents[0]?.policy),
       ),
     )
 

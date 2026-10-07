@@ -1,13 +1,32 @@
-import type { operations } from '@/shared/types/generated/eiams-v1'
+export type { PageMeta } from './catalog.api-types'
 
-/** Contract-derived filters for catalog reference lists and material search. */
-export type ListMaterialDomainsQuery = NonNullable<
-  operations['listMaterialDomains']['parameters']['query']
->
-export type ListMaterialCategoriesQuery = NonNullable<
-  operations['listMaterialCategories']['parameters']['query']
->
-export type ListMaterialFamiliesQuery = NonNullable<
-  operations['listMaterialFamilies']['parameters']['query']
->
-export type ListMaterialsQuery = NonNullable<operations['listMaterials']['parameters']['query']>
+export type {
+  UnitOfMeasure,
+  UnitOfMeasureUpsertRequest,
+  UnitOfMeasurePage,
+  MaterialDomain,
+  MaterialDomainUpsertRequest,
+  MaterialDomainPage,
+  MaterialCategory,
+  MaterialCategoryUpsertRequest,
+  MaterialCategoryPage,
+  MaterialFamily,
+  MaterialFamilyUpsertRequest,
+  MaterialFamilyPage,
+  Material,
+  MaterialUpsertRequest,
+  MaterialPage,
+  MaterialUnitConversion,
+  MaterialUnitConversionUpsertRequest,
+  MaterialUnitConversionPage,
+  ListUnitsOfMeasureQuery,
+  ListMaterialDomainsQuery,
+  ListMaterialCategoriesQuery,
+  ListMaterialFamiliesQuery,
+  ListMaterialsQuery,
+  ListMaterialUnitConversionsQuery,
+  NamedReference,
+  Uuid,
+  RecordStatus,
+  CatalogStatus,
+} from './catalog.api-types'

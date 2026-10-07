@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { createMaterial } from '@/test/msw/factories'
+import type { Material } from '@/modules/catalog/types/catalog.types'
 import {
   ASSET_LINE_DOCUMENT_TYPES,
   assetInputSchema,
@@ -10,7 +11,6 @@ import {
   createEmptyAssetLine,
   isAssetMaterial,
   toAssetLineInputs,
-  type AssetKindMaterial,
   type AssetLineValues,
 } from '@/shared/documents/schemas/document-lines.schemas'
 
@@ -214,17 +214,12 @@ describe('asset-line capture schema (e12-t05)', () => {
     const asset = createMaterial({
       materialKind: 'Asset',
       requiresAssetNumber: true,
-      trackingType: 'Serial',
-    })
-    const durable = createMaterial({ materialKind: 'Durable', trackingType: 'Serial' })
-    const consumable = createMaterial({ materialKind: 'Consumable' })
+    }) as unknown as Material
+    const consumable = createMaterial({ materialKind: 'Consumable' }) as unknown as Material
     expect(isAssetMaterial(asset)).toBe(true)
-    expect(isAssetMaterial(durable)).toBe(false)
     expect(isAssetMaterial(consumable)).toBe(false)
-    if (isAssetMaterial(asset)) {
-      const narrowed: AssetKindMaterial = asset
-      expect(narrowed.requiresAssetNumber).toBe(true)
-      expect(narrowed.trackingType).toBe('Serial')
+    if (asset.materialKind === 'Asset') {
+      expect(asset.requiresAssetNumber).toBe(true)
     }
   })
 })

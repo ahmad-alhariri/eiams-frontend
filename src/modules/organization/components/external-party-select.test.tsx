@@ -1,12 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
 import { ExternalPartySelect } from '@/modules/organization/components/external-party-select'
-import { createExternalParty, createPage } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
+import { createExternalParty } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -28,7 +29,7 @@ describe('ExternalPartySelect', () => {
     server.use(
       http.get(`${API_BASE_URL}/external-parties`, ({ request }) => {
         requestedStatus = new URL(request.url).searchParams.get('status')
-        return HttpResponse.json(createPage([party]))
+        return okPageJson([party])
       }),
     )
 

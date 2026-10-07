@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type {
   WarehouseMaterialSetting,
   WarehouseMaterialSettingUpsertRequest,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/modules/warehouse/types/warehouse.api-types'
 
 /**
  * Non-negative DECIMAL(18,3) threshold kept as source text (like the
@@ -52,7 +52,13 @@ function toNullableQuantity(value: string | undefined): number | null {
   return Number(value)
 }
 
-/** Maps form-owned values to the exact contract request, including concurrency. */
+/** Maps form-owned values to the exact contract request, including concurrency.
+ *
+ * `warehouseId` is NOT set here: it is the route parameter
+ * (`PUT /warehouses/{warehouseId}/material-settings`) and the contract body
+ * omits it. The previous `existing?.warehouseId ?? ''` sent an empty string for a
+ * new setting, which the backend's `[JsonRequired] Guid WarehouseId` rejects.
+ */
 export function toWarehouseMaterialSettingRequest(
   values: WarehouseMaterialSettingFormValues,
   existing: WarehouseMaterialSetting | null,

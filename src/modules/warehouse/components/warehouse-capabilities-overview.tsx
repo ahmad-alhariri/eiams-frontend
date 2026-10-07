@@ -85,7 +85,7 @@ export function WarehouseCapabilitiesOverview({ warehouseId }: { warehouseId: st
           </thead>
           <tbody>
             {capabilities.map((capability) => (
-              <tr key={capability.capabilityId} className="border-b border-border last:border-b-0">
+              <tr key={capability.domainId} className="border-b border-border last:border-b-0">
                 <td className="px-3 py-4 font-medium text-foreground">
                   {capability.domain.displayName}
                 </td>

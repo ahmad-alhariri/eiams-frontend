@@ -1,12 +1,14 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { renderHook, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { InventoryBalance } from '@/modules/inventory/types/inventory.api-types'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { InventoryBalance } from '@/shared/types/generated/eiams-v1'
-import { createInventoryBalance, createPage, fixtureUuid } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
+import { fixtureUuid } from '@/test/msw/factories'
+import { wireInventoryBalance } from '@/test/msw/inventory-wire-fixtures'
 import { server } from '@/test/msw/server'
 
 import { useIssueLineBalances } from './use-issue-line-balances'
@@ -21,19 +23,50 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = fixtureUuid(30)
+const COMPUTER_MATERIAL_ID = fixtureUuid(24)
+const PAPER_MATERIAL_ID = fixtureUuid(27)
 
+function materialOf(materialId: string, displayName: string) {
+  return { id: materialId, displayName, code: 'IT-HW-PC-001' }
+}
+
+/**
+ * A balance in the REAL wire shape (`inventory.api-types`), NOT the frozen
+ * generated snapshot `createInventoryBalance` mints.
+ *
+ * `createInventoryBalance` carries none of the flat `materialId` / `warehouseId`
+ * columns the backend projects, so a row built that way describes nothing
+ * `inventoryService.listBalances` could return. `wireInventoryBalance` is the
+ * same fixture the inventory service suite serves (see
+ * `inventory-wire-fixtures.ts` for the DTO evidence), and the flat id is kept in
+ * step with the nested reference a fixture can never disagree with.
+ */
 function createBalance(overrides: Partial<InventoryBalance> = {}): InventoryBalance {
-  return createInventoryBalance({
-    warehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي' },
+  return wireInventoryBalance({
+    materialId: COMPUTER_MATERIAL_ID,
+    materialCode: 'IT-HW-PC-001',
+    materialNameAr: 'حاسوب مكتبي',
+    material: materialOf(COMPUTER_MATERIAL_ID, 'حاسوب مكتبي'),
+    warehouseId: WAREHOUSE_ID,
+    warehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي', code: 'WH-CENTRAL' },
     ...overrides,
   })
 }
 
-function createWrapper() {
-  const client = createQueryClient()
+function createWrapper(existingClient?: QueryClient) {
+  const client = existingClient ?? createQueryClient()
   return function QueryWrapper({ children }: PropsWithChildren) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>
   }
+}
+
+/**
+ * `retry: false` so a deliberately failing read settles in a single attempt.
+ * The production `createQueryClient()` retries once with the default backoff,
+ * which would leave the failure pending for ~1s of real time.
+ */
+function createDeterministicClient(): QueryClient {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } })
 }
 
 afterEach(() => {
@@ -42,12 +75,11 @@ afterEach(() => {
 
 describe('useIssueLineBalances', () => {
   it('resolves one balance per distinct selected material in the given warehouse', async () => {
-    const computers = createBalance({
-      material: { id: fixtureUuid(24), displayName: 'حاسوب مكتبي' },
-      quantity: 15,
-    })
+    const computers = createBalance({ quantity: 15 })
     const paper = createBalance({
-      material: { id: fixtureUuid(27), displayName: 'ورق طباعة' },
+      materialId: PAPER_MATERIAL_ID,
+      materialNameAr: 'ورق طباعة',
+      material: materialOf(PAPER_MATERIAL_ID, 'ورق طباعة'),
       quantity: 12,
     })
     const requestedQueries: string[] = []
@@ -55,8 +87,8 @@ describe('useIssueLineBalances', () => {
       http.get(`${API_BASE_URL}/inventory/balances`, ({ request }) => {
         requestedQueries.push(new URL(request.url).search)
         const materialId = new URL(request.url).searchParams.get('materialId')
-        const row = [computers, paper].find((item) => item.material.id === materialId)
-        return HttpResponse.json(createPage(row === undefined ? [] : [row]))
+        const row = [computers, paper].find((item) => item.materialId === materialId)
+        return okPageJson(row === undefined ? [] : [row])
       }),
     )
 
@@ -78,12 +110,12 @@ describe('useIssueLineBalances', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, () => {
         callCount += 1
-        return HttpResponse.json(createPage([row]))
+        return okPageJson([row])
       }),
     )
 
     const { result } = renderHook(
-      () => useIssueLineBalances(WAREHOUSE_ID, [row.material.id, row.material.id]),
+      () => useIssueLineBalances(WAREHOUSE_ID, [row.materialId, row.materialId]),
       { wrapper: createWrapper() },
     )
 
@@ -92,9 +124,7 @@ describe('useIssueLineBalances', () => {
   })
 
   it('maps a material without any balance row to null (no stock held)', async () => {
-    server.use(
-      http.get(`${API_BASE_URL}/inventory/balances`, () => HttpResponse.json(createPage([]))),
-    )
+    server.use(http.get(`${API_BASE_URL}/inventory/balances`, () => okPageJson([])))
 
     const { result } = renderHook(() => useIssueLineBalances(WAREHOUSE_ID, [fixtureUuid(99)]), {
       wrapper: createWrapper(),
@@ -145,6 +175,107 @@ describe('useIssueLineBalances', () => {
     })
     expect(result.current.balanceByMaterialId.size).toBe(0)
     expect(result.current.isLoading).toBe(false)
+  })
+
+  // e24-t10 / B3. `null` in this map means "the server says no stock is held",
+  // so a failed read must never produce one. Before the fix the loop only
+  // checked `isLoading`, so an errored query fell through to
+  // `set(materialId, null)` and both outbound forms printed "quantity exceeds
+  // the available balance (0)" — a claim about inventory the server never
+  // made.
+  it('leaves a failed lookup unknown instead of mapping it to zero stock, and retries it on demand', async () => {
+    const materialId = fixtureUuid(24)
+    let balanceRequests = 0
+    let shouldFail = true
+    server.use(
+      http.get(`${API_BASE_URL}/inventory/balances`, () => {
+        balanceRequests += 1
+        if (shouldFail) {
+          return new HttpResponse(null, { status: 500 })
+        }
+        return okPageJson([createBalance({ quantity: 40 })])
+      }),
+    )
+
+    const { result } = renderHook(() => useIssueLineBalances(WAREHOUSE_ID, [materialId]), {
+      wrapper: createWrapper(createDeterministicClient()),
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(result.current.isLoading).toBe(false)
+    // Unknown, not zero: the key must be ABSENT, not present-and-null.
+    expect(result.current.balanceByMaterialId.has(materialId)).toBe(false)
+    expect(result.current.balanceByMaterialId.get(materialId)).toBeUndefined()
+    expect(balanceRequests).toBe(1)
+
+    shouldFail = false
+    act(() => {
+      result.current.retry()
+    })
+
+    await waitFor(() => expect(result.current.balanceByMaterialId.get(materialId)).toBe(40))
+    expect(result.current.isError).toBe(false)
+    expect(balanceRequests).toBe(2)
+  })
+
+  it('reports the failure without disturbing the lookups that succeeded', async () => {
+    const good = createBalance({ quantity: 7 })
+    const failingMaterialId = fixtureUuid(25)
+    server.use(
+      http.get(`${API_BASE_URL}/inventory/balances`, ({ request }) => {
+        const materialId = new URL(request.url).searchParams.get('materialId')
+        if (materialId === failingMaterialId) {
+          return new HttpResponse(null, { status: 503 })
+        }
+        return okPageJson([good])
+      }),
+    )
+
+    const { result } = renderHook(
+      () => useIssueLineBalances(WAREHOUSE_ID, [good.material.id, failingMaterialId]),
+      { wrapper: createWrapper(createDeterministicClient()) },
+    )
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(result.current.balanceByMaterialId.get(good.material.id)).toBe(7)
+    expect(result.current.balanceByMaterialId.has(failingMaterialId)).toBe(false)
+  })
+
+  it('keeps a cached balance when a background refetch of that same material fails', async () => {
+    const materialId = fixtureUuid(26)
+    let balanceRequests = 0
+    server.use(
+      http.get(`${API_BASE_URL}/inventory/balances`, () => {
+        balanceRequests += 1
+        return balanceRequests === 1
+          ? okPageJson([
+              createBalance({
+                quantity: 9,
+                materialId: fixtureUuid(26),
+                materialNameAr: 'حبر طابعة',
+                material: materialOf(fixtureUuid(26), 'حبر طابعة'),
+              }),
+            ])
+          : new HttpResponse(null, { status: 500 })
+      }),
+    )
+
+    const client = createDeterministicClient()
+    const { result } = renderHook(() => useIssueLineBalances(WAREHOUSE_ID, [materialId]), {
+      wrapper: createWrapper(client),
+    })
+
+    await waitFor(() => expect(result.current.balanceByMaterialId.get(materialId)).toBe(9))
+    // Stale the cached row, then let the next refetch fail. The server's last
+    // authoritative answer is still 9, so the form must not degrade into an
+    // unexplained block (the e24-t09 F-1 precedent).
+    await act(async () => {
+      await client.invalidateQueries({ predicate: () => true })
+    })
+
+    await waitFor(() => expect(balanceRequests).toBeGreaterThan(1))
+    expect(result.current.balanceByMaterialId.get(materialId)).toBe(9)
+    expect(result.current.isError).toBe(false)
   })
 })
 

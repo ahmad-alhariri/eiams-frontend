@@ -1,4 +1,4 @@
-import type { OrganizationalUnit } from '@/shared/types/generated/eiams-v1'
+import type { OrganizationalUnit } from '@/modules/organization/types/organization.types'
 
 import {
   createEntitySelectorAdapter,
@@ -18,8 +18,8 @@ export type OrgUnitLoader = EntityLoader<OrganizationalUnit>
 const orgUnitAdapter: EntitySelectorAdapter<OrganizationalUnit> =
   createEntitySelectorAdapter<OrganizationalUnit>({
     toOption: (orgUnit) => ({
-      value: orgUnit.orgUnitId,
-      label: orgUnit.nameAr,
+      value: orgUnit.id,
+      label: orgUnit.name,
       disabled: orgUnit.status !== 'Active',
       payload: orgUnit,
     }),

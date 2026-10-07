@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createPage, createWarehouse, createWarehouseDocument } from '@/test/msw/factories'
+import { createWarehouse, createWarehouseDocument } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -46,15 +47,15 @@ describe('OpeningDocumentsListPage', () => {
     const document = createWarehouseDocument({
       documentStatus: 'Draft',
       documentType: 'Opening',
-      warehouse: { id: warehouse.warehouseId, displayName: warehouse.nameAr },
+      warehouse: { id: warehouse.id, displayName: warehouse.name },
     })
 
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
         expect(new URL(request.url).searchParams.get('documentType')).toBe('Opening')
-        return HttpResponse.json(createPage([document]))
+        return okPageJson([document])
       }),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json([warehouse])),
+      http.get(`${API_BASE_URL}/warehouses`, () => okJson([warehouse])),
     )
 
     render(<OpeningDocumentsListPage />, { wrapper: createWrapper() })
@@ -71,7 +72,7 @@ describe('OpeningDocumentsListPage', () => {
   it('shows the Arabic error state and retries the opening-document request', async () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, () =>
-        HttpResponse.json({ titleAr: 'تعذر جلب السندات' }, { status: 500 }),
+        apiJson({ titleAr: 'تعذر جلب السندات' }, { status: 500 }),
       ),
     )
 
@@ -82,7 +83,7 @@ describe('OpeningDocumentsListPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
         expect(new URL(request.url).searchParams.get('documentType')).toBe('Opening')
-        return HttpResponse.json(createPage([]))
+        return okPageJson([])
       }),
     )
     await userEvent.click(screen.getByRole('button', { name: /إعادة المحاولة/i }))
@@ -94,7 +95,7 @@ describe('OpeningDocumentsListPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
         expect(new URL(request.url).searchParams.get('documentType')).toBe('Opening')
-        return HttpResponse.json(createPage([]))
+        return okPageJson([])
       }),
     )
 

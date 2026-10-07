@@ -13,7 +13,7 @@
  * Vite's Node configuration context.
  */
 
-export const DEFAULT_DEV_API_PROXY_TARGET = 'http://localhost:8080'
+export const DEFAULT_DEV_API_PROXY_TARGET = 'http://localhost:5000'
 
 export const DEFAULT_API_BASE_URL = '/api/v1'
 
@@ -22,7 +22,25 @@ export interface DevApiProxyConfig {
   context: string
   /** Backend origin the dev server forwards API requests to. */
   target: string
-  changeOrigin: true
+  /**
+   * Must stay `false`.
+   *
+   * `changeOrigin: true` rewrites the forwarded `Host` header to the proxy target,
+   * so the backend receives `Host: localhost:5000` while the browser's truthful
+   * `Origin` stays `http://localhost:5173`. The backend's refresh-cookie origin
+   * check compares `Origin` against its OWN `{Scheme}://{Host}`
+   * (`RefreshTokenTransport.IsCookieOriginAllowed`), so a rewritten host can never
+   * match a same-origin browser request and every cookie-authenticated call is
+   * refused with 403 `REFRESH_TOKEN_ORIGIN_REJECTED`.
+   *
+   * That check is the CSRF defence for the host-only refresh cookie, so it is not
+   * weakened here: forwarding the original `Host` lets the backend see the real
+   * browser origin and validate it truthfully, which is what its own startup
+   * message asks for ("Serve browser API requests through the UI's same-origin
+   * /api/v1 proxy"). The backend routes by path, not by host, so nothing needs the
+   * rewritten value.
+   */
+  changeOrigin: false
 }
 
 function normalizeBaseUrl(value: string | undefined): string | null {
@@ -63,5 +81,5 @@ export function resolveDevApiProxy(
 
   // Not frozen: Vite's http-proxy patches the options object at startup
   // (prependPath), so the config must stay extensible.
-  return { context, target, changeOrigin: true } as const
+  return { context, target, changeOrigin: false } as const
 }

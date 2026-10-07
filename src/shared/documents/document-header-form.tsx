@@ -15,6 +15,7 @@ import type { OptionLoader } from '@/shared/selectors/selector-adapter'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { Badge } from '@/shared/ui/badge'
 import { Input } from '@/shared/ui/input'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import type {
   DocumentLineInput,
   DocumentType,
@@ -22,7 +23,6 @@ import type {
   ReceivingInfo,
   ReturnInfo,
   TransferInfo,
-  Warehouse,
   WarehouseDocumentDraftRequest,
 } from '@/shared/types/generated/eiams-v1'
 

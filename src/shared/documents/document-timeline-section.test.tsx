@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import type { ReactNode } from 'react'
@@ -84,7 +85,7 @@ describe('DocumentTimelineSection', () => {
         attempts += 1
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json({
+          : okJson({
               documentId: DOCUMENT_ID,
               currentStatus: 'Posted',
               currentRowVersion: 2,

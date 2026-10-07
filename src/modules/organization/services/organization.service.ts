@@ -1,61 +1,94 @@
-import type { AxiosInstance, AxiosRequestConfig } from 'axios'
-
+import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
+import type { ApiPage } from '@/shared/api/api-contracts'
 import type {
-  Employee,
-  EmployeePage,
-  EmployeeUpsertRequest,
-  ExternalParty,
-  ExternalPartyPage,
-  ExternalPartyUpsertRequest,
-  OrganizationalUnit,
-  OrganizationalUnitPage,
-  OrganizationalUnitUpsertRequest,
-  paths,
   Site,
+  SiteCreateRequest,
+  SiteUpdateRequest,
   SitePage,
-  SiteUpsertRequest,
-} from '@/shared/types/generated/eiams-v1'
-import { apiClient } from '@/shared/services/api.client'
-import type {
+  OrganizationalUnit,
+  OrganizationalUnitCreateRequest,
+  OrganizationalUnitUpdateRequest,
+  OrganizationalUnitPage,
+  Employee,
+  EmployeeCreateRequest,
+  EmployeeUpdateRequest,
+  EmployeePage,
+  ExternalParty,
+  ExternalPartyUpsertRequest,
+  ExternalPartyPage,
+  ListSitesQuery,
+  ListOrganizationalUnitsQuery,
   ListEmployeesQuery,
   ListExternalPartiesQuery,
-  ListOrganizationalUnitsQuery,
-  ListSitesQuery,
-} from '@/modules/organization/types/organization.types'
+  PageMeta,
+} from '@/modules/organization/types/organization.api-types'
+import type { ResourceIdResponse } from '@/shared/api/api-contracts'
 
-const SITES_PATH = '/sites' satisfies keyof paths
-const SITE_PATH = '/sites/{siteId}' satisfies keyof paths
-const ORGANIZATIONAL_UNITS_PATH = '/organizational-units' satisfies keyof paths
-const ORGANIZATIONAL_UNIT_PATH = '/organizational-units/{orgUnitId}' satisfies keyof paths
-const EMPLOYEES_PATH = '/employees' satisfies keyof paths
-const EMPLOYEE_PATH = '/employees/{employeeId}' satisfies keyof paths
-const EXTERNAL_PARTIES_PATH = '/external-parties' satisfies keyof paths
-const EXTERNAL_PARTY_PATH = '/external-parties/{externalPartyId}' satisfies keyof paths
-const DEACTIVATE_EXTERNAL_PARTY_PATH =
-  '/external-parties/{externalPartyId}/deactivate' satisfies keyof paths
+const SITES_PATH = '/sites'
+const SITE_PATH = '/sites/{siteId}'
+const ORGANIZATIONAL_UNITS_PATH = '/organizational-units'
+const ORGANIZATIONAL_UNIT_PATH = '/organizational-units/{orgUnitId}'
+const EMPLOYEES_PATH = '/employees'
+const EMPLOYEE_PATH = '/employees/{employeeId}'
+const EXTERNAL_PARTIES_PATH = '/external-parties'
+const EXTERNAL_PARTY_PATH = '/external-parties/{externalPartyId}'
+const DEACTIVATE_EXTERNAL_PARTY_PATH = '/external-parties/{externalPartyId}/deactivate'
 
 function pathWithId(path: string, parameter: string, id: string): string {
   return path.replace(parameter, encodeURIComponent(id))
 }
 
+/** Convert transport `ApiPage<T>` to module `XxxPage` with `meta: PageMeta`. */
+function normalizePage<T>(apiPage: ApiPage<T>): { items: ReadonlyArray<T>; meta: PageMeta } {
+  return {
+    items: apiPage.items,
+    meta: {
+      page: apiPage.page,
+      pageIndex: apiPage.page,
+      pageSize: apiPage.pageSize,
+      itemCount: apiPage.totalItems,
+      totalItems: apiPage.totalItems,
+      totalCount: apiPage.totalItems,
+      totalPages: apiPage.totalPages,
+      hasNextPage: apiPage.hasNextPage,
+      hasPreviousPage: apiPage.hasPreviousPage,
+    },
+  }
+}
+
+/**
+ * Write shapes verified against the backend C# `RequestBody` records (txq4).
+ *
+ * Create and update are DELIBERATELY separate types, not one "upsert": the
+ * update routes accept a strictly smaller body (`code`, `organizationId`,
+ * `siteId`, `parentId`, `orgUnitId` and `employeeNumber` are all create-only)
+ * and none of these three aggregates is versioned. A single upsert type is what
+ * previously let the UI send `nameAr` plus a `rowVersion` no projection has.
+ *
+ * Return types follow `ResultExtensions`: a `Result<Guid>` handler answers
+ * `{ id }` (`ResourceIdResponse`), and a plain `Result` handler answers an EMPTY
+ * body. Declaring `Promise<Site>` for an update handed callers a phantom record
+ * the server never sent.
+ */
 export interface OrganizationService {
   listSites: (query: ListSitesQuery) => Promise<SitePage>
   getSite: (siteId: string) => Promise<Site>
-  createSite: (request: SiteUpsertRequest) => Promise<Site>
-  updateSite: (siteId: string, request: SiteUpsertRequest) => Promise<Site>
+  createSite: (request: SiteCreateRequest) => Promise<ResourceIdResponse>
+  updateSite: (siteId: string, request: SiteUpdateRequest) => Promise<void>
   listOrganizationalUnits: (query: ListOrganizationalUnitsQuery) => Promise<OrganizationalUnitPage>
   getOrganizationalUnit: (orgUnitId: string) => Promise<OrganizationalUnit>
   createOrganizationalUnit: (
-    request: OrganizationalUnitUpsertRequest,
-  ) => Promise<OrganizationalUnit>
+    request: OrganizationalUnitCreateRequest,
+  ) => Promise<ResourceIdResponse>
   updateOrganizationalUnit: (
     orgUnitId: string,
-    request: OrganizationalUnitUpsertRequest,
-  ) => Promise<OrganizationalUnit>
+    request: OrganizationalUnitUpdateRequest,
+  ) => Promise<void>
   listEmployees: (query: ListEmployeesQuery) => Promise<EmployeePage>
   getEmployee: (employeeId: string) => Promise<Employee>
-  createEmployee: (request: EmployeeUpsertRequest) => Promise<Employee>
-  updateEmployee: (employeeId: string, request: EmployeeUpsertRequest) => Promise<Employee>
+  createEmployee: (request: EmployeeCreateRequest) => Promise<ResourceIdResponse>
+  updateEmployee: (employeeId: string, request: EmployeeUpdateRequest) => Promise<void>
   listExternalParties: (query: ListExternalPartiesQuery) => Promise<ExternalPartyPage>
   getExternalParty: (externalPartyId: string) => Promise<ExternalParty>
   createExternalParty: (request: ExternalPartyUpsertRequest) => Promise<ExternalParty>
@@ -63,110 +96,162 @@ export interface OrganizationService {
     externalPartyId: string,
     request: ExternalPartyUpsertRequest,
   ) => Promise<ExternalParty>
-  deactivateExternalParty: (
-    externalPartyId: string,
-    config: AxiosRequestConfig,
-  ) => Promise<ExternalParty>
+  deactivateExternalParty: (externalPartyId: string) => Promise<ExternalParty>
 }
 
-/**
- * Contract-only organization transport for a single Axios boundary.
- *
- * The caller supplies idempotency configuration for deactivation so the
- * interactive mutation can retain and explicitly reuse its request key.
- */
-export function createOrganizationService(client: AxiosInstance): OrganizationService {
+export function createOrganizationService(transport: ApiTransport): OrganizationService {
   return {
     async listSites(query) {
-      const response = await client.get<SitePage>(SITES_PATH, { params: query })
-      return response.data
-    },
-    async getSite(siteId) {
-      const response = await client.get<Site>(pathWithId(SITE_PATH, '{siteId}', siteId))
-      return response.data
-    },
-    async createSite(request) {
-      const response = await client.post<Site>(SITES_PATH, request)
-      return response.data
-    },
-    async updateSite(siteId, request) {
-      const response = await client.put<Site>(pathWithId(SITE_PATH, '{siteId}', siteId), request)
-      return response.data
-    },
-    async listOrganizationalUnits(query) {
-      const response = await client.get<OrganizationalUnitPage>(ORGANIZATIONAL_UNITS_PATH, {
-        params: query,
+      const page = await transport.requestPage<Site>({
+        path: SITES_PATH,
+        method: 'GET',
+        query: query as Record<string, string | number | boolean | undefined>,
       })
-      return response.data
+      return normalizePage(page) as SitePage
     },
+
+    async getSite(siteId) {
+      const response = await transport.request<Site>({
+        path: pathWithId(SITE_PATH, '{siteId}', siteId),
+        method: 'GET',
+      })
+      return response
+    },
+
+    async createSite(request) {
+      return await transport.request<ResourceIdResponse>({
+        path: SITES_PATH,
+        method: 'POST',
+        body: request,
+      })
+    },
+
+    async updateSite(siteId, request) {
+      await transport.requestEmpty({
+        path: pathWithId(SITE_PATH, '{siteId}', siteId),
+        method: 'PUT',
+        body: request,
+      })
+    },
+
+    async listOrganizationalUnits(query) {
+      const page = await transport.requestPage<OrganizationalUnit>({
+        path: ORGANIZATIONAL_UNITS_PATH,
+        method: 'GET',
+        query: query as Record<string, string | number | boolean | undefined>,
+      })
+      return normalizePage(page) as OrganizationalUnitPage
+    },
+
     async getOrganizationalUnit(orgUnitId) {
-      const response = await client.get<OrganizationalUnit>(
-        pathWithId(ORGANIZATIONAL_UNIT_PATH, '{orgUnitId}', orgUnitId),
-      )
-      return response.data
+      const response = await transport.request<OrganizationalUnit>({
+        path: pathWithId(ORGANIZATIONAL_UNIT_PATH, '{orgUnitId}', orgUnitId),
+        method: 'GET',
+      })
+      return response
     },
+
     async createOrganizationalUnit(request) {
-      const response = await client.post<OrganizationalUnit>(ORGANIZATIONAL_UNITS_PATH, request)
-      return response.data
+      return await transport.request<ResourceIdResponse>({
+        path: ORGANIZATIONAL_UNITS_PATH,
+        method: 'POST',
+        body: request,
+      })
     },
+
     async updateOrganizationalUnit(orgUnitId, request) {
-      const response = await client.put<OrganizationalUnit>(
-        pathWithId(ORGANIZATIONAL_UNIT_PATH, '{orgUnitId}', orgUnitId),
-        request,
-      )
-      return response.data
+      await transport.requestEmpty({
+        path: pathWithId(ORGANIZATIONAL_UNIT_PATH, '{orgUnitId}', orgUnitId),
+        method: 'PUT',
+        body: request,
+      })
     },
+
     async listEmployees(query) {
-      const response = await client.get<EmployeePage>(EMPLOYEES_PATH, { params: query })
-      return response.data
+      const page = await transport.requestPage<Employee>({
+        path: EMPLOYEES_PATH,
+        method: 'GET',
+        query: query as Record<string, string | number | boolean | undefined>,
+      })
+      return normalizePage(page) as EmployeePage
     },
+
     async getEmployee(employeeId) {
-      const response = await client.get<Employee>(
-        pathWithId(EMPLOYEE_PATH, '{employeeId}', employeeId),
-      )
-      return response.data
+      const response = await transport.request<Employee>({
+        path: pathWithId(EMPLOYEE_PATH, '{employeeId}', employeeId),
+        method: 'GET',
+      })
+      return response
     },
+
     async createEmployee(request) {
-      const response = await client.post<Employee>(EMPLOYEES_PATH, request)
-      return response.data
+      return await transport.request<ResourceIdResponse>({
+        path: EMPLOYEES_PATH,
+        method: 'POST',
+        body: request,
+      })
     },
+
     async updateEmployee(employeeId, request) {
-      const response = await client.put<Employee>(
-        pathWithId(EMPLOYEE_PATH, '{employeeId}', employeeId),
-        request,
-      )
-      return response.data
+      await transport.requestEmpty({
+        path: pathWithId(EMPLOYEE_PATH, '{employeeId}', employeeId),
+        method: 'PUT',
+        body: request,
+      })
     },
+
     async listExternalParties(query) {
-      const response = await client.get<ExternalPartyPage>(EXTERNAL_PARTIES_PATH, { params: query })
-      return response.data
+      const page = await transport.requestPage<ExternalParty>({
+        path: EXTERNAL_PARTIES_PATH,
+        method: 'GET',
+        query: query as Record<string, string | number | boolean | undefined>,
+      })
+      return normalizePage(page) as ExternalPartyPage
     },
+
     async getExternalParty(externalPartyId) {
-      const response = await client.get<ExternalParty>(
-        pathWithId(EXTERNAL_PARTY_PATH, '{externalPartyId}', externalPartyId),
-      )
-      return response.data
+      const response = await transport.request<ExternalParty>({
+        path: pathWithId(EXTERNAL_PARTY_PATH, '{externalPartyId}', externalPartyId),
+        method: 'GET',
+      })
+      return response
     },
+
     async createExternalParty(request) {
-      const response = await client.post<ExternalParty>(EXTERNAL_PARTIES_PATH, request)
-      return response.data
+      const response = await transport.request<ExternalParty>({
+        path: EXTERNAL_PARTIES_PATH,
+        method: 'POST',
+        body: request,
+      })
+      return response
     },
+
     async updateExternalParty(externalPartyId, request) {
-      const response = await client.put<ExternalParty>(
-        pathWithId(EXTERNAL_PARTY_PATH, '{externalPartyId}', externalPartyId),
-        request,
-      )
-      return response.data
+      const response = await transport.request<ExternalParty>({
+        path: pathWithId(EXTERNAL_PARTY_PATH, '{externalPartyId}', externalPartyId),
+        method: 'PUT',
+        body: request,
+      })
+      return response
     },
-    async deactivateExternalParty(externalPartyId, config) {
-      const response = await client.post<ExternalParty>(
-        pathWithId(DEACTIVATE_EXTERNAL_PARTY_PATH, '{externalPartyId}', externalPartyId),
-        undefined,
-        config,
-      )
-      return response.data
+
+    async deactivateExternalParty(externalPartyId) {
+      const response = await transport.request<ExternalParty>({
+        path: pathWithId(DEACTIVATE_EXTERNAL_PARTY_PATH, '{externalPartyId}', externalPartyId),
+        method: 'POST',
+      })
+      return response
     },
   }
 }
 
-export const organizationService = createOrganizationService(apiClient)
+// Eager singleton over the application's single transport (9uuf). Never `{} as
+// any` — that default is what made the first runtime list call throw. Replaced
+// during tests by `setOrganizationService`.
+let organizationService: OrganizationService = createOrganizationService(apiTransport)
+
+export function setOrganizationService(transport: ApiTransport) {
+  organizationService = createOrganizationService(transport)
+}
+
+export { organizationService }

@@ -5,7 +5,8 @@ import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import { createPage, createWarehouse } from '@/test/msw/factories'
+import { createWarehouse } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -34,21 +35,21 @@ afterEach(() => {
 describe('useScopedWarehouseSelector', () => {
   it('loads warehouses through the scoped contract list and maps them to options', async () => {
     const central = createWarehouse({
-      warehouseId: '00000000-0000-4000-8000-000000000001',
+      id: '00000000-0000-4000-8000-000000000001',
       code: 'WH-1',
-      nameAr: 'المستودع المركزي',
+      name: 'المستودع المركزي',
     })
     const archive = createWarehouse({
-      warehouseId: '00000000-0000-4000-8000-000000000002',
+      id: '00000000-0000-4000-8000-000000000002',
       code: 'WH-2',
-      nameAr: 'المستودع الأرشيفي',
+      name: 'المستودع الأرشيفي',
       status: 'Inactive',
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
         const search = new URL(request.url).searchParams.get('search') ?? ''
         const items = search === '' ? [central, archive] : [central]
-        return HttpResponse.json(createPage(items))
+        return okPageJson(items)
       }),
     )
     const { result } = renderHook(() => useScopedWarehouseSelector(), {
@@ -59,25 +60,25 @@ describe('useScopedWarehouseSelector', () => {
     const options = await result.current.loadOptions('')
     expect(options).toHaveLength(2)
     expect(options[0]).toEqual({
-      value: central.warehouseId,
-      label: central.nameAr,
+      value: central.id,
+      label: central.name,
       payload: central,
       disabled: false,
     })
     expect(options[1]).toEqual({
-      value: archive.warehouseId,
-      label: archive.nameAr,
+      value: archive.id,
+      label: archive.name,
       payload: archive,
       disabled: true,
     })
   })
 
   it('passes the server-side search query to the list endpoint', async () => {
-    const central = createWarehouse({ nameAr: 'المستودع المركزي' })
+    const central = createWarehouse({ name: 'المستودع المركزي' })
     server.use(
       http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
         const search = new URL(request.url).searchParams.get('search') ?? ''
-        return HttpResponse.json(createPage(search.includes('مركزي') ? [central] : []))
+        return okPageJson(search.includes('مركزي') ? [central] : [])
       }),
     )
     const { result } = renderHook(() => useScopedWarehouseSelector(), {
@@ -86,7 +87,7 @@ describe('useScopedWarehouseSelector', () => {
 
     const options = await result.current.loadOptions('مركزي')
     expect(options).toHaveLength(1)
-    expect(options[0]?.value).toBe(central.warehouseId)
+    expect(options[0]?.value).toBe(central.id)
   })
 
   it('resolves to an empty list and reports scopeReady=false without a selected scope', async () => {
@@ -95,7 +96,7 @@ describe('useScopedWarehouseSelector', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses`, () => {
         requests += 1
-        return HttpResponse.json(createPage([]))
+        return okPageJson([])
       }),
     )
     const { result } = renderHook(() => useScopedWarehouseSelector(), {

@@ -12,11 +12,13 @@ import {
 } from '@/modules/organization/hooks/use-employee-mutations'
 import {
   useEmployeesQuery,
+  useOrganizationalUnitsQuery,
   useSitesQuery,
 } from '@/modules/organization/hooks/use-organization-queries'
 import type { ListEmployeesQuery } from '@/modules/organization/types/organization.types'
 import {
-  toEmployeeRequest,
+  toCreateEmployeeRequest,
+  toUpdateEmployeeRequest,
   type EmployeeFormValues,
 } from '@/modules/organization/schemas/employee.schemas'
 import { StatusBadge } from '@/shared/feedback/status-badge'
@@ -30,18 +32,27 @@ import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { toast } from '@/shared/ui/toast-manager'
 import { pageRows } from '@/shared/utils/table-data'
-import type { Employee, RecordStatus } from '@/shared/types/generated/eiams-v1'
+import type { Employee, RecordStatus } from '@/modules/organization/types/organization.types'
 
 const employeeColumnHelper = createColumnHelper<typeof dataTableFeatures, Employee>()
+
+const REFERENCE_PAGE = { page: 0, pageSize: 200 } as const
 
 function isRecordStatus(value: string | null): value is RecordStatus {
   return value === 'Active' || value === 'Inactive'
 }
 
 /**
- * Scoped, read-only employee directory. The v1 API owns search, filtering,
- * and pagination; no client-side data copy or employee mutation is introduced
- * here because employee administration belongs to the subsequent flow.
+ * Scoped employee directory.
+ *
+ * The employee projection carries a FLAT `orgUnitId` and no nested `orgUnit` or
+ * `site` reference objects, so this screen joins the organizational-unit name
+ * from the org-units list. It deliberately renders NO site column: the API
+ * filters employees by `siteId`, but an employee record cannot supply a site
+ * name, and the site filter dropdown above already offers the site names the
+ * directory knows about. Inventing one here would mean joining org unit → site,
+ * which only holds when the unit list is complete — so the column was removed
+ * rather than faked.
  */
 function EmployeesListPage() {
   const navigate = useNavigate()
@@ -57,7 +68,7 @@ function EmployeesListPage() {
   const employeesQueryInput = useMemo<ListEmployeesQuery>(
     () => ({
       // Table controls are intentionally 1-based for people; the v1 API is 0-based.
-      pageIndex: currentPage - 1,
+      page: currentPage - 1,
       pageSize,
       ...(search === '' ? {} : { search }),
       ...(siteId === undefined ? {} : { siteId }),
@@ -66,10 +77,17 @@ function EmployeesListPage() {
     [currentPage, pageSize, search, siteId, status],
   )
   const employeesQuery = useEmployeesQuery(employeesQueryInput)
-  const sitesQuery = useSitesQuery({ pageIndex: 0, pageSize: 200, status: 'Active' })
+  const sitesQuery = useSitesQuery({ ...REFERENCE_PAGE, status: 'Active' })
+  const unitsQuery = useOrganizationalUnitsQuery(REFERENCE_PAGE)
   const createMutation = useCreateEmployeeMutation()
   const updateMutation = useUpdateEmployeeMutation()
   const submitFeedback = useSubmitFeedback()
+
+  // `orgUnitId` is flat on the wire; the label is joined from the units list.
+  const orgUnitNameById = useMemo(
+    () => new Map((unitsQuery.data?.items ?? []).map((unit) => [unit.id, unit.name])),
+    [unitsQuery.data],
+  )
 
   const handleSearchChange = useCallback(
     (nextSearch: string) => {
@@ -109,12 +127,16 @@ function EmployeesListPage() {
     async (values: EmployeeFormValues) => {
       const employee = dialogEmployee ?? null
       await submitFeedback(async () => {
-        const request = toEmployeeRequest(values, employee)
         if (employee === null) {
-          await createMutation.mutateAsync(request)
+          // `createEmployee` answers `{ id }`.
+          await createMutation.mutateAsync(toCreateEmployeeRequest(values))
           toast.success({ title: 'تمت إضافة الموظف.' })
         } else {
-          await updateMutation.mutateAsync({ employeeId: employee.employeeId, request })
+          // `updateEmployee` answers with an EMPTY body.
+          await updateMutation.mutateAsync({
+            employeeId: employee.id,
+            request: toUpdateEmployeeRequest(values),
+          })
           toast.success({ title: 'تم حفظ تعديلات الموظف.' })
         }
         setDialogEmployee(undefined)
@@ -126,14 +148,14 @@ function EmployeesListPage() {
   const columns = useMemo(
     () =>
       employeeColumnHelper.columns([
-        employeeColumnHelper.accessor('fullNameAr', {
-          id: 'fullNameAr',
+        employeeColumnHelper.accessor('fullName', {
+          id: 'fullName',
           header: 'اسم الموظف',
           cell: (info) => (
             <button
               type="button"
               className="font-semibold text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => openDetail(info.row.original.employeeId)}
+              onClick={() => openDetail(info.row.original.id)}
             >
               {info.getValue()}
             </button>
@@ -142,17 +164,17 @@ function EmployeesListPage() {
         employeeColumnHelper.accessor('employeeNumber', {
           id: 'employeeNumber',
           header: 'الرقم الوظيفي',
+          cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
         }),
-        employeeColumnHelper.accessor('jobTitleAr', {
-          id: 'jobTitleAr',
+        employeeColumnHelper.accessor('jobTitle', {
+          id: 'jobTitle',
           header: 'المسمى الوظيفي',
           cell: (info) => info.getValue() ?? '—',
         }),
-        employeeColumnHelper.accessor('orgUnit.displayName', {
-          id: 'orgUnit',
-          header: 'الوحدة التنظيمية',
-        }),
-        employeeColumnHelper.accessor('site.displayName', { id: 'site', header: 'الموقع' }),
+        employeeColumnHelper.accessor(
+          (employee) => orgUnitNameById.get(employee.orgUnitId) ?? '—',
+          { id: 'orgUnit', header: 'الوحدة التنظيمية' },
+        ),
         employeeColumnHelper.accessor('status', {
           id: 'status',
           header: 'الحالة',
@@ -168,7 +190,7 @@ function EmployeesListPage() {
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`تعديل ${row.original.fullNameAr}`}
+                    aria-label={`تعديل ${row.original.fullName}`}
                     onClick={() => openEdit(row.original)}
                   >
                     <IconEdit aria-hidden />
@@ -178,7 +200,7 @@ function EmployeesListPage() {
             ]
           : []),
       ]),
-    [canManage, openDetail, openEdit],
+    [canManage, openDetail, openEdit, orgUnitNameById],
   )
 
   const page = employeesQuery.data
@@ -199,8 +221,8 @@ function EmployeesListPage() {
                 <SelectContent>
                   <SelectItem value="all">كل المواقع</SelectItem>
                   {sitesQuery.data?.items.map((site) => (
-                    <SelectItem key={site.siteId} value={site.siteId}>
-                      {site.nameAr}
+                    <SelectItem key={site.id} value={site.id}>
+                      {site.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -233,7 +255,7 @@ function EmployeesListPage() {
 
       <ContentCard
         title="قائمة الموظفين"
-        description="ابحث بالاسم أو الرقم الوظيفي، وصفِّ النتائج حسب الموقع أو الحالة، ثم تنقّل بين صفحات الخادم."
+        description="ابحث بالاسم أو الرقم الوظيفي، وصفِّ النتائج حسب الموقع أو الحالة، ثم تنقّل بين صفحات الخادم."
       >
         <DataTableServer
           columns={columns}

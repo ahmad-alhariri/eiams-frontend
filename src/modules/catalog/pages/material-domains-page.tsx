@@ -22,7 +22,8 @@ import { dataTableFeatures, DataTable } from '@/shared/ui/data-table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { toast } from '@/shared/ui/toast-manager'
 import { listRows } from '@/shared/utils/table-data'
-import type { MaterialDomain, RecordStatus } from '@/shared/types/generated/eiams-v1'
+import type { MaterialDomain } from '@/modules/catalog/types/catalog.types'
+import type { RecordStatus } from '@/shared/types/generated/eiams-v1'
 
 const materialDomainColumnHelper = createColumnHelper<typeof dataTableFeatures, MaterialDomain>()
 
@@ -55,7 +56,7 @@ function MaterialDomainsPage() {
           await createMutation.mutateAsync(request)
           toast.success({ title: 'تمت إضافة مجال التصنيف.' })
         } else {
-          await updateMutation.mutateAsync({ domainId: domain.domainId, request })
+          await updateMutation.mutateAsync({ domainId: domain.materialDomainId, request })
           toast.success({ title: 'تم حفظ تعديلات مجال التصنيف.' })
         }
         setDialogDomain(undefined)
@@ -148,7 +149,7 @@ function MaterialDomainsPage() {
       >
         <DataTable
           columns={columns}
-          data={listRows(domainsQuery.data, domainsQuery.isError)}
+          data={listRows(domainsQuery.data?.items, domainsQuery.isError)}
           isLoading={domainsQuery.isLoading}
           isError={domainsQuery.isError}
           onRetry={() => void domainsQuery.refetch()}

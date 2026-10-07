@@ -57,7 +57,7 @@ describe('OpenAPI generation configuration', () => {
     expect(generationConfigRaw).not.toContain("'--enum-values'")
   })
 
-  it('exposes generation scripts and protects quality with generated-type drift checking', () => {
+  it('exposes the OpenAPI generator scripts for manual / whhu.13 / whhu.5 use', () => {
     expect(packageManifest.scripts?.['api:types:generate']).toBe(
       'node scripts/generate-api-types.mjs',
     )
@@ -67,7 +67,11 @@ describe('OpenAPI generation configuration', () => {
     expect(packageManifest.scripts?.['api:types:dry']).toBe(
       'node scripts/generate-api-types.mjs --dry-run',
     )
-    expect(packageManifest.scripts?.['quality']).toContain('pnpm run api:types:check')
+
+    // Per ADR-0001 (D-INT-02) the generated-type drift check is no longer part
+    // of the active `quality` CI gate; the architecture-forbid test in
+    // src/test/no-new-generated-imports.test.ts is the active enforcement.
+    expect(packageManifest.scripts?.['quality']).not.toContain('pnpm run api:types:check')
 
     expect(readmeRaw).toContain('pnpm run api:types:dry')
     expect(readmeRaw).toContain('pnpm run api:types:generate')

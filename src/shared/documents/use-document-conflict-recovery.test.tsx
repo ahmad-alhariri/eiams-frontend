@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -40,16 +41,16 @@ function useMutableDocumentHandlers(store: {
   server.use(
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
       counters.detailRequests += 1
-      return HttpResponse.json(store.documents[0])
+      return okJson(store.documents[0])
     }),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => {
       counters.policyRequests += 1
-      return HttpResponse.json(store.documents[0]?.policy)
+      return okJson(store.documents[0]?.policy)
     }),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => {
       counters.historyRequests += 1
       const document = store.documents[0]
-      return HttpResponse.json({
+      return okJson({
         currentRowVersion: document?.rowVersion ?? 0,
         currentStatus: document?.documentStatus ?? 'Draft',
         documentId: DOCUMENT_ID,

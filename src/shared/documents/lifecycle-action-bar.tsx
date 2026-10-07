@@ -151,7 +151,11 @@ function LifecycleActionBar({
       {policy.advisories.length > 0 ? (
         <div className="flex flex-col gap-1.5 rounded-md bg-muted/40 px-3 py-2">
           {policy.advisories.map((advisory) => (
-            <p key={advisory.code} className="flex items-start gap-2 text-sm text-muted-foreground">
+            <p
+              key={advisory.code}
+              data-slot="policy-advisory-row"
+              className="flex items-start gap-2 text-sm text-muted-foreground"
+            >
               <IconInfoCircle
                 data-slot="policy-advisory-icon"
                 className="mt-0.5 shrink-0"

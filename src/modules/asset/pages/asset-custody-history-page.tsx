@@ -12,6 +12,8 @@ import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTable } from '@/shared/ui/data-table'
+import { Button } from '@/shared/ui/button'
+import { formatDateTime } from '@/shared/utils/format'
 
 /**
  * Immutable custody history for one asset (e19-t08 / PRD §12.8 step 3):
@@ -47,11 +49,18 @@ export default function AssetCustodyHistoryPage() {
         columnHelper.accessor('fromTs', {
           id: 'fromTs',
           header: 'بداية العهدة',
-          cell: ({ getValue }) => (
-            <span dir="ltr" className="text-sm">
-              {getValue()}
-            </span>
-          ),
+          cell: ({ getValue }) => <span dir="ltr">{formatDateTime(getValue())}</span>,
+        }),
+        // Custody rows are append-only, so a closed row's end time is the only
+        // record of when the asset came back: it must be readable, not inferred.
+        columnHelper.accessor('toTs', {
+          id: 'toTs',
+          header: 'نهاية العهدة',
+          cell: ({ getValue, row }) => {
+            const toTs = getValue()
+            if (row.original.status !== 'Closed' || !toTs) return '—'
+            return <span dir="ltr">{formatDateTime(toTs)}</span>
+          },
         }),
         columnHelper.accessor('status', {
           id: 'status',
@@ -82,13 +91,14 @@ export default function AssetCustodyHistoryPage() {
           title="تعذّر تحميل سجل العهدة"
           description="تعذّر جلب سجل عهدة هذا الأصل. حاول مرة أخرى."
           action={
-            <button
+            <Button
               type="button"
-              className="rounded-md border border-border px-4 py-2 text-sm"
+              variant="outline"
+              size="sm"
               onClick={() => void timelineQuery.refetch()}
             >
               إعادة المحاولة
-            </button>
+            </Button>
           }
         />
       ) : (

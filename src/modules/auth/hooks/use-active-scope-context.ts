@@ -1,33 +1,29 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { activeScopeContext } from '@/modules/auth/services/active-scope-runtime'
+import { createActiveScopeContext } from '@/modules/auth/services/active-scope-context'
 import { authService } from '@/modules/auth/services/auth.service'
-import { selectedScope } from '@/modules/auth/services/active-scope-context'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 
 /**
- * Reads the sole cached server session and exposes its active scope transition.
- * Scope selection UI and permission/route decisions compose this hook later.
+ * Reads the sole cached server session and exposes its server-assigned active
+ * scope. The scope is read-only: the backend owns scope assignment, so this hook
+ * intentionally exposes no mutation.
  */
 export function useActiveScopeContext() {
   const authStatus = useAuthSessionStore((state) => state.status)
+  const queryClient = useQueryClient()
   const sessionQuery = useQuery({
     queryKey: authSessionQueryKey,
     queryFn: authService.getSession,
     enabled: authStatus === 'authenticated',
     staleTime: Number.POSITIVE_INFINITY,
   })
-  const switchMutation = useMutation({ mutationFn: activeScopeContext.switchScope })
-  const activeScope = selectedScope(sessionQuery.data)
+  const scopeContext = createActiveScopeContext(queryClient)
 
   return {
     ...sessionQuery,
-    activeScope,
-    activeScopeCacheKey:
-      activeScope === undefined ? undefined : activeScopeContext.getActiveScopeCacheKey(),
-    switchScope: switchMutation.mutateAsync,
-    isSwitchingScope: switchMutation.isPending,
-    switchError: switchMutation.error,
+    activeScope: scopeContext.getActiveScope(),
+    activeScopeCacheKey: scopeContext.getActiveScopeCacheKey(),
   }
 }

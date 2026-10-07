@@ -1,12 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useMemo } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 
 import { useOrganizationalUnitsQuery } from '@/modules/organization/hooks/use-organization-queries'
 import {
-  employeeSchema,
+  emptyEmployeeFormValues,
+  employeeFormSchema,
+  toEmployeeFormValues,
   type EmployeeFormValues,
 } from '@/modules/organization/schemas/employee.schemas'
+import type { Employee } from '@/modules/organization/types/organization.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -21,16 +24,13 @@ import {
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { Employee } from '@/shared/types/generated/eiams-v1'
 
-const REFERENCE_PAGE = { pageIndex: 0, pageSize: 200, status: 'Active' } as const
-const EMPTY_VALUES: EmployeeFormValues = {
-  employeeNumber: '',
-  fullNameAr: '',
-  jobTitleAr: '',
-  orgUnitId: '',
-  status: 'Active',
-}
+const REFERENCE_PAGE = { page: 0, pageSize: 200, status: 'Active' } as const
+const SERVER_ERROR_KEYS = ['orgUnitId', 'employeeNumber', 'fullName', 'jobTitle'] as const
+
+/** Arabic note shown in place of an editable control on the create-only fields. */
+const CREATE_ONLY_NOTE =
+  'يُحدَّد الرقم الوظيفي والوحدة التنظيمية عند إنشاء الموظف ولا يمكن تعديلهما بعد ذلك.'
 
 export interface EmployeeFormDialogProps {
   employee: Employee | null
@@ -40,7 +40,13 @@ export interface EmployeeFormDialogProps {
   onSubmit: (values: EmployeeFormValues) => Promise<void>
 }
 
-/** Employee upsert form backed only by the scoped organizational-unit directory. */
+/**
+ * Creates and updates employees from the scoped organizational-unit directory.
+ *
+ * `orgUnitId` and `employeeNumber` bind only to `POST /employees`, so on edit
+ * they render disabled and carry the record's own values; `toUpdateEmployeeRequest`
+ * drops them. Re-assigning an employee to another unit is therefore not offered.
+ */
 export function EmployeeFormDialog({
   employee,
   open,
@@ -48,23 +54,23 @@ export function EmployeeFormDialog({
   onOpenChange,
   onSubmit,
 }: EmployeeFormDialogProps) {
+  const isCreate = employee === null
   const form = useForm<EmployeeFormValues>({
-    resolver: zodResolver(employeeSchema),
-    defaultValues: EMPTY_VALUES,
+    resolver: zodResolver(employeeFormSchema(isCreate)),
+    defaultValues: emptyEmployeeFormValues(),
   })
   const unitsQuery = useOrganizationalUnitsQuery(REFERENCE_PAGE, { enabled: open })
   const units = useMemo(() => unitsQuery.data?.items ?? [], [unitsQuery.data])
 
   useEffect(() => {
     if (!open) return
-    form.reset({
-      employeeNumber: employee?.employeeNumber ?? '',
-      fullNameAr: employee?.fullNameAr ?? '',
-      jobTitleAr: employee?.jobTitleAr ?? '',
-      orgUnitId: employee?.orgUnit.id ?? '',
-      status: employee?.status ?? 'Active',
-    })
+    form.reset(toEmployeeFormValues(employee))
   }, [employee, form, open])
+
+  const [orgUnitId, fullName] = useWatch({
+    control: form.control,
+    name: ['orgUnitId', 'fullName'],
+  })
 
   const submit = async (values: EmployeeFormValues) => {
     form.clearErrors()
@@ -72,18 +78,21 @@ export function EmployeeFormDialog({
       await onSubmit(values)
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['employeeNumber', 'fullNameAr', 'jobTitleAr', 'orgUnitId', 'status'],
-      })
+      setFormServerErrors(form, apiError.fieldErrors, { schemaKeys: [...SERVER_ERROR_KEYS] })
     }
   }
 
   const referencesUnavailable = unitsQuery.isLoading || unitsQuery.isError
+  const isSubmittable =
+    fullName.trim() !== '' &&
+    (!isCreate || (units.length > 0 && orgUnitId !== '')) &&
+    !referencesUnavailable
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md" dir="rtl">
         <DialogHeader>
-          <DialogTitle>{employee ? 'تعديل الموظف' : 'إضافة موظف'}</DialogTitle>
+          <DialogTitle>{isCreate ? 'إضافة موظف' : 'تعديل الموظف'}</DialogTitle>
           <DialogDescription>
             اختر الوحدة التنظيمية من الدليل المعتمد ضمن نطاق العمل الحالي.
           </DialogDescription>
@@ -111,10 +120,18 @@ export function EmployeeFormDialog({
             className="grid gap-5"
             onSubmit={form.handleSubmit(submit)}
           >
+            {isCreate ? null : (
+              <p
+                role="note"
+                className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground"
+              >
+                {CREATE_ONLY_NOTE}
+              </p>
+            )}
             <div className="grid gap-5 sm:grid-cols-2">
               <FormField
                 control={form.control}
-                name="fullNameAr"
+                name="fullName"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>اسم الموظف</FormLabel>
@@ -139,7 +156,7 @@ export function EmployeeFormDialog({
                       <Input
                         {...field}
                         dir="ltr"
-                        disabled={isPending || referencesUnavailable}
+                        disabled={isPending || referencesUnavailable || !isCreate}
                         placeholder="EMP-001"
                       />
                     </FormControl>
@@ -150,7 +167,7 @@ export function EmployeeFormDialog({
             </div>
             <FormField
               control={form.control}
-              name="jobTitleAr"
+              name="jobTitle"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>المسمى الوظيفي</FormLabel>
@@ -173,18 +190,25 @@ export function EmployeeFormDialog({
                   <FormLabel>الوحدة التنظيمية</FormLabel>
                   <Select
                     value={field.value === '' ? null : field.value}
-                    disabled={isPending || referencesUnavailable}
+                    disabled={isPending || referencesUnavailable || !isCreate}
                     onValueChange={(value) => field.onChange(value ?? '')}
                   >
                     <FormControl>
                       <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                        <SelectValue placeholder="اختر الوحدة التنظيمية" />
+                        <SelectValue placeholder="اختر الوحدة التنظيمية">
+                          {units.find((unit) => unit.id === field.value)?.name ?? undefined}
+                        </SelectValue>
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {units.map((unit) => (
-                        <SelectItem key={unit.orgUnitId} value={unit.orgUnitId}>
-                          {unit.nameAr} ({unit.code})
+                        <SelectItem key={unit.id} value={unit.id}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{unit.name}</span>
+                            {unit.unitType === '' ? null : (
+                              <span className="text-muted text-sm">{unit.unitType}</span>
+                            )}
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -193,38 +217,9 @@ export function EmployeeFormDialog({
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field, fieldState }) => (
-                <FormItem>
-                  <FormLabel>الحالة</FormLabel>
-                  <Select
-                    value={field.value}
-                    disabled={isPending || referencesUnavailable}
-                    onValueChange={(value) => field.onChange(value)}
-                  >
-                    <FormControl>
-                      <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="Active">نشط</SelectItem>
-                      <SelectItem value="Inactive">غير نشط</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
             <DialogFooter>
-              <Button
-                type="submit"
-                loading={isPending}
-                disabled={referencesUnavailable || units.length === 0}
-              >
-                {employee ? 'حفظ التعديلات' : 'إضافة الموظف'}
+              <Button type="submit" loading={isPending} disabled={!isSubmittable}>
+                {isCreate ? 'إضافة الموظف' : 'حفظ التعديلات'}
               </Button>
               <Button
                 type="button"

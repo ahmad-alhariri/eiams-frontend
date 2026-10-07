@@ -8,7 +8,7 @@ import {
   type ListAdjustmentsQuery,
 } from '@/modules/adjustment/types/adjustment.types'
 import { useAdjustmentsListQuery } from '@/modules/adjustment/hooks/use-adjustment-queries'
-import { usePermission } from '@/modules/auth/hooks/use-permission'
+import { useRoutePermission } from '@/modules/auth/hooks/use-permission'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { StatusBadge } from '@/shared/feedback/status-badge'
@@ -49,7 +49,8 @@ export default function AdjustmentsListPage() {
   const [purpose, setPurpose] = useState<PurposeValue | undefined>()
   const [status, setStatus] = useState<StatusValue | undefined>()
   const [warehouseId, setWarehouseId] = useState<string | undefined>()
-  const { has } = usePermission()
+  const canCreateAdjustment = useRoutePermission('adjustmentNew')
+  const canCreateDisposal = useRoutePermission('assetDisposalNew')
 
   const warehouseSelector = useScopedWarehouseSelector()
 
@@ -154,20 +155,24 @@ export default function AdjustmentsListPage() {
         title={ROUTE_METADATA.adjustments.labelAr}
         subtitle="جميع سندات التسوية والإعدام ضمن نطاق العمل الحالي، مع بحث وتصفية تُنفَّذ في الخادم."
         actions={
-          has('document.create') ? (
+          canCreateAdjustment || canCreateDisposal ? (
             <div className="flex flex-wrap items-center gap-3">
-              <Link
-                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground"
-                to={ROUTE_PATHS.assetDisposalNew}
-              >
-                سند إعدام أصل
-              </Link>
-              <Link
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-                to={ROUTE_PATHS.adjustmentNew}
-              >
-                سند تسوية جديد
-              </Link>
+              {canCreateDisposal ? (
+                <Link
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground"
+                  to={ROUTE_PATHS.assetDisposalNew}
+                >
+                  سند إعدام أصل
+                </Link>
+              ) : null}
+              {canCreateAdjustment ? (
+                <Link
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                  to={ROUTE_PATHS.adjustmentNew}
+                >
+                  سند تسوية جديد
+                </Link>
+              ) : null}
             </div>
           ) : null
         }
@@ -237,7 +242,7 @@ export default function AdjustmentsListPage() {
           errorMessage="تعذّر جلب قائمة سندات التسوية. حاول مرة أخرى."
           emptyTitle="لا توجد سندات تسوية"
           emptyDescription={
-            has('document.create')
+            canCreateAdjustment
               ? 'ابدأ بإنشاء سند تسوية جديد من زر الإضافة.'
               : 'لم يتم العثور على سندات تسوية.'
           }

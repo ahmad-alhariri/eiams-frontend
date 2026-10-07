@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type {
   MaterialCategory,
   MaterialCategoryUpsertRequest,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/modules/catalog/types/catalog.types'
 
 export const materialCategorySchema = z.object({
   code: z
@@ -11,7 +11,7 @@ export const materialCategorySchema = z.object({
     .trim()
     .min(1, 'رمز التصنيف مطلوب.')
     .max(50, 'لا يمكن أن يتجاوز رمز التصنيف 50 حرفاً.'),
-  domainId: z.string().uuid('اختر مجال التصنيف.'),
+  materialDomainId: z.string().uuid('اختر مجال التصنيف.'),
   nameAr: z
     .string()
     .trim()
@@ -29,9 +29,9 @@ function findDescendantIds(
 ): ReadonlySet<string> {
   const childrenByParentId = new Map<string, string[]>()
   for (const category of categories) {
-    if (category.parentCategoryId === undefined) continue
+    if (category.parentCategoryId === undefined || category.parentCategoryId === null) continue
     const children = childrenByParentId.get(category.parentCategoryId) ?? []
-    children.push(category.categoryId)
+    children.push(category.materialCategoryId)
     childrenByParentId.set(category.parentCategoryId, children)
   }
 
@@ -54,9 +54,13 @@ export function createMaterialCategorySchema(
   categories: readonly MaterialCategory[],
   category: MaterialCategory | null,
 ) {
-  const categoriesById = new Map(categories.map((candidate) => [candidate.categoryId, candidate]))
+  const categoriesById = new Map(
+    categories.map((candidate) => [candidate.materialCategoryId, candidate]),
+  )
   const descendantIds =
-    category === null ? new Set<string>() : findDescendantIds(category.categoryId, categories)
+    category === null
+      ? new Set<string>()
+      : findDescendantIds(category.materialCategoryId, categories)
 
   return materialCategorySchema.superRefine((values, context) => {
     if (values.parentCategoryId === undefined) return
@@ -70,14 +74,14 @@ export function createMaterialCategorySchema(
       })
       return
     }
-    if (parent.domain.id !== values.domainId) {
+    if (parent.materialDomainId !== values.materialDomainId) {
       context.addIssue({
         code: 'custom',
         path: ['parentCategoryId'],
         message: 'يجب أن يكون التصنيف الأب ضمن المجال نفسه.',
       })
     }
-    if (category !== null && values.parentCategoryId === category.categoryId) {
+    if (category !== null && values.parentCategoryId === category.materialCategoryId) {
       context.addIssue({
         code: 'custom',
         path: ['parentCategoryId'],
@@ -101,9 +105,9 @@ export function toMaterialCategoryRequest(
 ): MaterialCategoryUpsertRequest {
   return {
     code: values.code.trim(),
-    domainId: values.domainId,
+    materialDomainId: values.materialDomainId,
     nameAr: values.nameAr.trim(),
-    ...(values.parentCategoryId === undefined ? {} : { parentCategoryId: values.parentCategoryId }),
+    parentCategoryId: values.parentCategoryId ?? null,
     rowVersion: category?.rowVersion ?? 0,
     status: values.status,
   }

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+﻿import type { ReactNode } from 'react'
 import { IconBell, IconMenu2 } from '@tabler/icons-react'
 
 import { cn } from '@/shared/utils/class-names'
@@ -14,7 +14,14 @@ type AppHeaderProps = {
   /** Breadcrumb trail rendered in the center region (delivered by e05-t06). */
   breadcrumb?: ReactNode
   /** Auth feature composition mounted beside the session controls. */
-  scopeSwitcher?: ReactNode
+  /**
+   * Auth feature composition for the session user block and its dropdown
+   * (ui-design 4.2: avatar, name, role, caret, menu). Injected rather than
+   * observed here: the header frame stays provider-free — the auth module owns
+   * the session read and sign-out — and it replaces the static `user` block
+   * when both are supplied.
+   */
+  userMenu?: ReactNode
   /** Unread notification count — only the badge is server-driven. */
   notificationsCount?: number
   /** Authenticated session identity — supplied by e06 once auth lands. */
@@ -25,11 +32,11 @@ type AppHeaderProps = {
  * Application header frame (ui-design.md 4.2): 64px forest bar. Brand block,
  * collapse/menu triggers, center breadcrumb region, notification bell with
  * damask-red badge, and the session user block (avatar circle with forest
- * initials on golden wheat, name + role). The user dropdown menu and live
- * counts arrive with e06 auth — until a session exists the user block is not
- * rendered and the bell shows no badge.
+ * initials on golden wheat, name + role) followed by the dropdown caret that
+ * opens the injected user menu. Until a session exists neither the user block
+ * nor the caret is rendered, and the bell shows no badge.
  */
-function AppHeader({ breadcrumb, scopeSwitcher, notificationsCount = 0, user }: AppHeaderProps) {
+function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHeaderProps) {
   const collapsed = useUiStore((state) => state.sidebarCollapsed)
   const toggleCollapsed = useUiStore((state) => state.toggleSidebarCollapsed)
   const setDrawerOpen = useUiStore((state) => state.setSidebarDrawerOpen)
@@ -81,7 +88,6 @@ function AppHeader({ breadcrumb, scopeSwitcher, notificationsCount = 0, user }: 
       </div>
 
       <div className="ms-auto flex shrink-0 items-center gap-3">
-        {scopeSwitcher}
         <button
           type="button"
           aria-label="الإشعارات"
@@ -98,24 +104,27 @@ function AppHeader({ breadcrumb, scopeSwitcher, notificationsCount = 0, user }: 
           ) : null}
         </button>
 
-        {user ? (
-          <div data-slot="app-header-user" className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className="flex size-9 items-center justify-center rounded-full bg-golden-wheat text-sm font-bold text-forest"
-            >
-              {userInitials}
-            </span>
-            <span className="hidden max-w-40 truncate text-start md:block">
-              <span className="block truncate text-sm font-medium text-white">
-                {user.displayName}
+        {userMenu ??
+          (user ? (
+            <div data-slot="app-header-user" className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className="flex size-9 items-center justify-center rounded-full bg-golden-wheat text-sm font-bold text-forest"
+              >
+                {userInitials}
               </span>
-              {user.roleName ? (
-                <span className="block truncate text-xs text-sidebar-border">{user.roleName}</span>
-              ) : null}
-            </span>
-          </div>
-        ) : null}
+              <span className="hidden max-w-40 truncate text-start md:block">
+                <span className="block truncate text-sm font-medium text-white">
+                  {user.displayName}
+                </span>
+                {user.roleName ? (
+                  <span className="block truncate text-xs text-sidebar-border">
+                    {user.roleName}
+                  </span>
+                ) : null}
+              </span>
+            </div>
+          ) : null)}
       </div>
     </header>
   )

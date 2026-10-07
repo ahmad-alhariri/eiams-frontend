@@ -60,12 +60,24 @@ import { formatDate, formatDateTime, formatNumber, toArabicDigits } from '@/shar
 
 /**
  * Mutation props the attachment panel needs, surfaced as an OPTIONAL page
- * prop: t10/t11 wire the real upload/delete mutations here. Until then the
- * panel renders its read-only presentation (server attachments + policy gate).
+ * prop: the routed page wires the real upload/delete manager (t06). Until then
+ * the panel renders its read-only presentation (server attachments + policy
+ * gate).
+ *
+ * `deleteError` is part of this `Pick` (e24-t10 / B1): the manager already
+ * produced it, but the page's `Pick` — the narrower of the two prop types — was
+ * dropping it on the floor, so a failed delete produced no user-visible
+ * feedback whatsoever.
  */
 export type DocumentDetailAttachmentMutationProps = Pick<
   AttachmentPanelProps,
-  'pendingUploads' | 'onUpload' | 'onRemove' | 'onCancelPending' | 'isUploading' | 'uploadError'
+  | 'pendingUploads'
+  | 'onUpload'
+  | 'onRemove'
+  | 'onCancelPending'
+  | 'isUploading'
+  | 'uploadError'
+  | 'deleteError'
 >
 
 export interface DocumentDetailPageProps {
@@ -170,18 +182,30 @@ const EMPTY_CAPABILITY_EVALUATIONS: readonly CapabilityEvaluation[] = []
 /**
  * Client-side preflight summary (e12-t12) rendered above the lifecycle action
  * bar. Blocked gates render as Arabic destructive alerts; unknown gates render
- * as muted notes. Server blockers already rendered by the bar are deduped by
- * message text, and SoftFreeze advisories stay exclusively with the bar
- * (warnings only — never rendered here).
+ * as muted notes. SoftFreeze advisories stay exclusively with the bar (warnings
+ * only — never rendered here).
+ *
+ * e24-t07: a gate that restates a blocker the server already renders is
+ * suppressed **by blocker code** whenever the gate resolved one, so reworded
+ * server copy can no longer make a single failure appear twice. Gates with no
+ * server code of their own (balance, capability) fall back to matching the
+ * Arabic message, which remains the only signal they carry.
  */
 function PreflightSummary({ preflight }: { preflight: DocumentPreflight | null }) {
   if (preflight === null) {
     return null
   }
+  const blockerCodes = new Set(preflight.blockers.map((blocker) => blocker.code))
   const blockerMessages = new Set(preflight.blockers.map((blocker) => blocker.messageAr))
-  const visibleGates = preflight.gates.filter(
-    (gate) => gate.messageAr !== null && !blockerMessages.has(gate.messageAr),
-  )
+  const visibleGates = preflight.gates.filter((gate) => {
+    if (gate.messageAr === null) {
+      return false
+    }
+    if (gate.blockerCode !== null) {
+      return !blockerCodes.has(gate.blockerCode)
+    }
+    return !blockerMessages.has(gate.messageAr)
+  })
   if (visibleGates.length === 0) {
     return null
   }
@@ -387,6 +411,16 @@ export interface DocumentDetailBodyProps extends DocumentDetailPageProps {
     ((action: DocumentActionType, reason?: string) => void | Promise<void>) | undefined
   petalSlot?: ReactNode
   policy: DocumentPolicy | null
+  /**
+   * Present only when the policy read itself FAILED and no policy is available
+   * (e24-t09 / SAD.md §"Resilience", D-AUD-02 rule 6). `policy: null` alone
+   * cannot distinguish "still loading" from "the read failed", so the routed
+   * page reports the failure here and this body replaces the action surface
+   * with a retryable Arabic error instead of an unexplained pending note.
+   * Absent for standalone compositions (gallery/tests) that pass no policy at
+   * all — those keep the original pending presentation.
+   */
+  policyFailure?: { onRetry: () => void } | undefined
   timelineSlot?: ReactNode
 }
 
@@ -408,6 +442,7 @@ export function DocumentDetailBody({
   onExecuteAction,
   petalSlot,
   policy,
+  policyFailure,
   timelineSlot,
 }: DocumentDetailBodyProps) {
   const [busyAction, setBusyAction] = useState<string | null>(null)
@@ -471,21 +506,33 @@ export function DocumentDetailBody({
     signedOriginalSatisfied: document.policy.signedOriginalSatisfied,
     blockers: document.policy.blockers,
   }
+  // Defence-in-depth gate: the routed page wires the session predicate; the
+  // body defaults to the bar's backwards-compatible "render every presented
+  // action" contract when composed standalone (gallery/tests).
+  const permitAllActions = useCallback(() => true, [])
+  const permitAction = isActionPermitted ?? permitAllActions
+
   // The mutable window (D-ATT-01) is the Draft status only — including the
   // post-Revise Draft. Outside it the panel stays read-only even when real
   // mutation props are wired; the shared helper is the single source of truth.
+  //
+  // A Draft is necessary but not sufficient: uploading or removing a draft
+  // attachment is `document.update` (D-ATT-01 §"Upload/delete controls are
+  // rendered only inside the mutable window AND only for users with
+  // document.update"). `UploadAttachment` already maps to that code in
+  // use-document-permissions, so reusing the same predicate keeps one gate for
+  // both surfaces. `AttachmentPanel` treats read-only as *hidden* controls,
+  // which is the presentation D-LIFE-01 requires for a permission denial
+  // (a state/policy block is what disables, and the panel has no such state).
   const attachmentsReadOnly =
-    attachmentMutationProps === undefined || !isDocumentMutable(document.documentStatus)
+    attachmentMutationProps === undefined ||
+    !isDocumentMutable(document.documentStatus) ||
+    !permitAction('UploadAttachment')
 
   // Surfaced read-only state (D-ATT-01): a muted note under the action bar
   // explains why the document cannot be edited once it leaves Draft. `null`
   // for a mutable Draft — the note only renders for read-only statuses.
   const readOnlyReasonAr = documentReadOnlyReasonAr(document.documentStatus)
-
-  // Defence-in-depth gate: the routed page wires the session predicate; the
-  // body defaults to the bar's backwards-compatible "render every presented
-  // action" contract when composed standalone (gallery/tests).
-  const permitAllActions = useCallback(() => true, [])
 
   const backLabel = `العودة إلى ${ROUTE_METADATA[listRouteKey].labelAr}`
 
@@ -578,6 +625,7 @@ export function DocumentDetailBody({
           onCancelPending={attachmentMutationProps?.onCancelPending ?? NOOP_CANCEL_PENDING}
           isUploading={attachmentMutationProps?.isUploading ?? false}
           uploadError={attachmentMutationProps?.uploadError ?? null}
+          deleteError={attachmentMutationProps?.deleteError ?? null}
           policy={attachmentPolicy}
           documentStatus={document.documentStatus}
           readOnly={attachmentsReadOnly}
@@ -589,14 +637,29 @@ export function DocumentDetailBody({
         description="إجراءات الدورة المتاحة وفق تقييم السياسة الصادر من الخادم، مع المعرقلات والتنبيهات."
       >
         <PreflightSummary preflight={preflight} />
-        {policy === null ? (
+        {policyFailure !== undefined ? (
+          // Partial failure modeled independently (SAD.md:230, D-AUD-02 rule 6):
+          // the document above rendered fine, so only this policy-dependent
+          // surface degrades — and it degrades loudly, with a retry, instead of
+          // leaving the user on a permanently "awaiting policy" note.
+          <ErrorState
+            className="min-h-40"
+            title="تعذّر تحميل سياسة السند"
+            description="تعذّر جلب تقييم إجراءات دورة حياة السند من الخادم، لذلك لا تُعرض الإجراءات الآن. بيانات السند أعلاه صحيحة. تحقق من الاتصال ثم أعد المحاولة."
+            action={
+              <Button type="button" variant="outline" size="sm" onClick={policyFailure.onRetry}>
+                إعادة المحاولة
+              </Button>
+            }
+          />
+        ) : policy === null ? (
           <p className="text-sm text-muted-foreground">بانتظار تقييم سياسة المستند من الخادم...</p>
         ) : (
           <LifecycleActionBar
             policy={policy}
             busyAction={busyAction}
             onExecute={handleExecute}
-            isActionPermitted={isActionPermitted ?? permitAllActions}
+            isActionPermitted={permitAction}
           />
         )}
         {readOnlyReasonAr !== null ? (
@@ -666,6 +729,24 @@ function DocumentDetailPage({
   // is recreated every render, so only the function enters the action deps.
   const { reportConflict } = conflictRecovery
   const attachmentManager = useDocumentAttachmentManager(documentId ?? null)
+
+  // F-1 (e24-t09, SAD.md:230 / D-AUD-02 rule 6): the detail and policy reads
+  // are two independent queries, so they must degrade independently.
+  // `policyQuery.data ?? null` collapses "still loading" and "the read failed"
+  // into the same `null`, which made ONE failed policy read render a fully
+  // loaded document whose entire lifecycle action surface silently vanished
+  // behind a permanent "awaiting policy evaluation" note — no Arabic reason,
+  // no error, no retry. It fails CLOSED (no action is ever wrongly enabled),
+  // so this is a recovery/UX/a11y defect, not a privilege-escalation hole.
+  // Only a FAILED read with no cached policy reports the failure; a failed
+  // background refetch over already-cached policy data keeps rendering the
+  // bar from the server's last authoritative evaluation. The retry closes over
+  // the live query object rather than a memoized refetch, so it always
+  // refetches the current key.
+  const policyFailure =
+    policyQuery.isError && policyQuery.data === undefined
+      ? { onRetry: () => void policyQuery.refetch() }
+      : undefined
 
   const submitMutation = useSubmitDocumentMutation(documentId ?? null)
   const postMutation = usePostDocumentMutation(documentId ?? null)
@@ -810,6 +891,7 @@ function DocumentDetailPage({
         isActionPermitted={(action) => policyGate.decision(action).presentation !== 'Hidden'}
         listRouteKey={routeEntry.listRouteKey}
         policy={policyQuery.data ?? null}
+        policyFailure={policyFailure}
         attachmentMutationProps={{
           pendingUploads: attachmentManager.pendingUploads,
           onUpload: attachmentManager.onUpload,
@@ -817,6 +899,7 @@ function DocumentDetailPage({
           onCancelPending: attachmentManager.onCancelPending,
           isUploading: attachmentManager.isUploading,
           uploadError: attachmentManager.uploadError,
+          deleteError: attachmentManager.deleteError,
         }}
         linesSlot={linesSlot}
         onExecuteAction={handleExecuteAction}

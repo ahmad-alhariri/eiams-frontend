@@ -3,13 +3,15 @@ import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 
 import { RolePermissionMatrixField } from '@/modules/admin/components/role-permission-matrix-field'
-import { useUpdateRoleMutation } from '@/modules/admin/hooks/use-admin-mutations'
+import { useReplaceRolePermissionsMutation } from '@/modules/admin/hooks/use-admin-mutations'
 import { usePermissionsQuery } from '@/modules/admin/hooks/use-admin-queries'
 import {
   applyRolePermissionsServerError,
+  classifyRolePermissionWriteError,
+  ROLE_STALE_VERSION_MESSAGE_AR,
   rolePermissionsSchema,
   toPermissionMatrixRows,
-  toRolePermissionsRequest,
+  toReplaceRolePermissionsRequest,
   type RolePermissionsFormValues,
 } from '@/modules/admin/schemas/role-permissions.schemas'
 import { ErrorState } from '@/shared/feedback/error-state'
@@ -26,13 +28,13 @@ import {
   DialogTitle,
 } from '@/shared/ui/dialog'
 import { toast } from '@/shared/ui/toast-manager'
-import type { Role } from '@/shared/types/generated/eiams-v1'
+import type { RoleProjection } from '@/modules/admin/types/role.types'
 
 const EMPTY_VALUES: RolePermissionsFormValues = { permissionCodes: [] }
 
 export interface RolePermissionDialogProps {
   /** Role whose permission assignment is edited; `null` keeps the dialog idle. */
-  role: Role | null
+  role: RoleProjection | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -45,7 +47,7 @@ export interface RolePermissionDialogProps {
  */
 export function RolePermissionDialog({ role, open, onOpenChange }: RolePermissionDialogProps) {
   const permissionsQuery = usePermissionsQuery()
-  const updateMutation = useUpdateRoleMutation()
+  const replaceMutation = useReplaceRolePermissionsMutation()
   const submitFeedback = useSubmitFeedback()
   const form = useForm<RolePermissionsFormValues>({
     resolver: zodResolver(rolePermissionsSchema),
@@ -62,19 +64,41 @@ export function RolePermissionDialog({ role, open, onOpenChange }: RolePermissio
     form.clearErrors()
     try {
       await submitFeedback(async () => {
-        await updateMutation.mutateAsync({
-          roleId: role.roleId,
-          request: toRolePermissionsRequest(values, role),
+        await replaceMutation.mutateAsync({
+          roleId: role.id,
+          request: toReplaceRolePermissionsRequest(values, role),
         })
         toast.success({ title: 'تم حفظ صلاحيات الدور.' })
         onOpenChange(false)
       })
     } catch (error: unknown) {
+      // Same classification as the full page: this dialog submits the same operation, so an
+      // identical failure must be explained identically rather than falling through to the
+      // generic per-status copy.
+      const outcome = classifyRolePermissionWriteError(error)
+
+      if (outcome.kind === 'stale-version') {
+        toast.error({
+          title: 'عدّل مستخدم آخر هذا الدور أثناء عملك.',
+          description: ROLE_STALE_VERSION_MESSAGE_AR,
+        })
+        // Reload the catalogue so the matrix shows the version now on the server. The dialog
+        // is left open with the stale selection rather than silently resubmitting it.
+        await permissionsQuery.refetch()
+        onOpenChange(false)
+        return
+      }
+
+      if (outcome.kind === 'scope-mismatch') {
+        toast.error({ title: outcome.titleAr, description: outcome.detailAr ?? undefined })
+        return
+      }
+
       applyRolePermissionsServerError(form, error)
     }
   }
 
-  const rows = toPermissionMatrixRows(permissionsQuery.data ?? [], role?.permissionCodes ?? [])
+  const rows = role === null ? [] : toPermissionMatrixRows(permissionsQuery.data ?? [], role)
   const catalogUnavailable = permissionsQuery.isPending || permissionsQuery.isError
   const isEmptyCatalog = !catalogUnavailable && rows.length === 0
 
@@ -115,24 +139,24 @@ export function RolePermissionDialog({ role, open, onOpenChange }: RolePermissio
           <Form {...form}>
             <form
               noValidate
-              aria-busy={updateMutation.isPending}
+              aria-busy={replaceMutation.isPending}
               className="grid gap-5"
               onSubmit={form.handleSubmit(submit)}
             >
               <RolePermissionMatrixField
                 control={form.control}
-                disabled={updateMutation.isPending}
+                disabled={replaceMutation.isPending}
                 idPrefix="role-permission-dialog"
                 rows={rows}
               />
               <DialogFooter>
-                <Button type="submit" loading={updateMutation.isPending}>
+                <Button type="submit" loading={replaceMutation.isPending}>
                   حفظ الصلاحيات
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={updateMutation.isPending}
+                  disabled={replaceMutation.isPending}
                   onClick={() => onOpenChange(false)}
                 >
                   إلغاء

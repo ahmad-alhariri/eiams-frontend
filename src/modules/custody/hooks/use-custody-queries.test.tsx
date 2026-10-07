@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okPageJson } from '@/test/msw/envelope'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -32,8 +33,8 @@ describe('useCustodiesQuery (e19-t01)', () => {
         const url = new URL(request.url)
         expect(url.searchParams.get('status')).toBe('Active')
         expect(url.searchParams.get('custodyKind')).toBe('Operational')
-        return HttpResponse.json({
-          items: [
+        return okPageJson(
+          [
             {
               assetId: ASSET_ID,
               assetNumber: 'AST-2024-C01',
@@ -52,8 +53,8 @@ describe('useCustodiesQuery (e19-t01)', () => {
               status: 'Active',
             },
           ],
-          meta: { pageIndex: 0, pageSize: 20, totalItems: 1, totalPages: 1 },
-        })
+          { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 },
+        )
       }),
     )
 
@@ -76,10 +77,7 @@ describe('useCustodiesQuery (e19-t01)', () => {
     // the disabled branch is covered by the service contract tests.
     server.use(
       http.get(`${API_BASE_URL}/custodies`, () =>
-        HttpResponse.json({
-          items: [],
-          meta: { pageIndex: 0, pageSize: 20, totalItems: 0, totalPages: 0 },
-        }),
+        okPageJson([], { page: 1, pageSize: 20, totalCount: 0, totalPages: 0 }),
       ),
     )
     const { result } = renderHook(

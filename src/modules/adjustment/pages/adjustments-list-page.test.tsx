@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okPageJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -12,9 +13,9 @@ import type {
   AdjustmentPurpose,
   AdjustmentStatus,
   InventoryAdjustment,
-  InventoryAdjustmentPage,
-  SessionResponse,
 } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -35,23 +36,10 @@ const API_BASE_URL = '/api/v1'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'adjustment.manager',
-      displayName: 'مدير المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستودع' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      {
-        scopeType: 'Enterprise',
-        scopeId: null,
-        displayName: 'الهيئة العامة للرقابة والتفتيش',
-      },
-    ],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -117,9 +105,12 @@ function useAdjustmentsHandler(items: readonly InventoryAdjustment[]) {
   server.use(
     http.get(`${API_BASE_URL}/adjustments`, ({ request }) => {
       capturedListUrl = new URL(request.url)
-      return HttpResponse.json<InventoryAdjustmentPage>({
-        items: [...items],
-        meta: { pageIndex: 0, pageSize: 20, totalItems: items.length, totalPages: 1 },
+      // Wire envelope: `data` is the item array, `pagination` is snake_case.
+      return okPageJson([...items], {
+        page: 1,
+        pageSize: 20,
+        totalCount: items.length,
+        totalPages: 1,
       })
     }),
   )
@@ -168,21 +159,22 @@ describe('AdjustmentsListPage (e21-t02)', () => {
     expect(detailLink.getAttribute('href')).toBe(`/adjustments/${ADJUSTMENT_ID}`)
   })
 
-  it('offers the create CTA to a manager with document.create', async () => {
+  it('offers the create CTA to a manager with create and post permissions', async () => {
     useAdjustmentsHandler([])
-    renderPage(['document.view', 'document.create'])
+    renderPage(['document.view', 'document.create', 'document.post'])
 
     await screen.findByRole('heading', { level: 1, name: 'سندات التسوية' })
     const cta = screen.getByRole('link', { name: 'سند تسوية جديد' })
     expect(cta.getAttribute('href')).toBe('/adjustments/new')
   })
 
-  it('hides the create CTA without document.create (keeper view)', async () => {
+  it('hides the create CTAs from keepers with create but without post', async () => {
     useAdjustmentsHandler([])
-    renderPage(['document.view'])
+    renderPage(['document.view', 'document.create'])
 
     await screen.findByRole('heading', { level: 1, name: 'سندات التسوية' })
     expect(screen.queryByRole('link', { name: 'سند تسوية جديد' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'سند إعدام أصل' })).toBeNull()
   })
 
   it('refetches with the selected purpose filter as a query param', async () => {
@@ -208,7 +200,7 @@ describe('AdjustmentsListPage (e21-t02)', () => {
   it('shows the error state with retry when the list request fails', async () => {
     server.use(
       http.get(`${API_BASE_URL}/adjustments`, () =>
-        HttpResponse.json({ title: 'Server Error' }, { status: 500 }),
+        apiJson({ title: 'Server Error' }, { status: 500 }),
       ),
     )
     renderPage(['document.view'])

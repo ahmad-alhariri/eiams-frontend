@@ -8,7 +8,6 @@ docs
 dist
 node_modules
 contracts/openapi/*.json
-public/mockServiceWorker.js
 src/shared/types/generated
 pnpm-lock.yaml
 vite-dev.err.log

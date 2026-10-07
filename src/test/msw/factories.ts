@@ -2,9 +2,9 @@ import type {
   ActionAvailability,
   Asset,
   AssetCustody,
+  AssetMovement,
   AuditLog,
   AuditLogEntry,
-  AuthTokenResponse,
   DocumentActionResult,
   DocumentActionType,
   DocumentAttachment,
@@ -12,9 +12,7 @@ import type {
   DocumentLine,
   DocumentPolicy,
   DocumentStatus,
-  Employee,
   ExternalParty,
-  EffectiveRole,
   FieldError,
   InventoryBalance,
   LifecycleActorSnapshot,
@@ -31,19 +29,39 @@ import type {
   ProblemDetails,
   Permission,
   Role,
-  ScopeContext,
-  SessionResponse,
-  Site,
   StockMovement,
-  OrganizationalUnit,
   UnitOfMeasure,
-  UserSummary,
-  UserRoleScope,
-  Warehouse,
-  WarehouseCapability,
   WarehouseDocument,
-  WarehouseMaterialSetting,
 } from '@/shared/types/generated/eiams-v1'
+import type {
+  AuthTokenResponse,
+  SessionResponse,
+  SessionRole,
+  SessionScope,
+  SessionUser,
+} from '@/modules/auth/types/session.types'
+import type {
+  WarehouseCapability,
+  WarehouseMaterialSetting,
+} from '@/modules/warehouse/types/warehouse.api-types'
+// txq4: Site / OrganizationalUnit / Employee / Warehouse are typed against the
+// handwritten contracts, NOT the frozen generated snapshot. Importing them from
+// `@/shared/types/generated/eiams-v1` is what let these factories keep minting
+// `warehouseId` / `nameAr` / nested `site` fixtures while production code had
+// already moved to `id` / `name` — the suite validated fiction against itself.
+import type {
+  Site,
+  OrganizationalUnit,
+  Employee,
+} from '@/modules/organization/types/organization.api-types'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
+import type {
+  PermissionCatalogEntry,
+  RoleProjection,
+  UserRoleScopeProjection,
+} from '@/modules/admin/types/role.types'
+import type { UserDetailProjection, UserDirectoryRow } from '@/modules/admin/types/user.types'
+import type { ScopeContext } from '@/shared/types/generated/eiams-v1'
 
 /** Contract-backed fixture helpers for MSW tests.
  *
@@ -51,6 +69,36 @@ import type {
  * is checked against the generated OpenAPI surface. Factories deliberately
  * produce ordinary data only; endpoint-specific handlers remain owned by the
  * feature that exercises the endpoint.
+ *
+ * Why this stays in the test tree, and did NOT move to `src/shared/`
+ * -----------------------------------------------------------------
+ * `eiams-frontend-vs8p` (EPIC G7) briefly moved this file to
+ * `src/shared/fixtures/factories.ts` with a re-export shim here, to satisfy
+ * "no file under `src/` outside `src/test/` imports `@/test/**`" without waiting
+ * for the mock layer to be deleted. That was reverted, and the reasoning is
+ * worth keeping because the move looks reasonable and is still wrong.
+ *
+ * `src/shared/` is the PRODUCTION shared layer: it is inside the app TypeScript
+ * project and inside the browser module graph. Parking 1300 lines of Arabic
+ * fixture data and the canonical `DOCUMENT_TRANSITIONS` table there means any
+ * production component can `import { createWarehouseDocument } from
+ * '@/shared/fixtures/factories'` and ship seed records, and the only thing
+ * standing between that and a 40 kB fixture bundle in `dist/` is a developer
+ * noticing. `production-artifact-purity.test.ts` would catch the resulting
+ * artifact, but "safe because nothing imports it yet" is precisely the posture
+ * that rots: this epic exists because a fixture layer nobody was importing
+ * still shipped.
+ *
+ * The other consumer was `src/mocks/` — the development mock API. `eiams-frontend-m4jm`
+ * deleted that directory, which is why the two remaining runtime imports
+ * (`src/mocks/db.ts`, `src/mocks/handlers.ts`) were never a structural problem
+ * to be engineered around: they were two lines that stopped existing when the
+ * directory did. `src/test/no-runtime-test-imports.test.ts` named exactly those
+ * two files and stayed red until then, which was the honest state — the guard
+ * reported what was still true rather than being satisfied by moving the problem
+ * somewhere it could not see. It is green now, and it is green because nothing
+ * outside `src/test/` imports this file at all: which makes the reasoning above
+ * the only thing standing between it and the next well-meaning relocation.
  */
 /**
  * Recursive override type: a full `T[K]` value (spread semantics), an explicit
@@ -105,7 +153,7 @@ export function createNamedReference(
   overrides: FixtureOverrides<NamedReference> = {},
 ): NamedReference {
   return withOverrides(
-    { id: fixtureUuid(1), displayName: 'مرجع تجريبي', code: 'REF-001', status: 'Active' },
+    { id: fixtureUuid(1), displayName: 'مرجع تجريبي', code: 'REF-001' },
     overrides,
   )
 }
@@ -138,13 +186,48 @@ export function createProblemDetails(
   )
 }
 
-export function createUserSummary(overrides: FixtureOverrides<UserSummary> = {}): UserSummary {
+/**
+ * One row of the administration directory, in the served shape.
+ *
+ * Distinct from `createUserDetail` below because the backend serves two different
+ * records: the directory row additionally carries the user's sole role-and-scope
+ * assignment, while the single-user read omits it.
+ */
+export function createUserDirectoryRow(
+  overrides: FixtureOverrides<UserDirectoryRow> = {},
+): UserDirectoryRow {
   return withOverrides(
     {
-      userId: fixtureUuid(10),
+      id: fixtureUuid(10),
+      email: 'fixture.user@eiams.local',
       username: 'fixture.user',
-      displayName: 'مستخدم تجريبي',
+      firstName: 'مستخدم',
+      lastName: 'اختباري',
       status: 'Active',
+      createdAtUtc: '2026-01-01T00:00:00Z',
+      rowVersion: 1,
+      roleId: fixtureUuid(14),
+      roleName: 'SYSTEM_ADMIN',
+      scopeType: 'Enterprise',
+      scopeId: null,
+    },
+    overrides,
+  )
+}
+
+/** The single-user read: no `username`, no `rowVersion`, and no assignment. */
+export function createUserDetail(
+  overrides: FixtureOverrides<UserDetailProjection> = {},
+): UserDetailProjection {
+  return withOverrides(
+    {
+      id: fixtureUuid(10),
+      email: 'fixture.user@eiams.local',
+      username: 'fixture.user',
+      firstName: 'مستخدم',
+      lastName: 'اختباري',
+      status: 'Active',
+      createdAtUtc: '2026-01-01T00:00:00Z',
       rowVersion: 1,
     },
     overrides,
@@ -177,29 +260,65 @@ export function createRole(overrides: FixtureOverrides<Role> = {}): Role {
   )
 }
 
-export function createUserRoleScope(
-  overrides: FixtureOverrides<UserRoleScope> = {},
-): UserRoleScope {
+/**
+ * The role administration projection. Distinct from `createRole` above because the
+ * assignment surface still carries the stale generated shape (`roleId`, `code`,
+ * `status`), while the role catalogue and permission matrix consume the handwritten
+ * `RoleProjection`. Migrating the assignment projection is tracked separately.
+ */
+export function createRoleProjection(
+  overrides: FixtureOverrides<RoleProjection> = {},
+): RoleProjection {
   return withOverrides(
     {
-      userRoleScopeId: fixtureUuid(15),
-      userId: fixtureUuid(10),
-      role: createRole(),
-      scope: createScopeContext({
-        scopeType: 'Enterprise',
-        scopeId: null,
-        displayName: 'الهيئة العامة للرقابة والتفتيش',
-      }),
+      id: fixtureUuid(14),
+      name: 'SYSTEM_ADMIN',
+      nameAr: 'مدير النظام',
+      description: 'Enterprise structural administration.',
+      allowedScopeTypes: ['Enterprise'],
+      permissionCodes: ['admin.user.view', 'admin.user.manage'],
+      rowVersion: 1,
     },
     overrides,
   )
 }
 
-export function createEffectiveRole(
-  overrides: FixtureOverrides<EffectiveRole> = {},
-): EffectiveRole {
+/** One entry of the server-owned permission catalogue, in its served shape. */
+export function createPermissionCatalogEntry(
+  overrides: FixtureOverrides<PermissionCatalogEntry> = {},
+): PermissionCatalogEntry {
   return withOverrides(
-    { roleId: fixtureUuid(11), code: 'WH_KEEPER', nameAr: 'أمين المستودع' },
+    {
+      id: fixtureUuid(13),
+      code: 'admin.user.view',
+      nameAr: 'عرض المستخدمين',
+      descriptionAr: 'عرض دليل حسابات المستخدمين.',
+      description: 'View users.',
+      allowedScopeTypes: ['Enterprise'],
+    },
+    overrides,
+  )
+}
+
+/**
+ * The user's sole role-and-scope assignment, in the shape the backend serves.
+ *
+ * Deliberately NOT the generated `UserRoleScope` (`{role, scope, userId,
+ * userRoleScopeId}`): that describes a record the backend never returned, and a
+ * collection of them would contradict D-SRS-01's one-assignment invariant.
+ */
+export function createUserRoleScope(
+  overrides: FixtureOverrides<UserRoleScopeProjection> = {},
+): UserRoleScopeProjection {
+  return withOverrides(
+    {
+      id: fixtureUuid(15),
+      roleId: fixtureUuid(14),
+      roleName: 'SYSTEM_ADMIN',
+      scopeType: 'Enterprise',
+      scopeId: null,
+      rowVersion: 1,
+    },
     overrides,
   )
 }
@@ -211,16 +330,58 @@ export function createScopeContext(overrides: FixtureOverrides<ScopeContext> = {
   )
 }
 
-export function createSession(overrides: FixtureOverrides<SessionResponse> = {}): SessionResponse {
-  const activeScope = createScopeContext()
+export function createSessionUser(overrides: FixtureOverrides<SessionUser> = {}): SessionUser {
   return withOverrides(
     {
-      user: createUserSummary(),
+      id: fixtureUuid(10),
+      email: 'fixture.user@eiams.local',
+      firstName: 'مستخدم',
+      lastName: 'اختباري',
+      employeeId: null,
+      employeeName: null,
+    },
+    overrides,
+  )
+}
+
+/**
+ * The session's SINGLE role. `nameAr` is what the UI renders; keeping it in the fixture is
+ * what catches a consumer that silently reads `name` instead.
+ */
+export function createSessionRole(overrides: FixtureOverrides<SessionRole> = {}): SessionRole {
+  return withOverrides(
+    {
+      id: fixtureUuid(11),
+      name: 'WarehouseKeeper',
+      nameAr: 'أمين مستودع',
+      description: null,
+    },
+    overrides,
+  )
+}
+
+/**
+ * The active scope as the session endpoint sends it: `scopeName`, not `displayName`.
+ * `scopeId` is null only for Enterprise.
+ */
+export function createSessionScope(overrides: FixtureOverrides<SessionScope> = {}): SessionScope {
+  return withOverrides(
+    {
+      scopeType: 'Warehouse',
+      scopeId: fixtureUuid(12),
+      scopeName: 'مستودع اختباري',
+    },
+    overrides,
+  )
+}
+
+export function createSession(overrides: FixtureOverrides<SessionResponse> = {}): SessionResponse {
+  return withOverrides(
+    {
+      user: createSessionUser(),
+      role: createSessionRole(),
       permissionCodes: ['document.view'],
-      availableScopes: [activeScope],
-      activeScope,
-      scopeState: 'Selected',
-      activeRoles: [createEffectiveRole()],
+      activeScope: createSessionScope(),
     },
     overrides,
   )
@@ -264,7 +425,6 @@ export function createMaterialCategory(
       code: 'IT-HW',
       domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
       nameAr: 'الأجهزة',
-      pathDisplay: 'تقنية المعلومات / الأجهزة',
       rowVersion: 1,
       status: 'Active',
     },
@@ -279,8 +439,8 @@ export function createMaterialFamily(
     {
       familyId: fixtureUuid(22),
       code: 'IT-HW-PC',
-      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
       category: createNamedReference({ id: fixtureUuid(21), displayName: 'الأجهزة' }),
+      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
       nameAr: 'الحواسيب',
       rowVersion: 1,
       status: 'Active',
@@ -297,7 +457,7 @@ export function createUnitOfMeasure(
       unitId: fixtureUuid(23),
       code: 'EA',
       nameAr: 'قطعة',
-      symbolAr: 'قطعة',
+      symbolAr: 'EA',
       rowVersion: 1,
       status: 'Active',
     },
@@ -312,11 +472,11 @@ export function createMaterial(overrides: FixtureOverrides<Material> = {}): Mate
       code: 'IT-HW-PC-001',
       nameAr: 'حاسوب مكتبي',
       descriptionAr: 'مادة تجريبية',
-      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
-      category: createNamedReference({ id: fixtureUuid(21), displayName: 'الأجهزة' }),
-      family: createNamedReference({ id: fixtureUuid(22), displayName: 'الحواسيب' }),
       baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة', code: 'EA' }),
-      materialKind: 'Durable',
+      category: createNamedReference({ id: fixtureUuid(21), displayName: 'الأجهزة' }),
+      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
+      family: createNamedReference({ id: fixtureUuid(22), displayName: 'الحواسيب' }),
+      materialKind: 'Consumable',
       requiresAssetNumber: false,
       trackingType: 'Quantity',
       rowVersion: 1,
@@ -331,14 +491,14 @@ export function createMaterialUnitConversion(
 ): MaterialUnitConversion {
   return withOverrides(
     {
-      baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة', code: 'EA' }),
       conversionId: fixtureUuid(25),
-      factor: '12',
-      fromUnit: createNamedReference({ id: fixtureUuid(26), displayName: 'كرتونة', code: 'CTN' }),
       material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
+      baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة', code: 'EA' }),
+      fromUnit: createNamedReference({ id: fixtureUuid(26), displayName: 'كرتونة', code: 'CTN' }),
+      factor: '12',
+      usedInPostedDocuments: false,
       rowVersion: 1,
       status: 'Active',
-      usedInPostedDocuments: false,
     },
     overrides,
   )
@@ -347,11 +507,13 @@ export function createMaterialUnitConversion(
 export function createWarehouse(overrides: FixtureOverrides<Warehouse> = {}): Warehouse {
   return withOverrides(
     {
-      warehouseId: fixtureUuid(30),
+      id: fixtureUuid(30),
+      siteId: fixtureUuid(50),
+      organizationalUnitId: fixtureUuid(52),
       code: 'WH-CENTRAL',
-      nameAr: 'المستودع المركزي',
-      locationAr: 'دمشق',
-      site: createNamedReference({ id: fixtureUuid(31), displayName: 'المقر الرئيسي' }),
+      name: 'المستودع المركزي',
+      warehouseType: 'Storage',
+      canHoldStock: true,
       rowVersion: 1,
       status: 'Active',
     },
@@ -364,8 +526,8 @@ export function createWarehouseCapability(
 ): WarehouseCapability {
   return withOverrides(
     {
-      capabilityId: fixtureUuid(32),
       warehouseId: fixtureUuid(30),
+      domainId: fixtureUuid(20),
       domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
       operations: ['Receiving', 'Issue'],
       rowVersion: 1,
@@ -379,8 +541,8 @@ export function createWarehouseMaterialSetting(
 ): WarehouseMaterialSetting {
   return withOverrides(
     {
-      settingId: fixtureUuid(33),
       warehouseId: fixtureUuid(30),
+      materialId: fixtureUuid(24),
       material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
       minQuantity: 2,
       maxQuantity: 10,
@@ -394,13 +556,12 @@ export function createWarehouseMaterialSetting(
 export function createSite(overrides: FixtureOverrides<Site> = {}): Site {
   return withOverrides(
     {
-      siteId: fixtureUuid(50),
+      id: fixtureUuid(50),
       organizationId: fixtureUuid(51),
       code: 'DAM-HQ',
-      nameAr: 'المقر الرئيسي',
-      address: 'دمشق',
-      governorate: 'دمشق',
-      rowVersion: 1,
+      name: 'المقر الرئيسي',
+      location: 'دمشق',
+      governorateCode: 'DIM',
       status: 'Active',
     },
     overrides,
@@ -412,12 +573,11 @@ export function createOrganizationalUnit(
 ): OrganizationalUnit {
   return withOverrides(
     {
-      orgUnitId: fixtureUuid(52),
+      id: fixtureUuid(52),
       siteId: fixtureUuid(50),
-      code: 'DAM-ADMIN',
-      nameAr: 'الإدارة',
-      pathDisplay: 'المقر الرئيسي / الإدارة',
-      rowVersion: 1,
+      parentId: null,
+      name: 'الإدارة',
+      unitType: 'Department',
       status: 'Active',
     },
     overrides,
@@ -427,13 +587,11 @@ export function createOrganizationalUnit(
 export function createEmployee(overrides: FixtureOverrides<Employee> = {}): Employee {
   return withOverrides(
     {
-      employeeId: fixtureUuid(53),
+      id: fixtureUuid(53),
+      orgUnitId: fixtureUuid(52),
       employeeNumber: 'EMP-001',
-      fullNameAr: 'موظف تجريبي',
-      jobTitleAr: 'أمين مستودع',
-      orgUnit: createNamedReference({ id: fixtureUuid(52), displayName: 'الإدارة' }),
-      site: createNamedReference({ id: fixtureUuid(50), displayName: 'المقر الرئيسي' }),
-      rowVersion: 1,
+      fullName: 'موظف تجريبي',
+      jobTitle: 'أمين مستودع',
       status: 'Active',
     },
     overrides,
@@ -559,6 +717,32 @@ export function createAssetCustody(overrides: FixtureOverrides<AssetCustody> = {
 }
 
 /**
+ * Immutable asset-movement ledger read model (e18-t05). Same standing as
+ * `createStockMovement`: a standalone provenance projection that never derives
+ * an asset status or mutates a document. Defaults describe a receipt into a
+ * warehouse, so an issue/return/disposal row only has to override `eventType`
+ * and the warehouse references it actually moved between.
+ */
+export function createAssetMovement(
+  overrides: FixtureOverrides<AssetMovement> = {},
+): AssetMovement {
+  return withOverrides(
+    {
+      assetId: fixtureUuid(50),
+      documentId: fixtureUuid(150),
+      documentLineId: fixtureUuid(160),
+      documentReference: 'EIAMS-RCV-2026-0001',
+      eventType: 'Received',
+      movementId: fixtureUuid(52),
+      occurredAt: FIXTURE_TIMESTAMP,
+      occurredBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مدير المستودع' }),
+      toWarehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
+    },
+    overrides,
+  )
+}
+
+/**
  * Immutable inventory-ledger read model. This is deliberately a standalone
  * projection: it does not derive a balance or mutate a warehouse document.
  */
@@ -586,9 +770,9 @@ export function createStockMovement(
  * --- Document engine fixtures -------------------------------------------------
  *
  * Shared mock-data spine for the document engine: attachment/line/policy/event
- * fixtures plus the canonical lifecycle transition table that both the mock
- * API (src/mocks/handlers.ts) and the scenario handlers
- * (src/test/msw/warehouse-document-handlers.ts) replay.
+ * fixtures plus the canonical lifecycle transition table that the scenario
+ * handlers (src/test/msw/warehouse-document-handlers.ts) replay. The deleted
+ * development mock (src/mocks/handlers.ts) replayed the same table.
  */
 
 export type DocumentTransition = Readonly<{

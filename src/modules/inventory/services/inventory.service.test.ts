@@ -1,151 +1,146 @@
 import axios from 'axios'
-import { HttpResponse, http } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+import { http } from 'msw'
+import { describe, expect, it } from 'vitest'
 
-import { createInventoryService } from '@/modules/inventory/services/inventory.service'
-import { normalizeApiError } from '@/shared/services/api-error'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
-import type { StockMovement } from '@/shared/types/generated/eiams-v1'
 import {
-  createInventoryBalance,
-  createNamedReference,
-  createPage,
-  createProblemDetails,
-  fixtureUuid,
-} from '@/test/msw/factories'
+  inventoryService,
+  setInventoryService,
+} from '@/modules/inventory/services/inventory.service'
+import { normalizeApiError } from '@/shared/services/api-error'
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
+import { wireInventoryBalance, wireStockMovement } from '@/test/msw/inventory-wire-fixtures'
 import { server } from '@/test/msw/server'
+import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
 
 const API_BASE_URL = '/api/v1'
-const bundles: ApiClientBundle[] = []
+
+// A real transport over a real Axios client (9uuf); the previous cast supplied
+// none of requestPage/request/requestEmpty while satisfying the type.
+const createHarness = registerTestTransportHarness(API_BASE_URL)
 
 function setupService() {
-  const bundle = createApiClient({ baseURL: API_BASE_URL })
-  bundles.push(bundle)
-  return createInventoryService(bundle.client)
+  const { transport } = createHarness()
+  setInventoryService(transport)
+  return inventoryService
 }
 
-function createStockMovement(): StockMovement {
+/**
+ * The page the service NORMALIZES to: `requestPage` unwraps the wire
+ * `pagination` block into `ApiPage`, and `normalizePage` re-projects it onto the
+ * module's wider `PageMeta`. The generated `createPage([item])` the previous
+ * expectations compared against (`{items, meta:{pageIndex,pageSize,totalItems,
+ * totalPages}}`) describes neither the wire nor the result — an expectation
+ * written against it can only be satisfied by a transport that stopped
+ * unwrapping — so the real normalized shape is spelled out here.
+ */
+function normalizedPage<T>(
+  items: readonly T[],
+  pagination: { page: number; pageSize: number; totalItems: number },
+) {
   return {
-    documentId: fixtureUuid(60),
-    documentLineId: fixtureUuid(61),
-    documentReference: 'RCP-2026-0001',
-    material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
-    movementId: fixtureUuid(70),
-    movementType: 'Receipt',
-    postedAt: '2026-08-21T10:00:00.000Z',
-    postedBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مدير المستودع' }),
-    quantityDelta: 5,
-    warehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
+    items,
+    meta: {
+      page: pagination.page,
+      pageIndex: pagination.page,
+      pageSize: pagination.pageSize,
+      itemCount: pagination.totalItems,
+      totalItems: pagination.totalItems,
+      totalCount: pagination.totalItems,
+      totalPages: pagination.totalItems === 0 ? 0 : 1,
+      hasNextPage: false,
+      hasPreviousPage: pagination.page > 1,
+    },
   }
 }
-
-afterEach(() => {
-  for (const bundle of bundles.splice(0)) bundle.dispose()
-})
 
 describe('InventoryService', () => {
   it('forwards contracted balance and movement filters and server ordering unchanged', async () => {
     const service = setupService()
-    const balance = createInventoryBalance()
-    const movement = createStockMovement()
+    const balance = wireInventoryBalance()
+    const movement = wireStockMovement()
     const requestedQueries: Record<string, string>[] = []
 
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, ({ request }) => {
         requestedQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json(createPage([balance]))
+        return okPageJson([balance], { page: 2, pageSize: 25, totalCount: 1, totalPages: 1 })
       }),
       http.get(`${API_BASE_URL}/inventory/movements`, ({ request }) => {
         requestedQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json(createPage([movement]))
+        return okPageJson([movement], { page: 1, pageSize: 50, totalCount: 1, totalPages: 1 })
       }),
     )
 
     await expect(
       service.listBalances({
-        lowStockState: 'Low',
-        materialId: balance.material.id,
-        pageIndex: 2,
+        materialId: balance.materialId,
+        page: 2,
         pageSize: 25,
         search: 'حاسوب',
-        sortBy: 'Quantity',
-        sortDirection: 'Descending',
-        warehouseId: balance.warehouse.id,
+        warehouseId: balance.warehouseId,
       }),
-    ).resolves.toEqual(createPage([balance]))
+    ).resolves.toEqual(normalizedPage([balance], { page: 2, pageSize: 25, totalItems: 1 }))
     await expect(
       service.listMovements({
-        dateFrom: '2026-08-01T00:00:00.000Z',
-        dateTo: '2026-08-31T23:59:59.000Z',
         documentId: movement.documentId,
-        materialId: movement.material.id,
+        materialId: movement.materialId,
         movementType: 'Receipt',
-        pageIndex: 1,
+        page: 1,
         pageSize: 50,
-        sortBy: 'QuantityDelta',
-        sortDirection: 'Ascending',
-        warehouseId: movement.warehouse.id,
+        warehouseId: movement.warehouseId,
       }),
-    ).resolves.toEqual(createPage([movement]))
+    ).resolves.toEqual(normalizedPage([movement], { page: 1, pageSize: 50, totalItems: 1 }))
 
     expect(requestedQueries).toEqual([
       {
-        lowStockState: 'Low',
-        materialId: balance.material.id,
-        pageIndex: '2',
+        materialId: balance.materialId,
+        page: '2',
         pageSize: '25',
         search: 'حاسوب',
-        sortBy: 'Quantity',
-        sortDirection: 'Descending',
-        warehouseId: balance.warehouse.id,
+        warehouseId: balance.warehouseId,
       },
       {
-        dateFrom: '2026-08-01T00:00:00.000Z',
-        dateTo: '2026-08-31T23:59:59.000Z',
         documentId: movement.documentId,
-        materialId: movement.material.id,
+        materialId: movement.materialId,
         movementType: 'Receipt',
-        pageIndex: '1',
+        page: '1',
         pageSize: '50',
-        sortBy: 'QuantityDelta',
-        sortDirection: 'Ascending',
-        warehouseId: movement.warehouse.id,
+        warehouseId: movement.warehouseId,
       },
     ])
   })
 
   it('encodes balance and movement identifiers and returns contract responses unchanged', async () => {
     const service = setupService()
-    const balance = createInventoryBalance()
-    const movement = createStockMovement()
+    const balance = wireInventoryBalance()
+    const movement = wireStockMovement()
     const balanceId = 'balance / دمشق'
     const movementId = 'movement / دمشق'
 
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances/${encodeURIComponent(balanceId)}`, () =>
-        HttpResponse.json(balance),
+        okJson(balance),
       ),
       http.get(`${API_BASE_URL}/inventory/movements/${encodeURIComponent(movementId)}`, () =>
-        HttpResponse.json(movement),
+        okJson(movement),
       ),
     )
 
+    const readMovement = await service.getMovement(movementId)
     await expect(service.getBalance(balanceId)).resolves.toEqual(balance)
-    await expect(service.getMovement(movementId)).resolves.toEqual(movement)
+    expect(readMovement).toEqual(movement)
+    // `postedBy` is a UUID STRING on the wire — `StockMovementResponse.PostedBy`
+    // is a `Guid` — so the detail page's `{movement.postedBy}` React child gets
+    // a string. Serving the generated `NamedReference` here is what made React
+    // throw "Objects are not valid as a React child".
+    expect(typeof readMovement.postedBy).toBe('string')
   })
 
   it('preserves server failures for Arabic error normalization at the presentation boundary', async () => {
     const service = setupService()
-    const problem = createProblemDetails({
-      code: 'inventory.balance.not_found',
-      detailAr: 'تعذر العثور على رصيد المخزون.',
-      status: 404,
-      titleAr: 'الرصيد غير موجود',
-    })
-
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances/missing`, () =>
-        HttpResponse.json(problem, { status: 404 }),
+        errJson(404, { code: 'INVENTORY_BALANCES_NOT_FOUND', message: 'Balance not found.' }),
       ),
     )
 
@@ -153,10 +148,9 @@ describe('InventoryService', () => {
 
     expect(axios.isAxiosError(error)).toBe(true)
     expect(normalizeApiError(error)).toMatchObject({
-      code: 'inventory.balance.not_found',
-      detailAr: 'تعذر العثور على رصيد المخزون.',
+      code: 'INVENTORY_BALANCES_NOT_FOUND',
       status: 404,
-      titleAr: 'الرصيد غير موجود',
+      titleAr: 'لم يتم العثور على رصيد المخزون.',
     })
   })
 })

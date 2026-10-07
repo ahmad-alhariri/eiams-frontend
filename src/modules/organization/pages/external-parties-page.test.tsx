@@ -1,13 +1,14 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter } from 'react-router'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import ExternalPartiesPage from '@/modules/organization/pages/external-parties-page'
 import { createQueryClient } from '@/shared/services/query.client'
-import { createExternalParty, createPage } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
+import { createExternalParty } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const scope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -42,11 +43,11 @@ describe('ExternalPartiesPage', () => {
       nameAr: 'جهة معطلة',
       status: 'Inactive',
     })
-    let receivedPageIndex: string | null = null
+    let receivedPage: string | null = null
     server.use(
       http.get(`${API_BASE_URL}/external-parties`, ({ request }) => {
-        receivedPageIndex = new URL(request.url).searchParams.get('pageIndex')
-        return HttpResponse.json(createPage([activeParty, inactiveParty]))
+        receivedPage = new URL(request.url).searchParams.get('page')
+        return okPageJson([activeParty, inactiveParty])
       }),
     )
 
@@ -59,6 +60,6 @@ describe('ExternalPartiesPage', () => {
     expect(screen.queryByRole('button', { name: 'إضافة جهة خارجية' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /تعديل/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /تعطيل/ })).not.toBeInTheDocument()
-    expect(receivedPageIndex).toBe('0')
+    expect(receivedPage).toBe('0')
   })
 })

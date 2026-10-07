@@ -13,7 +13,9 @@ import {
   type RefreshSessionRequest,
   type SessionAdapter,
 } from '@/shared/services/session-adapter'
-import type { AuthTokenResponse, paths } from '@/shared/types/generated/eiams-v1'
+import type { ApiSuccessResponse } from '@/shared/api/envelope'
+import type { paths } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse } from '@/modules/auth/types/session.types'
 
 const AUTH_LOGIN_PATH = '/auth/login' satisfies keyof paths
 const AUTH_REFRESH_PATH = '/auth/refresh' satisfies keyof paths
@@ -141,8 +143,22 @@ export function createApiClient({
   const sessionAdapter = createSessionAdapter(
     refreshSession ??
       (async () => {
-        const response = await client.post<AuthTokenResponse>(AUTH_REFRESH_PATH)
-        return response.data
+        // The backend wraps every response in `ApiResults`, so `response.data`
+        // here is the ENVELOPE. This used to be typed `AuthTokenResponse`, which
+        // told the compiler nothing was wrong while `installTokenResponse` went on
+        // to read `accessToken` and `session` off the envelope — both
+        // `undefined`. Session hydration therefore produced no token and no
+        // session on the real backend, and `src/modules/auth/services/
+        // session-lifecycle.test.ts` only stayed green because its fixture
+        // served a bare `AuthTokenResponse`, the one shape this bug accepts.
+        //
+        // Unwrapped explicitly here rather than through `ApiTransport`: this
+        // request sits UNDER the transport, since the transport is what
+        // `withCredentials` and the interceptor chain below are for. It is also
+        // the reason the envelope guard scopes to service files — the envelope
+        // is unwrapped at every layer that has to unwrap it, exactly once each.
+        const response = await client.post<ApiSuccessResponse<AuthTokenResponse>>(AUTH_REFRESH_PATH)
+        return response.data.data
       }),
   )
 
@@ -190,7 +206,7 @@ export function createApiClient({
   }
 }
 
-const useDevSession = isDevAuthBypassEnabled(environment, import.meta.env)
+const useDevSession = isDevAuthBypassEnabled(environment)
 
 if (useDevSession) {
   console.info('[dev] Auth bypass active — /auth/refresh is served by a fixture session')

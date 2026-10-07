@@ -1,4 +1,6 @@
-import { delay, http, HttpResponse, type HttpHandler } from 'msw'
+﻿import { delay, http, type HttpHandler } from 'msw'
+
+import { okJson } from './envelope'
 
 import { environment } from '@/config/env'
 
@@ -30,7 +32,9 @@ export function createReceivingSuppliersHandler(
         normalized.length === 0
           ? distinct
           : distinct.filter((item) => item.toLocaleLowerCase('ar').includes(normalized))
-      return HttpResponse.json(matches.slice(0, 10))
+      // Serves the wire envelope: `data` is the suggestion array. A bare array here
+      // meant the transport read `.data` off undefined and returned nothing.
+      return okJson(matches.slice(0, 10))
     }),
   ]
 }

@@ -36,7 +36,6 @@ describe('contract-derived MSW factories', () => {
     })
     const session = createSession({
       activeScope: scope,
-      availableScopes: [scope],
       permissionCodes: ['audit.view'],
     })
     const response = createAuthTokenResponse({ expiresInSeconds: 60, session })
@@ -47,7 +46,7 @@ describe('contract-derived MSW factories', () => {
   })
 
   it('uses the shared v1 paging envelope and derives its totals from items', () => {
-    const page = createPage([createWarehouse(), createWarehouse({ warehouseId: fixtureUuid(32) })])
+    const page = createPage([createWarehouse(), createWarehouse({ id: fixtureUuid(32) })])
 
     expect(page.meta).toMatchObject({ pageIndex: 1, pageSize: 20, totalItems: 2, totalPages: 1 })
     expect(page.items).toHaveLength(2)
@@ -92,7 +91,13 @@ describe('document-engine MSW factories', () => {
     })
 
     expect(line.material.materialId).toBe(fixtureUuid(60))
-    expect(line.material.materialKind).toBe('Durable')
+    // `Consumable`, not `Durable`. `'Durable'` only ever existed in the FROZEN
+    // GENERATED snapshot's `MaterialKind` union; the live handwritten catalog
+    // contract (`catalog.api-types.Material.materialKind`) is
+    // `'Consumable' | 'Asset'`, so a line whose material is `Durable` describes a
+    // record the API can never send — and `createMaterial()` correctly defaults to
+    // `Consumable`. The expectation was the stale side, so it moves to the factory.
+    expect(line.material.materialKind).toBe('Consumable')
     expect(line.quantity).toBe(3)
     expect(line.baseQuantity).toBe(3)
     expect(line.conversionFactor).toBe('1.000000')

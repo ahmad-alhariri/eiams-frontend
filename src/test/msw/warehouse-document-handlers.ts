@@ -1,4 +1,4 @@
-import { delay, http, HttpResponse, type HttpHandler } from 'msw'
+﻿import { delay, http, type HttpHandler } from 'msw'
 
 import { environment } from '@/config/env'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
@@ -10,11 +10,20 @@ import {
   createMaterial,
   createNamedReference,
   createPolicyBlocker,
+  createSite,
   createWarehouse,
   createWarehouseDocument,
   DOCUMENT_TRANSITIONS,
   fixtureUuid,
 } from '@/test/msw/factories'
+import { apiJson, okJson, okPageJson, toWireErrorResponse } from '@/test/msw/envelope'
+// `Warehouse`/`Site` are typed against the handwritten contracts, NOT the frozen
+// generated snapshot: the wire record serves `id` + a FLAT `siteId` and carries
+// no nested site snapshot, so the generated `Warehouse` (whose `site` object
+// this harness used to read a site label from) describes nothing the backend
+// ever returned.
+import type { Site } from '@/modules/organization/types/organization.api-types'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 import type {
   DocumentActionType,
   DocumentActionResult,
@@ -29,11 +38,9 @@ import type {
   LifecycleDocumentReference,
   Material,
   NamedReference,
-  PageMeta,
   ProblemDetails,
   ReasonedDocumentActionRequest,
   VersionOnlyDocumentActionRequest,
-  Warehouse,
   WarehouseDocument,
   WarehouseDocumentDraftRequest,
 } from '@/shared/types/generated/eiams-v1'
@@ -43,10 +50,21 @@ import type {
  *
  * These functions return MSW handler arrays (registered via `server.use(...)`)
  * so document-engine tests — list filtering, detail, history, policy, and the
- * six lifecycle action POSTs — exercise the exact contract shapes the dev mock
- * API serves. The transition engine (`applyDocumentAction`) is the single
- * implementation shared with `src/mocks/handlers.ts`: same rowVersion guard,
- * same reason validation, same state-transition table, same 409 problem body.
+ * six lifecycle action POSTs — exercise the exact contract shapes the deleted
+ * dev mock API used to serve. The transition engine (`applyDocumentAction`) is
+ * the single implementation it shared with `src/mocks/handlers.ts`: same
+ * rowVersion guard, same reason validation, same state-transition table, same
+ * 409 problem body.
+ *
+ * What used to live ONLY in the dev mock, and now lives here so deleting
+ * `src/mocks/` (EPIC G7, bead `eiams-frontend-79na` → `eiams-frontend-m4jm`)
+ * could not lose it:
+ * - the `Idempotency-Key` memo wiring — `documentActionIdempotency`,
+ *   `readIdempotencyKey`, `applyIdempotentDocumentAction` below;
+ * - the browser-first multipart branch — `readRequestForm` in
+ *   `@/test/msw/multipart-parser`;
+ * - the audit chronology comparator — `@/test/msw/audit-chronology`;
+ * - the adjustment policy simulator — `@/test/msw/adjustment-policy-simulator`.
  */
 
 const DOCUMENT_PREFIX = `${environment.apiBaseUrl}/warehouse-documents`
@@ -59,12 +77,16 @@ const DEFAULT_ACTOR: LifecycleActorSnapshot = {
   roleNameAr: 'أمين المستودع',
 }
 
+// POLICY-BLOCKER code (frontend vocabulary, `policy-blocker-codes.ts`) — NOT a wire
+// error code. Blockers and error envelopes are separate namespaces.
 const SIGNED_ORIGINAL_MISSING_CODE = 'document.signed_original_missing'
+// WIRE error code emitted by the backend (`WarehouseDocuments.SignedCopyRequired`).
+const SIGNED_COPY_REQUIRED_ERROR_CODE = 'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED'
 const SIGNED_ORIGINAL_MISSING_DETAIL_AR = 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.'
 
 function signedOriginalMissingProblem(): ProblemDetails {
   return problemBase(
-    SIGNED_ORIGINAL_MISSING_CODE,
+    SIGNED_COPY_REQUIRED_ERROR_CODE,
     SIGNED_ORIGINAL_MISSING_DETAIL_AR,
     422,
     'attachmentType',
@@ -101,7 +123,8 @@ export const WAREHOUSE_DOCUMENT_TYPES = [
 interface DocumentListQuery {
   documentStatus?: DocumentStatus
   documentType?: DocumentType
-  pageIndex: number
+  /** One-based page index, as bound by `PaginationQueryParameters.Page`. */
+  page: number
   pageSize: number
   search?: string
   warehouseId?: string
@@ -115,14 +138,29 @@ function queryEnum<T extends string>(value: string | null, allowed: readonly T[]
   return value !== null && (allowed as readonly string[]).includes(value) ? (value as T) : undefined
 }
 
+/**
+ * Reads the list query the way the backend actually binds it.
+ *
+ * The page parameter is `page` and is ONE-BASED (`PaginationQueryParameters.Page`,
+ * `Range(1, ...)`, default 1). This harness used to read a zero-based
+ * `pageIndex`, a convention no backend accepts, so it silently disagreed with
+ * every list request the application makes. `pageSize` is read under the name
+ * `toWirePaginationParams` actually emits; whether the backend binds that as
+ * `pageSize` or `page_size` is `eiams-frontend-3svn`'s decision, and this
+ * harness deliberately does not pre-empt it.
+ *
+ * Out-of-range values clamp the way ASP.NET model binding would: a `page` below
+ * 1 becomes 1 and a non-positive page size falls back to the default, instead of
+ * producing a negative slice offset.
+ */
 function parseDocumentListQuery(url: URL): DocumentListQuery {
-  const pageIndex = Number.parseInt(url.searchParams.get('pageIndex') ?? '0', 10)
+  const page = Number.parseInt(url.searchParams.get('page') ?? '1', 10)
   const pageSize = Number.parseInt(
     url.searchParams.get('pageSize') ?? String(LIST_DEFAULT_PAGE_SIZE),
     10,
   )
   const query: DocumentListQuery = {
-    pageIndex: Number.isFinite(pageIndex) && pageIndex >= 0 ? pageIndex : 0,
+    page: Number.isFinite(page) && page >= 1 ? page : 1,
     pageSize: Number.isFinite(pageSize) && pageSize > 0 ? pageSize : LIST_DEFAULT_PAGE_SIZE,
   }
   const search = url.searchParams.get('search')
@@ -158,26 +196,20 @@ function matchesSearch<Record>(
   return textOf(record).toLowerCase().includes(search.toLowerCase())
 }
 
-function pageMeta(totalItems: number, pageIndex: number, pageSize: number): PageMeta {
-  return {
-    pageIndex,
-    pageSize,
-    totalItems,
-    totalPages: totalItems === 0 ? 0 : Math.ceil(totalItems / pageSize),
-  }
+/**
+ * Wire page count for a filtered list.
+ *
+ * Replaces the former `pageMeta()`, which built the UI shape
+ * `{pageIndex, pageSize, totalItems, totalPages}` and existed only to be
+ * embedded in a bare `{items, meta}` body the backend never sends.
+ * `okPageJson` derives the snake_case `pagination` block the contract carries.
+ */
+function totalPageCount(totalItems: number, pageSize: number): number {
+  return totalItems === 0 ? 0 : Math.ceil(totalItems / pageSize)
 }
 
-function notFound(): HttpResponse<ProblemDetails> {
-  const payload: ProblemDetails = {
-    code: 'record.not_found',
-    detailAr: 'لم يتم العثور على السجل المطلوب.',
-    fieldErrors: [],
-    status: 404,
-    titleAr: 'لم يتم العثور على البيانات المطلوبة.',
-    traceId: 'mock-trace',
-    type: 'https://eiams.example/problems/record.not_found',
-  }
-  return HttpResponse.json(payload, { status: 404 })
+function notFound() {
+  return toWireErrorResponse({ code: 'WAREHOUSE_DOCUMENTS_NOT_FOUND', status: 404 }, 404)
 }
 
 function problemBase(
@@ -202,7 +234,7 @@ export function versionConflictProblem(
 ): LifecycleConflictProblemDetails {
   return {
     ...problemBase(
-      'document.version_conflict',
+      'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
       'تعذر تنفيذ الإجراء: المستند عدَّله مستخدم آخر. أعد تحميل البيانات وحاول مجدداً.',
       409,
     ),
@@ -218,7 +250,7 @@ function actionNotAllowedProblem(
 ): LifecycleConflictProblemDetails {
   return {
     ...problemBase(
-      'document.action_not_allowed',
+      'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
       `لا يمكن تنفيذ إجراء «${action}» في الحالة «${document.documentStatus}» الحالية للمستند.`,
       409,
     ),
@@ -301,11 +333,134 @@ export function createIdempotencyMemo(): IdempotencyMemo {
 /** Arabic 422 problem for a same-key replay whose body differs from the stored attempt. */
 export function idempotencyMismatchProblem(): ProblemDetails {
   return problemBase(
-    'document.idempotency_mismatch',
+    'REQUEST_IDEMPOTENCY_MISMATCH',
     'لا يمكن إعادة استخدام مفتاح التكرار مع طلب مختلف عن الطلب الأصلي.',
     422,
     'idempotencyKey',
   )
+}
+
+/**
+ * Module-scoped memo for the six lifecycle action routes (D-LIFE-01 §94-97).
+ *
+ * WHY THIS IS MODULE-SCOPED AND NOT PER-REQUEST
+ * ---------------------------------------------
+ * An `Idempotency-Key` identifies an INTENT, not a call. The retry that matters
+ * is the one that arrives after the first response was lost — which is a fresh
+ * request, quite possibly after a re-registration of the routes, and it must
+ * still recognise the earlier success. A memo scoped to one handler instance
+ * forgets the intent the moment the instance is rebuilt, and the retry then
+ * falls through to the rowVersion guard and answers 409 for work that already
+ * happened. So the shared instance lives here, at module scope, exactly as the
+ * dev mock's `DOCUMENT_ACTION_IDEMPOTENCY` does.
+ *
+ * This is contract-relevant rather than cosmetic: the backend reads
+ * `Idempotency-Key` on exactly five actions (`PostDocumentController.cs:31`,
+ * `PostInventoryAdjustmentController.cs:32`, `ReverseInventoryAdjustmentController.cs:29`,
+ * `CreateReversalDocumentController.cs:26`, `CompleteWarehouseDocumentDraftController.cs:30`),
+ * and `src/shared/services/mutation-safety.ts` mints a key per user intent, so
+ * the replay semantics below are the ones the UI depends on.
+ *
+ * Suite-local isolation is still available: pass an explicit `idempotency`
+ * (see `createWarehouseDocumentActionHandler`), which is what keeps one test's
+ * stored key out of the next test's document.
+ */
+export const documentActionIdempotency: IdempotencyMemo = createIdempotencyMemo()
+
+/** Reads the wire header the backend reads; `null` when the caller sent none. */
+export function readIdempotencyKey(request: Request): string | null {
+  return request.headers.get(IDEMPOTENCY_KEY_HEADER)
+}
+
+export interface IdempotentDocumentActionInput {
+  action: DocumentActionType
+  document: WarehouseDocument
+  rowVersion: number
+  reason?: string | null
+  occurredBy?: LifecycleActorSnapshot | undefined
+  /** Raw `Idempotency-Key` header value; `null` leaves this attempt unmemoized. */
+  idempotencyKey: string | null
+  /** Memo to consult and record into; defaults to the module-scoped instance. */
+  idempotency?: IdempotencyMemo
+}
+
+/**
+ * The route-level outcome: everything `applyDocumentAction` can produce, plus
+ * the two outcomes only the memo can produce. `status` is carried alongside the
+ * failed kinds so an HTTP route answers 422 for a mismatch and 409 for a
+ * conflict without re-deriving which is which.
+ */
+export type IdempotentDocumentActionOutcome =
+  | { kind: 'replay'; result: DocumentActionResult }
+  | { kind: 'mismatch'; problem: ProblemDetails; status: 422 }
+  | { kind: 'conflict'; problem: LifecycleConflictProblemDetails; status: 409 }
+  | { kind: 'validation'; problem: ProblemDetails; status: 422 }
+  | {
+      kind: 'ok'
+      document: WarehouseDocument
+      result: DocumentActionResult
+      compensatingDocument?: WarehouseDocument
+    }
+
+/**
+ * One lifecycle action as an HTTP route performs it: read the intent key, replay
+ * a matching earlier success verbatim, refuse a non-equivalent same-key retry
+ * with 422, then apply the transition and — only on success — record the result
+ * under that key (D-LIFE-01 §94-97).
+ *
+ * The memo key uses the RESOLVED document id rather than whatever the caller
+ * read out of the path: the memo must identify the record that was actually
+ * transitioned, and a handler that echoes an unvalidated path segment into the
+ * key would let two spellings of one document store two independent intents.
+ *
+ * Nothing is stored for a conflict or a validation failure, so a client that
+ * retries the same key after fixing the rowVersion gets a fresh attempt rather
+ * than a poisoned memo entry.
+ */
+export function applyIdempotentDocumentAction(
+  input: IdempotentDocumentActionInput,
+): IdempotentDocumentActionOutcome {
+  const memo = input.idempotency ?? documentActionIdempotency
+  const documentId = input.document.documentId
+  const memoCheck = memo.check({
+    idempotencyKey: input.idempotencyKey,
+    action: input.action,
+    documentId,
+    rowVersion: input.rowVersion,
+    reason: input.reason ?? null,
+  })
+  if (memoCheck.kind === 'replay') {
+    return { kind: 'replay', result: memoCheck.result }
+  }
+  if (memoCheck.kind === 'mismatch') {
+    return { kind: 'mismatch', problem: idempotencyMismatchProblem(), status: 422 }
+  }
+  const outcome = applyDocumentAction({
+    action: input.action,
+    document: input.document,
+    rowVersion: input.rowVersion,
+    reason: input.reason ?? null,
+    occurredBy: input.occurredBy,
+  })
+  if (outcome.kind === 'conflict') {
+    return { kind: 'conflict', problem: outcome.problem, status: 409 }
+  }
+  if (outcome.kind === 'validation') {
+    return { kind: 'validation', problem: outcome.problem, status: 422 }
+  }
+  if (input.idempotencyKey !== null) {
+    memo.store(
+      input.idempotencyKey,
+      input.action,
+      documentId,
+      input.rowVersion,
+      input.reason ?? null,
+      outcome.result,
+    )
+  }
+  // `outcome` is narrowed to the success variant: its document, result, and
+  // optional compensating document are handed to the caller unchanged.
+  return outcome
 }
 
 let eventIdSequence = 300
@@ -422,11 +577,15 @@ function buildCompensatingDocument(
     documentStatus: 'Posted',
     documentType,
     lines: original.lines,
+    // D-ATT-01: the compensating document is posted by the same transaction
+    // that posted the reversal, so its signed-original gate is satisfied by
+    // the reversing document — no advisory may surface on the mirror.
     policy: createDocumentPolicy({
       documentId: input.documentId,
       documentStatus: 'Posted',
       evaluatedAt: input.occurredAt,
       rowVersion: 1,
+      signedOriginalSatisfied: true,
     }),
     postedAt: input.occurredAt,
     postedBy: actor,
@@ -478,7 +637,7 @@ export function applyDocumentAction(input: DocumentActionInput): DocumentActionO
     return {
       kind: 'validation',
       problem: problemBase(
-        'document.action_unsupported',
+        'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
         `لا يمكن تنفيذ إجراء «${action}» عبر مسار الحالة.`,
         422,
         'action',
@@ -488,7 +647,7 @@ export function applyDocumentAction(input: DocumentActionInput): DocumentActionO
   if (actionRequiresReason(action) && !isPresent(input.reason)) {
     return {
       kind: 'validation',
-      problem: problemBase('document.reason_required', 'يرجى إدخال سبب الإجراء.', 422, 'reason'),
+      problem: problemBase('REQUEST_VALIDATION_FAILED', 'يرجى إدخال سبب الإجراء.', 422, 'reason'),
     }
   }
   if (input.rowVersion !== document.rowVersion) {
@@ -610,10 +769,18 @@ export function createWarehouseDocumentListHandler(
             (item) => `${item.paperDocumentNumber} ${item.systemReferenceNumber}`,
           ),
       )
-      const start = query.pageIndex * query.pageSize
-      return HttpResponse.json({
-        items: filtered.slice(start, start + query.pageSize),
-        meta: pageMeta(filtered.length, query.pageIndex, query.pageSize),
+      // One-based `page`, so page 1 is the first slice.
+      const start = (query.page - 1) * query.pageSize
+      // Serves the wire envelope, not `{items, meta}`. The backend wraps every
+      // response in `ApiResponse<T>(Success, Data, Pagination, Meta)`; a bare UI
+      // page here made the shared `ApiTransport` read `data`/`pagination` off
+      // undefined and return an empty page, which is what eiams-frontend-3abe
+      // exposed once the document services moved onto the transport.
+      return okPageJson(filtered.slice(start, start + query.pageSize), {
+        page: query.page,
+        pageSize: query.pageSize,
+        totalCount: filtered.length,
+        totalPages: totalPageCount(filtered.length, query.pageSize),
       })
     }),
   ]
@@ -627,7 +794,7 @@ export function createWarehouseDocumentDetailHandler(
   return [
     http.get(`${DOCUMENT_PREFIX}/:documentId`, async ({ params }) => {
       await delay(options.delayMs ?? 0)
-      return params['documentId'] === document.documentId ? HttpResponse.json(document) : notFound()
+      return params['documentId'] === document.documentId ? okJson(document) : notFound()
     }),
   ]
 }
@@ -650,7 +817,7 @@ export function createWarehouseDocumentHistoryHandler(
       if (params['documentId'] !== documentId) {
         return notFound()
       }
-      return HttpResponse.json({
+      return okJson({
         documentId,
         currentStatus: options.currentStatus ?? lastEvent?.toStatus ?? EMPTY_HISTORY_STATUS,
         currentRowVersion: options.currentRowVersion ?? lastEvent?.documentRowVersion ?? 0,
@@ -668,7 +835,7 @@ export function createWarehouseDocumentPolicyHandler(
   return [
     http.get(`${DOCUMENT_PREFIX}/:documentId/policy`, async ({ params }) => {
       await delay(options.delayMs ?? 0)
-      return params['documentId'] === policy.documentId ? HttpResponse.json(policy) : notFound()
+      return params['documentId'] === policy.documentId ? okJson(policy) : notFound()
     }),
   ]
 }
@@ -694,7 +861,15 @@ export interface DocumentActionHandlerOptions {
  * The six lifecycle action POSTs (submit/post/reject/revise/cancel/reverse)
  * wired to one mutable in-memory document record. Replays the same transition
  * engine the dev mock API uses, so engine tests and `pnpm dev` agree on
- * rowVersion (409), reason (422), and transition guards.
+ * rowVersion (409), reason (422), transition guards, and `Idempotency-Key`
+ * replay/mismatch.
+ *
+ * The memo handed to `applyIdempotentDocumentAction` is PER HANDLER SET, not the
+ * module-scoped one. These handlers exist to serve one test, and a test that
+ * registers a document, runs an action, then registers another document must not
+ * inherit the first test's stored key. Suites that model the dev mock's
+ * long-lived process — where one key spans route re-registrations — use
+ * `applyIdempotentDocumentAction` directly with the module-scoped memo.
  */
 export function createWarehouseDocumentActionHandler(
   options: DocumentActionHandlerOptions,
@@ -713,43 +888,20 @@ export function createWarehouseDocumentActionHandler(
       }
       const body = (await request.json()) as
         VersionOnlyDocumentActionRequest | ReasonedDocumentActionRequest
-      const reason = 'reason' in body ? (body.reason ?? null) : null
-      const idempotencyKey = request.headers.get(IDEMPOTENCY_KEY_HEADER)
-      const memoCheck = idempotency.check({
-        idempotencyKey,
-        action,
-        documentId,
-        rowVersion: body.rowVersion,
-        reason,
-      })
-      if (memoCheck.kind === 'replay') {
-        return HttpResponse.json(memoCheck.result)
-      }
-      if (memoCheck.kind === 'mismatch') {
-        return HttpResponse.json(idempotencyMismatchProblem(), { status: 422 })
-      }
-      const outcome = applyDocumentAction({
+      const outcome = applyIdempotentDocumentAction({
         action,
         document,
         rowVersion: body.rowVersion,
-        reason,
+        reason: 'reason' in body ? (body.reason ?? null) : null,
         occurredBy: options.occurredBy,
+        idempotencyKey: readIdempotencyKey(request),
+        idempotency,
       })
-      if (outcome.kind === 'conflict') {
-        return HttpResponse.json(outcome.problem, { status: 409 })
-      }
-      if (outcome.kind === 'validation') {
-        return HttpResponse.json(outcome.problem, { status: 422 })
-      }
-      if (idempotencyKey !== null) {
-        idempotency.store(
-          idempotencyKey,
-          action,
-          documentId,
-          body.rowVersion,
-          reason,
-          outcome.result,
-        )
+      if (outcome.kind !== 'ok') {
+        if (outcome.kind === 'replay') {
+          return okJson(outcome.result)
+        }
+        return toWireErrorResponse(outcome.problem, outcome.status)
       }
       current = outcome.document
       if (store !== undefined) {
@@ -762,7 +914,7 @@ export function createWarehouseDocumentActionHandler(
       if (outcome.compensatingDocument !== undefined) {
         options.onCompensatingDocumentCreated?.(outcome.compensatingDocument)
       }
-      return HttpResponse.json(outcome.result)
+      return okJson(outcome.result)
     }),
   )
 }
@@ -799,14 +951,23 @@ export interface DraftLookups {
   materialOf: (materialId: string) => Material | undefined
   /** Resolves a draft line's selected unit; `undefined` for the base unit. */
   unitOf: (unitId: string | undefined) => NamedReference | undefined
-  /** Resolves the document warehouse (site snapshot comes from it). */
+  /** Resolves the document warehouse. */
   warehouseOf: (warehouseId: string) => Warehouse | undefined
+  /**
+   * Resolves a site by id.
+   *
+   * A `Warehouse` carries a FLAT `siteId` and no nested site snapshot, so the
+   * document's `site` reference has to be joined against the sites list — the
+   * wire record a warehouse returns is not enough to name its own site.
+   */
+  siteOf: (siteId: string) => Site | undefined
 }
 
 const FALLBACK_LOOKUPS: DraftLookups = {
   materialOf: (materialId) => createMaterial({ materialId }),
   unitOf: (unitId) => (unitId === undefined ? undefined : createNamedReference({ id: unitId })),
-  warehouseOf: (warehouseId) => createWarehouse({ warehouseId }),
+  warehouseOf: (warehouseId) => createWarehouse({ id: warehouseId }),
+  siteOf: (siteId) => createSite({ id: siteId }),
 }
 
 function resolveLookups(lookups: Partial<DraftLookups> | undefined): DraftLookups {
@@ -851,6 +1012,23 @@ function namedActor(actor: LifecycleActorSnapshot): NamedReference {
 }
 
 /**
+ * The document spine's warehouse/site reference pair, derived from the flat wire
+ * shape: the warehouse reference reads `id`/`name`, and the site reference is
+ * joined from `warehouse.siteId` through the sites lookup because the warehouse
+ * record itself carries no site label.
+ */
+function draftWarehouseReferences(
+  warehouse: Warehouse,
+  lookups: DraftLookups,
+): { site: NamedReference; warehouse: NamedReference } {
+  const site = lookups.siteOf(warehouse.siteId) ?? createSite({ id: warehouse.siteId })
+  return {
+    site: createNamedReference({ id: site.id, displayName: site.name }),
+    warehouse: createNamedReference({ id: warehouse.id, displayName: warehouse.name }),
+  }
+}
+
+/**
  * Builds a complete Draft `WarehouseDocument` from a
  * `WarehouseDocumentDraftRequest` — the shared shape the create handler and
  * the dev mock both persist. Petals (receiving/issue/transfer/return) pass
@@ -869,8 +1047,8 @@ export function buildDraftDocument(
   const lookups = resolveLookups(options.lookups)
   const actor = options.occurredBy ?? DEFAULT_DRAFT_ACTOR
   const warehouse =
-    lookups.warehouseOf(request.warehouseId) ??
-    createWarehouse({ warehouseId: request.warehouseId })
+    lookups.warehouseOf(request.warehouseId) ?? createWarehouse({ id: request.warehouseId })
+  const references = draftWarehouseReferences(warehouse, lookups)
   return {
     attachments: [],
     createdAt: options.createdAt ?? new Date().toISOString(),
@@ -891,10 +1069,10 @@ export function buildDraftDocument(
     ...(request.receivingInfo === undefined ? {} : { receivingInfo: request.receivingInfo }),
     ...(request.returnInfo === undefined ? {} : { returnInfo: request.returnInfo }),
     rowVersion: 1,
-    site: warehouse.site,
+    site: references.site,
     systemReferenceNumber: options.systemReferenceNumber,
     ...(request.transferInfo === undefined ? {} : { transferInfo: request.transferInfo }),
-    warehouse: createNamedReference({ id: warehouse.warehouseId, displayName: warehouse.nameAr }),
+    warehouse: references.warehouse,
   }
 }
 
@@ -910,8 +1088,8 @@ export function applyDraftToDocument(
 ): WarehouseDocument {
   const resolved = resolveLookups(lookups)
   const warehouse =
-    resolved.warehouseOf(request.warehouseId) ??
-    createWarehouse({ warehouseId: request.warehouseId })
+    resolved.warehouseOf(request.warehouseId) ?? createWarehouse({ id: request.warehouseId })
+  const references = draftWarehouseReferences(warehouse, resolved)
   const nextRowVersion = document.rowVersion + 1
   return {
     ...document,
@@ -928,9 +1106,9 @@ export function applyDraftToDocument(
     ...(request.receivingInfo === undefined ? {} : { receivingInfo: request.receivingInfo }),
     ...(request.returnInfo === undefined ? {} : { returnInfo: request.returnInfo }),
     rowVersion: nextRowVersion,
-    site: warehouse.site,
+    site: references.site,
     ...(request.transferInfo === undefined ? {} : { transferInfo: request.transferInfo }),
-    warehouse: createNamedReference({ id: warehouse.warehouseId, displayName: warehouse.nameAr }),
+    warehouse: references.warehouse,
   }
 }
 
@@ -973,7 +1151,7 @@ export function createWarehouseDocumentCreateHandler(
         store.push(document)
       }
       options.onDocumentCreated?.(document)
-      return HttpResponse.json(document, { status: 201 })
+      return apiJson(document, { status: 201 })
     }),
   ]
 }
@@ -997,7 +1175,7 @@ export function createWarehouseDocumentUpdateHandler(
       }
       const body = (await request.json()) as WarehouseDocumentDraftRequest
       if (body.rowVersion !== document.rowVersion) {
-        return HttpResponse.json(versionConflictProblem(document), { status: 409 })
+        return toWireErrorResponse(versionConflictProblem(document), 409)
       }
       const updated = applyDraftToDocument(document, body, options.lookups)
       current = updated
@@ -1008,7 +1186,7 @@ export function createWarehouseDocumentUpdateHandler(
         }
       }
       options.onDocumentUpdated?.(updated)
-      return HttpResponse.json(updated)
+      return okJson(updated)
     }),
   ]
 }

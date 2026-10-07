@@ -17,13 +17,11 @@ import {
 import { documentQueryKeys, useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
-import type {
-  InventoryBalance,
-  SessionResponse,
-  StockMovement,
-} from '@/shared/types/generated/eiams-v1'
+import type { InventoryBalance, StockMovement } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
-import { createPage } from '@/test/msw/factories'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
+import { apiJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -38,8 +36,8 @@ const scenario = createCrossModuleScenario()
 const transfer = scenario.documents.transfer
 const transferOut = findTransferMovement('TransferOut')
 const transferIn = findTransferMovement('TransferIn')
-const sourceBalance = findTransferBalance(scenario.warehouses.source.warehouseId)
-const destinationBalance = findTransferBalance(scenario.warehouses.destination.warehouseId)
+const sourceBalance = findTransferBalance(scenario.warehouses.source.id)
+const destinationBalance = findTransferBalance(scenario.warehouses.destination.id)
 
 beforeAll(async () => {
   await Promise.all([
@@ -71,8 +69,8 @@ describe('atomic transfer propagation', () => {
     expect(transferHeading).toHaveTextContent('تفاصيل سند التحويل')
     expect(transferHeading.closest('[dir="rtl"]')).not.toBeNull()
     expect(screen.getAllByText('مرحّل').length).toBeGreaterThan(0)
-    expect(screen.getByText(scenario.warehouses.source.nameAr)).toBeInTheDocument()
-    expect(screen.getByText(scenario.warehouses.destination.nameAr)).toBeInTheDocument()
+    expect(screen.getByText(scenario.warehouses.source.name)).toBeInTheDocument()
+    expect(screen.getByText(scenario.warehouses.destination.name)).toBeInTheDocument()
     expect(screen.getByText('تغذية فرع حمص بالورق')).toBeInTheDocument()
     expect(screen.getByText('سند-نقل-موقّع.pdf')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /ترحيل|عكس|رفض/ })).not.toBeInTheDocument()
@@ -89,8 +87,8 @@ describe('atomic transfer propagation', () => {
     expect(transferOut.postedAt).toBe(transferIn.postedAt)
     expect(transferIn.quantityDelta).toBe(transfer.lines[0]?.quantity)
     expect(transferOut.quantityDelta).toBe(-transferIn.quantityDelta)
-    expect(transferOut.warehouse.id).toBe(scenario.warehouses.source.warehouseId)
-    expect(transferIn.warehouse.id).toBe(scenario.warehouses.destination.warehouseId)
+    expect(transferOut.warehouse.id).toBe(scenario.warehouses.source.id)
+    expect(transferIn.warehouse.id).toBe(scenario.warehouses.destination.id)
 
     await navigate(router, ROUTE_PATHS.inventoryMovements)
 
@@ -100,14 +98,14 @@ describe('atomic transfer propagation', () => {
     expect(outboundRow).not.toBeNull()
     expect(inboundRow).not.toBeNull()
     expect(
-      within(outboundRow as HTMLElement).getByText(scenario.warehouses.source.nameAr),
+      within(outboundRow as HTMLElement).getByText(scenario.warehouses.source.name),
     ).toBeInTheDocument()
     expect(within(outboundRow as HTMLElement).getByText('-٣')).toBeInTheDocument()
     expect(
       within(outboundRow as HTMLElement).getByText(transfer.systemReferenceNumber),
     ).toBeInTheDocument()
     expect(
-      within(inboundRow as HTMLElement).getByText(scenario.warehouses.destination.nameAr),
+      within(inboundRow as HTMLElement).getByText(scenario.warehouses.destination.name),
     ).toBeInTheDocument()
     expect(within(inboundRow as HTMLElement).getByText('+٣')).toBeInTheDocument()
     expect(
@@ -129,8 +127,8 @@ describe('atomic transfer propagation', () => {
     await navigate(router, ROUTE_PATHS.inventoryBalances)
 
     expect(await screen.findByRole('heading', { name: 'أرصدة المخزون' })).toBeInTheDocument()
-    const sourceRow = screen.getByText(scenario.warehouses.source.nameAr).closest('tr')
-    const destinationRow = screen.getByText(scenario.warehouses.destination.nameAr).closest('tr')
+    const sourceRow = screen.getByText(scenario.warehouses.source.name).closest('tr')
+    const destinationRow = screen.getByText(scenario.warehouses.destination.name).closest('tr')
     expect(sourceRow).not.toBeNull()
     expect(destinationRow).not.toBeNull()
     expect(
@@ -189,25 +187,25 @@ describe('atomic transfer propagation', () => {
     server.use(
       http.get(`${environment.apiBaseUrl}/warehouse-documents/${transfer.documentId}`, () => {
         requestCounts.document += 1
-        return HttpResponse.json(responseScope === 'enterprise' ? transfer : siteTransfer)
+        return apiJson(responseScope === 'enterprise' ? transfer : siteTransfer)
       }),
       http.get(`${environment.apiBaseUrl}/inventory/movements/${transferOut.movementId}`, () => {
         requestCounts.transferOut += 1
-        return HttpResponse.json(responseScope === 'enterprise' ? transferOut : siteTransferOut)
+        return apiJson(responseScope === 'enterprise' ? transferOut : siteTransferOut)
       }),
       http.get(`${environment.apiBaseUrl}/inventory/movements/${transferIn.movementId}`, () => {
         requestCounts.transferIn += 1
-        return HttpResponse.json(responseScope === 'enterprise' ? transferIn : siteTransferIn)
+        return apiJson(responseScope === 'enterprise' ? transferIn : siteTransferIn)
       }),
       http.get(`${environment.apiBaseUrl}/inventory/balances/${sourceBalance.balanceId}`, () => {
         requestCounts.sourceBalance += 1
-        return HttpResponse.json(responseScope === 'enterprise' ? sourceBalance : siteSourceBalance)
+        return apiJson(responseScope === 'enterprise' ? sourceBalance : siteSourceBalance)
       }),
       http.get(
         `${environment.apiBaseUrl}/inventory/balances/${destinationBalance.balanceId}`,
         () => {
           requestCounts.destinationBalance += 1
-          return HttpResponse.json(
+          return apiJson(
             responseScope === 'enterprise' ? destinationBalance : siteDestinationBalance,
           )
         },
@@ -297,23 +295,10 @@ describe('atomic transfer propagation', () => {
 
 function readOnlySession(): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'cross.module.viewer',
-      displayName: 'مراجع التكامل',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مراجع التكامل' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: ['document.view', 'inventory.view'],
-    availableScopes: [
-      {
-        scopeType: 'Enterprise',
-        scopeId: null,
-        displayName: 'المؤسسة',
-      },
-    ],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -357,10 +342,10 @@ function registerScenarioHandlers(
 
   server.use(
     http.get(`${environment.apiBaseUrl}/warehouse-documents/${transfer.documentId}`, () =>
-      HttpResponse.json(transfer),
+      apiJson(transfer),
     ),
     http.get(`${environment.apiBaseUrl}/warehouse-documents/${transfer.documentId}/history`, () =>
-      HttpResponse.json({
+      apiJson({
         documentId: transfer.documentId,
         currentStatus: transfer.documentStatus,
         currentRowVersion: transfer.rowVersion,
@@ -368,27 +353,23 @@ function registerScenarioHandlers(
       }),
     ),
     http.get(`${environment.apiBaseUrl}/warehouse-documents/${transfer.documentId}/policy`, () =>
-      HttpResponse.json(transfer.policy),
+      apiJson(transfer.policy),
     ),
     http.get(`${environment.apiBaseUrl}/inventory/movements`, ({ request }) => {
       movementListQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-      return HttpResponse.json(createPage(movements, { pageIndex: 0, pageSize: 10 }))
+      return okPageJson(movements, { page: 1, pageSize: 10 })
     }),
     http.get(`${environment.apiBaseUrl}/inventory/movements/:movementId`, ({ params }) => {
       const movement = movements.find((candidate) => candidate.movementId === params['movementId'])
-      return movement === undefined
-        ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json(movement)
+      return movement === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(movement)
     }),
     http.get(`${environment.apiBaseUrl}/inventory/balances`, ({ request }) => {
       balanceListQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-      return HttpResponse.json(createPage(balances, { pageIndex: 0, pageSize: 10 }))
+      return okPageJson(balances, { page: 1, pageSize: 10 })
     }),
     http.get(`${environment.apiBaseUrl}/inventory/balances/:balanceId`, ({ params }) => {
       const balance = balances.find((candidate) => candidate.balanceId === params['balanceId'])
-      return balance === undefined
-        ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json(balance)
+      return balance === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(balance)
     }),
   )
 }

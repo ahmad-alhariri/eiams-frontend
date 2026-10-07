@@ -53,3 +53,17 @@ export const INVENTORY_COUNT_SCOPE_LABELS_AR = {
 export function isAssetCountLine(line: { assetId?: string | null }): boolean {
   return line.assetId !== undefined && line.assetId !== null
 }
+
+/*
+ * Deliberately absent: any client-side "variance" helper for a STORED line.
+ *
+ * A count line's difference is a server-owned read model
+ * (`InventoryCountLine.difference`). A line whose `actualQuantity` is null is
+ * *unentered*, not a full shortfall, and must never be rendered or gated as a
+ * variance — see kc7v and eiams-frontend-ef78. Read `line.difference` directly
+ * and bucket with `summarizeCountLines` in `utils/count-review.ts`.
+ *
+ * The quantity-entry workspace previews a difference only for its own unsaved
+ * draft input, which is a local form concern, not a stored read model; that
+ * preview lives with the entry schema, not here.
+ */

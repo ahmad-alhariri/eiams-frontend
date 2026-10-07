@@ -1,10 +1,11 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { createExternalParty } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
@@ -38,29 +39,31 @@ describe('external-party mutation cache invalidation', () => {
     const updated = { ...party, nameAr: 'الجهة المحدّثة' }
     let listRequests = 0
     let detailRequests = 0
+    const updateBodies: unknown[] = []
 
     server.use(
-      http.get(`${API_BASE_URL}/external-parties`, ({ request }) => {
-        const url = new URL(request.url)
-        if (url.searchParams.has('search')) return HttpResponse.json({ items: [], meta: {} })
+      http.get(`${API_BASE_URL}/external-parties`, () => {
         listRequests += 1
-        return HttpResponse.json({
-          items: [listRequests === 1 ? party : updated],
-          meta: { pageIndex: 0, pageSize: 10, totalItems: 1, totalPages: 1 },
+        return okPageJson([listRequests === 1 ? party : updated], {
+          page: 1,
+          pageSize: 10,
+          totalCount: 1,
+          totalPages: 1,
         })
       }),
       http.get(`${API_BASE_URL}/external-parties/${party.externalPartyId}`, () => {
         detailRequests += 1
-        return HttpResponse.json(detailRequests === 1 ? party : updated)
+        return okJson(detailRequests === 1 ? party : updated)
       }),
-      http.put(`${API_BASE_URL}/external-parties/${party.externalPartyId}`, () =>
-        HttpResponse.json(updated),
-      ),
+      http.put(`${API_BASE_URL}/external-parties/${party.externalPartyId}`, async ({ request }) => {
+        updateBodies.push(await request.json())
+        return okJson(updated)
+      }),
     )
 
     const { result } = renderHook(
       () => ({
-        list: useExternalPartiesQuery({ pageIndex: 0, pageSize: 10 }),
+        list: useExternalPartiesQuery({ page: 0, pageSize: 10 }),
         detail: useExternalPartyQuery(party.externalPartyId),
         update: useUpdateExternalPartyMutation(),
       }),
@@ -81,5 +84,7 @@ describe('external-party mutation cache invalidation', () => {
     await waitFor(() => expect(detailRequests).toBeGreaterThanOrEqual(2))
     expect(result.current.list.data?.items[0]?.nameAr).toBe('الجهة المحدّثة')
     expect(result.current.detail.data?.nameAr).toBe('الجهة المحدّثة')
+    // `PUT` sends the versioned upsert body the backend's Update command binds.
+    expect(updateBodies).toEqual([{ ...party, rowVersion: 1 }])
   })
 })

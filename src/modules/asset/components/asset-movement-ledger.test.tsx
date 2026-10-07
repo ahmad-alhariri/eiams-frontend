@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okPageJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AssetMovementLedger } from './asset-movement-ledger'
@@ -20,8 +21,8 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 function useMovementsHandler() {
   server.use(
     http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () =>
-      HttpResponse.json({
-        items: [
+      okPageJson(
+        [
           {
             assetId: ASSET_ID,
             documentId: fixtureUuid(150),
@@ -52,8 +53,8 @@ function useMovementsHandler() {
             occurredBy: { displayName: 'مدير النظام', id: fixtureUuid(11) },
           },
         ],
-        meta: { pageIndex: 0, pageSize: 20, totalItems: 2, totalPages: 1 },
-      }),
+        { page: 1, pageSize: 20, totalCount: 2, totalPages: 1 },
+      ),
     ),
   )
 }
@@ -84,10 +85,7 @@ describe('AssetMovementLedger (e18-t05)', () => {
   it('shows the empty state when the asset has no movements', async () => {
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () =>
-        HttpResponse.json({
-          items: [],
-          meta: { pageIndex: 0, pageSize: 20, totalItems: 0, totalPages: 0 },
-        }),
+        okPageJson([], { page: 1, pageSize: 20, totalCount: 0, totalPages: 0 }),
       ),
     )
     renderLedger()

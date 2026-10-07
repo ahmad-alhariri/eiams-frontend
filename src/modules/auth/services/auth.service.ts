@@ -1,23 +1,15 @@
-import type { AxiosInstance } from 'axios'
-
-import { apiClient } from '@/shared/services/api.client'
-import type {
-  AuthTokenResponse,
-  LoginRequest,
-  SessionResponse,
-  SetActiveScopeRequest,
-  paths,
-} from '@/shared/types/generated/eiams-v1'
+﻿import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
+import type { LoginRequest, paths } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
 
 const AUTH_LOGIN_PATH = '/auth/login' satisfies keyof paths
 const AUTH_LOGOUT_PATH = '/auth/logout' satisfies keyof paths
 const AUTH_SESSION_PATH = '/auth/session' satisfies keyof paths
-const AUTH_ACTIVE_SCOPE_PATH = '/auth/active-scope' satisfies keyof paths
 
 export interface AuthService {
   login: (request: LoginRequest) => Promise<AuthTokenResponse>
   getSession: () => Promise<SessionResponse>
-  setActiveScope: (request: SetActiveScopeRequest) => Promise<SessionResponse>
   logout: () => Promise<void>
 }
 
@@ -28,24 +20,28 @@ export interface AuthService {
  * navigate, or normalize/present errors. Those concerns belong to the session
  * lifecycle, query, route, and UI boundaries that compose this service.
  */
-export function createAuthService(client: AxiosInstance): AuthService {
+export function createAuthService(transport: ApiTransport): AuthService {
   return {
     async login(request) {
-      const response = await client.post<AuthTokenResponse>(AUTH_LOGIN_PATH, request)
-      return response.data
+      const response = await transport.request<AuthTokenResponse>({
+        path: AUTH_LOGIN_PATH,
+        method: 'POST',
+        body: request,
+      })
+      return response
     },
     async getSession() {
-      const response = await client.get<SessionResponse>(AUTH_SESSION_PATH)
-      return response.data
-    },
-    async setActiveScope(request) {
-      const response = await client.put<SessionResponse>(AUTH_ACTIVE_SCOPE_PATH, request)
-      return response.data
+      const response = await transport.request<SessionResponse>({
+        path: AUTH_SESSION_PATH,
+        method: 'GET',
+      })
+      return response
     },
     async logout() {
-      await client.post(AUTH_LOGOUT_PATH)
+      // 204: no body, so `requestEmpty` rather than `request`.
+      await transport.requestEmpty({ path: AUTH_LOGOUT_PATH, method: 'POST' })
     },
   }
 }
 
-export const authService = createAuthService(apiClient)
+export const authService = createAuthService(apiTransport)

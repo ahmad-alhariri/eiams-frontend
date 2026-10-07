@@ -4,15 +4,15 @@ import userEvent from '@testing-library/user-event'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import {
-  createPermission,
-  createProblemDetails,
-  createRole,
+  createPermissionCatalogEntry,
+  createRoleProjection,
   createSession,
 } from '@/test/msw/factories'
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -55,16 +55,19 @@ afterEach(() => {
 
 describe('RolePermissionsPage', () => {
   it('keeps the contract catalog visible but hides replacement controls without admin.role.manage', async () => {
-    const role = createRole({ roleId: ROLE_ID, permissionCodes: ['admin.role.view'] })
-    const viewPermission = createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
-    const managePermission = createPermission({
+    const role = createRoleProjection({ id: ROLE_ID, permissionCodes: ['admin.role.view'] })
+    const viewPermission = createPermissionCatalogEntry({
+      code: 'admin.role.view',
+      nameAr: 'عرض الأدوار',
+    })
+    const managePermission = createPermissionCatalogEntry({
       code: 'admin.role.manage',
       nameAr: 'إدارة الأدوار',
     })
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => HttpResponse.json(role)),
+      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => okJson(role)),
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        HttpResponse.json([viewPermission, managePermission]),
+        okPageJson([viewPermission, managePermission]),
       ),
     )
 
@@ -81,25 +84,28 @@ describe('RolePermissionsPage', () => {
   it('confirms and sends the complete contract replacement including the current rowVersion', async () => {
     permissions.canManage = true
     const user = userEvent.setup()
-    const role = createRole({
-      roleId: ROLE_ID,
+    const role = createRoleProjection({
+      id: ROLE_ID,
       permissionCodes: ['admin.role.view'],
       rowVersion: 7,
     })
-    const viewPermission = createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
-    const managePermission = createPermission({
+    const viewPermission = createPermissionCatalogEntry({
+      code: 'admin.role.view',
+      nameAr: 'عرض الأدوار',
+    })
+    const managePermission = createPermissionCatalogEntry({
       code: 'admin.role.manage',
       nameAr: 'إدارة الأدوار',
     })
     const receivedBodies: unknown[] = []
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => HttpResponse.json(role)),
+      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => okJson(role)),
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        HttpResponse.json([viewPermission, managePermission]),
+        okPageJson([viewPermission, managePermission]),
       ),
-      http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, async ({ request }) => {
+      http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}/permissions`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json({
+        return okJson({
           ...role,
           permissionCodes: ['admin.role.view', 'admin.role.manage'],
         })
@@ -119,11 +125,8 @@ describe('RolePermissionsPage', () => {
     await waitFor(() =>
       expect(receivedBodies).toEqual([
         {
-          code: role.code,
-          nameAr: role.nameAr,
           permissionCodes: ['admin.role.view', 'admin.role.manage'],
-          rowVersion: 7,
-          status: role.status,
+          expectedRowVersion: 7,
         },
       ]),
     )
@@ -132,30 +135,26 @@ describe('RolePermissionsPage', () => {
   it('keeps the selected matrix and maps a contract field error inline', async () => {
     permissions.canManage = true
     const user = userEvent.setup()
-    const role = createRole({ roleId: ROLE_ID, permissionCodes: ['admin.role.view'] })
-    const viewPermission = createPermission({ code: 'admin.role.view', nameAr: 'عرض الأدوار' })
-    const managePermission = createPermission({
+    const role = createRoleProjection({ id: ROLE_ID, permissionCodes: ['admin.role.view'] })
+    const viewPermission = createPermissionCatalogEntry({
+      code: 'admin.role.view',
+      nameAr: 'عرض الأدوار',
+    })
+    const managePermission = createPermissionCatalogEntry({
       code: 'admin.role.manage',
       nameAr: 'إدارة الأدوار',
     })
     server.use(
-      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => HttpResponse.json(role)),
+      http.get(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () => okJson(role)),
       http.get(`${API_BASE_URL}/admin/permissions`, () =>
-        HttpResponse.json([viewPermission, managePermission]),
+        okPageJson([viewPermission, managePermission]),
       ),
-      http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}`, () =>
-        HttpResponse.json(
-          createProblemDetails({
-            fieldErrors: [
-              {
-                field: 'permissionCodes',
-                code: 'forbidden',
-                messageAr: 'إحدى الصلاحيات غير متاحة.',
-              },
-            ],
-          }),
-          { status: 422 },
-        ),
+      http.put(`${API_BASE_URL}/admin/roles/${ROLE_ID}/permissions`, () =>
+        errJson(422, {
+          code: 'ROLES_NAME_NOT_UNIQUE',
+          message: 'Role name is not unique.',
+          details: { permissionCodes: ['not allowed'] },
+        }),
       ),
     )
 
@@ -173,7 +172,7 @@ describe('RolePermissionsPage', () => {
       ),
     )
 
-    expect(await screen.findByText('إحدى الصلاحيات غير متاحة.')).toBeInTheDocument()
+    expect(await screen.findByText('اسم الدور مستخدم مسبقاً.')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'إدارة الأدوار' })).toBeChecked()
   })
 })

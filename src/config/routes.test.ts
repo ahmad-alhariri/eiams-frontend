@@ -57,8 +57,6 @@ describe('Route constants (D-RBAC-01)', () => {
   it('marks the dev gallery as dev-only and auth routes as public', () => {
     expect(ROUTE_METADATA.devGallery.devOnly).toBe(true)
     expect(ROUTE_METADATA.login.public).toBe(true)
-    expect(ROUTE_METADATA.scopeSelect.public).toBe(true)
-    expect(ROUTE_METADATA.noAccess.public).toBe(true)
     expect(ROUTE_METADATA.notFound.public).toBe(true)
   })
 
@@ -92,6 +90,17 @@ describe('Route constants (D-RBAC-01)', () => {
       expect(meta.permissions).toContain('document.view')
       expect(meta.permissions).toContain('document.create')
     }
+  })
+
+  it('requires manager capabilities for adjustment and disposal creation', () => {
+    for (const route of ['adjustmentNew', 'assetDisposalNew'] as const) {
+      expect(ROUTE_METADATA[route].permissions).toEqual([
+        'document.view',
+        'document.create',
+        'document.post',
+      ])
+    }
+    expect(ROUTE_METADATA.documentIssueNew.permissions).not.toContain('document.post')
   })
 
   it('guards count planning with count.view + count.plan', () => {

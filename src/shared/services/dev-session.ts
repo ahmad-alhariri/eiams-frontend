@@ -1,13 +1,13 @@
 import { PERMISSION_CODES } from '@/config/permissions'
 import type { AppEnvironment } from '@/config/env'
-import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse } from '@/modules/auth/types/session.types'
 
 /**
  * Dev-only session fixture (transport boundary).
  *
  * The refresh endpoint is the single boundary where an authenticated session
  * enters the application: `SessionAdapter.refreshSession()` feeds the query
- * cache that guards (`RequireSelectedScope`, `RouteAccessGuard`) read from.
+ * cache that guards (`RequireActiveScope`, `RouteAccessGuard`) read from.
  * Swapping that one request for a fixture — instead of touching guards — keeps
  * the production auth flow, 401-retry behavior, and RBAC wiring fully intact
  * while letting developers open any feature page without credentials.
@@ -18,17 +18,24 @@ import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
  */
 
 const DEV_USER_ID = '00000000-0000-0000-0000-000000000001'
-const DEV_ROLE_ID = '00000000-0000-0000-0000-000000000002'
+const DEV_EMPLOYEE_ID = '00000000-0000-0000-0000-000000000002'
+const DEV_ROLE_ID = '00000000-0000-0000-0000-000000000004'
 const DEV_SCOPE_ID = '00000000-0000-0000-0000-000000000003'
 
-/** Route to the real /auth/refresh endpoint unless explicitly disabled. */
+/**
+ * Whether the fixture session may answer `/auth/refresh`.
+ *
+ * The flag is opt-in and defaults to OFF (RESOLUTION-040). Defaulting it on
+ * meant a developer could read a fixture-authenticated UI as proof that real
+ * login, refresh, authorization and session hydration work, which is the exact
+ * false evidence R-040 exists to prevent. `environment.authBypass` is already
+ * validated and production-checked by `@/config/env`, so this stays a plain
+ * read of the shared profile rather than a second, weaker source of truth.
+ */
 export function isDevAuthBypassEnabled(
-  environment: Pick<AppEnvironment, 'mode'>,
-  rawEnv: Record<string, unknown>,
+  environment: Pick<AppEnvironment, 'mode' | 'authBypass'>,
 ): boolean {
-  return (
-    environment.mode === 'development' && String(rawEnv['VITE_AUTH_BYPASS'] ?? 'true') !== 'false'
-  )
+  return environment.mode === 'development' && environment.authBypass
 }
 
 export function createDevSession(): AuthTokenResponse {
@@ -38,26 +45,24 @@ export function createDevSession(): AuthTokenResponse {
     tokenType: 'Bearer',
     session: {
       user: {
-        userId: DEV_USER_ID,
-        username: 'dev',
-        displayName: 'مطور النظام',
-        status: 'Active',
-        rowVersion: 0,
+        id: DEV_USER_ID,
+        email: 'dev@eiams.local',
+        firstName: 'مطور',
+        lastName: 'النظام',
+        employeeId: DEV_EMPLOYEE_ID,
+        employeeName: 'مطور النظام',
       },
-      activeRoles: [{ roleId: DEV_ROLE_ID, code: 'sysadmin', nameAr: 'مدير النظام' }],
-      availableScopes: [
-        {
-          scopeId: DEV_SCOPE_ID,
-          scopeType: 'Enterprise',
-          displayName: 'نطاق التطوير',
-        },
-      ],
+      role: {
+        id: DEV_ROLE_ID,
+        name: 'SystemAdministrator',
+        nameAr: 'مدير النظام',
+        description: 'صلاحية كاملة على كل المواقع والمستودعات',
+      },
       activeScope: {
         scopeId: DEV_SCOPE_ID,
         scopeType: 'Enterprise',
-        displayName: 'نطاق التطوير',
+        scopeName: 'نطاق التطوير',
       },
-      scopeState: 'Selected',
       permissionCodes: [...PERMISSION_CODES],
     },
   }

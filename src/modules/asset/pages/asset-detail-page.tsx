@@ -14,6 +14,8 @@ import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
+import { Button } from '@/shared/ui/button'
+import { formatDateTime } from '@/shared/utils/format'
 
 /**
  * Asset detail page (e18-t03): contract spine of one asset with the
@@ -45,13 +47,14 @@ export default function AssetDetailPage() {
           title="تعذّر تحميل الأصل"
           description="تعذّر جلب بيانات هذا الأصل. حاول مرة أخرى."
           action={
-            <button
+            <Button
               type="button"
-              className="rounded-md border border-border px-4 py-2 text-sm"
+              variant="outline"
+              size="sm"
               onClick={() => void assetQuery.refetch()}
             >
               إعادة المحاولة
-            </button>
+            </Button>
           }
         />
       ) : asset !== undefined ? (
@@ -111,9 +114,30 @@ function CustodySection({ assetId }: { assetId: string }) {
       title="سجل العهدة"
       description="الحالات العهدية المرتبطة بهذا الأصل (شخصية أو تشغيلية) وفق التسلسل الزمني."
     >
+      {/* e24-t10 / B4: these three states were one ternary, so a FAILED read
+          rendered "no custody is recorded for this asset" — a claim about the
+          asset's custody that the server never made, with no retry, and
+          directly contradicting the sibling page, which reports the same failed
+          read correctly. Failed read now degrades to its own retryable error;
+          "no custody" is only ever rendered for a successful empty read. */}
       {custodyQuery.isLoading ? (
         <LoadingSpinner label="جارٍ تحميل سجل العهدة..." />
-      ) : custodyQuery.isError || timeline.length === 0 ? (
+      ) : custodyQuery.isError ? (
+        <ErrorState
+          title="تعذّر تحميل سجل العهدة"
+          description="تعذّر جلب سجل عهدة هذا الأصل. حاول مرة أخرى."
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void custodyQuery.refetch()}
+            >
+              إعادة المحاولة
+            </Button>
+          }
+        />
+      ) : timeline.length === 0 ? (
         <p className="text-sm text-muted-foreground">لا توجد عهدة مسجّلة لهذا الأصل.</p>
       ) : (
         <ol className="grid gap-3">
@@ -130,8 +154,17 @@ function CustodySection({ assetId }: { assetId: string }) {
                 الحائز: {entry.holder.displayName}
               </span>
               <span className="text-xs text-muted-foreground" dir="ltr">
-                {entry.fromTs}
+                {formatDateTime(entry.fromTs)}
               </span>
+              {/* e24-t08: a closed custody row's end time is the only record of
+                  when the asset came back. The custody timeline page already
+                  shows it; omitting it here made the two surfaces of the same
+                  append-only data disagree. */}
+              {entry.status === 'Closed' && entry.toTs ? (
+                <span className="text-xs text-muted-foreground">
+                  نهاية العهدة: <span dir="ltr">{formatDateTime(entry.toTs)}</span>
+                </span>
+              ) : null}
             </li>
           ))}
         </ol>

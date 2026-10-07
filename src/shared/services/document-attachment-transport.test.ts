@@ -1,14 +1,22 @@
+﻿import axios from 'axios'
 import { HttpResponse, http } from 'msw'
-import type { AxiosInstance } from 'axios'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 import {
   createDocumentAttachmentFormData,
   createDocumentAttachmentTransport,
 } from '@/shared/services/document-attachment-transport'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import type { DocumentAttachment } from '@/shared/types/generated/eiams-v1'
+import { okJson } from '@/test/msw/envelope'
+import { readRequestForm } from '@/test/msw/multipart-parser'
 import { server } from '@/test/msw/server'
+import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
+
+beforeAll(() => {
+  // jsdom's XHR serializer preserves File names; undici's fetch adapter drops
+  // them to "blob" and asserts on non-undici Files (see multipart-parser.ts).
+  axios.defaults.adapter = 'xhr'
+})
 
 const API_BASE_URL = '/api/v1'
 const DOCUMENT_ID = '10000000-0000-4000-8000-000000000001'
@@ -30,19 +38,14 @@ const attachmentFixture: DocumentAttachment = {
   },
 }
 
-const bundles: ApiClientBundle[] = []
+// A real transport over a real Axios client (3abe). The harness now serves the
+// wire envelope, which is what the transport reads.
+const createHarness = registerTestTransportHarness(API_BASE_URL)
 
 function setupTransport() {
-  const bundle = createApiClient({ baseURL: API_BASE_URL })
-  bundles.push(bundle)
-  return createDocumentAttachmentTransport(bundle.client)
+  const { transport } = createHarness()
+  return createDocumentAttachmentTransport(transport)
 }
-
-afterEach(() => {
-  for (const bundle of bundles.splice(0)) {
-    bundle.dispose()
-  }
-})
 
 describe('document attachment transport', () => {
   it('encodes only the contract multipart fields and leaves the browser to add its boundary', () => {
@@ -63,7 +66,7 @@ describe('document attachment transport', () => {
     const transport = setupTransport()
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () =>
-        HttpResponse.json([attachmentFixture]),
+        okJson([attachmentFixture]),
       ),
     )
 
@@ -71,23 +74,40 @@ describe('document attachment transport', () => {
   })
 
   it('uploads a transient file as the contract multipart payload', async () => {
+    const transport = setupTransport()
     const file = new File(['signed copy'], 'signed.pdf', { type: 'application/pdf' })
-    const post = vi.fn().mockResolvedValue({ data: attachmentFixture })
-    const transport = createDocumentAttachmentTransport({ post } as unknown as AxiosInstance)
+    let capturedForm: FormData | undefined
+    let capturedPath: string | undefined
+
+    server.use(
+      http.post(
+        `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`,
+        async ({ request }) => {
+          capturedPath = new URL(request.url).pathname
+          capturedForm = await readRequestForm(request)
+          return okJson(attachmentFixture)
+        },
+      ),
+    )
 
     await expect(
       transport.upload(DOCUMENT_ID, { attachmentType: 'SignedOriginal', file, rowVersion: 7 }),
     ).resolves.toEqual(attachmentFixture)
 
-    expect(post).toHaveBeenCalledOnce()
-    const [path, body, config] = post.mock.calls[0] ?? []
-    expect(path).toBe(`/warehouse-documents/${DOCUMENT_ID}/attachments`)
-    expect(body).toBeInstanceOf(FormData)
-    expect((body as FormData).get('attachmentType')).toBe('SignedOriginal')
-    expect((body as FormData).get('rowVersion')).toBe('7')
+    // Read the REAL transmitted form off the intercepted request rather than
+    // asserting a mock's call arguments. The previous version passed
+    // `{ post } as unknown as AxiosInstance` and asserted that `client.post` had
+    // been called with `(path, body, undefined)` — which verified a mock's shape,
+    // not the request, and broke the moment the service moved onto the transport.
+    // The multipart assertions are unchanged in substance.
+    expect(capturedPath).toBe(`/api/v1/warehouse-documents/${DOCUMENT_ID}/attachments`)
+    expect(capturedForm).toBeInstanceOf(FormData)
+    expect(capturedForm?.get('attachmentType')).toBe('SignedOriginal')
+    expect(capturedForm?.get('rowVersion')).toBe('7')
+    expect(capturedForm?.get('file')).toBeInstanceOf(File)
     // No caller-supplied Content-Type: the browser/Axios sets the multipart
     // boundary when it transmits this transient form data.
-    expect(config).toBeUndefined()
+    expect(capturedForm?.get('content-type')).toBeNull()
   })
 
   it('deletes only through the draft attachment endpoint with its row version', async () => {

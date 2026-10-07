@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Resolver } from 'react-hook-form'
@@ -11,8 +11,9 @@ import {
   ISSUE_RECIPIENT_TYPE_LABELS_AR,
   toIssueInfo,
 } from '@/modules/issue/schemas/issue-info.schema'
+import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { CounterpartOption } from '@/shared/types/generated/eiams-v1'
+import { okPageJson } from '@/test/msw/envelope'
 import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
@@ -32,20 +33,30 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 const API_BASE_URL = '/api/v1'
 
-const RECIPIENT_OPTION: CounterpartOption = {
-  displayName: 'أحمد محمد',
-  id: fixtureUuid(64),
-  secondaryLabelAr: 'أمين مستودع',
+/**
+ * The recipient choices the section actually reads.
+ *
+ * The wire lookup is `GET /external-parties` (`CounterpartLookupService` →
+ * `organization.api-types.ExternalParty`), so the option is served in that
+ * record's real shape: `externalPartyId` / `nameAr` / `code` / `status` /
+ * `rowVersion`. The generated `CounterpartOption` this file used before
+ * (`displayName` + a `type` discriminator + `secondaryLabelAr`, under a
+ * `/counterparts` path no service requests) is a record the API cannot produce,
+ * and `counterpartSelectorAdapter` reads `externalPartyId` and `nameAr` — so a
+ * generated-shaped option yielded zero selectable results.
+ */
+const RECIPIENT: ExternalParty = {
+  externalPartyId: fixtureUuid(64),
+  nameAr: 'أحمد محمد',
+  code: null,
+  contactInfo: null,
+  notes: null,
   status: 'Active',
-  type: 'Employee',
+  rowVersion: 1,
 }
 
 function useCounterpartHandler() {
-  server.use(
-    http.get(`${API_BASE_URL}/counterparts`, () =>
-      HttpResponse.json({ items: [RECIPIENT_OPTION], meta: { page: 0, pageSize: 10, total: 1 } }),
-    ),
-  )
+  server.use(http.get(`${API_BASE_URL}/external-parties`, () => okPageJson([RECIPIENT])))
 }
 
 type SubmitSpy = (values: IssuePetalFormValues) => void
@@ -128,7 +139,7 @@ describe('IssueRecipientSection', () => {
     await user.type(screen.getByLabelText('سبب الصرف'), 'تجهيز مكتب إدارة التقنية')
 
     await user.click(screen.getByRole('button', { name: 'حفظ' }))
-    expect(submitted?.petal.issueTo.recipientId).toBe(RECIPIENT_OPTION.id)
+    expect(submitted?.petal.issueTo.recipientId).toBe(RECIPIENT.externalPartyId)
     expect(submitted?.petal.issueToDisplayName).toBe('أحمد محمد')
     expect(submitted?.petal.issueTo.issueReason).toBe('تجهيز مكتب إدارة التقنية')
     // The page maps out with the captured sibling name.
@@ -187,7 +198,7 @@ describe('IssueRecipientSection', () => {
     await user.click(await screen.findByRole('option', { name: /أحمد محمد/ }))
     expect(screen.getByTestId('state-probe')).toHaveAttribute(
       'data-recipient-id',
-      RECIPIENT_OPTION.id,
+      RECIPIENT.externalPartyId,
     )
     expect(screen.getByTestId('state-probe')).toHaveAttribute('data-display-name', 'أحمد محمد')
 

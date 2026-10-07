@@ -7,7 +7,10 @@ import {
   ISSUE_RECIPIENT_TYPE_LABELS_AR,
   issueInfoSchema,
   type IssueInfoFormValues,
+  type IssueRecipientType,
 } from '@/modules/issue/schemas/issue-info.schema'
+import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
+import type { CounterpartReference } from '@/modules/organization/types/counterpart-lookup.types'
 import {
   FormControl,
   FormField,
@@ -158,13 +161,13 @@ export function IssueRecipientSection({ disabled = false }: IssueRecipientSectio
                 <FormLabel>الجهة المستلمة</FormLabel>
                 <RecipientSelectorControl
                   disabled={disabled}
-                  recipientType={recipientType}
+                  recipientType={recipientType as IssueRecipientType}
                   value={field.value}
                   onValueChange={(reference, option) => {
                     form.setValue('petal.issueTo.recipientId', reference?.id ?? '', {
                       shouldValidate: true,
                     })
-                    form.setValue('petal.issueToDisplayName', option?.displayName ?? '', {
+                    form.setValue('petal.issueToDisplayName', option?.nameAr ?? '', {
                       shouldValidate: false,
                     })
                   }}
@@ -202,11 +205,8 @@ export function IssueRecipientSection({ disabled = false }: IssueRecipientSectio
 interface RecipientSelectorControlProps {
   disabled: boolean
   value: string
-  recipientType: string
-  onValueChange: (
-    reference: { type: (typeof ISSUE_RECIPIENT_TYPES)[number]; id: string } | null,
-    option: { displayName: string } | undefined,
-  ) => void
+  recipientType: IssueRecipientType
+  onValueChange: (reference: CounterpartReference | null, option: ExternalParty | undefined) => void
 }
 
 /**
@@ -224,7 +224,7 @@ function RecipientSelectorControl({
   const { error, formDescriptionId, formItemId, formMessageId, required } = useFormField()
   return (
     <CounterpartSelect
-      type={recipientType as (typeof ISSUE_RECIPIENT_TYPES)[number]}
+      type={recipientType}
       value={value}
       disabled={disabled}
       inputProps={{
@@ -234,17 +234,7 @@ function RecipientSelectorControl({
         'aria-describedby':
           [formDescriptionId, error ? formMessageId : ''].filter(Boolean).join(' ') || undefined,
       }}
-      onValueChange={(reference, option) =>
-        onValueChange(
-          reference === null
-            ? null
-            : {
-                type: reference.type as (typeof ISSUE_RECIPIENT_TYPES)[number],
-                id: reference.id,
-              },
-          option === undefined ? undefined : { displayName: option.displayName },
-        )
-      }
+      onValueChange={onValueChange}
     />
   )
 }

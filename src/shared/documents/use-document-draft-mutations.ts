@@ -2,9 +2,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { documentService } from '@/shared/documents/document-transport'
-import { documentQueryKeys } from '@/shared/documents/use-document-queries'
+import { documentQueryKeys, DOCUMENT_RESOURCE } from '@/shared/documents/use-document-queries'
 import { normalizeApiError } from '@/shared/services/api-error'
-import { type ScopeCacheKey } from '@/shared/services/query-keys'
+import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 import type {
   WarehouseDocument,
   WarehouseDocumentDraftRequest,
@@ -19,27 +19,33 @@ import type {
 
 /**
  * Invalidates every scoped document-list page (all filter variants) without
- * touching detail/history/policy keys: list keys carry a filters object at
- * index 5, document keys a documentId string.
+ * touching detail/history/policy keys.
+ *
+ * The list prefix is derived from `queryKeys.scoped` rather than written out as
+ * `key[0] === 'scoped' && key[1] === ... && key[3] === 'document'`. A positional
+ * predicate hard-codes the factory's internal tuple order, so a change to
+ * `scopeParts` or to a resource name in `use-document-queries.ts` would make it
+ * silently stop matching — and document list pages would then never refresh
+ * after a save, with no error anywhere. Only the one offset that distinguishes a
+ * list key from a detail key (the filters object) is read positionally, and it is
+ * computed from the prefix length rather than hard-coded
+ * (eiams-frontend-xlfs).
  */
 async function invalidateDocumentLists(
   queryClient: ReturnType<typeof useQueryClient>,
   scope: ScopeCacheKey | undefined,
 ): Promise<void> {
   if (scope === undefined) return
-  const scopeId = scope.kind === 'enterprise' ? null : scope.id
+  const listPrefix = queryKeys.scoped(scope, DOCUMENT_RESOURCE, 'documents')
+  const filtersIndex = listPrefix.length
   await queryClient.invalidateQueries({
     predicate: (query) => {
       const key = query.queryKey
-      return (
-        key[0] === 'scoped' &&
-        key[1] === scope.kind &&
-        key[2] === scopeId &&
-        key[3] === 'document' &&
-        key[4] === 'documents' &&
-        typeof key[5] === 'object' &&
-        key[5] !== null
-      )
+      if (key.length <= filtersIndex) return false
+      if (!listPrefix.every((part, index) => key[index] === part)) return false
+      // A list key carries its filters object right after the prefix; a detail
+      // key carries a documentId string in that position instead.
+      return typeof key[filtersIndex] === 'object' && key[filtersIndex] !== null
     },
   })
 }

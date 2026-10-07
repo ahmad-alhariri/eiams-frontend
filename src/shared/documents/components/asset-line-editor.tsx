@@ -27,7 +27,8 @@ import type { OptionLoader } from '@/shared/selectors/selector-adapter'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
-import type { CapabilityOperation, Material } from '@/shared/types/generated/eiams-v1'
+import type { CapabilityOperation } from '@/modules/warehouse/types/warehouse.types'
+import type { Material } from '@/modules/catalog/types/catalog.types'
 
 // The editor is a component file by contract; its schema and draft mapper live
 // in ../schemas/document-lines.schemas.ts (e12-t05).
@@ -329,14 +330,24 @@ function AssetLineRow({
     }
     clearErrors(`${linePath}.materialId`)
     onMaterialIdChange(nextValue ?? '')
-    setValue(`${linePath}.materialNameAr`, payload?.nameAr ?? '')
-    setValue(`${linePath}.materialDomainId`, payload?.domain.id ?? '')
-    setValue(`${linePath}.baseUnitId`, payload?.baseUnit.id ?? '')
-    setValue(`${linePath}.baseUnitNameAr`, payload?.baseUnit.displayName ?? '')
-    if (payload !== undefined) {
-      setValue(`${linePath}.assetInputs`, [createEmptyAssetInput()])
-      setValue(`${linePath}.quantity`, 1)
+    // Everything below is DERIVED from the payload. The optional chain on
+    // `option?.payload` stops at `payload`, so an option carrying no
+    // domain/unit reference used to THROW here and abort the rest of the
+    // handler — skipping the quantity/asset seed and leaving the asset line
+    // posting quantity 0.
+    if (payload === undefined) {
+      setValue(`${linePath}.materialNameAr`, '')
+      setValue(`${linePath}.materialDomainId`, '')
+      setValue(`${linePath}.baseUnitId`, '')
+      setValue(`${linePath}.baseUnitNameAr`, '')
+      return
     }
+    setValue(`${linePath}.materialNameAr`, payload.nameAr)
+    setValue(`${linePath}.materialDomainId`, payload.materialDomain.id)
+    setValue(`${linePath}.baseUnitId`, payload.unit.id)
+    setValue(`${linePath}.baseUnitNameAr`, payload.unit.displayName)
+    setValue(`${linePath}.assetInputs`, [createEmptyAssetInput()])
+    setValue(`${linePath}.quantity`, 1)
   }
 
   const addUnit = () => {

@@ -19,12 +19,13 @@ import { RouteSuspense } from '@/shared/layout/route-suspense'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
 import type {
   InventoryBalance,
-  SessionResponse,
   StockMovement,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
-import { createPage } from '@/test/msw/factories'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
+import { apiJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -139,7 +140,7 @@ describe('receiving and opening balance propagation', () => {
     const enterpriseScope = { kind: 'enterprise' } as const
     const warehouseScope = {
       kind: 'warehouse',
-      id: scenario.warehouses.source.warehouseId,
+      id: scenario.warehouses.source.id,
     } as const
     const warehouseDocument = { ...receiving, rowVersion: receiving.rowVersion + 1 }
     const warehouseMovement = {
@@ -157,22 +158,18 @@ describe('receiving and opening balance propagation', () => {
     server.use(
       http.get(`${environment.apiBaseUrl}/warehouse-documents/${receiving.documentId}`, () => {
         requestCounts.document += 1
-        return HttpResponse.json(responseScope === 'enterprise' ? receiving : warehouseDocument)
+        return apiJson(responseScope === 'enterprise' ? receiving : warehouseDocument)
       }),
       http.get(
         `${environment.apiBaseUrl}/inventory/movements/${receivingMovement.movementId}`,
         () => {
           requestCounts.movement += 1
-          return HttpResponse.json(
-            responseScope === 'enterprise' ? receivingMovement : warehouseMovement,
-          )
+          return apiJson(responseScope === 'enterprise' ? receivingMovement : warehouseMovement)
         },
       ),
       http.get(`${environment.apiBaseUrl}/inventory/balances/${receivingBalance.balanceId}`, () => {
         requestCounts.balance += 1
-        return HttpResponse.json(
-          responseScope === 'enterprise' ? receivingBalance : warehouseBalance,
-        )
+        return apiJson(responseScope === 'enterprise' ? receivingBalance : warehouseBalance)
       }),
     )
 
@@ -230,23 +227,10 @@ describe('receiving and opening balance propagation', () => {
 
 function readOnlySession(): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'cross.module.viewer',
-      displayName: 'مراجع التكامل',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مراجع التكامل' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: ['document.view', 'inventory.view'],
-    availableScopes: [
-      {
-        scopeType: 'Enterprise',
-        scopeId: null,
-        displayName: 'المؤسسة',
-      },
-    ],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -293,9 +277,7 @@ function useScenarioHandlers(
   server.use(
     http.get(`${environment.apiBaseUrl}/warehouse-documents/:documentId`, ({ params }) => {
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
-      return document === undefined
-        ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json(document)
+      return document === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(document)
     }),
     http.get(`${environment.apiBaseUrl}/warehouse-documents/:documentId/history`, ({ params }) => {
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
@@ -303,7 +285,7 @@ function useScenarioHandlers(
         document === undefined ? undefined : scenario.ledgers.lifecycleEvents[document.documentId]
       return document === undefined || events === undefined
         ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json({
+        : apiJson({
             documentId: document.documentId,
             currentStatus: document.documentStatus,
             currentRowVersion: document.rowVersion,
@@ -314,27 +296,23 @@ function useScenarioHandlers(
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
       return document === undefined
         ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json(document.policy)
+        : apiJson(document.policy)
     }),
     http.get(`${environment.apiBaseUrl}/inventory/movements`, ({ request }) => {
       movementListQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-      return HttpResponse.json(createPage(movements, { pageIndex: 0, pageSize: 10 }))
+      return okPageJson(movements, { page: 1, pageSize: 10 })
     }),
     http.get(`${environment.apiBaseUrl}/inventory/movements/:movementId`, ({ params }) => {
       const movement = movements.find((candidate) => candidate.movementId === params['movementId'])
-      return movement === undefined
-        ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json(movement)
+      return movement === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(movement)
     }),
     http.get(`${environment.apiBaseUrl}/inventory/balances`, ({ request }) => {
       balanceListQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-      return HttpResponse.json(createPage(balances, { pageIndex: 0, pageSize: 10 }))
+      return okPageJson(balances, { page: 1, pageSize: 10 })
     }),
     http.get(`${environment.apiBaseUrl}/inventory/balances/:balanceId`, ({ params }) => {
       const balance = balances.find((candidate) => candidate.balanceId === params['balanceId'])
-      return balance === undefined
-        ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json(balance)
+      return balance === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(balance)
     }),
   )
 }
@@ -355,7 +333,7 @@ function findSourceBalance(document: WarehouseDocument): InventoryBalance {
   const materialId = document.lines[0]?.material.materialId
   const balance = scenario.ledgers.balances.find(
     (candidate) =>
-      candidate.warehouse.id === scenario.warehouses.source.warehouseId &&
+      candidate.warehouse.id === scenario.warehouses.source.id &&
       candidate.material.id === materialId,
   )
   if (balance === undefined) {

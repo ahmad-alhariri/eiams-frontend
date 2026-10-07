@@ -8,7 +8,7 @@ import {
   type MaterialLoader,
 } from '@/shared/selectors/adapters/material-selector'
 import type { EntitySelectorResult } from '@/shared/selectors/selector-adapter'
-import type { Material } from '@/shared/types/generated/eiams-v1'
+import type { Material } from '@/modules/catalog/types/catalog.types'
 
 export interface ScopedMaterialSelectorResult extends EntitySelectorResult<Material> {
   /** False until the session has a selected active scope; callers disable the control. */
@@ -45,7 +45,7 @@ export function useScopedMaterialSelector(
         return []
       }
       const listQuery: ListMaterialsQuery = {
-        pageIndex: 0,
+        page: 0,
         pageSize: Math.max(1, maxResults),
         status: 'Active',
         ...(query.trim() === '' ? {} : { search: query.trim() }),
