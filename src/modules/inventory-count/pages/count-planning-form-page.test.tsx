@@ -44,7 +44,7 @@ let postStatus = 201
 function useHandlers() {
   postedBody = undefined
   postStatus = 201
-  const warehouse = createWarehouse({ warehouseId: WAREHOUSE_ID, nameAr: 'المستودع المركزي' })
+  const warehouse = createWarehouse({ id: WAREHOUSE_ID, name: 'المستودع المركزي' })
   server.use(
     http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
     http.post(`${API_BASE_URL}/inventory-counts`, async ({ request }) => {

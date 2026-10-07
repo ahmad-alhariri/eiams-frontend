@@ -6,12 +6,8 @@ import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  createInventoryBalance,
-  createMaterial,
-  createPage,
-  createWarehouse,
-} from '@/test/msw/factories'
+import { createInventoryBalance, createMaterial, createWarehouse } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -66,7 +62,7 @@ describe('InventoryBalancesPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, ({ request }) => {
         initialQuery ??= Object.fromEntries(new URL(request.url).searchParams)
-        return HttpResponse.json(createPage(balances, { totalItems: 11, totalPages: 2 }))
+        return okPageJson(balances, { page: 1, pageSize: 10, totalCount: 11, totalPages: 2 })
       }),
     )
 
@@ -106,9 +102,12 @@ describe('InventoryBalancesPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, ({ request }) => {
         receivedQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json(
-          createPage([createInventoryBalance()], { totalItems: 20, totalPages: 2 }),
-        )
+        return okPageJson([createInventoryBalance()], {
+          page: 1,
+          pageSize: 10,
+          totalCount: 20,
+          totalPages: 2,
+        })
       }),
     )
 
@@ -150,18 +149,16 @@ describe('InventoryBalancesPage', () => {
 
   it('uses the scoped warehouse and all-material selectors for server filters', async () => {
     const user = userEvent.setup()
-    const warehouse = createWarehouse({ nameAr: 'مستودع الأصول' })
+    const warehouse = createWarehouse({ name: 'مستودع الأصول' })
     const assetMaterial = createMaterial({ materialKind: 'Asset', nameAr: 'طابعة أصلية' })
     const receivedQueries: Record<string, string>[] = []
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([warehouse]))),
-      http.get(`${API_BASE_URL}/catalog/materials`, () =>
-        HttpResponse.json(createPage([assetMaterial])),
-      ),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
+      http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([assetMaterial])),
       http.get(`${API_BASE_URL}/inventory/balances`, ({ request }) => {
         receivedQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json(createPage([createInventoryBalance()]))
+        return okPageJson([createInventoryBalance()])
       }),
     )
 
@@ -169,10 +166,10 @@ describe('InventoryBalancesPage', () => {
     await screen.findByText('المستودع المركزي')
 
     await user.type(screen.getByRole('combobox', { name: 'تصفية حسب المستودع' }), 'أص')
-    await user.click(await screen.findByRole('option', { name: warehouse.nameAr }))
+    await user.click(await screen.findByRole('option', { name: warehouse.name }))
     await waitFor(() =>
       expect(receivedQueries).toContainEqual(
-        expect.objectContaining({ warehouseId: warehouse.warehouseId }),
+        expect.objectContaining({ warehouseId: warehouse.id }),
       ),
     )
 
@@ -182,7 +179,7 @@ describe('InventoryBalancesPage', () => {
       expect(receivedQueries).toContainEqual(
         expect.objectContaining({
           materialId: assetMaterial.materialId,
-          warehouseId: warehouse.warehouseId,
+          warehouseId: warehouse.id,
         }),
       ),
     )
@@ -194,9 +191,7 @@ describe('InventoryBalancesPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, () => {
         attempts += 1
-        return attempts === 1
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(createPage([]))
+        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okPageJson([])
       }),
     )
 

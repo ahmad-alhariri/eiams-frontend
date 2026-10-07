@@ -47,7 +47,7 @@ describe('OpeningDocumentsListPage', () => {
     const document = createWarehouseDocument({
       documentStatus: 'Draft',
       documentType: 'Opening',
-      warehouse: { id: warehouse.warehouseId, displayName: warehouse.nameAr },
+      warehouse: { id: warehouse.id, displayName: warehouse.name },
     })
 
     server.use(

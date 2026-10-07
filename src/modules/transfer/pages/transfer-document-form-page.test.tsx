@@ -6,15 +6,16 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import TransferDocumentFormPage from './transfer-document-form-page'
+import type { Material } from '@/modules/catalog/types/catalog.api-types'
 import {
   createMaterial,
-  createPage,
   createSessionRole,
   createSessionScope,
   createSessionUser,
   createWarehouse,
   createWarehouseCapability,
 } from '@/test/msw/factories'
+import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
@@ -43,14 +44,48 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
 }
 
 const sourceWarehouse = createWarehouse({
-  warehouseId: SOURCE_WAREHOUSE_ID,
-  nameAr: 'المستودع المركزي',
+  id: SOURCE_WAREHOUSE_ID,
+  name: 'المستودع المركزي',
 })
 const destinationWarehouse = createWarehouse({
-  warehouseId: DESTINATION_WAREHOUSE_ID,
-  nameAr: 'مستودع الفرع الشمالي',
+  id: DESTINATION_WAREHOUSE_ID,
+  name: 'مستودع الفرع الشمالي',
 })
-const material = createMaterial({ materialId: MATERIAL_ID })
+const material = contractMaterial({ materialId: MATERIAL_ID })
+
+/**
+ * Re-projects the shared `createMaterial()` fixture onto the HANDWRITTEN catalog
+ * contract the production line editor parses.
+ *
+ * `createMaterial()` still mints the frozen generated shape (`domain` / `family` /
+ * `baseUnit`); `catalog/api-types` `Material` carries `materialDomain` /
+ * `materialFamily` / `unit`. Without the projection
+ * `quantity-line-editor.tsx` dereferences `payload.materialDomain.id` on
+ * `undefined` and every material pick throws.
+ */
+function contractMaterial(overrides: Partial<Material> = {}): Material {
+  const base = createMaterial()
+  return {
+    code: base.code,
+    descriptionAr: base.descriptionAr ?? null,
+    materialCategory: base.category,
+    materialCategoryId: base.category.id,
+    materialDomain: base.domain,
+    materialDomainId: base.domain.id,
+    materialFamily: base.family,
+    materialFamilyId: base.family.id,
+    materialId: base.materialId,
+    materialKind: base.materialKind === 'Asset' ? 'Asset' : 'Consumable',
+    nameAr: base.nameAr,
+    nominalConversionFactor: 1,
+    requiresAssetNumber: base.requiresAssetNumber,
+    rowVersion: base.rowVersion,
+    status: 'Active',
+    unit: base.baseUnit,
+    unitId: base.baseUnit.id,
+    ...overrides,
+  }
+}
 
 let postedBody: Record<string, unknown> | undefined
 
@@ -58,14 +93,14 @@ function useHandlers() {
   postedBody = undefined
   server.use(
     http.get(`${API_BASE_URL}/warehouses`, () =>
-      HttpResponse.json(createPage([sourceWarehouse, destinationWarehouse])),
+      okPageJson([sourceWarehouse, destinationWarehouse]),
     ),
-    http.get(`${API_BASE_URL}/catalog/materials`, () => HttpResponse.json(createPage([material]))),
+    http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material])),
     http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () =>
-      HttpResponse.json([
+      okJson([
         createWarehouseCapability({
           warehouseId: SOURCE_WAREHOUSE_ID,
-          domain: material.domain,
+          domain: material.materialDomain,
           operations: ['Transfer'],
         }),
       ]),
@@ -74,22 +109,20 @@ function useHandlers() {
       const url = new URL(request.url)
       const materialId = url.searchParams.get('materialId')
       if (materialId === MATERIAL_ID) {
-        return HttpResponse.json(
-          createPage([
-            {
-              warehouseId: SOURCE_WAREHOUSE_ID,
-              materialId: MATERIAL_ID,
-              quantity: 100,
-              unitOfMeasureId: fixtureUomId(),
-            },
-          ]),
-        )
+        return okPageJson([
+          {
+            warehouseId: SOURCE_WAREHOUSE_ID,
+            materialId: MATERIAL_ID,
+            quantity: 100,
+            unitOfMeasureId: fixtureUomId(),
+          },
+        ])
       }
-      return HttpResponse.json(createPage([]))
+      return okPageJson([])
     }),
     http.post(`${API_BASE_URL}/warehouse-documents`, async ({ request }) => {
       postedBody = (await request.json()) as Record<string, unknown>
-      return HttpResponse.json(
+      return apiJson(
         {
           documentId: RETURN_DOC_ID,
           documentNumber: 'TRF-2026-0001',
@@ -229,9 +262,7 @@ describe('TransferDocumentFormPage (e17-t04/t05/t06)', () => {
     let balanceShouldFail = true
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, () =>
-        balanceShouldFail
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(createPage([])),
+        balanceShouldFail ? new HttpResponse(null, { status: 500 }) : okPageJson([]),
       ),
     )
     const user = userEvent.setup()

@@ -8,15 +8,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from '@/shared/services/query.client'
 
 import IssueDocumentFormPage from './issue-document-form-page'
+import type { Material } from '@/modules/catalog/types/catalog.api-types'
 import {
   createMaterial,
-  createPage,
   createSessionRole,
   createSessionScope,
   createSessionUser,
   createWarehouse,
   createWarehouseCapability,
 } from '@/test/msw/factories'
+import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
@@ -36,10 +37,44 @@ const UNIT_OF_MEASURE_ID = '99999999-9999-4999-8999-999999999901'
 const ISSUE_DOCUMENT_ID = '44444444-4444-4444-8444-444444444704'
 
 const sourceWarehouse = createWarehouse({
-  warehouseId: SOURCE_WAREHOUSE_ID,
-  nameAr: 'المستودع المركزي',
+  id: SOURCE_WAREHOUSE_ID,
+  name: 'المستودع المركزي',
 })
-const material = createMaterial({ materialId: MATERIAL_ID })
+const material = contractMaterial({ materialId: MATERIAL_ID })
+
+/**
+ * Re-projects the shared `createMaterial()` fixture onto the HANDWRITTEN catalog
+ * contract the production line editor parses.
+ *
+ * `createMaterial()` still mints the frozen generated shape (`domain` / `family` /
+ * `baseUnit`); `catalog/api-types` `Material` carries `materialDomain` /
+ * `materialFamily` / `unit`. Without the projection
+ * `quantity-line-editor.tsx` dereferences `payload.materialDomain.id` on
+ * `undefined` and every material pick throws.
+ */
+function contractMaterial(overrides: Partial<Material> = {}): Material {
+  const base = createMaterial()
+  return {
+    code: base.code,
+    descriptionAr: base.descriptionAr ?? null,
+    materialCategory: base.category,
+    materialCategoryId: base.category.id,
+    materialDomain: base.domain,
+    materialDomainId: base.domain.id,
+    materialFamily: base.family,
+    materialFamilyId: base.family.id,
+    materialId: base.materialId,
+    materialKind: base.materialKind === 'Asset' ? 'Asset' : 'Consumable',
+    nameAr: base.nameAr,
+    nominalConversionFactor: 1,
+    requiresAssetNumber: base.requiresAssetNumber,
+    rowVersion: base.rowVersion,
+    status: 'Active',
+    unit: base.baseUnit,
+    unitId: base.baseUnit.id,
+    ...overrides,
+  }
+}
 
 let postedBody: Record<string, unknown> | undefined
 
@@ -55,13 +90,14 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
 function useHandlers(balanceQuantity: number | 'fail') {
   postedBody = undefined
   server.use(
-    http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([sourceWarehouse]))),
-    http.get(`${API_BASE_URL}/catalog/materials`, () => HttpResponse.json(createPage([material]))),
+    http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([sourceWarehouse])),
+    http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material])),
+    http.get(`${API_BASE_URL}/assets`, () => okPageJson([])),
     http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () =>
-      HttpResponse.json([
+      okJson([
         createWarehouseCapability({
           warehouseId: SOURCE_WAREHOUSE_ID,
-          domain: material.domain,
+          domain: material.materialDomain,
           operations: ['Issue'],
         }),
       ]),
@@ -69,20 +105,18 @@ function useHandlers(balanceQuantity: number | 'fail') {
     http.get(`${API_BASE_URL}/inventory/balances`, () =>
       balanceQuantity === 'fail'
         ? new HttpResponse(null, { status: 500 })
-        : HttpResponse.json(
-            createPage([
-              {
-                warehouseId: SOURCE_WAREHOUSE_ID,
-                materialId: MATERIAL_ID,
-                quantity: balanceQuantity,
-                unitOfMeasureId: UNIT_OF_MEASURE_ID,
-              },
-            ]),
-          ),
+        : okPageJson([
+            {
+              warehouseId: SOURCE_WAREHOUSE_ID,
+              materialId: MATERIAL_ID,
+              quantity: balanceQuantity,
+              unitOfMeasureId: UNIT_OF_MEASURE_ID,
+            },
+          ]),
     ),
     http.post(`${API_BASE_URL}/warehouse-documents`, async ({ request }) => {
       postedBody = (await request.json()) as Record<string, unknown>
-      return HttpResponse.json(
+      return apiJson(
         {
           documentId: ISSUE_DOCUMENT_ID,
           documentNumber: 'ISS-2026-0001',
@@ -196,16 +230,14 @@ describe('IssueDocumentFormPage', () => {
     // REAL block for the same line (AGENTS.md rule 3 is not weakened).
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, () =>
-        HttpResponse.json(
-          createPage([
-            {
-              warehouseId: SOURCE_WAREHOUSE_ID,
-              materialId: MATERIAL_ID,
-              quantity: 100,
-              unitOfMeasureId: UNIT_OF_MEASURE_ID,
-            },
-          ]),
-        ),
+        okPageJson([
+          {
+            warehouseId: SOURCE_WAREHOUSE_ID,
+            materialId: MATERIAL_ID,
+            quantity: 100,
+            unitOfMeasureId: UNIT_OF_MEASURE_ID,
+          },
+        ]),
       ),
     )
     await user.click(within(failure).getByRole('button', { name: 'إعادة المحاولة' }))

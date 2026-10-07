@@ -46,7 +46,7 @@ describe('ReceivingDocumentsListPage', () => {
     const warehouse = createWarehouse()
     const document = createWarehouseDocument({
       documentStatus: 'Draft',
-      warehouse: { id: warehouse.warehouseId, displayName: warehouse.nameAr },
+      warehouse: { id: warehouse.id, displayName: warehouse.name },
       receivingInfo: { receivingType: 'Supplier', supplierRef: 'EXT-SUP-001' },
     })
     server.use(

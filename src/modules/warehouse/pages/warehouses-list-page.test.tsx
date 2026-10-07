@@ -1,14 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { errJson } from '@/test/msw/envelope'
+import { apiJson, errJson, okPageJson } from '@/test/msw/envelope'
 
-import { createPage, createSite, createWarehouse } from '@/test/msw/factories'
+import {
+  createOrganizationalUnit,
+  createSite,
+  createWarehouse,
+  fixtureUuid,
+} from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -51,30 +56,56 @@ afterEach(() => {
 describe('WarehousesListPage', () => {
   it('renders contract-backed warehouse rows and sends zero-based server pagination', async () => {
     const warehouse = createWarehouse()
-    let receivedPageIndex: string | null = null
+    const site = createSite()
+    let receivedPage: string | null = null
     let receivedPageSize: string | null = null
 
     server.use(
       http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
         const url = new URL(request.url)
-        receivedPageIndex = url.searchParams.get('pageIndex')
+        receivedPage = url.searchParams.get('page')
         receivedPageSize = url.searchParams.get('pageSize')
-        return HttpResponse.json(createPage([warehouse], { totalItems: 11, totalPages: 2 }))
+        return okPageJson([warehouse], { page: 1, pageSize: 10, totalCount: 11, totalPages: 2 })
       }),
-      http.get(`${API_BASE_URL}/sites`, () => HttpResponse.json(createPage([createSite()]))),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([site])),
     )
 
     render(<WarehousesListPage />, { wrapper: createWrapper() })
 
     expect(await screen.findByRole('heading', { level: 1, name: 'المستودعات' })).toBeInTheDocument()
-    expect(await screen.findByText(warehouse.nameAr)).toBeInTheDocument()
+    // `name` / `code` / `warehouseType` are the wire fields. `nameAr` and
+    // `locationAr` were the frozen snapshot's fiction and are rendered nowhere.
+    expect(await screen.findByRole('link', { name: warehouse.name })).toHaveAttribute(
+      'href',
+      `/warehouses/${warehouse.id}`,
+    )
     expect(screen.getByText(warehouse.code)).toBeInTheDocument()
-    expect(screen.getByText(warehouse.site.displayName)).toBeInTheDocument()
-    expect(screen.getByText(warehouse.locationAr ?? '')).toBeInTheDocument()
+    expect(screen.getByText(warehouse.warehouseType)).toBeInTheDocument()
+    // `siteId` is FLAT: the location column resolves the site NAME by joining the
+    // sites list the page already fetches for its filter, because a warehouse
+    // record carries no nested site object.
+    expect(site.id).toBe(warehouse.siteId)
+    expect(screen.getByText(site.name)).toBeInTheDocument()
+    expect(screen.queryByText(site.location ?? '')).not.toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'الحالة' })).toBeInTheDocument()
+    expect(screen.getByText('نشط')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /إضافة|تعديل/ })).not.toBeInTheDocument()
-    expect(receivedPageIndex).toBe('0')
+    expect(receivedPage).toBe('0')
     expect(receivedPageSize).toBe('10')
+  })
+
+  it('falls back to a dash for a warehouse whose site is missing from the sites list', async () => {
+    const warehouse = createWarehouse({ siteId: fixtureUuid(950) })
+
+    server.use(
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([createSite()])),
+    )
+
+    render(<WarehousesListPage />, { wrapper: createWrapper() })
+
+    expect(await screen.findByRole('link', { name: warehouse.name })).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
   })
 
   it('sends selected site and status filters to the server', async () => {
@@ -83,16 +114,14 @@ describe('WarehousesListPage', () => {
     const receivedFilters: Array<{ siteId: string | null; status: string | null }> = []
 
     server.use(
-      http.get(`${API_BASE_URL}/sites`, () => HttpResponse.json(createPage([site]))),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([site])),
       http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
         const url = new URL(request.url)
         receivedFilters.push({
           siteId: url.searchParams.get('siteId'),
           status: url.searchParams.get('status'),
         })
-        return HttpResponse.json(
-          createPage([createWarehouse({ site: { id: site.siteId, displayName: site.nameAr } })]),
-        )
+        return okPageJson([createWarehouse({ siteId: site.id })])
       }),
     )
 
@@ -100,12 +129,12 @@ describe('WarehousesListPage', () => {
 
     await screen.findByText('المستودع المركزي')
     await user.click(screen.getByRole('combobox', { name: 'تصفية حسب الموقع' }))
-    await user.click(await screen.findByRole('option', { name: site.nameAr }))
+    await user.click(await screen.findByRole('option', { name: site.name }))
     await user.click(screen.getByRole('combobox', { name: 'تصفية حسب حالة المستودع' }))
     await user.click(await screen.findByRole('option', { name: 'غير نشط' }))
 
     await waitFor(() =>
-      expect(receivedFilters).toContainEqual({ siteId: site.siteId, status: 'Inactive' }),
+      expect(receivedFilters).toContainEqual({ siteId: site.id, status: 'Inactive' }),
     )
   })
 
@@ -113,12 +142,12 @@ describe('WarehousesListPage', () => {
     let attempts = 0
 
     server.use(
-      http.get(`${API_BASE_URL}/sites`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([])),
       http.get(`${API_BASE_URL}/warehouses`, () => {
         attempts += 1
         return attempts === 1
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(createPage([createWarehouse()]))
+          ? apiJson({ detailAr: 'تعذّر جلب المستودعات.' }, { status: 500 })
+          : okPageJson([createWarehouse()])
       }),
     )
 
@@ -135,8 +164,8 @@ describe('WarehousesListPage', () => {
 
   it('shows the Arabic empty state when the scoped server page has no warehouses', async () => {
     server.use(
-      http.get(`${API_BASE_URL}/sites`, () => HttpResponse.json(createPage([]))),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )
 
     render(<WarehousesListPage />, { wrapper: createWrapper() })
@@ -144,18 +173,20 @@ describe('WarehousesListPage', () => {
     expect(await screen.findByRole('heading', { name: 'لا توجد مستودعات' })).toBeInTheDocument()
   })
 
-  it('gates creation behind warehouse.manage and posts the exact WarehouseUpsertRequest', async () => {
+  it('gates creation behind warehouse.manage and posts the exact WarehouseCreateRequest', async () => {
     permissions.canManage = true
     const site = createSite()
+    const orgUnit = createOrganizationalUnit()
     let receivedBody: unknown = null
     const user = userEvent.setup()
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
-      http.get(`${API_BASE_URL}/sites`, () => HttpResponse.json(createPage([site]))),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([site])),
+      http.get(`${API_BASE_URL}/organizational-units`, () => okPageJson([orgUnit])),
       http.post(`${API_BASE_URL}/warehouses`, async ({ request }) => {
         receivedBody = await request.json()
-        return HttpResponse.json(createWarehouse(), { status: 201 })
+        return apiJson({ id: fixtureUuid(31) }, { status: 201 })
       }),
     )
 
@@ -163,31 +194,38 @@ describe('WarehousesListPage', () => {
     await user.click(await screen.findByRole('button', { name: 'إضافة مستودع' }))
     const dialog = screen.getByRole('dialog')
     await user.click(within(dialog).getByRole('combobox', { name: 'الموقع' }))
-    await user.click(await screen.findByRole('option', { name: site.nameAr }))
+    await user.click(await screen.findByRole('option', { name: /^المقر الرئيسي/ }))
+    await user.click(within(dialog).getByRole('combobox', { name: 'الوحدة التنظيمية' }))
+    await user.click(await screen.findByRole('option', { name: new RegExp(orgUnit.name) }))
     await user.type(within(dialog).getByLabelText('اسم المستودع'), 'المستودع الفرعي')
-    await user.type(within(dialog).getByLabelText('رمز المستودع'), 'WH-SUB')
-    await user.type(within(dialog).getByLabelText('الموقع التفصيلي'), '  دمشق  ')
+    await user.type(within(dialog).getByLabelText('الرمز'), '  WH-SUB  ')
+    await user.type(within(dialog).getByLabelText('نوع المستودع'), 'Storage')
     await user.click(within(dialog).getByRole('button', { name: 'إضافة المستودع' }))
 
     await waitFor(() => expect(receivedBody).not.toBeNull())
+    // `POST /warehouses` binds exactly these six fields. It carries no `status`
+    // (activation is a separate route) and no concurrency token, and there is no
+    // `locationAr` anywhere in the body.
     expect(receivedBody).toEqual({
-      siteId: site.siteId,
+      siteId: site.id,
+      organizationalUnitId: orgUnit.id,
+      name: 'المستودع الفرعي',
       code: 'WH-SUB',
-      nameAr: 'المستودع الفرعي',
-      locationAr: 'دمشق',
-      status: 'Active',
-      rowVersion: 0,
+      warehouseType: 'Storage',
+      canHoldStock: true,
     })
   })
 
   it('renders local and server field errors in the Arabic create form', async () => {
     permissions.canManage = true
     const site = createSite()
+    const orgUnit = createOrganizationalUnit()
     const user = userEvent.setup()
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
-      http.get(`${API_BASE_URL}/sites`, () => HttpResponse.json(createPage([site]))),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([site])),
+      http.get(`${API_BASE_URL}/organizational-units`, () => okPageJson([orgUnit])),
       http.post(`${API_BASE_URL}/warehouses`, () =>
         // A duplicate warehouse code is a real, specific backend condition:
         // WAREHOUSES_CODE_NOT_UNIQUE, 409 (WarehousesErrors.cs). The invented
@@ -204,13 +242,18 @@ describe('WarehousesListPage', () => {
     render(<WarehousesListPage />, { wrapper: createWrapper() })
     await user.click(await screen.findByRole('button', { name: 'إضافة مستودع' }))
     const dialog = screen.getByRole('dialog')
-    await user.click(within(dialog).getByRole('button', { name: 'إضافة المستودع' }))
-    expect(await within(dialog).findByText('يجب اختيار موقع صالح.')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('combobox', { name: 'الوحدة التنظيمية' }))
+    await user.click(await screen.findByRole('option', { name: new RegExp(orgUnit.name) }))
+    await user.type(within(dialog).getByLabelText('اسم المستودع'), 'مستودع')
+    await user.type(within(dialog).getByLabelText('الرمز'), 'WH-DUP')
+    await user.type(within(dialog).getByLabelText('نوع المستودع'), 'Storage')
+    // `siteId` is create-only AND required, so the submit control stays disabled
+    // until it is chosen — the form never posts an incomplete create body.
+    expect(within(dialog).getByRole('button', { name: 'إضافة المستودع' })).toBeDisabled()
 
     await user.click(within(dialog).getByRole('combobox', { name: 'الموقع' }))
-    await user.click(await screen.findByRole('option', { name: site.nameAr }))
-    await user.type(within(dialog).getByLabelText('اسم المستودع'), 'مستودع')
-    await user.type(within(dialog).getByLabelText('رمز المستودع'), 'WH-DUP')
+    await user.click(await screen.findByRole('option', { name: /^المقر الرئيسي/ }))
+    expect(within(dialog).getByRole('button', { name: 'إضافة المستودع' })).toBeEnabled()
     await user.click(within(dialog).getByRole('button', { name: 'إضافة المستودع' }))
     expect(await within(dialog).findByText('رمز المستودع مستخدم مسبقاً.')).toBeInTheDocument()
   })

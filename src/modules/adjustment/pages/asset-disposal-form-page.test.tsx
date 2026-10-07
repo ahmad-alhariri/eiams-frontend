@@ -23,8 +23,8 @@ vi.mock('@/modules/warehouse/hooks/use-scoped-warehouse-selector', () => ({
     scopeReady: true,
     loadOptions: async () =>
       Object.values(createCrossModuleScenario().warehouses).map((warehouse) => ({
-        value: warehouse.warehouseId,
-        label: warehouse.nameAr,
+        value: warehouse.id,
+        label: warehouse.name,
         payload: warehouse,
       })),
   }),
@@ -57,7 +57,7 @@ function eligibleHandler() {
   server.use(http.get('*/api/v1/adjustments/disposal-eligible-assets', () => okPageJson([asset])))
 }
 
-async function chooseWarehouse(user: ReturnType<typeof userEvent.setup>, name = warehouse.nameAr) {
+async function chooseWarehouse(user: ReturnType<typeof userEvent.setup>, name = warehouse.name) {
   const input = screen.getByRole('combobox', { name: 'مستودع الإعدام' })
   await user.clear(input)
   await user.type(input, name)
@@ -117,7 +117,7 @@ describe('asset disposal draft contract', () => {
     await user.click(screen.getByRole('button', { name: 'حفظ مسودة الإعدام' }))
     await waitFor(() => expect(bodies).toHaveLength(1))
     expect(bodies[0]).toEqual({
-      warehouseId: warehouse.warehouseId,
+      warehouseId: warehouse.id,
       purpose: 'Disposal',
       reason: 'محضر لجنة الفحص رقم ١٢',
       lines: [
@@ -145,7 +145,7 @@ describe('asset disposal draft contract', () => {
     server.use(http.post('*/api/v1/adjustments', create))
     const user = renderForm()
     await fillForm(user)
-    await chooseWarehouse(user, scenario.warehouses.destination.nameAr)
+    await chooseWarehouse(user, scenario.warehouses.destination.name)
     expect(screen.getByRole('combobox', { name: 'الأصل المستبعد' })).toHaveValue('')
     await user.click(screen.getByRole('button', { name: 'حفظ مسودة الإعدام' }))
     expect(await screen.findByText('يجب اختيار أصل صالح من القائمة.')).toBeInTheDocument()
@@ -184,7 +184,7 @@ describe('asset disposal draft contract', () => {
       page: '1',
       pageSize: '10',
       search: asset.assetNumber,
-      warehouseId: warehouse.warehouseId,
+      warehouseId: warehouse.id,
     })
     expect(input).toHaveValue(`${asset.assetNumber} — ${asset.material.displayName}`)
   })

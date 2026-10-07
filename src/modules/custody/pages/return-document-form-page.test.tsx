@@ -32,7 +32,7 @@ vi.mock('@/modules/auth/hooks/use-permission', () => ({
 }))
 
 const WAREHOUSE_ID = fixtureUuid(30)
-const WAREHOUSE = createWarehouse({ warehouseId: WAREHOUSE_ID })
+const WAREHOUSE = createWarehouse({ id: WAREHOUSE_ID })
 const MATERIAL_ID = fixtureUuid(40)
 const MATERIAL = createMaterial({ materialId: MATERIAL_ID })
 
@@ -40,7 +40,7 @@ async function fillHeader(user: ReturnType<typeof userEvent.setup>) {
   const warehouseCombo = screen.getByRole('combobox', { name: 'المستودع' })
   await user.click(warehouseCombo)
   await user.type(warehouseCombo, 'central')
-  await user.click(await screen.findByText(WAREHOUSE.nameAr))
+  await user.click(await screen.findByText(WAREHOUSE.name))
 
   await user.type(screen.getByLabelText('رقم المستند الورقي'), '2024/151')
   await user.type(screen.getByLabelText('السنة الورقية'), '2024')

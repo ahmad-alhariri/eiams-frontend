@@ -25,12 +25,8 @@ import type {
 } from '@/shared/types/generated/eiams-v1'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
-import {
-  createPage,
-  createSessionUser,
-  createSessionRole,
-  createSessionScope,
-} from '@/test/msw/factories'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
+import { apiJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -126,7 +122,7 @@ describe('issue custody and return chain', () => {
       screen.getByText(`${returnedAsset.assetNumber} — ${scenario.catalog.assetMaterial.nameAr}`),
     ).toBeInTheDocument()
     expect(screen.getByText('في المخزن')).toBeInTheDocument()
-    expect(screen.getByText(scenario.warehouses.source.nameAr)).toBeInTheDocument()
+    expect(screen.getByText(scenario.warehouses.source.name)).toBeInTheDocument()
 
     const issuedAssetRow = (await screen.findByText(issue.systemReferenceNumber)).closest('tr')
     const returnedAssetRow = screen.getByText(returnDocument.systemReferenceNumber).closest('tr')
@@ -188,7 +184,7 @@ describe('issue custody and return chain', () => {
     const enterpriseScope = { kind: 'enterprise' } as const
     const warehouseScope = {
       kind: 'warehouse',
-      id: scenario.warehouses.source.warehouseId,
+      id: scenario.warehouses.source.id,
     } as const
     const warehouseIssue = { ...issue, rowVersion: issue.rowVersion + 1 }
     const warehouseAsset = {
@@ -211,23 +207,19 @@ describe('issue custody and return chain', () => {
     server.use(
       http.get(`${environment.apiBaseUrl}/warehouse-documents/${issue.documentId}`, () => {
         requestCounts.document += 1
-        return HttpResponse.json(responseScope === 'enterprise' ? issue : warehouseIssue)
+        return apiJson(responseScope === 'enterprise' ? issue : warehouseIssue)
       }),
       http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.assetId}`, () => {
         requestCounts.asset += 1
-        return HttpResponse.json(responseScope === 'enterprise' ? returnedAsset : warehouseAsset)
+        return apiJson(responseScope === 'enterprise' ? returnedAsset : warehouseAsset)
       }),
       http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.assetId}/custody`, () => {
         requestCounts.custodyTimeline += 1
-        return HttpResponse.json([
-          responseScope === 'enterprise' ? returnedCustody : warehouseCustody,
-        ])
+        return apiJson([responseScope === 'enterprise' ? returnedCustody : warehouseCustody])
       }),
       http.get(`${environment.apiBaseUrl}/custodies`, () => {
         requestCounts.custodyList += 1
-        return HttpResponse.json(
-          createPage([responseScope === 'enterprise' ? pendingCustody : warehousePending]),
-        )
+        return okPageJson([responseScope === 'enterprise' ? pendingCustody : warehousePending])
       }),
     )
 
@@ -281,10 +273,10 @@ describe('issue custody and return chain', () => {
     ).toEqual([warehouseCustody])
     expect(
       client.getQueryData(custodyQueryKeys.custodies(enterpriseScope, pendingFilters)),
-    ).toEqual(createPage([pendingCustody]))
-    expect(client.getQueryData(custodyQueryKeys.custodies(warehouseScope, pendingFilters))).toEqual(
-      createPage([warehousePending]),
-    )
+    ).toMatchObject({ items: [pendingCustody] })
+    expect(
+      client.getQueryData(custodyQueryKeys.custodies(warehouseScope, pendingFilters)),
+    ).toMatchObject({ items: [warehousePending] })
   })
 })
 
@@ -340,9 +332,7 @@ function useScenarioHandlers(
   server.use(
     http.get(`${environment.apiBaseUrl}/warehouse-documents/:documentId`, ({ params }) => {
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
-      return document === undefined
-        ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json(document)
+      return document === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(document)
     }),
     http.get(`${environment.apiBaseUrl}/warehouse-documents/:documentId/history`, ({ params }) => {
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
@@ -350,7 +340,7 @@ function useScenarioHandlers(
         document === undefined ? undefined : scenario.ledgers.lifecycleEvents[document.documentId]
       return document === undefined || events === undefined
         ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json({
+        : apiJson({
             documentId: document.documentId,
             currentStatus: document.documentStatus,
             currentRowVersion: document.rowVersion,
@@ -361,7 +351,7 @@ function useScenarioHandlers(
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
       return document === undefined
         ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json(document.policy)
+        : apiJson(document.policy)
     }),
     http.get(`${environment.apiBaseUrl}/custodies`, ({ request }) => {
       const searchParams = new URL(request.url).searchParams
@@ -377,34 +367,30 @@ function useScenarioHandlers(
             custody.holder.displayName.toLowerCase().includes(search) ||
             ('assetNumber' in custody && custody.assetNumber.toLowerCase().includes(search))),
       )
-      return HttpResponse.json(createPage(rows))
+      return okPageJson(rows)
     }),
     http.get(`${environment.apiBaseUrl}/assets/:assetId`, ({ params }) => {
       const asset = Object.values(scenario.assets).find(
         (candidate) => candidate.assetId === params['assetId'],
       )
-      return asset === undefined
-        ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json(asset)
+      return asset === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(asset)
     }),
     http.get(`${environment.apiBaseUrl}/assets/:assetId/custody`, ({ params }) =>
-      HttpResponse.json(
+      apiJson(
         scenario.ledgers.custodies.filter((custody) => custody.assetId === params['assetId']),
       ),
     ),
     http.get(`${environment.apiBaseUrl}/assets/:assetId/movements`, ({ params, request }) => {
       assetMovementQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-      return HttpResponse.json(
-        createPage(
-          scenario.ledgers.assetMovements.filter(
-            (movement) => movement.assetId === params['assetId'],
-          ),
+      return okPageJson(
+        scenario.ledgers.assetMovements.filter(
+          (movement) => movement.assetId === params['assetId'],
         ),
       )
     }),
     http.get(`${environment.apiBaseUrl}/inventory/movements`, ({ request }) => {
       stockMovementQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-      return HttpResponse.json(createPage(stockMovements, { pageIndex: 0, pageSize: 10 }))
+      return okPageJson(stockMovements, { page: 1, pageSize: 10 })
     }),
   )
 }

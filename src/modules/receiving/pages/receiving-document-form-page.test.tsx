@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ROUTE_PATHS } from '@/config/routes'
+import type { Material } from '@/modules/catalog/types/catalog.api-types'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import {
   createMaterial,
@@ -33,25 +34,75 @@ const WAREHOUSE_ID = fixtureUuid(300)
 const MATERIAL_ID = fixtureUuid(401)
 const ASSET_MATERIAL_ID = fixtureUuid(402)
 
-const warehouse = createWarehouse({ warehouseId: WAREHOUSE_ID })
-const material = createMaterial({ materialId: MATERIAL_ID })
-const assetMaterial = createMaterial({
+const warehouse = createWarehouse({ id: WAREHOUSE_ID })
+const material = contractMaterial({ materialId: MATERIAL_ID })
+const assetMaterial = contractMaterial({
   materialId: ASSET_MATERIAL_ID,
   code: 'IT-HW-PRT-101',
   nameAr: 'طابعة ليزر',
   materialKind: 'Asset',
   requiresAssetNumber: true,
-  trackingType: 'Serial',
-  domain: material.domain,
-  category: material.category,
-  family: material.family,
-  baseUnit: { id: fixtureUuid(23), displayName: 'قطعة', code: 'EA', status: 'Active' },
+  unitId: fixtureUuid(23),
+  unit: { id: fixtureUuid(23), displayName: 'قطعة' },
 })
 const capability = createWarehouseCapability({
   warehouseId: WAREHOUSE_ID,
-  domain: material.domain,
+  domain: material.materialDomain,
   operations: ['Receiving', 'Issue'],
 })
+
+/**
+ * Re-projects the shared `createMaterial()` fixture onto the HANDWRITTEN catalog
+ * contract the production line editor parses.
+ *
+ * `createMaterial()` still mints the frozen generated shape (`domain` / `category`
+ * / `family` / `baseUnit`); `catalog/api-types` `Material` carries
+ * `materialDomain` / `materialCategory` / `materialFamily` / `unit`. Without the
+ * projection `quantity-line-editor.tsx` dereferences `payload.materialDomain.id`
+ * on `undefined` and every material pick throws.
+ */
+function contractMaterial(overrides: Partial<Material> = {}): Material {
+  const base = createMaterial()
+  return {
+    code: base.code,
+    descriptionAr: base.descriptionAr ?? null,
+    materialCategory: base.category,
+    materialCategoryId: base.category.id,
+    materialDomain: base.domain,
+    materialDomainId: base.domain.id,
+    materialFamily: base.family,
+    materialFamilyId: base.family.id,
+    materialId: base.materialId,
+    materialKind: base.materialKind === 'Asset' ? 'Asset' : 'Consumable',
+    nameAr: base.nameAr,
+    nominalConversionFactor: 1,
+    requiresAssetNumber: base.requiresAssetNumber,
+    rowVersion: base.rowVersion,
+    status: 'Active',
+    unit: base.baseUnit,
+    unitId: base.baseUnit.id,
+    ...overrides,
+  }
+}
+
+/**
+ * The shared document-create handler mints its created document from the FROZEN
+ * generated `Material`, so its `materialOf` lookup answers in that shape while the
+ * page and the wire answer in the handwritten one.
+ */
+function generatedMaterialOf(materialId: string) {
+  if (materialId === ASSET_MATERIAL_ID) {
+    return createMaterial({
+      materialId,
+      code: 'IT-HW-PRT-101',
+      nameAr: 'طابعة ليزر',
+      materialKind: 'Asset',
+      requiresAssetNumber: true,
+      trackingType: 'Serial',
+    })
+  }
+  return materialId === MATERIAL_ID ? createMaterial({ materialId }) : undefined
+}
 
 function createWrapper() {
   const client = new QueryClient({
@@ -80,12 +131,7 @@ function createWrapper() {
 
 function useLookups() {
   return {
-    materialOf: (materialId: string) =>
-      materialId === MATERIAL_ID
-        ? material
-        : materialId === ASSET_MATERIAL_ID
-          ? assetMaterial
-          : undefined,
+    materialOf: generatedMaterialOf,
     unitOf: () => undefined,
     warehouseOf: (warehouseId: string) => (warehouseId === WAREHOUSE_ID ? warehouse : undefined),
   }
@@ -95,7 +141,7 @@ async function fillHeaderAndPetal(user: ReturnType<typeof userEvent.setup>) {
   const warehouseCombo = screen.getByRole('combobox', { name: 'المستودع' })
   await user.click(warehouseCombo)
   await user.type(warehouseCombo, 'central')
-  await user.click(await screen.findByRole('option', { name: warehouse.nameAr }))
+  await user.click(await screen.findByRole('option', { name: warehouse.name }))
 
   await user.type(screen.getByLabelText('رقم المستند الورقي'), '2024/101')
   await user.type(screen.getByLabelText('السنة الورقية'), '2024')

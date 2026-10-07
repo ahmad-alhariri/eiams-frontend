@@ -47,7 +47,7 @@ describe('IssueDocumentsListPage', () => {
     const document = createWarehouseDocument({
       documentStatus: 'Draft',
       documentType: 'Issue',
-      warehouse: { id: warehouse.warehouseId, displayName: warehouse.nameAr },
+      warehouse: { id: warehouse.id, displayName: warehouse.name },
     })
 
     server.use(

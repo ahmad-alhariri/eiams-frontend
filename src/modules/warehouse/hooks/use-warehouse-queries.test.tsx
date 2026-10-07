@@ -1,12 +1,12 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import {
-  createPage,
   createWarehouse,
   createWarehouseCapability,
   createWarehouseMaterialSetting,
@@ -78,33 +78,31 @@ describe('warehouse query hooks', () => {
 
   it('reads each warehouse resource through scoped master-data queries', async () => {
     const warehouse = createWarehouse()
-    const capability = createWarehouseCapability({ warehouseId: warehouse.warehouseId })
-    const setting = createWarehouseMaterialSetting({ warehouseId: warehouse.warehouseId })
+    const capability = createWarehouseCapability({ warehouseId: warehouse.id })
+    const setting = createWarehouseMaterialSetting({ warehouseId: warehouse.id })
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([warehouse]))),
-      http.get(`${API_BASE_URL}/warehouses/${warehouse.warehouseId}`, () =>
-        HttpResponse.json(warehouse),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
+      http.get(`${API_BASE_URL}/warehouses/${warehouse.id}`, () => okJson(warehouse)),
+      http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, () =>
+        okJson([capability]),
       ),
-      http.get(`${API_BASE_URL}/warehouses/${warehouse.warehouseId}/capabilities`, () =>
-        HttpResponse.json([capability]),
-      ),
-      http.get(`${API_BASE_URL}/warehouses/${warehouse.warehouseId}/material-settings`, () =>
-        HttpResponse.json(createPage([setting])),
+      http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/material-settings`, () =>
+        okPageJson([setting]),
       ),
     )
 
-    const warehouses = renderHook(() => useWarehousesQuery({ siteId: warehouse.site.id }), {
+    const warehouses = renderHook(() => useWarehousesQuery({ siteId: warehouse.siteId }), {
       wrapper: createWrapper(),
     })
-    const warehouseDetail = renderHook(() => useWarehouseQuery(warehouse.warehouseId), {
+    const warehouseDetail = renderHook(() => useWarehouseQuery(warehouse.id), {
       wrapper: createWrapper(),
     })
-    const capabilities = renderHook(() => useWarehouseCapabilitiesQuery(warehouse.warehouseId), {
+    const capabilities = renderHook(() => useWarehouseCapabilitiesQuery(warehouse.id), {
       wrapper: createWrapper(),
     })
     const materialSettings = renderHook(
-      () => useWarehouseMaterialSettingsQuery(warehouse.warehouseId, { search: 'حاسوب' }),
+      () => useWarehouseMaterialSettingsQuery(warehouse.id, { search: 'حاسوب' }),
       { wrapper: createWrapper() },
     )
 
@@ -127,7 +125,7 @@ describe('warehouse query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses`, () => {
         requestCount += 1
-        return HttpResponse.json(createPage([createWarehouse()]))
+        return okPageJson([createWarehouse()])
       }),
     )
 
