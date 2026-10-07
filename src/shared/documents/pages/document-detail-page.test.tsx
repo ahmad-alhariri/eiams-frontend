@@ -230,6 +230,56 @@ describe('DocumentDetailPage', () => {
     expect(screen.getByText('signed-submitted.pdf')).toBeInTheDocument()
   })
 
+  it('renders a compensating-style Posted document without any signed-original advisory (D-ATT-01)', async () => {
+    const document = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Issue',
+      documentStatus: 'Posted',
+      rowVersion: 1,
+      systemReferenceNumber: 'EIAMS-RVS-0001',
+      postedAt: '2026-01-02T00:00:00.000Z',
+      postedBy: { id: '00000000-0000-4000-8000-00000000000a', displayName: 'مدير المستودع' },
+      lines: [],
+      attachments: [],
+      policy: {
+        ...createSubmittedPostedPolicy('Posted'),
+        signedOriginalSatisfied: true,
+      },
+    })
+
+    server.use(
+      ...createWarehouseDocumentDetailHandler(document),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
+      ...createWarehouseDocumentPolicyHandler(document.policy),
+    )
+
+    render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/issue/${DOCUMENT_ID}`),
+    })
+
+    await screen.findByRole('heading', { level: 1, name: /EIAMS-RVS-0001/ })
+
+    // The mirror is posted by the reversing transaction (D-ATT-01): the
+    // preflight summary must not flag the signed-original gate, and the
+    // attachment panel must never render the missing/advisory state, even with
+    // zero attachments on the mirror.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('النسخة الموقعة من المستند مطلوبة قبل الترحيل.'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('يجب إرفاق النسخة الموقعة من المستند قبل الرصد.'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('النسخة الأصلية الموقعة مطلوبة للترحيل')).not.toBeInTheDocument()
+    // This branch renders the gate as moot for Posted documents (the gate only
+    // constrains the pre-post workflow), so the mirror shows the moot badge and
+    // never the missing/advisory state — the behaviour the fix asks for.
+    expect(screen.getByTestId('attachment-gate-moot')).toHaveTextContent(
+      'النسخة الموقعة غير مطلوبة بعد الآن',
+    )
+    expect(screen.queryByTestId('attachment-gate-missing')).not.toBeInTheDocument()
+  })
+
   it('renders Opening line types and asset identifiers from the server detail without an Opening wrapper', async () => {
     const openingPolicy = createDocumentPolicy({
       documentId: DOCUMENT_ID,
