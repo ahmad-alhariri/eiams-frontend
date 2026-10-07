@@ -1,27 +1,26 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
-import AdjustmentDraftFormPage from './adjustment-draft-form-page'
+import AdjustmentDraftFormPage from '@/modules/adjustment/pages/adjustment-draft-form-page'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
-import type {
-  InventoryAdjustment,
-  InventoryCountLinePage,
-  SessionResponse,
-} from '@/shared/types/generated/eiams-v1'
+import type { InventoryCount } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 const COUNT_ID = '223e4567-e89b-42d3-a456-426614174002'
 
 /** Serves the count-lines AND count-detail queries the page runs before seeding. */
-function useCountLinesHandler() {
+function useCountLinesHandler(status: InventoryCount['status'] = 'Completed') {
   server.use(
     http.get(`*/api/v1/inventory-counts/${COUNT_ID}/lines`, () =>
-      HttpResponse.json<InventoryCountLinePage>({
-        items: [
+      okPageJson(
+        [
           {
             countLineId: 'a23e4567-e89b-42d3-a456-426614174001',
             difference: -2,
@@ -41,16 +40,75 @@ function useCountLinesHandler() {
             actualQuantity: 10,
           },
         ],
-        meta: { pageIndex: 0, pageSize: 200, totalItems: 2, totalPages: 1 },
-      }),
+        { page: 1, pageSize: 200, totalCount: 2, totalPages: 1 },
+      ),
     ),
     http.get(`*/api/v1/inventory-counts/${COUNT_ID}`, () =>
-      HttpResponse.json({
+      okJson({
         countId: COUNT_ID,
+        status,
         warehouse: { id: '823e4567-e89b-42d3-a456-426614174008', displayName: 'المستودع المركزي' },
       }),
     ),
   )
+}
+
+function usePagedCountLinesHandler() {
+  const requestedPages: number[] = []
+  // Both fixtures differ only in fields the contract types loosely.
+  type CountLineView = {
+    countLineId: string
+    difference: number
+    material: { id: string; displayName: string }
+    reason: string | null
+    rowVersion: number
+    snapshotQuantity: number
+    actualQuantity: number | null
+  }
+
+  const matchingLines = Array.from({ length: 200 }, (_, index) => ({
+    countLineId: `count-line-${index}`,
+    difference: 0,
+    material: { id: '743e4567-e89b-42d3-a456-426614174008', displayName: 'ورق تصوير A4' },
+    reason: null,
+    rowVersion: 1,
+    snapshotQuantity: 10,
+    actualQuantity: 10,
+  }))
+  const laterVariance = {
+    countLineId: 'count-line-200',
+    difference: -1,
+    material: {
+      id: '723e4567-e89b-42d3-a456-426614174007',
+      displayName: 'حاسوب من الصفحة الثانية',
+    },
+    reason: 'عجز مرصود في الصفحة الثانية',
+    rowVersion: 1,
+    snapshotQuantity: 4,
+    actualQuantity: 3,
+  }
+
+  server.use(
+    http.get(`*/api/v1/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
+      const pageIndex = Number(new URL(request.url).searchParams.get('pageIndex'))
+      requestedPages.push(pageIndex)
+      return okPageJson<CountLineView>(pageIndex === 0 ? matchingLines : [laterVariance], {
+        page: pageIndex + 1,
+        pageSize: 200,
+        totalCount: 201,
+        totalPages: 2,
+      })
+    }),
+    http.get(`*/api/v1/inventory-counts/${COUNT_ID}`, () =>
+      okJson({
+        countId: COUNT_ID,
+        status: 'Completed',
+        warehouse: { id: '823e4567-e89b-42d3-a456-426614174008', displayName: 'المستودع المركزي' },
+      }),
+    ),
+  )
+
+  return requestedPages
 }
 
 vi.mock('@/modules/warehouse/hooks/use-scoped-warehouse-selector', () => ({
@@ -106,23 +164,10 @@ const MATERIAL_ID = '723e4567-e89b-42d3-a456-426614174007'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'adjustment.manager',
-      displayName: 'مدير المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستودع' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      {
-        scopeType: 'Enterprise',
-        scopeId: null,
-        displayName: 'الهيئة العامة للرقابة والتفتيش',
-      },
-    ],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -133,7 +178,7 @@ function useCreateHandler() {
   server.use(
     http.post('*/api/v1/adjustments', async ({ request }) => {
       capturedCreateBody = await request.json()
-      return HttpResponse.json<InventoryAdjustment>(
+      return okJson(
         {
           adjustmentId: '423e4567-e89b-42d3-a456-426614174004',
           countReference: null,
@@ -175,13 +220,17 @@ function fixtureUserId(): string {
 
 function renderForm(initialEntry = '/adjustments/new') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  client.setQueryData(authSessionQueryKey, sessionWith(['document.view', 'document.create']))
+  client.setQueryData(
+    authSessionQueryKey,
+    sessionWith(['document.view', 'document.create', 'document.post']),
+  )
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <QueryClientProvider client={client}>
         <Routes>
           <Route path="/adjustments/new" element={<AdjustmentDraftFormPage />} />
           <Route path="/adjustments" element={<p>القائمة</p>} />
+          <Route path="/counts/:countId" element={<p>جلسة الجرد المطلوبة</p>} />
         </Routes>
       </QueryClientProvider>
     </MemoryRouter>,
@@ -208,6 +257,81 @@ async function fillAndSubmitValidDirectCorrection(user: ReturnType<typeof userEv
 }
 
 describe('AdjustmentDraftFormPage (e21-t04)', () => {
+  it('returns to the originating count using Tab and Enter on the lifecycle recovery link', async () => {
+    useCountLinesHandler('InProgress')
+    renderForm(`/adjustments/new?countId=${COUNT_ID}&purpose=CountVariance`)
+    const user = userEvent.setup()
+    const link = await screen.findByRole('link', { name: 'العودة إلى جلسة الجرد' })
+    await user.tab()
+    expect(link).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(await screen.findByText('جلسة الجرد المطلوبة')).toBeVisible()
+  })
+
+  it.each(['Planned', 'InProgress'] as const)(
+    'blocks a direct count link for %s with Arabic recovery',
+    async (status) => {
+      useCountLinesHandler(status)
+      renderForm(`/adjustments/new?countId=${COUNT_ID}&purpose=CountVariance`)
+      expect(await screen.findByText('جلسة الجرد غير جاهزة للتسوية')).toBeVisible()
+      expect(screen.queryByRole('button', { name: 'حفظ المسودة' })).not.toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'العودة إلى جلسة الجرد' })).toHaveAttribute(
+        'href',
+        `/counts/${COUNT_ID}`,
+      )
+    },
+  )
+
+  it('allows a Closed count and saves the authoritative warehouse despite a tampered link', async () => {
+    useCountLinesHandler('Closed')
+    useCreateHandler()
+    renderForm(
+      `/adjustments/new?countId=${COUNT_ID}&purpose=CountVariance&warehouseId=833e4567-e89b-42d3-a456-426614174009`,
+    )
+    const user = userEvent.setup()
+    await screen.findByText(/هذا السند مرتبط بجلسة الجرد/)
+    await user.type(screen.getByLabelText('سبب التسوية'), 'تسوية فروقات الجرد')
+    await user.type(screen.getByLabelText('سبب الفرق'), 'عجز مرصود')
+    await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
+    await waitFor(() =>
+      expect(capturedCreateBody).toMatchObject({ countId: COUNT_ID, warehouseId: WAREHOUSE_ID }),
+    )
+  })
+
+  it.each([false, true])(
+    'blocks an unusable seed (unentered: %s) instead of mounting an empty locked row',
+    async (unentered) => {
+      useCountLinesHandler()
+      server.use(
+        http.get(`*/api/v1/inventory-counts/${COUNT_ID}/lines`, () =>
+          okPageJson(
+            [
+              {
+                countLineId: 'line',
+                material: { id: MATERIAL_ID, displayName: 'حاسوب مكتبي' },
+                snapshotQuantity: 25,
+                actualQuantity: unentered ? null : 25,
+                difference: 0,
+              },
+            ],
+            { page: 1, pageSize: 200, totalCount: 1, totalPages: 1 },
+          ),
+        ),
+      )
+      renderForm(`/adjustments/new?countId=${COUNT_ID}&purpose=CountVariance`)
+      expect(
+        await screen.findByText(unentered ? 'بيانات الجرد غير مكتملة' : 'لا توجد فروقات للتسوية'),
+      ).toBeVisible()
+      expect(screen.queryByRole('button', { name: 'حفظ المسودة' })).not.toBeInTheDocument()
+    },
+  )
+
+  it('rejects a count link carrying an incompatible purpose', () => {
+    renderForm(`/adjustments/new?countId=${COUNT_ID}&purpose=DirectCorrection`)
+    expect(screen.getByText('رابط الجرد غير صالح')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'حفظ المسودة' })).not.toBeInTheDocument()
+  })
+
   it('renders a DirectCorrection draft by default with manager controls', async () => {
     renderForm()
 
@@ -257,6 +381,18 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
     expect(screen.getAllByLabelText('سبب الفرق')).toHaveLength(1)
   })
 
+  it('seeds a nonzero variance beyond the first 200 count lines', async () => {
+    const requestedPages = usePagedCountLinesHandler()
+    renderForm(
+      '/adjustments/new?countId=223e4567-e89b-42d3-a456-426614174002&purpose=CountVariance&warehouseId=823e4567-e89b-42d3-a456-426614174008',
+    )
+
+    expect(await screen.findByText('حاسوب من الصفحة الثانية')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('عجز مرصود في الصفحة الثانية')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('سبب الفرق')).toHaveLength(1)
+    expect(requestedPages).toEqual([0, 1])
+  })
+
   it('never offers Disposal in the purpose dropdown (QA defect D1)', async () => {
     renderForm()
     const user = userEvent.setup()
@@ -287,9 +423,9 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
     )
   })
 
-  it('shows the keeper denial state without document.create', () => {
+  it('denies keepers with document.create but without document.post', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(authSessionQueryKey, sessionWith(['document.view']))
+    client.setQueryData(authSessionQueryKey, sessionWith(['document.view', 'document.create']))
     render(
       <MemoryRouter initialEntries={['/adjustments/new']}>
         <QueryClientProvider client={client}>

@@ -3,44 +3,33 @@ import { delay, HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
+import { okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
 
 const sessionFixture: SessionResponse = {
   user: {
-    userId: '10000000-0000-4000-8000-000000000001',
-    username: 'warehouse.keeper',
-    displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
+    id: '10000000-0000-4000-8000-000000000001',
+    email: 'warehouse.keeper@eiams.local',
+    firstName: 'أمين',
+    lastName: 'المستودع',
+    employeeId: null,
+    employeeName: null,
+  },
+  role: {
+    id: '10000000-0000-4000-8000-000000000002',
+    name: 'WarehouseKeeper',
+    nameAr: 'أمين مستودع',
+    description: null,
   },
   permissionCodes: ['document.create'],
-  availableScopes: [
-    {
-      scopeType: 'Warehouse',
-      scopeId: '20000000-0000-4000-8000-000000000001',
-      warehouseId: '20000000-0000-4000-8000-000000000001',
-      siteId: '30000000-0000-4000-8000-000000000001',
-      displayName: 'المستودع المركزي',
-    },
-  ],
   activeScope: {
     scopeType: 'Warehouse',
     scopeId: '20000000-0000-4000-8000-000000000001',
-    warehouseId: '20000000-0000-4000-8000-000000000001',
-    siteId: '30000000-0000-4000-8000-000000000001',
-    displayName: 'المستودع المركزي',
+    scopeName: 'المستودع المركزي',
   },
-  scopeState: 'Selected',
-  activeRoles: [
-    {
-      roleId: '40000000-0000-4000-8000-000000000001',
-      code: 'WH_KEEPER',
-      nameAr: 'أمين مستودع',
-    },
-  ],
 }
 
 function tokenResponse(accessToken: string): AuthTokenResponse {
@@ -80,7 +69,7 @@ describe('shared API client', () => {
           authorization: request.headers.get('Authorization'),
           credentials: request.credentials,
         })
-        return HttpResponse.json({ ok: true })
+        return okJson({ ok: true })
       }),
     )
 
@@ -117,13 +106,13 @@ describe('shared API client', () => {
       http.get(`${API_BASE_URL}/inventory/balances`, ({ request }) => {
         protectedCalls += 1
         return request.headers.get('Authorization') === 'Bearer refreshed-token'
-          ? HttpResponse.json({ request: 'balances' })
+          ? okJson({ request: 'balances' })
           : new HttpResponse(null, { status: 401 })
       }),
       http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
         protectedCalls += 1
         return request.headers.get('Authorization') === 'Bearer refreshed-token'
-          ? HttpResponse.json({ request: 'warehouses' })
+          ? okJson({ request: 'warehouses' })
           : new HttpResponse(null, { status: 401 })
       }),
       http.post(`${API_BASE_URL}/auth/refresh`, async ({ request }) => {
@@ -131,7 +120,7 @@ describe('shared API client', () => {
         expect(request.headers.get('Authorization')).toBeNull()
         expect(request.credentials).toBe('include')
         await delay(20)
-        return HttpResponse.json(tokenResponse('refreshed-token'))
+        return okJson(tokenResponse('refreshed-token'))
       }),
     )
 
@@ -140,8 +129,8 @@ describe('shared API client', () => {
       client.get('/warehouses'),
     ])
 
-    expect(balances.data).toEqual({ request: 'balances' })
-    expect(warehouses.data).toEqual({ request: 'warehouses' })
+    expect(balances.data.data).toEqual({ request: 'balances' })
+    expect(warehouses.data.data).toEqual({ request: 'warehouses' })
     expect(refreshCalls).toBe(1)
     expect(protectedCalls).toBe(4)
     expect(events).toEqual(['session-refreshed'])
@@ -160,7 +149,7 @@ describe('shared API client', () => {
       }),
       http.post(`${API_BASE_URL}/auth/refresh`, () => {
         refreshCalls += 1
-        return HttpResponse.json(tokenResponse('still-rejected-token'))
+        return okJson(tokenResponse('still-rejected-token'))
       }),
     )
 
@@ -194,7 +183,7 @@ describe('shared API client', () => {
       }),
       http.get(`${API_BASE_URL}/reports/dashboard`, ({ request }) => {
         observedAuthorization.push(request.headers.get('Authorization'))
-        return HttpResponse.json({ ok: true })
+        return okJson({ ok: true })
       }),
     )
 
@@ -251,7 +240,7 @@ describe('shared API client', () => {
       }),
       http.post(`${API_BASE_URL}/auth/refresh`, () => {
         refreshCalls += 1
-        return HttpResponse.json(tokenResponse('unexpected-token'))
+        return okJson(tokenResponse('unexpected-token'))
       }),
     )
 

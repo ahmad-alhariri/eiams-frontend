@@ -5,55 +5,38 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 
 import {
   AnonymousRoute,
-  NoAccessRoute,
-  RequireSelectedScope,
+  RequireActiveScope,
   RouteAccessGuard,
 } from '@/modules/auth/components/route-guards'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import type { AuthSessionStatus } from '@/modules/auth/store/auth-session.store'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole } from '@/test/msw/factories'
 
-/**
- * D-SRS-01 singular-session fixtures.
- *
- * The frozen provisional contract still declares `availableScopes` and
- * `scopeState` as required fields on `SessionResponse`. The D-SRS-01
- * singular-session refactor removed their consumer code in the frontend,
- * but the type is still imported from the deprecated generated artifact.
- * These fixtures satisfy the type until `whhu.5` deletes the generated
- * artifact entirely.
- */
-const selectedSession: SessionResponse = {
-  user: {
-    userId: '10000000-0000-4000-8000-000000000001',
-    username: 'warehouse.manager',
-    displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
-  },
+const activeScopeSession: SessionResponse = {
+  user: createSessionUser({ firstName: 'أمين المستودع' }),
+  role: createSessionRole(),
   permissionCodes: ['inventory.view'],
-  availableScopes: [],
-  scopeState: 'Selected',
   activeScope: {
     scopeType: 'Warehouse',
     scopeId: '20000000-0000-4000-8000-000000000001',
-    warehouseId: '20000000-0000-4000-8000-000000000001',
-    siteId: '30000000-0000-4000-8000-000000000001',
-    displayName: 'المستودع المركزي',
+    scopeName: 'المستودع المركزي',
   },
-  activeRoles: [],
 }
 
-const sessionWithoutScope: SessionResponse = {
-  ...selectedSession,
-  // The generated contract types `activeScope` as optional with
-  // exactOptionalPropertyTypes: true. Omit it entirely to model the
-  // server-detected Unavailable case; the route-guards `hasActiveScope`
-  // predicate treats the absent property as a missing scope.
-  permissionCodes: [],
+/**
+ * Deliberately builds a session carrying NO activeScope.
+ *
+ * `SessionResponse.activeScope` is required, so this payload cannot be expressed through the
+ * type — which is the point. It is the shape the guard must still refuse: the guard this bead
+ * closed compared `scopeState === 'SelectionRequired'` by equality, so undefined fell through
+ * to rendering the protected tree. The cast is the assertion under test, not a convenience,
+ * so it is confined to this one function.
+ */
+function sessionWithoutScope(): SessionResponse {
+  return { ...activeScopeSession, activeScope: undefined } as unknown as SessionResponse
 }
-delete (sessionWithoutScope as { activeScope?: unknown }).activeScope
 
 function renderRoutes({
   initialPath = '/protected',
@@ -84,13 +67,12 @@ function renderRoutes({
               </AnonymousRoute>
             }
           />
-          <Route path="/session/no-access" element={<NoAccessRoute />} />
           <Route
             path="/protected"
             element={
-              <RequireSelectedScope>
+              <RequireActiveScope>
                 <p>محتوى محمي</p>
-              </RequireSelectedScope>
+              </RequireActiveScope>
             }
           />
           <Route
@@ -114,7 +96,7 @@ afterEach(() => {
   })
 })
 
-describe('authentication route guards (D-SRS-01 singular session)', () => {
+describe('authentication route guards', () => {
   it('holds protected content behind a neutral Arabic loading boundary during hydration', () => {
     renderRoutes({ status: 'initializing' })
 
@@ -129,26 +111,30 @@ describe('authentication route guards (D-SRS-01 singular session)', () => {
     expect(screen.queryByText('محتوى محمي')).not.toBeInTheDocument()
   })
 
-  it('renders the contact-administrator state for an authenticated session without a scope', () => {
-    renderRoutes({ status: 'authenticated', session: sessionWithoutScope })
+  it('denies an authenticated session that carries no active scope', () => {
+    renderRoutes({ status: 'authenticated', session: sessionWithoutScope() })
 
     expect(screen.getByRole('heading', { name: 'لا يتوفر نطاق عمل' })).toBeInTheDocument()
     expect(screen.queryByText('محتوى محمي')).not.toBeInTheDocument()
   })
 
-  it('renders permission denial and keeps the session authenticated', () => {
+  it('renders scoped content and keeps permission denial separate from logout', () => {
     renderRoutes({
       initialPath: '/inventory',
       status: 'authenticated',
-      session: { ...selectedSession, permissionCodes: [] },
+      session: { ...activeScopeSession, permissionCodes: [] },
     })
 
     expect(screen.getByRole('heading', { name: 'ليست لديك صلاحية الوصول' })).toBeInTheDocument()
     expect(useAuthSessionStore.getState().status).toBe('authenticated')
   })
 
-  it('allows a selected-scope route when the canonical route permission passes', () => {
-    renderRoutes({ initialPath: '/inventory', status: 'authenticated', session: selectedSession })
+  it('allows a scoped route when the canonical route permission passes', () => {
+    renderRoutes({
+      initialPath: '/inventory',
+      status: 'authenticated',
+      session: activeScopeSession,
+    })
 
     expect(screen.getByText('أرصدة المخزون')).toBeInTheDocument()
   })

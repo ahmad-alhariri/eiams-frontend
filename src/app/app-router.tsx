@@ -2,15 +2,14 @@ import { createBrowserRouter, RouterProvider } from 'react-router'
 
 import { AppLayout } from '@/shared/layout/app-layout'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
+import { UiSandboxMarker } from '@/shared/layout/ui-sandbox-marker'
 import {
   AnonymousRoute,
-  NoAccessRoute,
-  RequireSelectedScope,
+  RequireActiveScope,
   RouteAccessGuard,
 } from '@/modules/auth/components/route-guards'
-import { ActiveScopeBadge } from '@/modules/auth/components/active-scope-badge'
-import { AuthSessionExpiredBridge } from '@/modules/auth/components/auth-session-expired-bridge'
-import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
+import { SessionUserMenu } from '@/modules/auth/components/session-user-menu'
+import { ROUTE_METADATA } from '@/config/routes'
 import {
   getWiredRouteKeys,
   isDevOnlyRoute,
@@ -26,13 +25,20 @@ import {
  *
  * Protected routes are driven entirely by ROUTE_METADATA: every non-public
  * wired route gets the RouteAccessGuard (scope + permission). Public routes
- * (login, scope select, no-access, not-found, dev gallery) are composed
- * explicitly below instead.
+ * (login, not-found, dev gallery) are composed explicitly below instead.
  *
  * App routes render inside the AppLayout frame; anonymous routes own their
- * standalone composition and mount outside that frame. Lazy routes retain the
- * shared per-domain error boundary, while AppLayout supplies its own suspense
- * boundary for framed pages.
+ * standalone composition and mount outside that frame. Only the protected
+ * branch receives the session chrome (`userMenu`): the dev-gallery and
+ * not-found branches render the same frame without a session identity. Lazy
+ * routes retain the shared per-domain error boundary, while AppLayout supplies
+ * its own suspense boundary for framed pages.
+ *
+ * The RESOLUTION-040 sandbox marker has to reach the anonymous routes too, and
+ * they get no AppLayout — a developer running the sandbox lands on `/login`
+ * first, and an unmarked page there reads as integration evidence. Login is
+ * therefore wrapped in the same `UiSandboxMarker` the frame uses, so there is
+ * one element and one profile read, not two of each.
  */
 const PROTECTED_ROUTE_OBJECTS = getWiredRouteKeys().flatMap((key) => {
   if (ROUTE_METADATA[key].public) {
@@ -59,14 +65,12 @@ const appRouter = createBrowserRouter([
   {
     ...LOGIN_ROUTE,
     element: (
-      <AnonymousRoute>
-        <RouteSuspense>{LOGIN_ROUTE.element}</RouteSuspense>
-      </AnonymousRoute>
+      <UiSandboxMarker>
+        <AnonymousRoute>
+          <RouteSuspense>{LOGIN_ROUTE.element}</RouteSuspense>
+        </AnonymousRoute>
+      </UiSandboxMarker>
     ),
-  },
-  {
-    path: ROUTE_PATHS.noAccess,
-    element: <NoAccessRoute />,
   },
   {
     element: <AppLayout />,
@@ -74,15 +78,9 @@ const appRouter = createBrowserRouter([
   },
   {
     element: (
-      <RequireSelectedScope>
-        {/* The bridge lives inside the router context (as a child of a route's
-            element branch) so its `useNavigate` resolves. It owns the
-            D-AUTH-01 §"Token and session lifecycle" navigation half of the
-            `session-expired` contract; the cache-clearing half is owned by
-            `authSessionLifecycle.clearLocalSession`. */}
-        <AuthSessionExpiredBridge />
-        <AppLayout scopeSwitcher={<ActiveScopeBadge />} />
-      </RequireSelectedScope>
+      <RequireActiveScope>
+        <AppLayout userMenu={<SessionUserMenu />} />
+      </RequireActiveScope>
     ),
     children: PROTECTED_ROUTE_OBJECTS,
   },

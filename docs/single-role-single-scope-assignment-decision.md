@@ -3,7 +3,7 @@
 **Decision ID:** D-SRS-01  
 **Status:** Accepted frontend architecture decision; backend contract enforcement pending ratification  
 **Beads:** `eiams-frontend-7ipk.1` (decision), `eiams-frontend-7ipk.5` (backend-enforcement record)  
-**Related contract gates:** `eiams-frontend-e01.7`, `eiams-frontend-whhu.1`, `eiams-frontend-whhu.7`, `eiams-frontend-whhu.10`  
+**Related contract gates:** `eiams-frontend-e01.7`, `eiams-frontend-whhu.1`, `eiams-frontend-whhu.7`, `eiams-frontend-whhu.10`, `eiams-frontend-whhu.11`  
 **Decision date:** 2026-09-01
 
 ## Decision
@@ -28,9 +28,11 @@ into additional role-scope rows.
 ## Session and authorization consequences
 
 The authoritative session has one required `activeScope`, representing the
-user's sole persistent assignment. It does not expose `availableScopes`, and
-`SelectionRequired` is not a valid session state. The browser does not choose
-among scopes or calculate inheritance; it consumes the server-calculated
+user's sole persistent assignment. `scopeState` is `Selected` while that
+assignment is valid and `Unavailable` only when the server detects it as
+invalid; no other state is valid. The session does not expose
+`availableScopes`, and `SelectionRequired` is not a valid session state. The
+browser does not choose among scopes or calculate inheritance; it consumes the server-calculated
 `permissionCodes` and effective role information for `activeScope`.
 
 `Unavailable` is reserved for a server-detected inactive, expired, or otherwise
@@ -58,10 +60,46 @@ requests.
    and the administrator's authority to assign the scope remain backend checks.
 
 `eiams-frontend-e01.7` owns ratification of the versioned OpenAPI and backend
-implementation. That ratification must publish the singular replacement
-request/response shape and validation/error semantics. An `assignments`
-collection is not part of the accepted v1 contract. No handwritten frontend
-adapter may conceal a different backend behavior.
+implementation, and `eiams-frontend-whhu.11` is the dedicated backend
+lifecycle prerequisite implementing this enforcement. That ratification must
+publish the singular replacement endpoint `GET`/`PUT
+/api/v1/admin/users/{userId}/role-scope` (singular `role-scope`, not plural
+`role-scopes`) with its singular replacement request/response shape and
+validation/error semantics: the request carries exactly one assignment
+(`roleId`, `scopeType`, `scopeId`) plus the required optimistic-concurrency
+`expectedRowVersion`, with no `assignments` collection, and the response is the
+complete stored singular assignment projection including its new `rowVersion`.
+An `assignments` collection is not part of the accepted v1 contract. No
+handwritten frontend adapter may conceal a different backend behavior.
+
+### Amendment 1.1.0 — `expectedRowVersion` is required (owner ruling 2026-09-28)
+
+The original text of this decision stated the request carries "no
+`rowVersion`". **That clause is superseded.** `expectedRowVersion` is a required
+field, and a stale replacement returns `409 Conflict` after which the frontend
+reloads the authoritative assignment and requires review rather than replaying a
+stale save.
+
+Two later owner-approved sources require it, and this amendment aligns the
+decision with them rather than the reverse:
+
+- `target-contract-baseline.md` (RESOLUTION-001/013/016) defines
+  `ReplaceUserRoleScopeRequest` as `roleId`, `scopeType`, `scopeId`, and
+  `expectedRowVersion: positive version`, and applies `expectedRowVersion` as the
+  uniform rule to every versioned write in the aggregate.
+- `CONFLICT-RESOLUTION-REVIEW-REPORT.md` §4.3 (2026-09-21) states the correct
+  shape as singular GET, atomic PUT replacement, no DELETE for the sole
+  assignment, no independent grant, **add `expectedRowVersion`**, and return the
+  full assignment after success rather than an identifier only.
+
+The original omission was a genuine defect, not a preference: the backend binds
+request bodies with `additionalProperties: false`, so *omitting* the field
+rejects the request. Beads `eiams-frontend-7ipk.2` and `.3` carried acceptance
+criteria requiring "no unsupported `rowVersion` field" and must be corrected to
+require `expectedRowVersion`.
+
+`OrganizationalUnit` remains confirmed as **not** an assignable scope; the three
+scope types Enterprise, Site and Warehouse stand.
 
 ## Frontend prevention and Arabic scope selection
 
@@ -94,7 +132,9 @@ rule that the server authorizes every request.
 
 The provisional OpenAPI remains provisional until `eiams-frontend-e01.7`
 reviews the backend implementation and publishes a versioned reconciled
-contract/provenance record. `eiams-frontend-whhu.1`, `.7`, and `.10` implement
+contract/provenance record. `eiams-frontend-whhu.11` implements the
+backend/database/API enforcement as the dedicated exactly-one lifecycle
+prerequisite. `eiams-frontend-whhu.1`, `.7`, and `.10` implement
 and verify the direct-integration/session consequences. The frontend tasks
 `eiams-frontend-7ipk.2`, `.3`, and `.4` consume this decision; `.5` records the
 backend-authoritative requirement above.
@@ -120,3 +160,17 @@ backend-authoritative requirement above.
   versioned OpenAPI consequences before production integration.
 - `eiams-frontend-whhu.1`, `.7`, `.10` — reconcile, implement, and smoke-test
   the production session and OpenAPI contract.
+- `eiams-frontend-whhu.11` — enforce the exactly-one user role-scope
+  lifecycle in the backend/database/API (dedicated prerequisite).
+
+## Amendments
+
+- **D-RBAC-03 (2026-10-04) — `Role.nameAr` is required.** The role read and
+  write contract carries a required Arabic display label, and the session role
+  DTO carries it too. `Role.Name` remains the role code (`WH_MGR`), not a
+  display label, so the Arabic-first UI had nothing to render before this. This
+  knowingly departs from RESOLUTION-027 §15 and RESOLUTION-019 §14; the
+  deviation and its accepted consequences are recorded in
+  [`role-arabic-label-contract-decision.md`](role-arabic-label-contract-decision.md).
+  Consequence for this decision's scope: any role-scoped session consumer must
+  expect `role.nameAr`, and the frontend role write path must send it.

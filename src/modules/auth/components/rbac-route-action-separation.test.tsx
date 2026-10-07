@@ -1,6 +1,8 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { okJson } from '@/test/msw/envelope'
 import userEvent from '@testing-library/user-event'
+import { http } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router'
 
@@ -9,46 +11,28 @@ import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
+import { type ApiClientBundle } from '@/shared/services/api.client'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { DocumentPolicy, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { DocumentPolicy } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole } from '@/test/msw/factories'
+import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = '20000000-0000-4000-8000-000000000001'
-const SITE_ID = '30000000-0000-4000-8000-000000000001'
 
 const warehouseScope = {
   scopeType: 'Warehouse' as const,
   scopeId: WAREHOUSE_ID,
-  displayName: 'مستودع دمشق المركزي',
-  siteId: SITE_ID,
-  warehouseId: WAREHOUSE_ID,
+  scopeName: 'مستودع دمشق المركزي',
 }
 
-/**
- * D-SRS-01 singular-session fixture.
- *
- * The frozen provisional contract still declares `availableScopes` and
- * `scopeState` as required fields on `SessionResponse`. The D-SRS-01
- * singular-session refactor removed their consumer code in the frontend,
- * but the type is still imported from the deprecated generated artifact.
- * This fixture satisfies the type until `whhu.5` deletes the generated
- * artifact entirely.
- */
 function selectedSession(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'warehouse.keeper',
-      displayName: 'أمين المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'أمين المستودع' }),
+    role: createSessionRole(),
     permissionCodes,
-    availableScopes: [warehouseScope],
     activeScope: warehouseScope,
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -138,25 +122,12 @@ describe('RBAC route and action separation', () => {
     expect(onExecute).not.toHaveBeenCalled()
   })
 
-  /**
-   * Under D-SRS-01 the user cannot switch scopes from the client; the only
-   * legitimate permission change is the server-returned session after an
-   * admin updates the user's role-scope assignment. This test verifies the
-   * route re-evaluates from the new server-returned session.
-   *
-   * `usePermission` reads the cached session through an observer whose
-   * queryFn is intentionally disabled (`enabled: false`); the application
-   * hydration flow owns session writes via `setQueryData`, not via fetch.
-   * The test mirrors that path: the admin updates the user's role-scope
-   * server-side, the client receives the new session (e.g. via a future
-   * SSE/polling channel that writes to the cache), and the UI re-evaluates.
-   */
-  it('re-evaluates the route from the server-returned session after a server-side permission change', async () => {
-    const bundle = createApiClient({ baseURL: API_BASE_URL })
-    bundles.push(bundle)
+  it('re-evaluates the route from a server-returned session after it is refetched', async () => {
     const queryClient = createQueryClient()
     const onExecute = vi.fn()
-    const nextSession = selectedSession(['document.post', 'inventory.view'])
+    const nextSession = selectedSession(['document.post'])
+
+    server.use(http.get(`${API_BASE_URL}/auth/session`, () => okJson(nextSession)))
 
     queryClient.setQueryData(authSessionQueryKey, selectedSession(['inventory.view']))
     useAuthSessionStore.setState({ status: 'authenticated' })
@@ -181,17 +152,14 @@ describe('RBAC route and action separation', () => {
     expect(screen.getByText('أرصدة المخزون')).toBeInTheDocument()
 
     await act(async () => {
-      // Admin updated the user's role-scope server-side; the application
-      // hydration flow (or a future real-time channel) writes the new
-      // session into the cache.
+      // The root owns session hydration; guards only observe the cached entry.
       queryClient.setQueryData(authSessionQueryKey, nextSession)
     })
 
     await waitFor(() => {
-      expect(screen.getByRole('region', { name: 'محتوى أرصدة المخزون' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'ليست لديك صلاحية الوصول' })).toBeInTheDocument()
     })
-    const post = screen.getByRole('button', { name: 'ترحيل' })
-    expect(post).not.toBeDisabled()
+    expect(screen.queryByText('أرصدة المخزون')).not.toBeInTheDocument()
     expect(useAuthSessionStore.getState().status).toBe('authenticated')
   })
 })

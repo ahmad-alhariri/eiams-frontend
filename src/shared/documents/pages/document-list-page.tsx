@@ -1,4 +1,4 @@
-import { IconPlus } from '@tabler/icons-react'
+﻿import { IconPlus } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router'
@@ -261,8 +261,8 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
           emptyDescription="لم يتم العثور على سندات تطابق معايير البحث الحالية."
           page={currentPage}
           pageSize={pageSize}
-          totalCount={documentListQuery.data?.meta.totalItems}
-          totalPages={Math.max(documentListQuery.data?.meta.totalPages ?? 1, 1)}
+          totalCount={documentListQuery.data?.totalItems}
+          totalPages={Math.max(documentListQuery.data?.totalPages ?? 1, 1)}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           searchQuery={search}

@@ -1,7 +1,8 @@
-import type { AxiosInstance } from 'axios'
-
-import { apiClient } from '@/shared/services/api.client'
-import type { IdempotentRequest } from '@/shared/services/mutation-safety'
+﻿import type { ApiPage } from '@/shared/api/api-contracts'
+import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
+import { toWirePaginationParams } from '@/shared/api/pagination'
+import { IDEMPOTENCY_KEY_HEADER, type IdempotentRequest } from '@/shared/services/mutation-safety'
 import type {
   DocumentActionResult,
   DocumentLifecycleHistory,
@@ -12,7 +13,6 @@ import type {
   VersionOnlyDocumentActionRequest,
   WarehouseDocument,
   WarehouseDocumentDraftRequest,
-  WarehouseDocumentPage,
 } from '@/shared/types/generated/eiams-v1'
 
 const DOCUMENTS_PATH = '/warehouse-documents' satisfies keyof paths
@@ -45,6 +45,8 @@ function reasonedAction(rowVersion: number, reason: string): ReasonedDocumentAct
 /**
  * Builds axios params with conditional spreads so optional filters never leak
  * `undefined` keys onto the wire, keeping the request exactOptional-safe.
+ * Page conversion is delegated to the shared boundary so the one-based UI
+ * model and the zero-based wire index are converted in one place.
  */
 function toQueryParams(query: ListWarehouseDocumentsQuery) {
   return {
@@ -52,15 +54,16 @@ function toQueryParams(query: ListWarehouseDocumentsQuery) {
     ...(query.dateTo === undefined ? {} : { dateTo: query.dateTo }),
     ...(query.documentStatus === undefined ? {} : { documentStatus: query.documentStatus }),
     ...(query.documentType === undefined ? {} : { documentType: query.documentType }),
-    ...(query.pageIndex === undefined ? {} : { pageIndex: query.pageIndex }),
-    ...(query.pageSize === undefined ? {} : { pageSize: query.pageSize }),
+    ...toWirePaginationParams(query),
     ...(query.search === undefined ? {} : { search: query.search }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
   }
 }
 
 export interface DocumentService {
-  listDocuments: (query: Readonly<ListWarehouseDocumentsQuery>) => Promise<WarehouseDocumentPage>
+  listDocuments: (
+    query: Readonly<ListWarehouseDocumentsQuery>,
+  ) => Promise<ApiPage<WarehouseDocument>>
   getDocument: (documentId: string) => Promise<WarehouseDocument>
   createDocument: (request: Readonly<WarehouseDocumentDraftRequest>) => Promise<WarehouseDocument>
   updateDocument: (
@@ -108,55 +111,67 @@ export interface DocumentService {
  * Contract-only warehouse-document transport. The API remains authoritative
  * for workflow state, policy evaluation, and optimistic-concurrency conflicts.
  */
-export function createDocumentService(client: AxiosInstance): DocumentService {
+export function createDocumentService(transport: ApiTransport): DocumentService {
   const executeAction = async (
     path: string,
     request: VersionOnlyDocumentActionRequest | ReasonedDocumentActionRequest,
     idempotentRequest: IdempotentRequest,
   ): Promise<DocumentActionResult> => {
-    const response = await client.post<DocumentActionResult>(
+    const response = await transport.request<DocumentActionResult>({
       path,
-      request,
-      idempotentRequest.config,
-    )
-    return response.data
+      method: 'POST',
+      body: request,
+      // Read the typed `idempotencyKey` rather than digging through the Axios
+      // config, so the header cannot drift from the key the caller holds.
+      headers: { [IDEMPOTENCY_KEY_HEADER]: idempotentRequest.idempotencyKey },
+    })
+    return response
   }
 
   return {
     async listDocuments(query) {
-      const response = await client.get<WarehouseDocumentPage>(DOCUMENTS_PATH, {
-        params: toQueryParams(query),
+      return transport.requestPage<WarehouseDocument>({
+        path: DOCUMENTS_PATH,
+        method: 'GET',
+        query: toQueryParams(query),
       })
-      return response.data
     },
     async getDocument(documentId) {
-      const response = await client.get<WarehouseDocument>(
-        pathWithDocumentId(DOCUMENT_PATH, documentId),
-      )
-      return response.data
+      const response = await transport.request<WarehouseDocument>({
+        path: pathWithDocumentId(DOCUMENT_PATH, documentId),
+        method: 'GET',
+      })
+      return response
     },
     async createDocument(request) {
-      const response = await client.post<WarehouseDocument>(DOCUMENTS_PATH, request)
-      return response.data
+      const response = await transport.request<WarehouseDocument>({
+        path: DOCUMENTS_PATH,
+        method: 'POST',
+        body: request,
+      })
+      return response
     },
     async updateDocument(documentId, request) {
-      const response = await client.put<WarehouseDocument>(
-        pathWithDocumentId(DOCUMENT_PATH, documentId),
-        request,
-      )
-      return response.data
+      const response = await transport.request<WarehouseDocument>({
+        path: pathWithDocumentId(DOCUMENT_PATH, documentId),
+        method: 'PUT',
+        body: request,
+      })
+      return response
     },
     async getDocumentHistory(documentId) {
-      const response = await client.get<DocumentLifecycleHistory>(
-        pathWithDocumentId(DOCUMENT_HISTORY_PATH, documentId),
-      )
-      return response.data
+      const response = await transport.request<DocumentLifecycleHistory>({
+        path: pathWithDocumentId(DOCUMENT_HISTORY_PATH, documentId),
+        method: 'GET',
+      })
+      return response
     },
     async getDocumentPolicy(documentId) {
-      const response = await client.get<DocumentPolicy>(
-        pathWithDocumentId(DOCUMENT_POLICY_PATH, documentId),
-      )
-      return response.data
+      const response = await transport.request<DocumentPolicy>({
+        path: pathWithDocumentId(DOCUMENT_POLICY_PATH, documentId),
+        method: 'GET',
+      })
+      return response
     },
     async submitDocument(documentId, rowVersion, idempotentRequest) {
       return executeAction(
@@ -203,4 +218,4 @@ export function createDocumentService(client: AxiosInstance): DocumentService {
   }
 }
 
-export const documentService = createDocumentService(apiClient)
+export const documentService = createDocumentService(apiTransport)

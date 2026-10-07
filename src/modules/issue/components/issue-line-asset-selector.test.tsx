@@ -1,7 +1,8 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
+import { okPageJson } from '@/test/msw/envelope'
 import type { PropsWithChildren } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { describe, expect, it, vi } from 'vitest'
@@ -51,8 +52,8 @@ function createHarness(lineOverrides: Partial<DocumentLinesContainer['lines'][nu
 function useTwoInStockAssetsHandler() {
   server.use(
     http.get(`${API_BASE_URL}/assets`, () =>
-      HttpResponse.json({
-        items: [
+      okPageJson(
+        [
           createAsset({
             assetId: fixtureUuid(230),
             assetNumber: 'AST-2024-C01',
@@ -70,8 +71,8 @@ function useTwoInStockAssetsHandler() {
             currentWarehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي' },
           }),
         ],
-        meta: { page: 0, pageSize: 50, total: 2 },
-      }),
+        { page: 1, pageSize: 50, totalCount: 2, totalPages: 1 },
+      ),
     ),
   )
 }
@@ -135,7 +136,7 @@ describe('IssueLineAssetSelector (e16-t05 / D-IAR-01)', () => {
   it('shows an empty-state message when no InStock assets exist for the material', async () => {
     server.use(
       http.get(`${API_BASE_URL}/assets`, () =>
-        HttpResponse.json({ items: [], meta: { page: 0, pageSize: 50, total: 0 } }),
+        okPageJson([], { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 }),
       ),
     )
     render(<IssueLineAssetSelector index={0} warehouseId={WAREHOUSE_ID} />, {

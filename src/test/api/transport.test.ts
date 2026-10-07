@@ -7,7 +7,9 @@
  * Per-contract test rules (per-plan §9; `docs/feature-service-composition-standard.md` §testing):
  *  - Focused transport-level tests only (no feature-level integration; no module endpoint strings
  *    like `ASSETS_PATH` — those belong to module-level service tests, not the shared transport layer).
- *  - MSW adapter stub only (`test/msw/handlers.ts` pattern — separate from browser MSW `mocks/handlers.ts`).
+ *  - MSW adapter stub only (`test/msw/handlers.ts` pattern — the test harness. The separate
+ *    browser-worker mock API it used to be confused with, `src/mocks/`, was deleted in
+ *    `eiams-frontend-m4jm`, so this is now the only MSW surface in the repository).
  *  - No second fake client with different envelope rules (reuse existing MSW adapter; reuse `mutation-safety`
  *    patterns; reuse `StatusBadge` vocabulary for error-state assertions — no new Arabic text invented).
  *  - Happy path, paginated response (`requestPage`), empty success (`requestEmpty` / `204`), error response

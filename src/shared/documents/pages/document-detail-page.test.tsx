@@ -1,18 +1,20 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type {
-  SessionResponse,
-  VersionOnlyDocumentActionRequest,
-} from '@/shared/types/generated/eiams-v1'
+import type { VersionOnlyDocumentActionRequest } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   createDocumentPolicy,
   createMaterial,
   createPolicyBlocker,
+  createSessionRole,
+  createSessionScope,
+  createSessionUser,
   createWarehouseDocument,
   createWarehouseDocumentLine,
   deriveLifecycleEvents,
@@ -53,23 +55,10 @@ const ALL_DOCUMENT_CODES = [
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'document.manager',
-      displayName: 'مدير المستندات',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستندات' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      {
-        scopeType: 'Warehouse',
-        scopeId: '00000000-0000-4000-8000-00000000000c',
-        displayName: 'المستودع المركزي',
-      },
-    ],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -414,11 +403,9 @@ describe('DocumentDetailPage', () => {
     let relatedDocumentReference: { systemReferenceNumber: string } | undefined
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(store.document),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: store.document.documentStatus,
           currentRowVersion: store.document.rowVersion,
@@ -426,7 +413,7 @@ describe('DocumentDetailPage', () => {
         }),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(store.document.policy),
+        okJson(store.document.policy),
       ),
       http.post(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/reverse`,
@@ -440,15 +427,15 @@ describe('DocumentDetailPage', () => {
             rowVersion: body.rowVersion,
           })
           if (outcome.kind === 'conflict') {
-            return HttpResponse.json(outcome.problem, { status: 409 })
+            return apiJson(outcome.problem, { status: 409 })
           }
           if (outcome.kind === 'validation') {
-            return HttpResponse.json(outcome.problem, { status: 422 })
+            return apiJson(outcome.problem, { status: 422 })
           }
           store.document = outcome.document
           store.events = [...store.events, outcome.result.lifecycleEvent]
           relatedDocumentReference = outcome.result.relatedDocument
-          return HttpResponse.json(outcome.result)
+          return okJson(outcome.result)
         },
       ),
     )
@@ -550,9 +537,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         attempts += 1
-        return attempts === 1
-          ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(document)
+        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson(document)
       }),
       ...createWarehouseDocumentPolicyHandler(document.policy),
     )
@@ -651,10 +636,10 @@ describe('DocumentDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(store.documents[0])
+        return okJson(store.documents[0])
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: store.documents[0]?.documentStatus ?? 'Draft',
           currentRowVersion: store.documents[0]?.rowVersion ?? 0,
@@ -662,7 +647,7 @@ describe('DocumentDetailPage', () => {
         }),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(store.documents[0]?.policy),
+        okJson(store.documents[0]?.policy),
       ),
       ...createWarehouseDocumentActionHandler({
         initialDocument: store.documents[0]!,
@@ -752,7 +737,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(document)
+        return okJson(document)
       }),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
       ...createWarehouseDocumentPolicyHandler(document.policy),
@@ -804,14 +789,14 @@ describe('DocumentDetailPage', () => {
             rowVersion: body.rowVersion,
           })
           if (outcome.kind === 'conflict') {
-            return HttpResponse.json(outcome.problem, { status: 409 })
+            return apiJson(outcome.problem, { status: 409 })
           }
           if (outcome.kind === 'validation') {
-            return HttpResponse.json(outcome.problem, { status: 422 })
+            return apiJson(outcome.problem, { status: 422 })
           }
           submitCalls += 1
           store.documents[0] = outcome.document
-          return HttpResponse.json(outcome.result)
+          return okJson(outcome.result)
         },
       ),
       ...createWarehouseDocumentActionHandler({
@@ -820,10 +805,10 @@ describe('DocumentDetailPage', () => {
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return HttpResponse.json(store.documents[0])
+        return okJson(store.documents[0])
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json({
+        okJson({
           documentId: DOCUMENT_ID,
           currentStatus: store.documents[0]?.documentStatus ?? 'Draft',
           currentRowVersion: store.documents[0]?.rowVersion ?? 0,
@@ -831,7 +816,7 @@ describe('DocumentDetailPage', () => {
         }),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(store.documents[0]?.policy),
+        okJson(store.documents[0]?.policy),
       ),
     )
 

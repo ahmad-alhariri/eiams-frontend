@@ -10,7 +10,8 @@ import {
 } from '@/modules/organization/hooks/use-organizational-unit-mutations'
 import { useOrganizationalUnitsQuery } from '@/modules/organization/hooks/use-organization-queries'
 import {
-  toOrganizationalUnitRequest,
+  toCreateOrganizationalUnitRequest,
+  toUpdateOrganizationalUnitRequest,
   type OrganizationalUnitFormValues,
 } from '@/modules/organization/schemas/organizational-unit.schemas'
 import { EmptyState } from '@/shared/feedback/empty-state'
@@ -40,7 +41,7 @@ function OrganizationalUnitsPage() {
   const search = useDebounce(searchInput)
   const queryInput = useMemo(
     () => ({
-      pageIndex: 0,
+      page: 0,
       pageSize: ORGANIZATIONAL_UNIT_TREE_PAGE_SIZE,
       ...(search === '' ? {} : { search }),
     }),
@@ -60,12 +61,18 @@ function OrganizationalUnitsPage() {
     async (values: OrganizationalUnitFormValues) => {
       const unit = dialogUnit ?? null
       await submitFeedback(async () => {
-        const request = toOrganizationalUnitRequest(values)
         if (unit === null) {
-          await createMutation.mutateAsync(request)
+          // `createOrganizationalUnit` answers `{ id }`.
+          await createMutation.mutateAsync(toCreateOrganizationalUnitRequest(values))
           toast.success({ title: 'تمت إضافة الوحدة التنظيمية.' })
         } else {
-          await updateMutation.mutateAsync({ orgUnitId: unit.orgUnitId, request })
+          // `updateOrganizationalUnit` answers with an EMPTY body, and its body
+          // binds only `name` and `unitType` — the unit cannot be re-sited or
+          // re-parented through this API.
+          await updateMutation.mutateAsync({
+            orgUnitId: unit.id,
+            request: toUpdateOrganizationalUnitRequest(values),
+          })
           toast.success({ title: 'تم حفظ تعديلات الوحدة التنظيمية.' })
         }
         setDialogUnit(undefined)
@@ -105,7 +112,7 @@ function OrganizationalUnitsPage() {
             type="search"
             value={searchInput}
             onChange={(event) => setSearchInput(event.currentTarget.value)}
-            placeholder="ابحث بالاسم أو الرمز..."
+            placeholder="ابحث بالاسم أو نوع الوحدة..."
           />
         </div>
 

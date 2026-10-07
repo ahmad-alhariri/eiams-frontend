@@ -7,6 +7,7 @@ import {
   type MaterialFormValues,
 } from '@/modules/catalog/schemas/material.schemas'
 import type { Material, MaterialFamily, UnitOfMeasure } from '@/modules/catalog/types/catalog.types'
+import { MATERIAL_KIND_OPTIONS } from '@/modules/catalog/constants/catalog-labels'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { useConfirm } from '@/shared/hooks/use-confirm'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
@@ -367,8 +368,11 @@ export function MaterialFormDialog({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="Consumable">مستهلكة</SelectItem>
-                          <SelectItem value="Asset">أصل ثابت</SelectItem>
+                          {MATERIAL_KIND_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />

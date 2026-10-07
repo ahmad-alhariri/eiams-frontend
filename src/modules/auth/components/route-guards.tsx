@@ -9,7 +9,7 @@ import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { FullPageSpinner } from '@/shared/feedback/full-page-spinner'
 import { Button } from '@/shared/ui/button'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 type RouteGuardProps = {
   children: ReactNode
@@ -43,16 +43,16 @@ function AuthLoadingBoundary() {
   )
 }
 
-function NoAccessScreen({ unavailable }: { unavailable: boolean }) {
-  const title = unavailable ? 'لا يتوفر نطاق عمل' : 'لا توجد صلاحية للوصول'
-  const description = unavailable
-    ? 'لا توجد صلاحيات نطاق فعّالة مرتبطة بحسابك حالياً. تواصل مع مسؤول النظام للمساعدة.'
-    : 'حسابك لا يملك النطاق أو الصلاحية اللازمة للوصول إلى النظام.'
-
+/**
+ * Contact-administrator state for an authenticated session that carries no
+ * active scope. Scope assignment is server-owned, so this gate is terminal:
+ * there is deliberately no selection UI or route to recover from.
+ */
+function ScopeUnavailable() {
   return (
     <main
       dir="rtl"
-      aria-labelledby="no-access-title"
+      aria-labelledby="scope-unavailable-title"
       className="flex min-h-dvh items-center justify-center bg-background p-4 sm:p-8"
     >
       <section className="w-full max-w-lg rounded-2xl border border-border bg-popover p-8 text-center shadow-modal sm:p-10">
@@ -62,59 +62,20 @@ function NoAccessScreen({ unavailable }: { unavailable: boolean }) {
         >
           <IconLockAccess className="size-7" />
         </span>
-        <h1 id="no-access-title" className="mt-5 text-2xl font-bold text-foreground">
-          {title}
+        <h1 id="scope-unavailable-title" className="mt-5 text-2xl font-bold text-foreground">
+          لا يتوفر نطاق عمل
         </h1>
-        <p className="mt-3 leading-7 text-muted-foreground">{description}</p>
+        <p className="mt-3 leading-7 text-muted-foreground">
+          لا توجد صلاحيات نطاق فعّالة مرتبطة بحسابك حالياً. تواصل مع مسؤول النظام للمساعدة.
+        </p>
       </section>
     </main>
   )
 }
 
 /**
- * D-SRS-01 singular-session guard.
- *
- * The backend exposes exactly one persistent `UserRoleScope` per user and one
- * required activeScope on the session. There is no `availableScopes`
- * collection, no `SelectionRequired` state, and no client scope switch.
- * An authenticated session is therefore either:
- *
- *   - present with a scope → render the protected route;
- *   - present with no scope (server-detected Unavailable) → render the
- *     no-access screen;
- *   - absent → either continue loading or redirect to /login.
- */
-function hasActiveScope(session: SessionResponse | undefined): boolean {
-  return session !== undefined && session.activeScope !== undefined
-}
-
-function RequireSelectedScope({ children }: RouteGuardProps) {
-  const status = useAuthSessionStore((state) => state.status)
-  const session = useCachedSession()
-
-  if (status === 'initializing') {
-    return <AuthLoadingBoundary />
-  }
-
-  if (status === 'unauthenticated') {
-    return <Navigate to={ROUTE_PATHS.login} replace />
-  }
-
-  if (!session) {
-    return <AuthLoadingBoundary />
-  }
-
-  if (!hasActiveScope(session)) {
-    return <NoAccessScreen unavailable />
-  }
-
-  return <>{children}</>
-}
-
-/**
  * Keeps public login content out of the app shell while hydration is pending
- * and sends already-authenticated users to the dashboard or the no-access
- * screen based on the singular session shape.
+ * and sends already-authenticated users onward.
  */
 function AnonymousRoute({ children }: RouteGuardProps) {
   const status = useAuthSessionStore((state) => state.status)
@@ -132,15 +93,15 @@ function AnonymousRoute({ children }: RouteGuardProps) {
     return <AuthLoadingBoundary />
   }
 
-  if (!hasActiveScope(session)) {
-    return <Navigate to={ROUTE_PATHS.noAccess} replace />
-  }
-
   return <Navigate to={ROUTE_PATHS.dashboard} replace />
 }
 
-/** Renders the no-access screen for an authenticated user without scope access. */
-function NoAccessRoute() {
+/**
+ * Blocks all feature routes until an authenticated session carries the
+ * server-assigned active scope. A session without one is denied outright,
+ * because the backend exposes no scope-selection surface.
+ */
+function RequireActiveScope({ children }: RouteGuardProps) {
   const status = useAuthSessionStore((state) => state.status)
   const session = useCachedSession()
 
@@ -152,11 +113,21 @@ function NoAccessRoute() {
     return <Navigate to={ROUTE_PATHS.login} replace />
   }
 
-  if (!session || !hasActiveScope(session)) {
-    return <NoAccessScreen unavailable />
+  if (!session) {
+    return <AuthLoadingBoundary />
   }
 
-  return <Navigate to={ROUTE_PATHS.dashboard} replace />
+  // Redundant against the type, and deliberately kept. `SessionResponse.activeScope` is
+  // required, so a well-typed payload cannot reach here without one; but this guard reads a
+  // runtime payload from the network. An earlier version tested `scopeState ===
+  // 'SelectionRequired'` and fell through to rendering children for every other value,
+  // including undefined, so a session with no scope rendered the protected tree. Denying
+  // on an absent scope is the fail-closed behaviour this bead exists to preserve.
+  if (!session.activeScope) {
+    return <ScopeUnavailable />
+  }
+
+  return <>{children}</>
 }
 
 function PermissionDenied() {
@@ -183,23 +154,15 @@ function PermissionDenied() {
 }
 
 /**
- * Composes the selected-scope boundary with the canonical e06-t06 permission
+ * Composes the active-scope boundary with the canonical e06-t06 permission
  * predicate. It deliberately contains no role or permission-string logic.
  */
 function RouteAccessGuard({ children, route }: RouteAccessGuardProps) {
   const hasRoutePermission = useRoutePermission(route)
 
   return (
-    <RequireSelectedScope>
-      {hasRoutePermission ? children : <PermissionDenied />}
-    </RequireSelectedScope>
+    <RequireActiveScope>{hasRoutePermission ? children : <PermissionDenied />}</RequireActiveScope>
   )
 }
 
-export {
-  AnonymousRoute,
-  AuthLoadingBoundary,
-  NoAccessRoute,
-  RequireSelectedScope,
-  RouteAccessGuard,
-}
+export { AnonymousRoute, AuthLoadingBoundary, RequireActiveScope, RouteAccessGuard }

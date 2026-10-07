@@ -1,4 +1,5 @@
 import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 import type { ApiPage } from '@/shared/api/api-contracts'
 import type {
   InventoryBalance,
@@ -58,7 +59,7 @@ export function createInventoryService(transport: ApiTransport): InventoryServic
         path: pathWithId(INVENTORY_BALANCE_PATH, '{balanceId}', balanceId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
     async listMovements(query) {
       const page = await transport.requestPage<StockMovement>({
@@ -73,16 +74,15 @@ export function createInventoryService(transport: ApiTransport): InventoryServic
         path: pathWithId(STOCK_MOVEMENT_PATH, '{movementId}', movementId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
   }
 }
 
-// Lazy singleton — replaced during tests by `setInventoryService`.
-let inventoryService: InventoryService = createInventoryService(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  {} as any,
-)
+// Eager singleton over the application's single transport (9uuf). Built at
+// module evaluation, never as `{} as any` — that default is what made the
+// first runtime list call throw. Replaced during tests by `setInventoryService`.
+let inventoryService: InventoryService = createInventoryService(apiTransport)
 
 export function setInventoryService(transport: ApiTransport) {
   inventoryService = createInventoryService(transport)

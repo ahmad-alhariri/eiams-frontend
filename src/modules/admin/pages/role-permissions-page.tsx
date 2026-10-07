@@ -7,18 +7,19 @@ import { useNavigate, useParams } from 'react-router'
 import { ROUTE_PATHS } from '@/config/routes'
 import { RolePermissionMatrixField } from '@/modules/admin/components/role-permission-matrix-field'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { useUpdateRoleMutation } from '@/modules/admin/hooks/use-admin-mutations'
+import { useReplaceRolePermissionsMutation } from '@/modules/admin/hooks/use-admin-mutations'
 import { usePermissionsQuery, useRoleQuery } from '@/modules/admin/hooks/use-admin-queries'
 import {
   applyRolePermissionsServerError,
+  classifyRolePermissionWriteError,
+  ROLE_STALE_VERSION_MESSAGE_AR,
   rolePermissionsSchema,
   toPermissionMatrixRows,
-  toRolePermissionsRequest,
+  toReplaceRolePermissionsRequest,
   type RolePermissionsFormValues,
 } from '@/modules/admin/schemas/role-permissions.schemas'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
-import { StatusBadge } from '@/shared/feedback/status-badge'
 import { Form } from '@/shared/forms/form'
 import { useConfirm } from '@/shared/hooks/use-confirm'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
@@ -30,6 +31,12 @@ import { toast } from '@/shared/ui/toast-manager'
 
 const EMPTY_VALUES: RolePermissionsFormValues = { permissionCodes: [] }
 
+const SCOPE_TYPE_LABELS_AR: Readonly<Record<string, string>> = {
+  Enterprise: 'مستوى المؤسسة',
+  Site: 'موقع',
+  Warehouse: 'مستودع',
+}
+
 /**
  * Role permission replacement screen. Effective user permissions remain
  * session-owned; this page only edits the server-side role definition.
@@ -40,7 +47,7 @@ function RolePermissionsPage() {
   const { has } = usePermission()
   const roleQuery = useRoleQuery(roleId)
   const permissionsQuery = usePermissionsQuery()
-  const updateMutation = useUpdateRoleMutation()
+  const replaceMutation = useReplaceRolePermissionsMutation()
   const submitFeedback = useSubmitFeedback()
   const { confirm, element: confirmElement } = useConfirm()
   const form = useForm<RolePermissionsFormValues>({
@@ -70,17 +77,34 @@ function RolePermissionsPage() {
 
     try {
       await submitFeedback(async () => {
-        await updateMutation.mutateAsync({
-          roleId: role.roleId,
-          request: toRolePermissionsRequest(values, role),
+        await replaceMutation.mutateAsync({
+          roleId: role.id,
+          request: toReplaceRolePermissionsRequest(values, role),
         })
         toast.success({ title: 'تم حفظ صلاحيات الدور.' })
       })
     } catch (error: unknown) {
+      const outcome = classifyRolePermissionWriteError(error)
+
+      if (outcome.kind === 'stale-version') {
+        // Someone changed this role after the form loaded. Reload instead of replaying:
+        // the selected codes were chosen against a version that no longer exists.
+        toast.error({
+          title: 'عدّل مستخدم آخر هذا الدور أثناء عملك.',
+          description: ROLE_STALE_VERSION_MESSAGE_AR,
+        })
+        await roleQuery.refetch()
+        return
+      }
+
+      if (outcome.kind === 'scope-mismatch') {
+        toast.error({ title: outcome.titleAr, description: outcome.detailAr ?? undefined })
+        return
+      }
+
       applyRolePermissionsServerError(form, error)
     }
   }
-
   if (roleId === undefined || roleId === '') {
     return (
       <div dir="rtl" className="min-w-0">
@@ -123,13 +147,13 @@ function RolePermissionsPage() {
     )
   }
 
-  const rows = toPermissionMatrixRows(permissionsQuery.data ?? [], role.permissionCodes)
+  const rows = toPermissionMatrixRows(permissionsQuery.data ?? [], role)
 
   return (
     <div dir="rtl" className="min-w-0">
       <PageHeader
         title={role.nameAr}
-        subtitle={`رمز الدور: ${role.code}`}
+        subtitle={`رمز الدور: ${role.name}`}
         actions={
           <Button type="button" variant="outline" onClick={returnToRoles}>
             <IconArrowRight aria-hidden data-icon="inline-start" />
@@ -142,10 +166,14 @@ function RolePermissionsPage() {
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
           <DetailField label="اسم الدور">{role.nameAr}</DetailField>
           <DetailField label="الرمز" ltr>
-            {role.code}
+            {role.name}
           </DetailField>
-          <DetailField label="الحالة">
-            <StatusBadge entity="record" status={role.status} />
+          <DetailField label="نطاقات الإسناد">
+            {role.allowedScopeTypes.length === 0
+              ? 'غير محدد'
+              : role.allowedScopeTypes
+                  .map((scopeType) => SCOPE_TYPE_LABELS_AR[scopeType] ?? scopeType)
+                  .join('، ')}
           </DetailField>
         </dl>
       </ContentCard>
@@ -179,18 +207,18 @@ function RolePermissionsPage() {
           <Form {...form}>
             <form
               noValidate
-              aria-busy={updateMutation.isPending}
+              aria-busy={replaceMutation.isPending}
               className="grid gap-4"
               onSubmit={form.handleSubmit(submit)}
             >
               <RolePermissionMatrixField
                 control={form.control}
-                disabled={updateMutation.isPending}
+                disabled={replaceMutation.isPending}
                 idPrefix="role-permission"
                 rows={rows}
               />
               <div className="flex flex-wrap gap-2">
-                <Button type="submit" loading={updateMutation.isPending}>
+                <Button type="submit" loading={replaceMutation.isPending}>
                   <IconDeviceFloppy aria-hidden data-icon="inline-start" />
                   حفظ الصلاحيات
                 </Button>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { loginSchema, setActiveScopeSchema } from '@/modules/auth/schemas/auth.schemas'
+import { loginSchema } from '@/modules/auth/schemas/auth.schemas'
 
 describe('loginSchema', () => {
   it('accepts the contract password bounds without transforming credentials', () => {
@@ -34,30 +34,5 @@ describe('loginSchema', () => {
     )
     expect(longPassword.error?.issues[0]?.message).toBe('يجب ألا تتجاوز كلمة المرور 200 محرف.')
     expect(longUsername.error?.issues[0]?.message).toBe('يجب ألا يتجاوز اسم المستخدم 100 محرف.')
-  })
-})
-
-describe('setActiveScopeSchema', () => {
-  it('accepts an Enterprise scope only with a null identifier', () => {
-    expect(setActiveScopeSchema.safeParse({ scopeType: 'Enterprise', scopeId: null }).success).toBe(
-      true,
-    )
-    expect(
-      setActiveScopeSchema.safeParse({
-        scopeType: 'Enterprise',
-        scopeId: '10000000-0000-4000-8000-000000000001',
-      }).success,
-    ).toBe(false)
-  })
-
-  it.each(['Site', 'Warehouse'] as const)('%s requires a UUID scope identifier', (scopeType) => {
-    expect(setActiveScopeSchema.safeParse({ scopeType, scopeId: null }).success).toBe(false)
-    expect(setActiveScopeSchema.safeParse({ scopeType, scopeId: 'not-a-uuid' }).success).toBe(false)
-    expect(
-      setActiveScopeSchema.safeParse({
-        scopeType,
-        scopeId: '10000000-0000-4000-8000-000000000001',
-      }).success,
-    ).toBe(true)
   })
 })

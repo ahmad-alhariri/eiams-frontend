@@ -11,9 +11,24 @@ import {
   useInvalidateDocumentDetail,
 } from '@/shared/documents/use-document-queries'
 import { normalizeApiError } from '@/shared/services/api-error'
+import { isConflictError } from '@/shared/services/mutation-safety'
 import type { AttachmentType, DocumentAttachment } from '@/shared/types/generated/eiams-v1'
 
 const EMPTY_ATTACHMENTS: readonly DocumentAttachment[] = []
+
+/**
+ * Arabic feedback for a failed attachment mutation: the server's own
+ * `detailAr` when the problem carries one, otherwise the generic `titleAr`
+ * (e24-t10 / B2). The previous code kept only `titleAr`, so the specific
+ * Arabic reason the server sent — "another user edited this document", for
+ * example — was discarded and the user saw a bare "the data changed".
+ * Nothing is invented here: a problem with no `detailAr` still renders
+ * `titleAr`, which is the contract's own sentence.
+ */
+function attachmentErrorMessageAr(error: unknown): string {
+  const apiError = normalizeApiError(error)
+  return apiError.detailAr ?? apiError.titleAr
+}
 
 /**
  * Panel-compatible manager shape produced by `useDocumentAttachmentManager`.
@@ -32,8 +47,11 @@ export interface DocumentAttachmentManager {
   readOnly: boolean
   disabled: boolean
   /**
-   * Arabic message of the most recent failed delete. Surfaced for the caller;
-   * the full 409/403 recovery flow lands in a later task.
+   * Arabic message of the most recent failed delete, preferring the server's
+   * `detailAr`. Surfaced to the caller, which renders it in the panel's
+   * `role="alert"` region (e24-t10 / B1). A 409 additionally refetches the
+   * scoped detail/policy/attachments branch, so a stale rowVersion or policy
+   * cannot be re-submitted against a document the panel is still describing.
    */
   deleteError: string | null
 }
@@ -52,6 +70,15 @@ function isUploadable(document: { documentStatus: string } | undefined): boolean
  * `pending.file` reference back through `onUpload`, so the existing failed
  * entry is reused instead of duplicated. Mutations are gated on a loaded
  * Draft document; a `null` documentId renders a zero-network manager.
+ *
+ * Failure feedback (e24-t10 / B2): both mutations report the server's
+ * `detailAr` when the problem carries one, falling back to its `titleAr`. On a
+ * 409 — and only a 409, per
+ * `docs/feature-service-composition-standard.md:87-91` — the scoped
+ * detail/policy/attachments branch is refetched, because a conflict means the
+ * cached document the panel is rendering is no longer authoritative. This is
+ * the same `useInvalidateDocumentDetail` recovery the lifecycle mutations use;
+ * nothing is retried automatically and no state is written optimistically.
  */
 export function useDocumentAttachmentManager(documentId: string | null): DocumentAttachmentManager {
   const detailQuery = useDocumentDetailQuery(documentId)
@@ -66,6 +93,21 @@ export function useDocumentAttachmentManager(documentId: string | null): Documen
   useEffect(() => {
     pendingRef.current = pendingUploads
   }, [pendingUploads])
+
+  /**
+   * D-LIFE-01 rule 6: a 409 means the cached document is stale, so the
+   * authoritative detail/policy/attachments are refetched. Scoped to 409 —
+   * a 403 or a network failure says nothing about document freshness, and
+   * `docs/feature-service-composition-standard.md:87-91` forbids assuming a
+   * cause a problem did not report.
+   */
+  const recoverFromConflict = useCallback(
+    (error: unknown) => {
+      if (documentId === null || !isConflictError(error)) return
+      void invalidateDetail(documentId)
+    },
+    [documentId, invalidateDetail],
+  )
 
   const uploadMutation = useMutation({
     mutationFn: ({ file, attachmentType }: { file: File; attachmentType: AttachmentType }) =>
@@ -83,10 +125,11 @@ export function useDocumentAttachmentManager(documentId: string | null): Documen
       }
     },
     onError: (error, { file }) => {
-      setUploadError(normalizeApiError(error).titleAr)
+      setUploadError(attachmentErrorMessageAr(error))
       setPendingUploads((previous) =>
         previous.map((pending) => (pending.file === file ? { ...pending, failed: true } : pending)),
       )
+      recoverFromConflict(error)
     },
   })
 
@@ -104,7 +147,8 @@ export function useDocumentAttachmentManager(documentId: string | null): Documen
       }
     },
     onError: (error) => {
-      setDeleteError(normalizeApiError(error).titleAr)
+      setDeleteError(attachmentErrorMessageAr(error))
+      recoverFromConflict(error)
     },
   })
 

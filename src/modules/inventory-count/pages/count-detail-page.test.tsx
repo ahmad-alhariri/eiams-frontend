@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -12,26 +13,18 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 const API_BASE_URL = '/api/v1'
 const COUNT_ID = '773e4567-e89b-42d3-a456-426614174099'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'count.manager',
-      displayName: 'مدير الجرد',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير الجرد' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      { scopeType: 'Enterprise', scopeId: null, displayName: 'الهيئة العامة للرقابة والتفتيش' },
-    ],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -62,11 +55,11 @@ function useHandlers() {
         notes: null,
         rowVersion: 1,
       }
-      return HttpResponse.json(count)
+      return okJson(count)
     }),
     http.post(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/start`, async ({ request }) => {
       startedBody = (await request.json()) as { rowVersion?: number }
-      return HttpResponse.json({
+      return okJson({
         countId: COUNT_ID,
         referenceNumber: 'EIAMS-CNT-2026-0101',
         documentStatus: 'InProgress',

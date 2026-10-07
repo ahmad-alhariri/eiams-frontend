@@ -15,6 +15,7 @@ import { IssueResponsibilityPreview } from '@/modules/issue/components/issue-res
 import { useIssueLineBalances } from '@/modules/issue/hooks/use-issue-line-balances'
 import { toIssueInfo } from '@/modules/issue/schemas/issue-info.schema'
 import { QuantityLineEditor } from '@/shared/documents/components/quantity-line-editor'
+import { BalanceReadError } from '@/shared/documents/components/balance-read-error'
 import {
   buildDraftRequest,
   DocumentHeaderSection,
@@ -46,7 +47,9 @@ import { Button } from '@/shared/ui/button'
  * Live balance guards (e16-t04): every selected line's material is looked up
  * in the source warehouse via `useIssueLineBalances`; known balances render a
  * per-line hint through the editor seam, and any over-balance line blocks
- * persistence with an Arabic message before the request fires.
+ * persistence with an Arabic message before the request fires. A FAILED lookup
+ * is reported through the shared `BalanceReadError` line with a retry and also
+ * blocks persistence (e24-t10 / B3) — never as a zero balance.
  */
 const issueDocumentFormSchema = z.object({
   header: documentHeaderSchema,
@@ -102,12 +105,21 @@ export default function IssueDocumentFormPage() {
 
   const materialIds = useMemo(() => lines.map((line) => line?.materialId ?? ''), [lines])
   const quantities = useMemo(() => lines.map((line) => line?.quantity ?? 0), [lines])
-  const { balanceByMaterialId, isLoading: balancesLoading } = useIssueLineBalances(
-    headerWarehouseId || undefined,
-    materialIds,
-  )
+  const {
+    balanceByMaterialId,
+    isLoading: balancesLoading,
+    isError: balancesFailed,
+    retry: retryBalances,
+  } = useIssueLineBalances(headerWarehouseId || undefined, materialIds)
 
-  /** First over-balance line, or null while every known balance covers its request. */
+  /**
+   * First over-balance line, or null while every known balance covers its
+   * request. A line whose balance read FAILED is absent from the map, so
+   * `balance === undefined` skips it (e24-t10 / B3): the form must not print
+   * "quantity exceeds the available balance (0)" — or any other number — for a
+   * quantity the server never returned. The failed read is reported honestly
+   * below instead, and it still blocks Save (fail closed) until it recovers.
+   */
   const overBalanceMessageAr = useMemo(() => {
     for (let index = 0; index < materialIds.length; index += 1) {
       if ((materialIds[index] ?? '') === '') continue
@@ -134,9 +146,13 @@ export default function IssueDocumentFormPage() {
     return null
   }, [lines])
 
+  // Fail CLOSED: an unverifiable balance blocks persistence, but the reason
+  // shown to the user is the failed read — never a fabricated shortfall
+  // (AGENTS.md rule 3, D-LIFE-01: the server owns the balance decision).
   const saveDisabled =
     isSubmitting ||
     balancesLoading ||
+    balancesFailed ||
     overBalanceMessageAr !== null ||
     assetCountMismatchMessageAr !== null
 
@@ -203,6 +219,7 @@ export default function IssueDocumentFormPage() {
               {overBalanceMessageAr}
             </p>
           ) : null}
+          {balancesFailed ? <BalanceReadError onRetry={retryBalances} /> : null}
           {assetCountMismatchMessageAr !== null && !balancesLoading ? (
             <p role="alert" className="text-sm text-destructive">
               {assetCountMismatchMessageAr}

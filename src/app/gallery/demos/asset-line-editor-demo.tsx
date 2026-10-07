@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/shared/ui/button'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
-import type { Warehouse } from '@/shared/types/generated/eiams-v1'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 
 /* eslint-disable react-refresh/only-export-components -- dev-only gallery demo
    that intentionally exports its sections registry alongside local components. */
@@ -69,7 +69,7 @@ function AssetLineEditorDemo() {
       documentType,
       header: {
         warehouseId: values.header.warehouseId,
-        warehouseDisplayName: warehouse?.payload?.nameAr ?? null,
+        warehouseDisplayName: warehouse?.payload?.name ?? null,
       },
       assetLines: toAssetLineInputs(values.lines),
     })

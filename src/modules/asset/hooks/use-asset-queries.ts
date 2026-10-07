@@ -9,6 +9,8 @@ import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 const ASSET_RESOURCE = 'asset'
 
 export const assetQueryKeys = {
+  /** Namespace root — the target for cross-module invalidation (e.g. custody). */
+  all: (scope: ScopeCacheKey) => queryKeys.scoped(scope, ASSET_RESOURCE),
   assets: (scope: ScopeCacheKey, query: ListAssetsQuery) =>
     queryKeys.scoped(scope, ASSET_RESOURCE, 'assets', query),
   asset: (scope: ScopeCacheKey, assetId: string) =>

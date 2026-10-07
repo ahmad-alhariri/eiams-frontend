@@ -128,7 +128,9 @@ describe('MaterialFormDialog', () => {
 
     await user.click(within(confirmation).getByRole('button', { name: 'تغيير النوع' }))
 
-    await waitFor(() => expect(within(dialog).getByLabelText('نوع المادة')).toHaveTextContent('Asset'))
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText('نوع المادة')).toHaveTextContent('Asset'),
+    )
   })
 
   it('preserves the consumable policy on direct selection', async () => {

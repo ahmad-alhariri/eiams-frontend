@@ -1,13 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import AdjustmentDetailPage from './adjustment-detail-page'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
-import type { InventoryAdjustment, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { InventoryAdjustment } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 vi.mock('@/shared/ui/toast-manager', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -25,19 +28,10 @@ const ADJUSTMENT_ID = '423e4567-e89b-42d3-a456-426614174004'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'adjustment.manager',
-      displayName: 'مدير المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستودع' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      { scopeType: 'Enterprise', scopeId: null, displayName: 'الهيئة العامة للرقابة والتفتيش' },
-    ],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -66,14 +60,14 @@ function draftFixture(): InventoryAdjustment {
           confirmationRequired: true,
           presentation: 'Disabled',
           reasonAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
-          reasonCode: 'SignedOriginalRequired',
+          reasonCode: 'document.signed_original_missing',
           reasonRequired: false,
         },
       ],
       advisories: [],
       blockers: [
         {
-          code: 'SignedOriginalRequired',
+          code: 'document.signed_original_missing',
           field: null,
           messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
         },
@@ -95,10 +89,17 @@ function draftFixture(): InventoryAdjustment {
 }
 
 function useDetailHandler(adjustment: InventoryAdjustment) {
-  server.use(http.get(`*/api/v1/adjustments/${ADJUSTMENT_ID}`, () => HttpResponse.json(adjustment)))
+  server.use(http.get(`*/api/v1/adjustments/${ADJUSTMENT_ID}`, () => okJson(adjustment)))
 }
 
-function renderPage(permissionCodes: readonly string[] = ['document.view', 'document.create']) {
+function renderPage(
+  permissionCodes: readonly string[] = [
+    'document.view',
+    'document.create',
+    'document.post',
+    'document.reverse',
+  ],
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(authSessionQueryKey, sessionWith(permissionCodes))
   return render(
@@ -158,6 +159,9 @@ describe('AdjustmentDetailPage (e21-t07)', () => {
     await screen.findByRole('heading', { level: 1 })
     expect(screen.getByText('إعدام أصل')).toBeInTheDocument()
     expect(screen.getByText('سند إعدام مرحّل لا يقبل العكس')).toBeInTheDocument()
+    const table = screen.getByRole('table')
+    expect(table.parentElement).toHaveClass('overflow-x-auto')
+    expect(table.closest('[data-slot="content-card"]')?.parentElement).toHaveClass('grid-cols-1')
     expect(screen.queryByRole('button', { name: 'عكس السند' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'ترحيل السند' })).toBeNull()
   })
@@ -165,7 +169,7 @@ describe('AdjustmentDetailPage (e21-t07)', () => {
   it('shows the error state when the detail request fails', async () => {
     server.use(
       http.get(`*/api/v1/adjustments/${ADJUSTMENT_ID}`, () =>
-        HttpResponse.json({ title: 'x' }, { status: 500 }),
+        apiJson({ title: 'x' }, { status: 500 }),
       ),
     )
     renderPage()

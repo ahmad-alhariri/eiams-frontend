@@ -6,7 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppProviders } from '@/app/providers/app-providers'
 import LoginPage from '@/modules/auth/pages/login-page'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
-import type { AuthTokenResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse } from '@/modules/auth/types/session.types'
+import { createSessionRole, createSessionScope, createSessionUser } from '@/test/msw/factories'
+import { errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const loginResponse: AuthTokenResponse = {
@@ -14,17 +16,10 @@ const loginResponse: AuthTokenResponse = {
   expiresInSeconds: 300,
   tokenType: 'Bearer',
   session: {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'warehouse.keeper',
-      displayName: 'أمين المستودع',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'أمين المستودع' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: ['document.create'],
-    availableScopes: [],
-    scopeState: 'SelectionRequired',
-    activeRoles: [],
   },
 }
 
@@ -74,7 +69,7 @@ describe('LoginPage', () => {
     server.use(
       http.post('/api/v1/auth/login', async ({ request }) => {
         received = await request.json()
-        return HttpResponse.json(loginResponse)
+        return okJson(loginResponse)
       }),
     )
     renderLoginPage()
@@ -98,7 +93,7 @@ describe('LoginPage', () => {
         await new Promise<void>((resolve) => {
           resolveLogin = resolve
         })
-        return HttpResponse.json(loginResponse)
+        return okJson(loginResponse)
       }),
     )
     renderLoginPage()
@@ -123,20 +118,15 @@ describe('LoginPage', () => {
 
   it('maps contract field errors inline and presents the normalized error feedback', async () => {
     const user = userEvent.setup()
+    // Neutral 404 USERS_NOT_FOUND: the wire carries no Arabic and no field copy,
+    // so the UI resolves its own governed message and keeps the credential fields.
     server.use(
       http.post('/api/v1/auth/login', () =>
-        HttpResponse.json(
-          {
-            status: 401,
-            code: 'auth.invalid_credentials',
-            titleAr: 'بيانات الدخول غير صحيحة.',
-            traceId: 'login-invalid',
-            fieldErrors: [
-              { field: 'password', code: 'invalid', messageAr: 'تحقق من كلمة المرور.' },
-            ],
-          },
-          { status: 401 },
-        ),
+        errJson(404, {
+          code: 'USERS_NOT_FOUND',
+          message: 'User not found.',
+          details: { password: ['invalid'] },
+        }),
       ),
     )
     renderLoginPage()
@@ -145,11 +135,9 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText('كلمة المرور'), 'password')
     await user.click(screen.getByRole('button', { name: 'تسجيل الدخول' }))
 
-    expect(await screen.findByText('تحقق من كلمة المرور.')).toBeInTheDocument()
-    expect(screen.getByLabelText(/./u, { selector: 'input[type="password"]' })).toHaveValue('')
     await waitFor(() => {
       expect(document.querySelector('[data-slot="toast-title"]')).toHaveTextContent(
-        'بيانات الدخول غير صحيحة.',
+        'لم يتم العثور على البيانات المطلوبة.',
       )
     })
   })

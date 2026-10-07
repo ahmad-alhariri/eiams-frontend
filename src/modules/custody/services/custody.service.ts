@@ -1,11 +1,11 @@
-import type { AxiosInstance } from 'axios'
+﻿import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 
 import type {
   CustodyMutationRequest,
   ListCustodiesQuery,
 } from '@/modules/custody/types/custody.types'
-import { apiClient } from '@/shared/services/api.client'
-import { withIdempotencyKey } from '@/shared/services/mutation-safety'
+import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import type { Custody, CustodyPage, paths } from '@/shared/types/generated/eiams-v1'
 
 const CUSTODIES_PATH = '/custodies' satisfies keyof paths
@@ -27,29 +27,48 @@ export interface CustodyService {
   ) => Promise<Custody>
 }
 
-export function createCustodyService(client: AxiosInstance): CustodyService {
+export function createCustodyService(transport: ApiTransport): CustodyService {
   return {
     async listCustodies(query) {
-      const response = await client.get(CUSTODIES_PATH, { params: query })
-      return response.data
+      const page = await transport.requestPage<Custody>({
+        path: CUSTODIES_PATH,
+        method: 'GET',
+        query: query as Record<string, string | number | boolean | undefined>,
+      })
+      return {
+        items: page.items,
+        meta: {
+          pageIndex: page.page - 1,
+          page: page.page,
+          pageSize: page.pageSize,
+          itemCount: page.totalItems,
+          totalItems: page.totalItems,
+          totalCount: page.totalItems,
+          totalPages: page.totalPages,
+          hasNextPage: page.hasNextPage,
+          hasPreviousPage: page.hasPreviousPage,
+        },
+      } as CustodyPage
     },
     async assignCustody(request, idempotencyKey) {
-      const response = await client.post(
-        CUSTODY_ASSIGN_PATH,
-        request,
-        withIdempotencyKey(idempotencyKey).config,
-      )
-      return response.data
+      const response = await transport.request<Custody>({
+        path: CUSTODY_ASSIGN_PATH,
+        method: 'POST',
+        body: request,
+        headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
+      })
+      return response
     },
     async transferCustody(custodyId, request, idempotencyKey) {
-      const response = await client.post(
-        pathWithId(CUSTODY_TRANSFER_PATH, '{custodyId}', custodyId),
-        request,
-        withIdempotencyKey(idempotencyKey).config,
-      )
-      return response.data
+      const response = await transport.request<Custody>({
+        path: pathWithId(CUSTODY_TRANSFER_PATH, '{custodyId}', custodyId),
+        method: 'POST',
+        body: request,
+        headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
+      })
+      return response
     },
   }
 }
 
-export const custodyService = createCustodyService(apiClient)
+export const custodyService = createCustodyService(apiTransport)

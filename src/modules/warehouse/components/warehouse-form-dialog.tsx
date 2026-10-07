@@ -1,10 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { useEffect, useMemo } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 
-import { useSitesQuery } from '@/modules/organization/hooks/use-organization-queries'
 import {
-  warehouseSchema,
+  useOrganizationalUnitsQuery,
+  useSitesQuery,
+} from '@/modules/organization/hooks/use-organization-queries'
+import {
+  emptyWarehouseFormValues,
+  toWarehouseFormValues,
+  warehouseFormSchema,
   type WarehouseFormValues,
 } from '@/modules/warehouse/schemas/warehouse.schemas'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
@@ -21,16 +26,19 @@ import {
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import { Textarea } from '@/shared/ui/textarea'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 
-const EMPTY_VALUES: WarehouseFormValues = {
-  siteId: '',
-  code: '',
-  nameAr: '',
-  locationAr: '',
-  status: 'Active',
-}
+const SERVER_ERROR_KEYS = [
+  'siteId',
+  'code',
+  'name',
+  'organizationalUnitId',
+  'warehouseType',
+  'canHoldStock',
+] as const
+
+/** Arabic note shown in place of an editable control on the create-only fields. */
+const CREATE_ONLY_NOTE = 'يُحدَّد الموقع والرمز عند إنشاء المستودع ولا يمكن تعديلهما بعد ذلك.'
 
 export interface WarehouseFormDialogProps {
   warehouse: Warehouse | null | undefined
@@ -47,23 +55,42 @@ export function WarehouseFormDialog({
   onOpenChange,
   onSubmit,
 }: WarehouseFormDialogProps) {
+  const isCreate = warehouse === null || warehouse === undefined
   const form = useForm<WarehouseFormValues>({
-    resolver: zodResolver(warehouseSchema),
-    defaultValues: EMPTY_VALUES,
+    resolver: zodResolver(warehouseFormSchema(isCreate)),
+    defaultValues: emptyWarehouseFormValues(),
   })
-  const sitesQuery = useSitesQuery({ page: 0, pageSize: 200, status: 'Active' }, { enabled: open })
+  const sitesQuery = useSitesQuery({ page: 0, pageSize: 200 }, { enabled: open })
+  const organizationalUnitsQuery = useOrganizationalUnitsQuery(
+    { page: 0, pageSize: 200 },
+    { enabled: open },
+  )
 
   useEffect(() => {
     if (!open) return
 
-    form.reset({
-      siteId: warehouse?.site.id ?? '',
-      code: warehouse?.code ?? '',
-      nameAr: warehouse?.nameAr ?? '',
-      locationAr: warehouse?.locationAr ?? '',
-      status: warehouse?.status ?? 'Active',
-    })
+    form.reset(toWarehouseFormValues(warehouse ?? null))
   }, [form, open, warehouse])
+
+  // `siteId` binds only to the create body, so on edit it is the warehouse's own
+  // site — which is also what scopes the organizational-unit options. `useWatch`
+  // rather than `form.watch` keeps one subscription for all five fields and
+  // stays out of the React Compiler's incompatible-library path.
+  const [siteId, code, name, organizationalUnitId, warehouseType] = useWatch({
+    control: form.control,
+    name: ['siteId', 'code', 'name', 'organizationalUnitId', 'warehouseType'],
+  })
+
+  const organizationalUnits = useMemo(() => {
+    const items = organizationalUnitsQuery.data?.items ?? []
+    return siteId === '' ? items : items.filter((unit) => unit.siteId === siteId)
+  }, [organizationalUnitsQuery.data, siteId])
+
+  const isSubmittable =
+    name.trim() !== '' &&
+    warehouseType.trim() !== '' &&
+    organizationalUnitId !== '' &&
+    (!isCreate || (siteId !== '' && code.trim() !== ''))
 
   const submit = async (values: WarehouseFormValues) => {
     form.clearErrors()
@@ -71,9 +98,7 @@ export function WarehouseFormDialog({
       await onSubmit(values)
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['siteId', 'code', 'nameAr', 'locationAr', 'status'],
-      })
+      setFormServerErrors(form, apiError.fieldErrors, { schemaKeys: [...SERVER_ERROR_KEYS] })
     }
   }
 
@@ -81,7 +106,7 @@ export function WarehouseFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>{warehouse ? 'تعديل المستودع' : 'إضافة مستودع'}</DialogTitle>
+          <DialogTitle>{isCreate ? 'إضافة مستودع' : 'تعديل المستودع'}</DialogTitle>
           <DialogDescription>
             أدخل بيانات المستودع المرجعية. إعدادات الصلاحيات والمواد تُدار في صفحات مستقلة.
           </DialogDescription>
@@ -93,17 +118,29 @@ export function WarehouseFormDialog({
             className="grid gap-5"
             onSubmit={form.handleSubmit(submit)}
           >
+            {isCreate ? null : (
+              <p
+                role="note"
+                className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground"
+              >
+                {CREATE_ONLY_NOTE}
+              </p>
+            )}
             <FormField
               control={form.control}
               name="siteId"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>الموقع</FormLabel>
-                  <Select value={field.value} disabled={isPending} onValueChange={field.onChange}>
+                  <Select
+                    value={field.value}
+                    disabled={isPending || !isCreate}
+                    onValueChange={field.onChange}
+                  >
                     <FormControl>
                       <SelectTrigger aria-label="الموقع">
                         <SelectValue>
-                          {sitesQuery.data?.items.find((s) => s.siteId === field.value)?.nameAr ??
+                          {sitesQuery.data?.items.find((site) => site.id === field.value)?.name ??
                             field.value ??
                             'اختر الموقع'}
                         </SelectValue>
@@ -112,12 +149,12 @@ export function WarehouseFormDialog({
                     <SelectContent>
                       <SelectItem value="">اختر الموقع</SelectItem>
                       {sitesQuery.data?.items.map((site) => (
-                        <SelectItem key={site.siteId} value={site.siteId}>
+                        <SelectItem key={site.id} value={site.id}>
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">{site.nameAr}</span>
-                            {site.code ? (
-                              <span className="text-muted text-sm">({site.code})</span>
-                            ) : null}
+                            <span className="font-medium">{site.name}</span>
+                            <span className="text-muted text-sm" dir="ltr">
+                              ({site.code})
+                            </span>
                           </div>
                         </SelectItem>
                       ))}
@@ -136,7 +173,7 @@ export function WarehouseFormDialog({
                   <FormControl>
                     <Input
                       value={field.value}
-                      disabled={isPending}
+                      disabled={isPending || !isCreate}
                       onValueChange={field.onChange}
                       placeholder="مثال: WH-001"
                     />
@@ -147,10 +184,10 @@ export function WarehouseFormDialog({
             />
             <FormField
               control={form.control}
-              name="nameAr"
+              name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>الاسم (العربية)</FormLabel>
+                  <FormLabel>اسم المستودع</FormLabel>
                   <FormControl>
                     <Input
                       value={field.value}
@@ -165,17 +202,50 @@ export function WarehouseFormDialog({
             />
             <FormField
               control={form.control}
-              name="locationAr"
+              name="organizationalUnitId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>الموقع التفصيلي (اختياري)</FormLabel>
+                  <FormLabel>الوحدة التنظيمية</FormLabel>
+                  <Select value={field.value} disabled={isPending} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger aria-label="الوحدة التنظيمية">
+                        <SelectValue>
+                          {organizationalUnits.find((unit) => unit.id === field.value)?.name ??
+                            field.value ??
+                            'اختر الوحدة التنظيمية'}
+                        </SelectValue>
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="">اختر الوحدة التنظيمية</SelectItem>
+                      {organizationalUnits.map((unit) => (
+                        <SelectItem key={unit.id} value={unit.id}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{unit.name}</span>
+                            {unit.unitType === '' ? null : (
+                              <span className="text-muted text-sm">{unit.unitType}</span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="warehouseType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>نوع المستودع</FormLabel>
                   <FormControl>
-                    <Textarea
-                      value={field.value ?? ''}
+                    <Input
+                      value={field.value}
                       disabled={isPending}
-                      onChange={(event) => field.onChange(event.target.value)}
-                      placeholder="وصف موقع المستودع داخل المبنى"
-                      rows={2}
+                      onValueChange={field.onChange}
+                      placeholder="مثال: Storage"
                     />
                   </FormControl>
                   <FormMessage />
@@ -184,19 +254,23 @@ export function WarehouseFormDialog({
             />
             <FormField
               control={form.control}
-              name="status"
+              name="canHoldStock"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>الحالة</FormLabel>
-                  <Select value={field.value} disabled={isPending} onValueChange={field.onChange}>
+                  <FormLabel>السماح بالتخزين</FormLabel>
+                  <Select
+                    value={field.value ? 'true' : 'false'}
+                    disabled={isPending}
+                    onValueChange={(next) => field.onChange(next === 'true')}
+                  >
                     <FormControl>
-                      <SelectTrigger aria-label="حالة المستودع">
-                        <SelectValue>{field.value === 'Active' ? 'نشط' : 'غير نشط'}</SelectValue>
+                      <SelectTrigger aria-label="السماح بالتخزين">
+                        <SelectValue>{field.value ? 'نعم' : 'لا'}</SelectValue>
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="Active">نشط</SelectItem>
-                      <SelectItem value="Inactive">غير نشط</SelectItem>
+                      <SelectItem value="true">نعم</SelectItem>
+                      <SelectItem value="false">لا</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -204,14 +278,8 @@ export function WarehouseFormDialog({
               )}
             />
             <DialogFooter>
-              <Button
-                type="submit"
-                loading={isPending}
-                disabled={
-                  !form.getValues().siteId || !form.getValues().code || !form.getValues().nameAr
-                }
-              >
-                {warehouse ? 'حفظ التعديلات' : 'إضافة المستودع'}
+              <Button type="submit" loading={isPending} disabled={!isSubmittable}>
+                {isCreate ? 'إضافة المستودع' : 'حفظ التعديلات'}
               </Button>
             </DialogFooter>
           </form>

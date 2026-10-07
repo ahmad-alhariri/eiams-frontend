@@ -1,3 +1,5 @@
+import { createAxiosTransport } from '@/shared/api/axios-transport'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import { HttpResponse, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -10,23 +12,17 @@ import { createAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { createQueryClient } from '@/shared/services/query.client'
 import { queryKeys } from '@/shared/services/query-keys'
-import type { AuthTokenResponse, SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
+import { createSessionRole, createSessionScope, createSessionUser } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
 
 const sessionFixture: SessionResponse = {
-  user: {
-    userId: '10000000-0000-4000-8000-000000000001',
-    username: 'warehouse.keeper',
-    displayName: 'أمين المستودع',
-    status: 'Active',
-    rowVersion: 1,
-  },
+  user: createSessionUser({ firstName: 'أمين المستودع' }),
+  role: createSessionRole(),
+  activeScope: createSessionScope(),
   permissionCodes: ['document.create'],
-  availableScopes: [],
-  scopeState: 'SelectionRequired',
-  activeRoles: [],
 }
 
 const tokenResponse: AuthTokenResponse = {
@@ -44,7 +40,7 @@ function setupLifecycle() {
   const queryClient = createQueryClient()
   const sessionStore = createAuthSessionStore(bundle.sessionAdapter)
   const lifecycle = createAuthSessionLifecycle({
-    authService: createAuthService(bundle.client),
+    authService: createAuthService(createAxiosTransport(bundle.client)),
     queryClient,
     sessionAdapter: bundle.sessionAdapter,
     sessionStore,
@@ -67,7 +63,7 @@ describe('auth session lifecycle', () => {
     server.use(
       http.post(`${API_BASE_URL}/auth/refresh`, ({ request }) => {
         refreshCredentials = request.credentials
-        return HttpResponse.json(tokenResponse)
+        return okJson(tokenResponse)
       }),
     )
 
@@ -83,7 +79,7 @@ describe('auth session lifecycle', () => {
     let authorization: string | null = null
 
     server.use(
-      http.post(`${API_BASE_URL}/auth/refresh`, () => HttpResponse.json(tokenResponse)),
+      http.post(`${API_BASE_URL}/auth/refresh`, () => okJson(tokenResponse)),
       http.post(`${API_BASE_URL}/auth/logout`, ({ request }) => {
         authorization = request.headers.get('Authorization')
         return new HttpResponse(null, { status: 204 })
@@ -108,7 +104,7 @@ describe('auth session lifecycle', () => {
     const { lifecycle, queryClient, sessionStore } = setupLifecycle()
 
     server.use(
-      http.post(`${API_BASE_URL}/auth/refresh`, () => HttpResponse.json(tokenResponse)),
+      http.post(`${API_BASE_URL}/auth/refresh`, () => okJson(tokenResponse)),
       http.post(`${API_BASE_URL}/auth/logout`, () => HttpResponse.error()),
     )
 
@@ -134,7 +130,7 @@ describe('auth session lifecycle', () => {
     const { bundle, lifecycle, queryClient, sessionStore } = setupLifecycle()
 
     server.use(
-      http.post(`${API_BASE_URL}/auth/refresh`, () => HttpResponse.json(tokenResponse)),
+      http.post(`${API_BASE_URL}/auth/refresh`, () => okJson(tokenResponse)),
       http.get(`${API_BASE_URL}/inventory/balances`, () => new HttpResponse(null, { status: 401 })),
     )
 
@@ -145,7 +141,7 @@ describe('auth session lifecycle', () => {
     // The second refresh is the adapter's one allowed retry attempt and fails.
     server.use(
       http.post(`${API_BASE_URL}/auth/refresh`, () =>
-        HttpResponse.json({ code: 'auth.session_expired' }, { status: 401 }),
+        apiJson({ code: 'auth.session_expired' }, { status: 401 }),
       ),
     )
 

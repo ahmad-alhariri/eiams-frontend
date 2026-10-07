@@ -1,4 +1,5 @@
 import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 import type {
   Warehouse,
   WarehouseCapability,
@@ -7,11 +8,12 @@ import type {
   WarehouseMaterialSettingPage,
   WarehouseMaterialSettingUpsertRequest,
   WarehousePage,
-  WarehouseUpsertRequest,
+  WarehouseCreateRequest,
+  WarehouseUpdateRequest,
   ListWarehousesQuery,
   ListWarehouseMaterialSettingsQuery,
 } from '@/modules/warehouse/types/warehouse.api-types'
-import type { ApiPage } from '@/shared/api/api-contracts'
+import type { ApiPage, ResourceIdResponse } from '@/shared/api/api-contracts'
 
 const WAREHOUSES_PATH = '/warehouses'
 const WAREHOUSE_PATH = '/warehouses/{warehouseId}'
@@ -61,8 +63,8 @@ function toMaterialSettingsPage(
 export interface WarehouseService {
   listWarehouses: (query: ListWarehousesQuery) => Promise<WarehousePage>
   getWarehouse: (warehouseId: string) => Promise<Warehouse>
-  createWarehouse: (request: WarehouseUpsertRequest) => Promise<Warehouse>
-  updateWarehouse: (warehouseId: string, request: WarehouseUpsertRequest) => Promise<Warehouse>
+  createWarehouse: (request: WarehouseCreateRequest) => Promise<ResourceIdResponse>
+  updateWarehouse: (warehouseId: string, request: WarehouseUpdateRequest) => Promise<void>
   getWarehouseCapabilities: (warehouseId: string) => Promise<readonly WarehouseCapability[]>
   replaceWarehouseCapabilities: (
     warehouseId: string,
@@ -95,25 +97,23 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         path: pathWithId(WAREHOUSE_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async createWarehouse(request) {
-      const response = await transport.request<Warehouse>({
+      return await transport.request<ResourceIdResponse>({
         path: WAREHOUSES_PATH,
         method: 'POST',
         body: request,
       })
-      return response.data
     },
 
     async updateWarehouse(warehouseId, request) {
-      const response = await transport.request<Warehouse>({
+      await transport.requestEmpty({
         path: pathWithId(WAREHOUSE_PATH, '{warehouseId}', warehouseId),
         method: 'PUT',
         body: request,
       })
-      return response.data
     },
 
     async getWarehouseCapabilities(warehouseId) {
@@ -121,7 +121,7 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         path: pathWithId(WAREHOUSE_CAPABILITIES_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
       })
-      return response.data
+      return response
     },
 
     async replaceWarehouseCapabilities(warehouseId, request) {
@@ -130,7 +130,7 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
 
     async listWarehouseMaterialSettings(warehouseId, query) {
@@ -149,16 +149,24 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         method: 'PUT',
         body: request,
       })
-      return response.data
+      return response
     },
   }
 }
 
-// Lazy singleton — replaced during tests by `setWarehouseService`.
-let warehouseService: WarehouseService = createWarehouseService(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  {} as any,
-)
+// Eager singleton over the application's single transport (9uuf). Never `{} as
+// any` — that default is what made the first runtime list call throw.
+//
+// This is the ONE warehouse service instance. Before 9uuf the module held
+// three competing singletons: this one, plus private copies inside
+// use-warehouse-queries.ts and use-warehouse-mutations.ts whose exported
+// `useWarehouseService`/`setWarehouseService` had zero importers. Injecting
+// only this one would have left 8 live query and mutation hooks calling an
+// empty object, so `warehouse.service.test.ts` would have gone green while the
+// warehouse UI stayed broken. The two hook-local copies are deleted, not
+// injected; every warehouse hook imports this binding. Replaced during tests
+// by `setWarehouseService`.
+let warehouseService: WarehouseService = createWarehouseService(apiTransport)
 
 export function setWarehouseService(transport: ApiTransport) {
   warehouseService = createWarehouseService(transport)

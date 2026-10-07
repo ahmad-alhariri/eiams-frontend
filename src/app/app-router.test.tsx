@@ -1,9 +1,35 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { HttpResponse, http } from 'msw'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { AppProviders } from '@/app/providers/app-providers'
 import { AppRouter, appRouter } from '@/app/app-router'
+import { ROUTE_PATHS } from '@/config/routes'
+import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
+import { queryClient } from '@/shared/services/query.client'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { createSession, createSessionScope } from '@/test/msw/factories'
+import { server } from '@/test/msw/server'
+
+const API_BASE_URL = '/api/v1'
+const USER_MENU_TRIGGER = 'قائمة المستخدم'
+
+function authenticatedSession(): SessionResponse {
+  return createSession({
+    activeScope: createSessionScope({ scopeType: 'Warehouse' }),
+    permissionCodes: ['inventory.view'],
+  })
+}
+function signIn() {
+  act(() => {
+    queryClient.setQueryData(authSessionQueryKey, authenticatedSession())
+    useAuthSessionStore.setState({ status: 'authenticated' })
+  })
+  server.use(
+    http.get(`${API_BASE_URL}/auth/session`, () => HttpResponse.json(authenticatedSession())),
+  )
+}
 
 beforeEach(() => {
   useAuthSessionStore.setState({ status: 'unauthenticated' })
@@ -12,6 +38,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => {
     appRouter.navigate('/')
+    queryClient.clear()
     useAuthSessionStore.setState({ status: 'initializing' })
   })
 })
@@ -148,5 +175,52 @@ describe('App router resilience (e05-t08)', () => {
       )
       expect(routeBoundaries).toHaveLength(1)
     })
+  })
+})
+
+/**
+ * The session user menu is injected at the protected `AppLayout` branch only
+ * (e24-t10). The dev-gallery and not-found branches render the same frame and
+ * must never show it: there is no session identity to sign out of there.
+ */
+describe('Session user menu wiring (e24-t10)', () => {
+  it('mounts the user menu in the protected shell', async () => {
+    signIn()
+    renderAppRouter()
+
+    await act(async () => {
+      await appRouter.navigate(ROUTE_PATHS.dashboard)
+    })
+
+    expect(await screen.findByRole('button', { name: USER_MENU_TRIGGER })).toBeInTheDocument()
+  })
+
+  it('keeps the user menu off the not-found branch', async () => {
+    signIn()
+    renderAppRouter()
+
+    await act(async () => {
+      await appRouter.navigate('/not-a-real-route')
+    })
+
+    expect(await screen.findByRole('heading', { name: 'الصفحة غير موجودة' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: USER_MENU_TRIGGER })).not.toBeInTheDocument()
+  })
+
+  it('serves the declared profile and settings placeholder routes', async () => {
+    signIn()
+    renderAppRouter()
+
+    await act(async () => {
+      await appRouter.navigate(ROUTE_PATHS.profile)
+    })
+    expect(appRouter.state.location.pathname).toBe(ROUTE_PATHS.profile)
+    expect(await screen.findByRole('heading', { name: 'الملف الشخصي' })).toBeInTheDocument()
+
+    await act(async () => {
+      await appRouter.navigate(ROUTE_PATHS.settings)
+    })
+    expect(appRouter.state.location.pathname).toBe(ROUTE_PATHS.settings)
+    expect(await screen.findByRole('heading', { name: 'الإعدادات' })).toBeInTheDocument()
   })
 })

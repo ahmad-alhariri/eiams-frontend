@@ -1,5 +1,6 @@
 import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
 import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 
 const EXTERNAL_PARTIES_PATH = '/external-parties'
 
@@ -40,16 +41,16 @@ export function createCounterpartLookupService(transport: ApiTransport): Counter
         path: `${EXTERNAL_PARTIES_PATH}/${encodeURIComponent(id)}`,
         method: 'GET',
       })
-      return response.data
+      return response
     },
   }
 }
 
-// Lazy singleton — replaced during tests by `setCounterpartLookupService`.
-let counterpartLookupService: CounterpartLookupService = createCounterpartLookupService(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  {} as any,
-)
+// Eager singleton over the application's single transport (9uuf). Never `{} as
+// any` — that default is what made the first runtime list call throw. Replaced
+// during tests by `setCounterpartLookupService`.
+let counterpartLookupService: CounterpartLookupService =
+  createCounterpartLookupService(apiTransport)
 
 export function setCounterpartLookupService(transport: ApiTransport) {
   counterpartLookupService = createCounterpartLookupService(transport)

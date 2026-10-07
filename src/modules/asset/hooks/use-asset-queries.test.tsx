@@ -1,10 +1,11 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createAsset, createAssetCustody, createPage } from '@/test/msw/factories'
+import { createAsset, createAssetCustody } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 import { useAssetCustodyTimelineQuery, useAssetQuery, useAssetsQuery } from './use-asset-queries'
@@ -39,7 +40,7 @@ describe('asset query hooks', () => {
       http.get(`${API_BASE_URL}/assets`, ({ request }) => {
         const url = new URL(request.url)
         requestedSearch = url.search
-        return HttpResponse.json(createPage([row]))
+        return okPageJson([row])
       }),
     )
 
@@ -70,9 +71,9 @@ describe('asset query hooks', () => {
   it('reads one asset and its custody timeline by id', async () => {
     const row = createAsset({ assetId: '11111111-1111-4111-8111-111111111111' })
     server.use(
-      http.get(`${API_BASE_URL}/assets/${row.assetId}`, () => HttpResponse.json(row)),
+      http.get(`${API_BASE_URL}/assets/${row.assetId}`, () => okJson(row)),
       http.get(`${API_BASE_URL}/assets/${row.assetId}/custody`, () =>
-        HttpResponse.json([createAssetCustody({ assetId: row.assetId })]),
+        okJson([createAssetCustody({ assetId: row.assetId })]),
       ),
     )
 

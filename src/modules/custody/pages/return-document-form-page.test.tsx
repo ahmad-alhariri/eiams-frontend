@@ -1,14 +1,14 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import ReturnDocumentFormPage from './return-document-form-page'
 import {
   createMaterial,
-  createPage,
   createWarehouse,
   createWarehouseCapability,
   fixtureUuid,
@@ -32,7 +32,7 @@ vi.mock('@/modules/auth/hooks/use-permission', () => ({
 }))
 
 const WAREHOUSE_ID = fixtureUuid(30)
-const WAREHOUSE = createWarehouse({ warehouseId: WAREHOUSE_ID })
+const WAREHOUSE = createWarehouse({ id: WAREHOUSE_ID })
 const MATERIAL_ID = fixtureUuid(40)
 const MATERIAL = createMaterial({ materialId: MATERIAL_ID })
 
@@ -40,7 +40,7 @@ async function fillHeader(user: ReturnType<typeof userEvent.setup>) {
   const warehouseCombo = screen.getByRole('combobox', { name: 'المستودع' })
   await user.click(warehouseCombo)
   await user.type(warehouseCombo, 'central')
-  await user.click(await screen.findByText(WAREHOUSE.nameAr))
+  await user.click(await screen.findByText(WAREHOUSE.name))
 
   await user.type(screen.getByLabelText('رقم المستند الورقي'), '2024/151')
   await user.type(screen.getByLabelText('السنة الورقية'), '2024')
@@ -49,10 +49,10 @@ async function fillHeader(user: ReturnType<typeof userEvent.setup>) {
 function useDocumentHandlers() {
   // Header section fetches warehouse options for the source-warehouse select.
   server.use(
-    http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([WAREHOUSE]))),
-    http.get(`${API_BASE_URL}/catalog/materials`, () => HttpResponse.json(createPage([MATERIAL]))),
+    http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([WAREHOUSE])),
+    http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([MATERIAL])),
     http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () =>
-      HttpResponse.json([
+      okJson([
         createWarehouseCapability({
           warehouseId: WAREHOUSE_ID,
           domain: MATERIAL.domain,
@@ -65,7 +65,7 @@ function useDocumentHandlers() {
       expect(body['documentType']).toBe('Return')
       const returnInfo = body['returnInfo'] as Record<string, unknown>
       expect(returnInfo['originalIssueDocumentId']).toBe(ISSUE_DOC_ID)
-      return HttpResponse.json(
+      return apiJson(
         {
           documentId: RETURN_DOC_ID,
           documentNumber: 'RETURN-2026-0001',

@@ -1,40 +1,50 @@
 import compositionStandard from '../../docs/feature-service-composition-standard.md?raw'
-import mutationSafetySource from '../shared/services/mutation-safety.ts?raw'
-import queryKeysSource from '../shared/services/query-keys.ts?raw'
-import factoriesSource from './msw/factories.ts?raw'
 import { describe, expect, it } from 'vitest'
 
-describe('feature service composition standard', () => {
-  it('documents the required service, query, mutation, and test boundaries', () => {
-    expect(compositionStandard).toContain('createFeatureService(client: AxiosInstance)')
+/**
+ * The machine-enforced half of the standard lives in two places now:
+ *
+ *  - `eslint.config.js` — the service-purity rules, which are single-token
+ *    restrictions ESLint can express, reported with a file and line at `lint`
+ *    time, before the build;
+ *  - `./feature-service-composition-standard-scans.test.ts` — the correlational
+ *    rules ESLint cannot express, each with an exact file-count assertion and a
+ *    negative control.
+ *
+ * This file previously asserted that the standard's *documentation* still
+ * contained certain sentences, and that a few modules still exported certain
+ * names. It inspected no service, hook or page, so it would have passed
+ * unchanged with every one of them violating every rule in the standard — and
+ * two of its assertions pinned `createIdempotentRequest` as a required export
+ * while that helper had zero production call sites, so the test was actively
+ * protecting dead code (eiams-frontend-xlfs).
+ *
+ * What remains here is the one thing a source scan cannot do: guard that the
+ * standard document itself still exists and still says something. A rule set
+ * that outlives its written rationale is how a standard quietly stops being
+ * one.
+ */
+describe('feature service composition standard (document)', () => {
+  it('exists and is a substantive document, not a stub or a truncated file', () => {
+    expect(compositionStandard.length).toBeGreaterThan(2000)
+  })
+
+  it('still states the boundaries the enforced rules depend on', () => {
+    // These are anchors, not a spell-check: each one names a boundary that a
+    // rule in eslint.config.js or in the scans file actually enforces, so if a
+    // future edit removes the rationale for a rule, this fails and the rule can
+    // be reconsidered deliberately rather than left orphaned.
     expect(compositionStandard).toContain('satisfies keyof paths')
-    expect(compositionStandard).toContain('queryKeys.public(resource, ...parts)')
-    expect(compositionStandard).toContain(
-      'queryKeys.scoped(activeScopeCacheKey, resource, ...parts)',
-    )
-    expect(compositionStandard).toContain('normalizeApiError(error)')
-    expect(compositionStandard).toContain('isConflictError(error)')
-    expect(compositionStandard).toContain('createIdempotentRequest()')
-    expect(compositionStandard).toMatch(/withRowVersion\(payload,\s+rowVersion\)/u)
-    expect(compositionStandard).toContain('src/test/msw/factories.ts')
-  })
-
-  it('references the shared implementations that enforce the documented seams', () => {
-    expect(mutationSafetySource).toContain('export function createIdempotentRequest')
-    expect(mutationSafetySource).toContain('export function withRowVersion')
-    expect(mutationSafetySource).toContain('export function isConflictError')
-    expect(queryKeysSource).toContain('public: (resource: string')
-    expect(queryKeysSource).toContain('scoped: (scope: ScopeCacheKey')
-    expect(factoriesSource).toContain('export function createProblemDetails')
-    expect(factoriesSource).toContain('export function createPage')
-  })
-
-  it('forbids service-level responsibilities that would bypass shared infrastructure', () => {
+    // `ApiTransport`, not `AxiosInstance`. This anchor previously pinned the
+    // old signature, and the doc was amended to prescribe the transport while
+    // this assertion kept demanding the Axios one — so the test was enforcing a
+    // standard the project had already moved off. It now pins the seam that
+    // `src/test/no-transport-mask.test.ts` and the envelope guard actually
+    // depend on.
+    expect(compositionStandard).toContain('createFeatureService(transport: ApiTransport)')
+    expect(compositionStandard).toMatch(/A service takes `ApiTransport`, never `AxiosInstance`/u)
+    expect(compositionStandard).toMatch(/withIdempotencyKey\(idempotencyKey\)/u)
     expect(compositionStandard).toMatch(/must not create an\s+Axios instance/u)
-    expect(compositionStandard).toMatch(
-      /do\s+not mirror server records into Zustand\s+or local component state/u,
-    )
     expect(compositionStandard).toMatch(/Do not add a\s+global Axios retry interceptor/u)
-    expect(compositionStandard).toMatch(/never call Axios,\s+encode endpoint URLs/u)
   })
 })

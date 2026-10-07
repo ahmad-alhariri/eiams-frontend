@@ -1,13 +1,10 @@
+import { createAxiosTransport } from '@/shared/api/axios-transport'
 import axios from 'axios'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import {
-  createAuditLog,
-  createAuditLogEntry,
-  createPage,
-  createProblemDetails,
-} from '@/test/msw/factories'
+import { createAuditLog, createAuditLogEntry } from '@/test/msw/factories'
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 import { createAuditService } from './audit.service'
@@ -20,7 +17,7 @@ const bundles: ApiClientBundle[] = []
 function setupService() {
   const bundle = createApiClient({ baseURL: API_BASE_URL })
   bundles.push(bundle)
-  return createAuditService(bundle.client)
+  return createAuditService(createAxiosTransport(bundle.client))
 }
 
 afterEach(() => {
@@ -44,7 +41,7 @@ describe('AuditService', () => {
     server.use(
       http.get(`${API_BASE_URL}/audit-logs`, ({ request }) => {
         requestedQuery = new URL(request.url).search
-        return HttpResponse.json(createPage([auditLog]))
+        return okPageJson([auditLog])
       }),
     )
 
@@ -85,9 +82,7 @@ describe('AuditService', () => {
     })
 
     server.use(
-      http.get(`${API_BASE_URL}/audit-logs/${auditLog.auditLogId}`, () =>
-        HttpResponse.json(auditLog),
-      ),
+      http.get(`${API_BASE_URL}/audit-logs/${auditLog.auditLogId}`, () => okJson(auditLog)),
     )
 
     const detail = await service.getAuditLog(auditLog.auditLogId)
@@ -105,16 +100,9 @@ describe('AuditService', () => {
 
   it('encodes audit identifiers and preserves server errors for Arabic presentation handling', async () => {
     const service = setupService()
-    const problem = createProblemDetails({
-      code: 'audit.log.not_found',
-      detailAr: 'تعذر العثور على سجل التدقيق.',
-      status: 404,
-      titleAr: 'سجل التدقيق غير موجود',
-    })
-
     server.use(
       http.get(`${API_BASE_URL}/audit-logs/id%2F1`, () =>
-        HttpResponse.json(problem, { status: 404 }),
+        errJson(404, { code: 'AUDIT_LOGS_NOT_FOUND', message: 'Audit log not found.' }),
       ),
     )
 
@@ -122,10 +110,9 @@ describe('AuditService', () => {
 
     expect(axios.isAxiosError(error)).toBe(true)
     expect(normalizeApiError(error)).toMatchObject({
-      code: 'audit.log.not_found',
-      detailAr: 'تعذر العثور على سجل التدقيق.',
+      code: 'AUDIT_LOGS_NOT_FOUND',
       status: 404,
-      titleAr: 'سجل التدقيق غير موجود',
+      titleAr: 'لم يتم العثور على سجل التدقيق.',
     })
   })
 })

@@ -6,10 +6,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   createDocumentPolicy,
   createOperationalAdvisory,
+  createSessionRole,
+  createSessionScope,
+  createSessionUser,
   createWarehouseCapability,
   createWarehouseDocument,
   createWarehouseDocumentLine,
@@ -50,17 +53,10 @@ const ALL_DOCUMENT_CODES = [
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'document.manager',
-      displayName: 'مدير المستندات',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستندات' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
-    availableScopes: [],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 
@@ -132,6 +128,7 @@ describe('useDocumentPolicyGate', () => {
       gate: 'balance',
       status: 'blocked',
       messageAr: 'الكمية المطلوبة (٢٥) تتجاوز الرصيد المتاح (١٢) للمادة «ورق تصوير A4».',
+      blockerCode: null,
     })
 
     const before = policyRequests

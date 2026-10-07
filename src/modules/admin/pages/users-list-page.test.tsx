@@ -1,11 +1,12 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okPageJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createPage, createUserSummary } from '@/test/msw/factories'
+import { createUserDirectoryRow } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -36,27 +37,27 @@ afterEach(() => {
 
 describe('UsersListPage', () => {
   it('renders contract-backed user rows and sends zero-based server pagination', async () => {
-    const account = createUserSummary()
-    let receivedPageIndex: string | null = null
+    const account = createUserDirectoryRow()
+    let receivedPage: string | null = null
     let receivedPageSize: string | null = null
 
     server.use(
       http.get(`${API_BASE_URL}/admin/users`, ({ request }) => {
         const url = new URL(request.url)
-        receivedPageIndex = url.searchParams.get('pageIndex')
+        receivedPage = url.searchParams.get('page')
         receivedPageSize = url.searchParams.get('pageSize')
-        return HttpResponse.json(createPage([account], { totalItems: 11, totalPages: 2 }))
+        return okPageJson([account], { page: 1, pageSize: 10, totalCount: 11, totalPages: 2 })
       }),
     )
 
     render(<UsersListPage />, { wrapper: createWrapper() })
 
     expect(await screen.findByRole('heading', { level: 1, name: 'المستخدمون' })).toBeInTheDocument()
-    expect(await screen.findByText(account.displayName)).toBeInTheDocument()
-    expect(screen.getByText(account.username)).toBeInTheDocument()
+    expect(await screen.findByText(account.firstName + ' ' + account.lastName)).toBeInTheDocument()
+    expect(screen.getByText(account.email)).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'الحالة' })).toBeInTheDocument()
     expect(screen.getByText('نشط')).toBeInTheDocument()
-    expect(receivedPageIndex).toBe('0')
+    expect(receivedPage).toBe('1')
     expect(receivedPageSize).toBe('10')
   })
 
@@ -68,13 +69,13 @@ describe('UsersListPage', () => {
       http.get(`${API_BASE_URL}/admin/users`, ({ request }) => {
         const url = new URL(request.url)
         receivedSearches.push(url.searchParams.get('search'))
-        return HttpResponse.json(createPage([createUserSummary()]))
+        return okPageJson([createUserDirectoryRow()])
       }),
     )
 
     render(<UsersListPage />, { wrapper: createWrapper() })
 
-    await screen.findByText('مستخدم تجريبي')
+    await screen.findByText('مستخدم اختباري')
     await user.type(screen.getByRole('searchbox', { name: 'بحث' }), ' أحمد ')
 
     await waitFor(() => expect(receivedSearches).toContain(' أحمد '))
@@ -88,7 +89,7 @@ describe('UsersListPage', () => {
         attempts += 1
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(createPage([createUserSummary()]))
+          : okPageJson([createUserDirectoryRow()])
       }),
     )
 
@@ -100,6 +101,6 @@ describe('UsersListPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
 
     await waitFor(() => expect(attempts).toBe(2))
-    expect(await screen.findByText('مستخدم تجريبي')).toBeInTheDocument()
+    expect(await screen.findByText('مستخدم اختباري')).toBeInTheDocument()
   })
 })

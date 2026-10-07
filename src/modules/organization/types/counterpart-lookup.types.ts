@@ -33,7 +33,10 @@ export function validateCounterpartForWrite(
     return { isValid: false, messageAr: 'اختر جهة مستلمة أو حائزة نشطة.' }
   }
   if (counterpart.status !== 'Active') {
-    return { isValid: false, messageAr: 'الجهة المختارة غير نشطة. اختر جهة نشطة أخرى قبل المتابعة.' }
+    return {
+      isValid: false,
+      messageAr: 'الجهة المختارة غير نشطة. اختر جهة نشطة أخرى قبل المتابعة.',
+    }
   }
   return { isValid: true, reference: { type: 'ExternalParty', id: counterpart.externalPartyId } }
 }

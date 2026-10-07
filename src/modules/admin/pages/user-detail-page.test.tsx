@@ -6,12 +6,14 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
+
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import {
-  createRole,
+  createRoleProjection,
   createSession,
   createUserRoleScope,
-  createUserSummary,
+  createUserDetail,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
@@ -27,8 +29,21 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 const API_BASE_URL = '/api/v1'
 const USER_ID = '00000000-0000-4000-8000-000000000099'
 const SITE_ID = '00000000-0000-4000-8000-000000000071'
-const ROLE_A = createRole({ roleId: '00000000-0000-4000-8000-0000000000a1', nameAr: 'مدير النظام' })
-const ROLE_B = createRole({ roleId: '00000000-0000-4000-8000-0000000000b2', nameAr: 'مدقق' })
+const ROLE_A = createRoleProjection({
+  id: '00000000-0000-4000-8000-0000000000a1',
+  name: 'SYSTEM_ADMIN',
+  nameAr: 'مدير النظام',
+  // Enterprise-only, so the editor must not offer Site or Warehouse for it.
+  allowedScopeTypes: ['Enterprise'],
+  rowVersion: 3,
+})
+const ROLE_B = createRoleProjection({
+  id: '00000000-0000-4000-8000-0000000000b2',
+  name: 'WH_MGR',
+  nameAr: 'مدير المستودع',
+  allowedScopeTypes: ['Site', 'Warehouse'],
+  rowVersion: 5,
+})
 
 function PageWrapper({ children }: PropsWithChildren) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -39,6 +54,7 @@ function PageWrapper({ children }: PropsWithChildren) {
         'admin.user.view',
         ...(permissions.canManage ? ['admin.user.manage'] : []),
         ...(permissions.canViewRoles ? ['admin.role.view'] : []),
+        'sites.view',
       ],
     }),
   )
@@ -54,27 +70,25 @@ function PageWrapper({ children }: PropsWithChildren) {
   )
 }
 
-function seedRoleScopes() {
+function seedEnterpriseAssignment() {
   server.use(
     http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
-      HttpResponse.json(
-        createUserSummary({
-          userId: USER_ID,
-          username: 'review.user',
-          displayName: 'مستخدم المراجعة',
-          rowVersion: 7,
+      okJson(createUserDetail({ id: USER_ID })),
+    ),
+    // The singular resource (D-SRS-01): one object, never a collection.
+    http.get(`${API_BASE_URL}/admin/users/${USER_ID}/role-scope`, () =>
+      okJson(
+        createUserRoleScope({
+          id: '00000000-0000-4000-8000-0000000000c1',
+          roleId: ROLE_A.id,
+          roleName: ROLE_A.name,
+          scopeType: 'Enterprise',
+          scopeId: null,
+          rowVersion: 4,
         }),
       ),
     ),
-    http.get(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, () =>
-      HttpResponse.json([
-        createUserRoleScope({
-          role: createRole({ roleId: ROLE_A.roleId, nameAr: 'مدير النظام' }),
-          scope: { scopeType: 'Enterprise', scopeId: null, displayName: 'المؤسسة' },
-        }),
-      ]),
-    ),
-    http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([ROLE_A, ROLE_B])),
+    http.get(`${API_BASE_URL}/admin/roles`, () => okPageJson([ROLE_A, ROLE_B])),
   )
 }
 
@@ -85,23 +99,27 @@ afterEach(() => {
 })
 
 describe('UserDetailPage', () => {
-  it('lists the user role-scopes and replaces the full assignment set on save', async () => {
+  it('replaces the single assignment with the role scope and version it was read at', async () => {
     const user = userEvent.setup()
     const receivedBodies: unknown[] = []
-    seedRoleScopes()
+    seedEnterpriseAssignment()
     server.use(
-      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, async ({ request }) => {
+      http.get(`${API_BASE_URL}/sites`, () =>
+        okPageJson([
+          { siteId: SITE_ID, code: 'ALE', nameAr: 'موقع حلب', rowVersion: 1, status: 'Active' },
+        ]),
+      ),
+      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scope`, async ({ request }) => {
         receivedBodies.push(await request.json())
-        return HttpResponse.json([
+        return okJson(
           createUserRoleScope({
-            role: createRole({ roleId: ROLE_A.roleId, nameAr: 'مدير النظام' }),
-            scope: { scopeType: 'Enterprise', scopeId: null, displayName: 'المؤسسة' },
+            roleId: ROLE_B.id,
+            roleName: ROLE_B.name,
+            scopeType: 'Site',
+            scopeId: SITE_ID,
+            rowVersion: 5,
           }),
-          createUserRoleScope({
-            role: createRole({ roleId: ROLE_B.roleId, nameAr: 'مدقق' }),
-            scope: { scopeType: 'Site', scopeId: 'site-1', displayName: 'موقع' },
-          }),
-        ])
+        )
       }),
     )
 
@@ -109,64 +127,123 @@ describe('UserDetailPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'تفاصيل المستخدم' })).toBeInTheDocument()
 
-    // The seeded Enterprise assignment for ROLE_A is loaded. The role name only
-    // renders inside the Radix Select content (mounted on open), so open the
-    // existing role select to confirm the assignment's role.
-    const comboboxes = await screen.findAllByRole('combobox')
-    await user.click(comboboxes[0]!)
-    expect(await screen.findByText('مدير النظام')).toBeInTheDocument()
-    await user.keyboard('{Escape}')
+    // Switch the role to WH_MGR, which permits Site, then choose the site target.
+    await user.click(await screen.findByRole('combobox', { name: /الدور/ }))
+    await user.click(await screen.findByRole('option', { name: ROLE_B.nameAr }))
 
-    // Add a second assignment for ROLE_B scoped to a Site.
-    await user.click(screen.getByRole('button', { name: 'إضافة تعيين' }))
-    // Each assignment row renders two selects (role, then scope). After adding,
-    // comboboxes are [role0, scope0, role1, scope1]; the new row's role select
-    // is the second-to-last combobox and its scope select is the last.
-    const combos = await screen.findAllByRole('combobox')
-    const newRoleSelect = combos.at(-2)!
-    await user.click(newRoleSelect)
-    const roleOptions = await screen.findAllByRole('option')
-    const roleBOption = roleOptions.find((option) => (option.textContent ?? '').includes('مدقق'))
-    expect(roleBOption).toBeDefined()
-    await user.click(roleBOption!)
-    const scopeSelects = screen.getAllByRole('combobox')
-    const newScopeSelect = scopeSelects.at(-1)!
-    await user.click(newScopeSelect)
-    const scopeOptions = await screen.findAllByRole('option')
-    const siteOption = scopeOptions.find((option) => (option.textContent ?? '').includes('موقع'))
-    expect(siteOption).toBeDefined()
-    await user.click(siteOption!)
-    const scopeInputs = screen.getAllByRole('textbox', { name: 'معرّف النطاق' })
-    await user.type(scopeInputs.at(-1)!, SITE_ID)
+    // Choosing a role whose allowedScopeTypes excludes Enterprise must move the
+    // scope type off Enterprise, otherwise the save would be refused by the server.
+    await user.click(await screen.findByRole('combobox', { name: /النطاق/ }))
+    await user.click(await screen.findByRole('option', { name: 'موقع' }))
 
-    await user.click(screen.getByRole('button', { name: 'حفظ التعيينات' }))
+    // AsyncSelect's Base UI input carries the combobox role, not textbox.
+    await user.click(await screen.findByRole('combobox', { name: 'موقع' }))
+    await user.type(screen.getByRole('combobox', { name: 'موقع' }), 'حلب')
+    await user.click(await screen.findByRole('option', { name: /موقع حلب/ }))
+
+    await user.click(screen.getByRole('button', { name: 'حفظ التعيين' }))
 
     await waitFor(() =>
       expect(receivedBodies).toEqual([
         {
-          assignments: [
-            { roleId: ROLE_A.roleId, scopeId: null, scopeType: 'Enterprise' },
-            { roleId: ROLE_B.roleId, scopeId: SITE_ID, scopeType: 'Site' },
-          ],
-          rowVersion: 7,
+          roleId: ROLE_B.id,
+          scopeType: 'Site',
+          scopeId: SITE_ID,
+          // The assignment's own version, not the user summary's rowVersion of 7.
+          expectedRowVersion: 4,
         },
       ]),
     )
-    // The mutation settled (button returns to its idle, enabled state) — the
-    // PUT replaced the full assignment set with ROLE_B + Site as asserted above.
-    const saveButton = await screen.findByRole('button', { name: 'حفظ التعيينات' })
-    expect(saveButton).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'حفظ التعيين' })).toBeEnabled()
   })
 
-  it('blocks incomplete assignments with Arabic inline validation', async () => {
+  it('offers only the scope types the chosen role permits', async () => {
     const user = userEvent.setup()
-    seedRoleScopes()
+    seedEnterpriseAssignment()
     render(<UserDetailPage />, { wrapper: PageWrapper })
 
-    await user.click(await screen.findByRole('button', { name: 'إضافة تعيين' }))
-    await user.click(screen.getByRole('button', { name: 'حفظ التعيينات' }))
+    // SYSTEM_ADMIN is Enterprise-only.
+    await user.click(await screen.findByRole('combobox', { name: /النطاق/ }))
+    expect(await screen.findByRole('option', { name: 'مستوى المؤسسة' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'مستودع' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'موقع' })).not.toBeInTheDocument()
+  })
+
+  it('hides the scope identifier for an Enterprise assignment and offers no add-row action', async () => {
+    seedEnterpriseAssignment()
+    render(<UserDetailPage />, { wrapper: PageWrapper })
+
+    expect(
+      await screen.findByText(/نطاق المؤسسة لا يتطلب تحديد موقع أو مستودع/u),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'مستودع' })).not.toBeInTheDocument()
+    // D-SRS-01: one assignment, always. There is no way to add a second row.
+    expect(screen.queryByRole('button', { name: /إضافة تعيين/ })).not.toBeInTheDocument()
+  })
+
+  it('blocks a missing role with Arabic inline validation', async () => {
+    const user = userEvent.setup()
+    // A user with no assignment starts with an empty role, which is the only
+    // state where the required-role rule can be violated.
+    server.use(
+      http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
+        okJson(createUserDetail({ id: USER_ID })),
+      ),
+      http.get(`${API_BASE_URL}/admin/users/${USER_ID}/role-scope`, () =>
+        errJson(404, {
+          code: 'UserRoleScopes.AssignmentNotFound',
+          message: 'The user does not have a role and scope assignment',
+        }),
+      ),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okPageJson([ROLE_A, ROLE_B])),
+    )
+
+    render(<UserDetailPage />, { wrapper: PageWrapper })
+
+    await user.click(await screen.findByRole('button', { name: 'حفظ التعيين' }))
 
     expect(await screen.findByText('يجب اختيار دور صالح.')).toBeInTheDocument()
+  })
+
+  it('submits version zero for a user who has no assignment yet', async () => {
+    const user = userEvent.setup()
+    const receivedBodies: unknown[] = []
+    server.use(
+      http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
+        okJson(createUserDetail({ id: USER_ID })),
+      ),
+      http.get(`${API_BASE_URL}/admin/users/${USER_ID}/role-scope`, () =>
+        // The backend answers AssignmentNotFound when the row is absent, and the
+        // service translates that to null rather than an error.
+        errJson(404, {
+          code: 'UserRoleScopes.AssignmentNotFound',
+          message: 'The user does not have a role and scope assignment',
+        }),
+      ),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okPageJson([ROLE_A, ROLE_B])),
+      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scope`, async ({ request }) => {
+        receivedBodies.push(await request.json())
+        return okJson(
+          createUserRoleScope({ roleId: ROLE_A.id, roleName: ROLE_A.name, rowVersion: 1 }),
+        )
+      }),
+    )
+
+    render(<UserDetailPage />, { wrapper: PageWrapper })
+
+    // The empty assignment is a normal state, not an error state.
+    expect(await screen.findByRole('button', { name: 'حفظ التعيين' })).toBeInTheDocument()
+
+    await user.click(await screen.findByRole('combobox', { name: /الدور/ }))
+    await user.click(await screen.findByRole('option', { name: ROLE_A.nameAr }))
+    await user.click(screen.getByRole('button', { name: 'حفظ التعيين' }))
+
+    await waitFor(() =>
+      expect(receivedBodies).toEqual([
+        { roleId: ROLE_A.id, scopeType: 'Enterprise', scopeId: null, expectedRowVersion: 0 },
+      ]),
+    )
   })
 
   it.each([
@@ -179,7 +256,7 @@ describe('UserDetailPage', () => {
       let roleCatalogRequests = 0
       permissions.canManage = canManage
       permissions.canViewRoles = canViewRoles
-      seedRoleScopes()
+      seedEnterpriseAssignment()
       server.use(
         http.get(`${API_BASE_URL}/admin/roles`, () => {
           roleCatalogRequests += 1
@@ -189,16 +266,17 @@ describe('UserDetailPage', () => {
 
       render(<UserDetailPage />, { wrapper: PageWrapper })
 
-      expect(await screen.findByText('مدير النظام')).toBeInTheDocument()
+      // Without role-catalog access the role is shown from the assignment's own code,
+      // never invented and never fetched.
+      expect(await screen.findByText(ROLE_A.name)).toBeInTheDocument()
       await waitFor(() => expect(roleCatalogRequests).toBe(0))
-      expect(screen.queryByRole('button', { name: 'إضافة تعيين' })).not.toBeInTheDocument()
+
       if (canManage) {
-        expect(screen.getByRole('button', { name: 'حفظ التعيينات' })).toBeInTheDocument()
-        expect(
-          screen.getByText(/تتطلب إضافة دور أو تغييره صلاحية عرض الأدوار/u),
-        ).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'حفظ التعيين' })).toBeInTheDocument()
+        expect(screen.getByText(/تتطلب تغيير الدور صلاحية عرض الأدوار/u)).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /إضافة تعيين/ })).not.toBeInTheDocument()
       } else {
-        expect(screen.queryByRole('button', { name: 'حفظ التعيينات' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'حفظ التعيين' })).not.toBeInTheDocument()
         expect(screen.getByText(/عرض للقراءة فقط/u)).toBeInTheDocument()
       }
     },
@@ -207,62 +285,60 @@ describe('UserDetailPage', () => {
   it.each([
     {
       status: 409,
-      body: {
-        status: 409,
-        code: 'admin.user_conflict',
-        titleAr: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
-        traceId: 'trace-conflict',
-      },
-      expected: 'تغيرت بيانات المستخدم. حدّث الصفحة ثم حاول مجدداً.',
+      // Normalised from the C# `UserRoleScopes.RowVersionMismatch`, which the
+      // backend emits and `normalizeWireErrorCode` upper-snake-cases.
+      code: 'USER_ROLE_SCOPES_ROW_VERSION_MISMATCH',
+      details: {},
+      expected: 'تغيرت البيانات من قبل مستخدم آخر. حدّث الصفحة ثم أعد المحاولة.',
     },
     {
-      status: 422,
-      body: {
-        status: 422,
-        code: 'validation.failed',
-        titleAr: 'تعذر تنفيذ الطلب. راجع البيانات المدخلة.',
-        traceId: 'trace-validation',
-        fieldErrors: [
-          {
-            field: 'assignments',
-            code: 'invalid_scope',
-            messageAr: 'يتعذر إسناد الدور إلى النطاق المحدد.',
-          },
-        ],
-      },
-      expected: 'يتعذر إسناد الدور إلى النطاق المحدد.',
+      status: 409,
+      code: 'USER_ROLE_SCOPES_ROLE_NOT_ALLOWED_AT_SCOPE',
+      details: {},
+      // The screen prefers detailAr when the code carries one, because it tells the
+      // administrator what to change.
+      expected: 'اختر دوراً مسموحاً في هذا النطاق.',
     },
-  ])('renders Arabic mutation feedback for HTTP $status', async ({ status, body, expected }) => {
-    const user = userEvent.setup()
-    seedRoleScopes()
-    server.use(
-      http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`, () =>
-        HttpResponse.json(body, { status }),
-      ),
-    )
-    render(<UserDetailPage />, { wrapper: PageWrapper })
+    {
+      status: 403,
+      code: 'USER_ROLE_SCOPES_ASSIGNMENT_OUTSIDE_ADMINISTRATOR_SCOPE',
+      details: {},
+      expected: 'الإسناد المطلوب خارج نطاق صلاحيتك الإدارية.',
+    },
+  ])(
+    'renders Arabic mutation feedback for HTTP $status $code',
+    async ({ status, code, details, expected }) => {
+      const user = userEvent.setup()
+      seedEnterpriseAssignment()
+      server.use(
+        http.put(`${API_BASE_URL}/admin/users/${USER_ID}/role-scope`, () =>
+          errJson(status, { code, details }),
+        ),
+      )
+      render(<UserDetailPage />, { wrapper: PageWrapper })
 
-    await user.click(await screen.findByRole('button', { name: 'حفظ التعيينات' }))
+      await user.click(await screen.findByRole('button', { name: 'حفظ التعيين' }))
 
-    expect(await screen.findByText(expected)).toBeInTheDocument()
-  })
+      expect(await screen.findByText(expected)).toBeInTheDocument()
+    },
+  )
 
-  it('renders an actionable Arabic error state when the role-scopes request fails', async () => {
+  it('renders an actionable Arabic error state when the assignment request fails', async () => {
     server.use(
       http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
-        HttpResponse.json(createUserSummary({ userId: USER_ID, rowVersion: 7 })),
+        okJson(createUserDetail({ id: USER_ID })),
       ),
       http.get(
-        `${API_BASE_URL}/admin/users/${USER_ID}/role-scopes`,
+        `${API_BASE_URL}/admin/users/${USER_ID}/role-scope`,
         () => new HttpResponse(null, { status: 500 }),
       ),
-      http.get(`${API_BASE_URL}/admin/roles`, () => HttpResponse.json([ROLE_A])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okPageJson([ROLE_A])),
     )
 
     render(<UserDetailPage />, { wrapper: PageWrapper })
 
     expect(
-      await screen.findByRole('heading', { name: 'تعذّر تحميل تعيينات المستخدم' }),
+      await screen.findByRole('heading', { name: 'تعذّر تحميل تعيين المستخدم' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'إعادة المحاولة' })).toBeInTheDocument()
   })

@@ -44,6 +44,11 @@ describe('cross-module scenario data', () => {
       policy: expect.objectContaining({ policyKind: 'Disposal' }),
     })
     for (const document of [scenario.documents.adjustment, scenario.documents.disposal]) {
+      const adjustment = Object.values({
+        countVariance: scenario.adjustments.countVariance,
+        disposal: scenario.adjustments.disposal,
+      }).find((candidate) => candidate.documentId === document.documentId)
+      expect(adjustment?.attachments).toEqual(document.attachments)
       expect(
         scenario.ledgers.lifecycleEvents[document.documentId]?.map((event) => event.eventType),
       ).toEqual(['Created', 'Posted'])
@@ -52,7 +57,7 @@ describe('cross-module scenario data', () => {
 
   it('preserves document-to-line-to-stock ledger provenance and balance totals', () => {
     const scenario = createCrossModuleScenario()
-    const sourceId = scenario.warehouses.source.warehouseId
+    const sourceId = scenario.warehouses.source.id
     const assetMaterialId = scenario.catalog.assetMaterial.materialId
     const consumableMaterialId = scenario.catalog.consumableMaterial.materialId
     const sourceAssetDelta = scenario.ledgers.stockMovements

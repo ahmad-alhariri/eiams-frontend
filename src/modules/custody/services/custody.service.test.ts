@@ -1,15 +1,61 @@
+﻿import { createAxiosTransport } from '@/shared/api/axios-transport'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/shared/services/api.client', () => ({
-  apiClient: { get: vi.fn(), post: vi.fn() },
+  apiClient: { request: vi.fn() },
 }))
 
 import { apiClient } from '@/shared/services/api.client'
 import { createCustodyService } from './custody.service'
 
+const mockedRequest = vi.mocked(apiClient.request)
+
+type SentConfig = {
+  url?: string
+  method?: string
+  params?: Record<string, unknown>
+  data?: unknown
+  headers?: Record<string, string>
+}
+
+function sentConfig(call = 0): SentConfig {
+  return (mockedRequest.mock.calls[call]?.[0] ?? {}) as SentConfig
+}
+
+/** A wire success envelope, which is what transport.request reads. */
+function envelope(data: unknown) {
+  return {
+    data: { success: true, data, pagination: null, meta: { request_id: 'r', timestamp: 't' } },
+  } as never
+}
+
+/** A wire paged envelope, which is what transport.requestPage reads. */
+function pagedEnvelope(items: readonly unknown[]) {
+  return {
+    data: {
+      success: true,
+      data: items,
+      pagination: {
+        page: 1,
+        page_size: 20,
+        total_items: items.length,
+        total_pages: 1,
+        has_previous_page: false,
+        has_next_page: false,
+      },
+      meta: { request_id: 'r', timestamp: 't' },
+    },
+  } as never
+}
+
+const testTransport = createAxiosTransport(apiClient)
+
 const ASSET_ID = '11111111-1111-4111-8111-111111111111'
+
 const HOLDER_ID = '22222222-2222-4222-8222-222222222222'
+
 const ISSUE_DOC_ID = '33333333-3333-4333-8333-333333333333'
+
 const CUSTODY_ID = '44444444-4444-4444-8444-444444444444'
 
 const assignRequest = {
@@ -24,53 +70,52 @@ const assignRequest = {
 } as const
 
 beforeEach(() => {
-  vi.mocked(apiClient.get).mockClear()
-  vi.mocked(apiClient.post).mockClear()
+  mockedRequest.mockReset()
 })
 
 describe('custody.service (e19-t01)', () => {
   it('lists custodies with contract filters as query params', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({ data: { items: [], meta: {} } })
-    const service = createCustodyService(apiClient as never)
+    mockedRequest.mockResolvedValue(pagedEnvelope([]))
+    const service = createCustodyService(testTransport)
 
     await service.listCustodies({ status: 'Active', custodyKind: 'Operational' })
 
-    expect(apiClient.get).toHaveBeenCalledWith('/custodies', {
+    expect(sentConfig()).toMatchObject({
+      url: '/custodies',
+      method: 'GET',
       params: { status: 'Active', custodyKind: 'Operational' },
     })
   })
 
   it('posts assignments to /custodies/assign with the Idempotency-Key header', async () => {
-    vi.mocked(apiClient.post).mockResolvedValue({ data: {} })
-    const service = createCustodyService(apiClient as never)
+    mockedRequest.mockResolvedValue(envelope({}))
+    const service = createCustodyService(testTransport)
 
     await service.assignCustody(assignRequest, 'key-1')
 
-    const [path, body, config] = vi.mocked(apiClient.post).mock.calls[0]!
+    const { url: path, data: body } = sentConfig()
     expect(path).toBe('/custodies/assign')
     expect(body).toEqual(assignRequest)
-    expect(config?.headers).toMatchObject({ 'Idempotency-Key': 'key-1' })
+    expect(sentConfig().headers).toMatchObject({ 'Idempotency-Key': 'key-1' })
   })
 
   it('posts transfers to the encoded per-custody path with the idempotency header', async () => {
-    vi.mocked(apiClient.post).mockResolvedValue({ data: {} })
-    const service = createCustodyService(apiClient as never)
+    mockedRequest.mockResolvedValue(envelope({}))
+    const service = createCustodyService(testTransport)
 
     await service.transferCustody(CUSTODY_ID, assignRequest, 'key-2')
 
-    const [path, , config] = vi.mocked(apiClient.post).mock.calls[0]!
+    const { url: path } = sentConfig()
     expect(path).toBe(`/custodies/${CUSTODY_ID}/transfer`)
-    expect(config?.headers).toMatchObject({ 'Idempotency-Key': 'key-2' })
+    expect(sentConfig().headers).toMatchObject({ 'Idempotency-Key': 'key-2' })
   })
 
   it('encodes unsafe custody ids in the transfer path', async () => {
-    vi.mocked(apiClient.post).mockResolvedValue({ data: {} })
-    const service = createCustodyService(apiClient as never)
+    mockedRequest.mockResolvedValue(envelope({}))
+    const service = createCustodyService(testTransport)
 
     await service.transferCustody('id/with slash', assignRequest, 'key-3')
 
-    expect(vi.mocked(apiClient.post).mock.calls[0]![0]).toBe(
-      '/custodies/id%2Fwith%20slash/transfer',
-    )
+    expect(sentConfig().url).toBe('/custodies/id%2Fwith%20slash/transfer')
   })
 })

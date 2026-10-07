@@ -1,13 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { FormProvider, useForm } from 'react-hook-form'
 
 import { TransferDestinationSection } from './transfer-destination-section'
 import type { TransferPetalContainer } from '@/modules/transfer/schemas/transfer-info.schema'
-import { createPage, createWarehouse } from '@/test/msw/factories'
+import { createWarehouse } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
@@ -19,17 +20,15 @@ const DESTINATION_WAREHOUSE_ID = '44444444-4444-4444-8444-444444444402'
 
 function useHandlers() {
   const sourceWarehouse = createWarehouse({
-    warehouseId: SOURCE_WAREHOUSE_ID,
-    nameAr: 'المستودع المركزي',
+    id: SOURCE_WAREHOUSE_ID,
+    name: 'المستودع المركزي',
   })
   const destinationWarehouse = createWarehouse({
-    warehouseId: DESTINATION_WAREHOUSE_ID,
-    nameAr: 'مستودع الفرع الشمالي',
+    id: DESTINATION_WAREHOUSE_ID,
+    name: 'مستودع الفرع الشمالي',
   })
   server.use(
-    http.get('/api/v1/warehouses', () =>
-      HttpResponse.json(createPage([sourceWarehouse, destinationWarehouse])),
-    ),
+    http.get('/api/v1/warehouses', () => okPageJson([sourceWarehouse, destinationWarehouse])),
   )
 }
 

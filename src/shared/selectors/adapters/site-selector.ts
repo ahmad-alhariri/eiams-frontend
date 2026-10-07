@@ -1,4 +1,4 @@
-import type { Site } from '@/shared/types/generated/eiams-v1'
+import type { Site } from '@/modules/organization/types/organization.types'
 
 import {
   createEntitySelectorAdapter,
@@ -17,8 +17,8 @@ export type SiteLoader = EntityLoader<Site>
  */
 const siteAdapter: EntitySelectorAdapter<Site> = createEntitySelectorAdapter<Site>({
   toOption: (site) => ({
-    value: site.siteId,
-    label: site.nameAr,
+    value: site.id,
+    label: site.name,
     disabled: site.status !== 'Active',
     payload: site,
   }),

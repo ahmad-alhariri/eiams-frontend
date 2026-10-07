@@ -4,7 +4,7 @@ import { useCallback, useMemo } from 'react'
 import type { PermissionCode } from '@/config/permissions'
 import { ROUTE_METADATA, type RouteKey } from '@/config/routes'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 export interface PermissionPredicates {
   has: (code: PermissionCode) => boolean

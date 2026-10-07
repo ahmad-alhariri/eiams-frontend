@@ -1,7 +1,8 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okPageJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
@@ -31,8 +32,8 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 function useCustodyHandlers() {
   server.use(
     http.get(`${API_BASE_URL}/custodies`, () =>
-      HttpResponse.json({
-        items: [
+      okPageJson(
+        [
           {
             assetId: ASSET_ID,
             assetNumber: 'AST-2023-C099',
@@ -51,8 +52,8 @@ function useCustodyHandlers() {
             status: 'Active',
           },
         ],
-        meta: { pageIndex: 0, pageSize: 20, totalItems: 1, totalPages: 1 },
-      }),
+        { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 },
+      ),
     ),
   )
 }

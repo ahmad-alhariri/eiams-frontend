@@ -15,7 +15,10 @@ import {
   useMaterialsQuery,
   useUnitsOfMeasureQuery,
 } from '@/modules/catalog/hooks/use-catalog-queries'
-import { MATERIAL_KIND_LABELS } from '@/modules/catalog/constants/catalog-labels'
+import {
+  MATERIAL_KIND_LABELS,
+  MATERIAL_KIND_OPTIONS,
+} from '@/modules/catalog/constants/catalog-labels'
 import {
   toMaterialRequest,
   type MaterialFormValues,
@@ -231,8 +234,11 @@ function MaterialsListPage() {
               onValueChange={handleMaterialKindChange}
             >
               <SelectItem value="all">كل الأنواع</SelectItem>
-              <SelectItem value="Consumable">مستهلكة</SelectItem>
-              <SelectItem value="Asset">أصل ثابت</SelectItem>
+              {MATERIAL_KIND_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </FilterSelect>
             <FilterSelect
               label="الحالة"

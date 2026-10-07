@@ -206,6 +206,27 @@ describe('AttachmentPanel — remove flow', () => {
   })
 })
 
+describe('AttachmentPanel — failed delete feedback (e24-t10 / B1)', () => {
+  it('renders the parent delete error as an alert and keeps the attachment listed', () => {
+    const attachment = makeAttachment()
+    renderPanel({ attachments: [attachment], deleteError: 'تعذر حذف المرفق — 409' })
+
+    const alert = screen.getByTestId('attachment-delete-error')
+    expect(alert).toHaveAttribute('role', 'alert')
+    expect(alert).toHaveTextContent('تعذر حذف المرفق — 409')
+    // The failed delete changes nothing about the stored row, and the panel
+    // says nothing that would suggest otherwise.
+    expect(screen.getByTestId('attachment-name')).toHaveTextContent('signed.pdf')
+    expect(screen.getByRole('button', { name: 'حذف المرفق signed.pdf' })).toBeInTheDocument()
+  })
+
+  it('renders no delete alert while the parent reports no failure', () => {
+    const { container } = renderPanel({ attachments: [makeAttachment()], deleteError: null })
+
+    expect(container.querySelector('[data-testid="attachment-delete-error"]')).toBeNull()
+  })
+})
+
 describe('AttachmentPanel — readOnly', () => {
   it('hides remove, cancel and picker actions but keeps the list readable', () => {
     const attachment = makeAttachment()

@@ -1,6 +1,5 @@
-import type { AxiosInstance } from 'axios'
-
-import { apiClient } from '@/shared/services/api.client'
+﻿import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 import type { AttachmentType, DocumentAttachment, paths } from '@/shared/types/generated/eiams-v1'
 
 const ATTACHMENTS_PATH = '/warehouse-documents/{documentId}/attachments' satisfies keyof paths
@@ -34,25 +33,32 @@ export interface DocumentAttachmentService {
  * `AttachmentUploadRequest` schema; version conflicts surface through the
  * shared Arabic error normalizer, never pre-validated here.
  */
-export function createDocumentAttachmentService(client: AxiosInstance): DocumentAttachmentService {
+export function createDocumentAttachmentService(
+  transport: ApiTransport,
+): DocumentAttachmentService {
   return {
     async uploadAttachment(documentId, file, attachmentType, rowVersion) {
       const form = new FormData()
       form.append('file', file)
       form.append('attachmentType', attachmentType)
       form.append('rowVersion', String(rowVersion))
-      const response = await client.post<DocumentAttachment>(
-        pathWithSegments(ATTACHMENTS_PATH, documentId),
-        form,
-      )
-      return response.data
+      const response = await transport.request<DocumentAttachment>({
+        path: pathWithSegments(ATTACHMENTS_PATH, documentId),
+        method: 'POST',
+        // No Content-Type: the browser must add the multipart boundary, which is
+        // why the transport passes the body through untouched.
+        body: form,
+      })
+      return response
     },
     async deleteAttachment(documentId, attachmentId, rowVersion) {
-      await client.delete(pathWithSegments(ATTACHMENT_PATH, documentId, attachmentId), {
-        params: { rowVersion },
+      await transport.requestEmpty({
+        path: pathWithSegments(ATTACHMENT_PATH, documentId, attachmentId),
+        method: 'DELETE',
+        query: { rowVersion },
       })
     },
   }
 }
 
-export const attachmentService = createDocumentAttachmentService(apiClient)
+export const attachmentService = createDocumentAttachmentService(apiTransport)

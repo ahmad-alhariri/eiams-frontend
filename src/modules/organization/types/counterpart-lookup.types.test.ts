@@ -19,7 +19,10 @@ function createCounterpart(status: 'Active' | 'Inactive'): ExternalParty {
 
 describe('counterpart write validation', () => {
   it('allows active server choices and blocks missing or inactive choices in Arabic', () => {
-    expect(validateCounterpartForWrite(createCounterpart('Active'))).toEqual({ isValid: true, reference: { type: 'ExternalParty', id: expect.any(String) } })
+    expect(validateCounterpartForWrite(createCounterpart('Active'))).toEqual({
+      isValid: true,
+      reference: { type: 'ExternalParty', id: expect.any(String) },
+    })
     expect(validateCounterpartForWrite(undefined)).toEqual({
       isValid: false,
       messageAr: 'اختر جهة مستلمة أو حائزة نشطة.',

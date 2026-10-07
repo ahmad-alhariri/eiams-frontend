@@ -2,7 +2,7 @@ import { useFormContext } from 'react-hook-form'
 
 import type { TransferPetalContainer } from '@/modules/transfer/schemas/transfer-info.schema'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
-import type { Warehouse } from '@/shared/types/generated/eiams-v1'
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import { FormField, FormItem, FormLabel, FormMessage, useFormField } from '@/shared/forms/form'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { Textarea } from '@/shared/ui/textarea'

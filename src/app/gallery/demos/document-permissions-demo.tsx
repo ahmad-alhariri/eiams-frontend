@@ -10,8 +10,8 @@ import type {
   ActionAvailability,
   DocumentActionType,
   DocumentPolicy,
-  SessionResponse,
 } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/utils/class-names'
@@ -20,7 +20,7 @@ import { cn } from '@/shared/utils/class-names'
    that intentionally exports its sections registry alongside local components. */
 
 const DEMO_USER_ID = '10000000-0000-4000-8000-000000000001'
-const DEMO_ROLE_ID = '20000000-0000-4000-8000-000000000002'
+const DEMO_ROLE_ID = '10000000-0000-4000-8000-000000000002'
 const DEMO_SCOPE_ID = '30000000-0000-4000-8000-000000000003'
 
 const DOCUMENT_PERMISSION_CODES: readonly PermissionCode[] = [
@@ -78,20 +78,29 @@ function buildDemoSession(
   permissionCodes: readonly PermissionCode[],
   roleLabelAr: string,
 ): SessionResponse {
+  // Built inline rather than from `@/test/msw/factories`: this file is application
+  // source (a gallery demo), and the `@/test/**` tree must never be reachable from an app
+  // chunk. It therefore spells out the session wire shape instead of sharing the factory.
   return {
     user: {
-      userId: DEMO_USER_ID,
-      username: 'demo.role',
-      displayName: `مستخدم تجريبي — ${roleLabelAr}`,
-      status: 'Active',
-      rowVersion: 1,
+      id: DEMO_USER_ID,
+      email: 'demo.role@eiams.local',
+      firstName: `مستخدم تجريبي — ${roleLabelAr}`,
+      lastName: '',
+      employeeId: null,
+      employeeName: null,
     },
-    activeRoles: [{ roleId: DEMO_ROLE_ID, code: 'demo-role', nameAr: roleLabelAr }],
-    availableScopes: [
-      { scopeId: DEMO_SCOPE_ID, scopeType: 'Enterprise', displayName: 'نطاق التطوير' },
-    ],
-    activeScope: { scopeId: DEMO_SCOPE_ID, scopeType: 'Enterprise', displayName: 'نطاق التطوير' },
-    scopeState: 'Selected',
+    role: {
+      id: DEMO_ROLE_ID,
+      name: 'DemoRole',
+      nameAr: roleLabelAr,
+      description: null,
+    },
+    activeScope: {
+      scopeId: DEMO_SCOPE_ID,
+      scopeType: 'Enterprise',
+      scopeName: 'نطاق التطوير',
+    },
     permissionCodes: [...permissionCodes],
   }
 }

@@ -5,10 +5,16 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import DocumentListPage from './document-list-page'
-import { createPage, createWarehouseDocument } from '@/test/msw/factories'
+import {
+  createPage,
+  createSessionRole,
+  createSessionScope,
+  createSessionUser,
+  createWarehouseDocument,
+} from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { SessionResponse } from '@/shared/types/generated/eiams-v1'
+import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -22,23 +28,10 @@ const API_BASE_URL = '/api/v1'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: {
-      userId: '10000000-0000-4000-8000-000000000001',
-      username: 'document.manager',
-      displayName: 'مدير المستندات',
-      status: 'Active',
-      rowVersion: 1,
-    },
+    user: createSessionUser({ firstName: 'مدير المستندات' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
-    availableScopes: [
-      {
-        scopeType: 'Enterprise',
-        scopeId: null,
-        displayName: 'الهيئة العامة للرقابة والتفتيش',
-      },
-    ],
-    scopeState: 'Selected',
-    activeRoles: [],
   }
 }
 

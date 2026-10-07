@@ -10,7 +10,12 @@ type OrganizationalUnitTreeProps = {
   onEdit?: (unit: OrganizationalUnit) => void
 }
 
-/** Domain-only tree presentation for the organizational-unit parent relation. */
+/**
+ * Domain-only tree presentation for the organizational-unit parent relation.
+ *
+ * The label is `name` (the wire field; there is no `nameAr`) and the secondary
+ * line is `unitType`, which replaces the `code` this projection never served.
+ */
 function OrganizationalUnitTree({ units, onEdit }: OrganizationalUnitTreeProps) {
   const tree = useMemo(() => buildOrganizationalUnitTree(units), [units])
 
@@ -19,9 +24,9 @@ function OrganizationalUnitTree({ units, onEdit }: OrganizationalUnitTreeProps) 
       nodes={tree}
       ariaLabel="شجرة الوحدات التنظيمية"
       leadIcon={<IconSitemap aria-hidden className="size-4 shrink-0 text-golden-wheat" />}
-      getKey={(unit) => unit.orgUnitId}
-      getLabel={(unit) => unit.nameAr}
-      getCode={(unit) => unit.code}
+      getKey={(unit) => unit.id}
+      getLabel={(unit) => unit.name}
+      getCode={(unit) => unit.unitType}
       getStatus={(unit) => unit.status}
       {...(onEdit === undefined ? {} : { onEdit })}
     />

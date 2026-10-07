@@ -13,9 +13,13 @@ import type {
   Material,
   NamedReference,
   StockMovement,
-  Warehouse,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
+// `Warehouse` is typed against the handwritten contract, NOT the frozen generated
+// snapshot: the wire record serves `id` + `name` and a FLAT `siteId`, so the
+// generated `Warehouse` (whose `warehouseId`/`nameAr`/nested `site` fields this
+// file used) describes nothing the backend ever returned.
+import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 import {
   createAsset,
   createAssetCustody,
@@ -27,6 +31,7 @@ import {
   createInventoryBalance,
   createMaterial,
   createNamedReference,
+  createSite,
   createStockMovement,
   createWarehouse,
   createWarehouseDocument,
@@ -169,18 +174,23 @@ function createScenarioLifecycleEvents(
  */
 export function createCrossModuleScenario(): CrossModuleScenario {
   const source = createWarehouse({
-    warehouseId: fixtureUuid(900),
+    id: fixtureUuid(900),
     code: 'WH-DAM-CENTRAL',
-    nameAr: 'المستودع المركزي في دمشق',
+    name: 'المستودع المركزي في دمشق',
   })
   const destination = createWarehouse({
-    warehouseId: fixtureUuid(901),
+    id: fixtureUuid(901),
     code: 'WH-HMS-BRANCH',
-    nameAr: 'مستودع فرع حمص',
+    name: 'مستودع فرع حمص',
   })
-  const sourceRef = reference(source.warehouseId, source.nameAr, source.code)
-  const destinationRef = reference(destination.warehouseId, destination.nameAr, destination.code)
-  const siteRef = reference(fixtureUuid(902), 'المقر الرئيسي', 'DAM-HQ')
+  const sourceRef = reference(source.id, source.name, source.code)
+  const destinationRef = reference(destination.id, destination.name, destination.code)
+  // Both warehouses inherit `siteId` from `createWarehouse` (`fixtureUuid(50)`,
+  // the id `createSite` uses), so the documents' site reference is resolved from
+  // that same seeded site rather than from a second, unrelated site id — the old
+  // fictional graph pointed documents and warehouses at different sites.
+  const scenarioSite = createSite()
+  const siteRef = reference(scenarioSite.id, scenarioSite.name, scenarioSite.code)
   const keeperRef = reference(fixtureUuid(903), 'أمين المستودع: سامر محمود')
   const managerRef = reference(fixtureUuid(904), 'مدير المستودع: هناء علي')
   const recipientId = fixtureUuid(905)
@@ -350,8 +360,8 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     site: siteRef,
     systemReferenceNumber: 'EIAMS-TRF-2026-0003',
     transferInfo: {
-      destinationWarehouseId: destination.warehouseId,
-      destinationWarehouseName: destination.nameAr,
+      destinationWarehouseId: destination.id,
+      destinationWarehouseName: destination.name,
       transferReason: 'تغذية فرع حمص بالورق',
     },
     warehouse: sourceRef,
@@ -556,7 +566,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     countId,
     countType: 'Full',
     createdAt: '2026-08-24T08:00:00.000Z',
-    createdBy: keeperRef,
+    createdBy: managerRef,
     freezePolicy: 'SoftFreeze',
     lineCount: 1,
     notes: 'جرد دوري للمستودع المركزي',
@@ -580,6 +590,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     },
   ]
   const countVariance: InventoryAdjustment = {
+    attachments: adjustmentDocument.attachments,
     adjustmentId: fixtureUuid(927),
     countId,
     countReference: count.referenceNumber,
@@ -597,6 +608,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     warehouse: sourceRef,
   }
   const disposal: InventoryAdjustment = {
+    attachments: disposalDocument.attachments,
     adjustmentId: disposalAdjustmentId,
     createdAt: '2026-08-25T09:30:00.000Z',
     createdBy: managerRef,

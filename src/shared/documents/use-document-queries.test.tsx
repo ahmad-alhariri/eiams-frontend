@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -10,7 +11,7 @@ import type {
   DocumentPolicy,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
-import { createNamedReference, createPage, fixtureUuid } from '@/test/msw/factories'
+import { createNamedReference, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -134,18 +135,10 @@ describe('document query hooks', () => {
     const policy = createPolicyFixture()
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents`, () =>
-        HttpResponse.json(createPage([document])),
-      ),
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        HttpResponse.json(document),
-      ),
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        HttpResponse.json(history),
-      ),
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        HttpResponse.json(policy),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents`, () => okPageJson([document])),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(document)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => okJson(history)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => okJson(policy)),
     )
 
     const list = renderHook(
@@ -181,7 +174,7 @@ describe('document query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, () => {
         requestCount += 1
-        return HttpResponse.json(createPage([createDocumentFixture()]))
+        return okPageJson([createDocumentFixture()])
       }),
     )
 
@@ -199,15 +192,15 @@ describe('document query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         requestCount += 1
-        return HttpResponse.json(createDocumentFixture())
+        return okJson(createDocumentFixture())
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => {
         requestCount += 1
-        return HttpResponse.json(createHistoryFixture())
+        return okJson(createHistoryFixture())
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => {
         requestCount += 1
-        return HttpResponse.json(createPolicyFixture())
+        return okJson(createPolicyFixture())
       }),
     )
 

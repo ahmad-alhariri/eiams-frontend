@@ -1,31 +1,32 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import { HttpResponse, http } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import {
-  createInventoryService,
   inventoryService,
   setInventoryService,
 } from '@/modules/inventory/services/inventory.service'
 import { normalizeApiError } from '@/shared/services/api-error'
-import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import type { StockMovement } from '@/shared/types/generated/eiams-v1'
 import {
   createInventoryBalance,
   createNamedReference,
   createPage,
-  createProblemDetails,
   fixtureUuid,
 } from '@/test/msw/factories'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
+import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
 
 const API_BASE_URL = '/api/v1'
-const bundles: ApiClientBundle[] = []
+
+// A real transport over a real Axios client (9uuf); the previous cast supplied
+// none of requestPage/request/requestEmpty while satisfying the type.
+const createHarness = registerTestTransportHarness(API_BASE_URL)
 
 function setupService() {
-  const bundle = createApiClient({ baseURL: API_BASE_URL })
-  bundles.push(bundle)
-  setInventoryService(bundle.client as unknown as Parameters<typeof createInventoryService>[0])
+  const { transport } = createHarness()
+  setInventoryService(transport)
   return inventoryService
 }
 
@@ -43,10 +44,6 @@ function createStockMovement(): StockMovement {
     warehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
   }
 }
-
-afterEach(() => {
-  for (const bundle of bundles.splice(0)) bundle.dispose()
-})
 
 describe('InventoryService', () => {
   it('forwards contracted balance and movement filters and server ordering unchanged', async () => {
@@ -127,16 +124,9 @@ describe('InventoryService', () => {
 
   it('preserves server failures for Arabic error normalization at the presentation boundary', async () => {
     const service = setupService()
-    const problem = createProblemDetails({
-      code: 'inventory.balance.not_found',
-      detailAr: 'تعذر العثور على رصيد المخزون.',
-      status: 404,
-      titleAr: 'الرصيد غير موجود',
-    })
-
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances/missing`, () =>
-        HttpResponse.json(problem, { status: 404 }),
+        errJson(404, { code: 'INVENTORY_BALANCES_NOT_FOUND', message: 'Balance not found.' }),
       ),
     )
 
@@ -144,10 +134,9 @@ describe('InventoryService', () => {
 
     expect(axios.isAxiosError(error)).toBe(true)
     expect(normalizeApiError(error)).toMatchObject({
-      code: 'inventory.balance.not_found',
-      detailAr: 'تعذر العثور على رصيد المخزون.',
+      code: 'INVENTORY_BALANCES_NOT_FOUND',
       status: 404,
-      titleAr: 'الرصيد غير موجود',
+      titleAr: 'لم يتم العثور على رصيد المخزون.',
     })
   })
 })

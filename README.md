@@ -77,10 +77,10 @@ contain credentials or other secrets.
 
 The Vite dev server proxies the configured API path (default `/api/v1`) to a
 locally running EIAMS backend. The browser always talks to the same origin, so
-the host-only refresh cookie works without CORS. With `VITE_ENABLE_API_MOCKS`
-at its default (`true`), MSW still answers known endpoints first and the proxy
-only receives bypassed requests; set mocks to `false` to exercise the real
-backend. The proxy is development-only:
+the host-only refresh cookie works without CORS. There is no development mock
+layer any more — every API request goes to the proxy — so when no backend is
+listening you get the failure state, which is the honest signal. The proxy is
+development-only:
 
 - it is never part of the production build, and
 - its target comes from `EIAMS_DEV_PROXY_TARGET`, which is deliberately not

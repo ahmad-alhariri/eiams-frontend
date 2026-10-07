@@ -2,9 +2,11 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { Material, NamedReference } from '@/modules/catalog/types/catalog.types'
-import type { Employee } from '@/modules/organization/types/organization.types'
-import type { OrganizationalUnit } from '@/modules/organization/types/organization.types'
-import type { Site } from '@/modules/organization/types/organization.types'
+import type {
+  Employee,
+  OrganizationalUnit,
+  Site,
+} from '@/modules/organization/types/organization.types'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import { useEmployeeSelector } from '@/shared/selectors/adapters/employee-selector'
 import { useMaterialSelector } from '@/shared/selectors/adapters/material-selector'
@@ -20,60 +22,72 @@ import {
   useScopedEntityOptions,
   type SelectorOption,
 } from '@/shared/selectors/selector-adapter'
+import {
+  createEmployee,
+  createOrganizationalUnit,
+  createSite,
+  createWarehouse,
+} from '@/test/msw/factories'
 
-const siteRef: NamedReference = {
-  id: '11111111-1111-4111-8111-111111111111',
-  displayName: 'فرع دمشق',
-}
+/**
+ * Fixtures come from the shared MSW factories rather than hand-rolled literals
+ * (txq4). The literals that used to live here described records the backend has
+ * never sent — `warehouseId`, `nameAr`, a nested `site` — and every adapter
+ * assertion below read those fields, so the suite validated the fiction against
+ * itself: `warehouse.site.displayName` was `undefined` on both sides of the
+ * comparison and could never fail.
+ */
+const siteRef: Site = createSite()
 
-const activeWarehouse: Warehouse = {
-  warehouseId: '22222222-2222-4222-8222-222222222222',
+const activeWarehouse: Warehouse = createWarehouse({
+  id: '22222222-2222-4222-8222-222222222222',
   code: 'W-01',
-  nameAr: 'مستودع دمشق الرئيسي',
-  locationAr: 'دمشق',
+  name: 'مستودع دمشق الرئيسي',
   siteId: siteRef.id,
-  site: siteRef,
   status: 'Active',
-  rowVersion: 1,
-}
+})
 
-const inactiveWarehouse: Warehouse = {
-  ...activeWarehouse,
-  warehouseId: '33333333-3333-4333-8333-333333333333',
+const inactiveWarehouse: Warehouse = createWarehouse({
+  id: '33333333-3333-4333-8333-333333333333',
   code: 'W-02',
-  nameAr: 'مستودع حلب',
-  status: 'Inactive',
-}
-
-const activeEmployee: Employee = {
-  employeeId: '44444444-4444-4444-8444-444444444444',
-  employeeNumber: 'EMP-001',
-  fullNameAr: 'أحمد علي',
-  jobTitleAr: 'أمين مستودع',
-  orgUnit: { id: 'ou-1', displayName: 'قسم المستودعات' },
-  site: siteRef,
-  status: 'Active',
-  rowVersion: 1,
-}
-
-const activeOrgUnit: OrganizationalUnit = {
-  orgUnitId: 'ou-1',
-  code: 'OU-01',
-  nameAr: 'قسم المستودعات',
+  name: 'مستودع حلب',
   siteId: siteRef.id,
-  status: 'Active',
-  rowVersion: 1,
-}
+  status: 'Inactive',
+})
 
-const activeSite: Site = {
-  siteId: 'site-1',
-  organizationId: 'org-1',
+const activeEmployee: Employee = createEmployee({
+  id: '44444444-4444-4444-8444-444444444444',
+  employeeNumber: 'EMP-001',
+  fullName: 'أحمد علي',
+  jobTitle: 'أمين مستودع',
+  status: 'Active',
+})
+
+// Keeps the factory's default `id` (fixtureUuid(52)) so `createEmployee()`'s
+// default `orgUnitId` resolves against it — the same join the employees screens
+// perform against the real org-units list.
+const activeOrgUnit: OrganizationalUnit = createOrganizationalUnit({
+  name: 'قسم المستودعات',
+  siteId: siteRef.id,
+  unitType: 'Department',
+  status: 'Active',
+})
+
+const activeSite: Site = createSite({
+  id: '11111111-1111-4111-8111-111111111111',
   code: 'S-01',
-  nameAr: 'فرع دمشق',
+  name: 'فرع دمشق',
   status: 'Active',
-  rowVersion: 1,
-}
+})
 
+/**
+ * Catalog has NOT been migrated onto the handwritten contracts, so this fixture
+ * stays a literal against `catalog.api-types.Material` (nested
+ * `materialFamily`/`materialCategory`/`materialDomain`/`unit`). The shared
+ * `createMaterial()` factory mints the frozen generated `Material` — a
+ * different type, with `baseUnit`/`category`/`domain`/`family` — so using it
+ * here would test a record the adapter is not even typed against.
+ */
 const activeMaterial: Material = {
   materialId: 'mat-1',
   code: 'M-01',
@@ -98,8 +112,8 @@ describe('createEntitySelectorAdapter', () => {
   it('defaults toOptionLabel and searchLabel from the mapped option label', () => {
     const adapter = createEntitySelectorAdapter<Warehouse>({
       toOption: (warehouse) => ({
-        value: warehouse.warehouseId,
-        label: warehouse.nameAr,
+        value: warehouse.id,
+        label: warehouse.name,
         payload: warehouse,
       }),
     })
@@ -111,8 +125,8 @@ describe('createEntitySelectorAdapter', () => {
 
   it('honors explicit toOptionLabel and searchLabel', () => {
     const adapter = createEntitySelectorAdapter<Warehouse>({
-      toOption: (warehouse) => ({ value: warehouse.warehouseId, label: warehouse.nameAr }),
-      toOptionLabel: (warehouse) => `${warehouse.nameAr} (${warehouse.code})`,
+      toOption: (warehouse) => ({ value: warehouse.id, label: warehouse.name }),
+      toOptionLabel: (warehouse) => `${warehouse.name} (${warehouse.code})`,
       searchLabel: (warehouse) => warehouse.code,
     })
 
@@ -169,8 +183,8 @@ describe('normalizeSelectorOptions', () => {
 
 const testWarehouseAdapter = createEntitySelectorAdapter<Warehouse>({
   toOption: (warehouse) => ({
-    value: warehouse.warehouseId,
-    label: warehouse.nameAr,
+    value: warehouse.id,
+    label: warehouse.name,
     disabled: warehouse.status !== 'Active',
     payload: warehouse,
   }),
@@ -189,13 +203,13 @@ describe('useScopedEntityOptions', () => {
     expect(loader).toHaveBeenCalledExactlyOnceWith('مستودع')
     expect(options).toEqual([
       {
-        value: activeWarehouse.warehouseId,
+        value: activeWarehouse.id,
         label: 'مستودع دمشق الرئيسي',
         disabled: false,
         payload: activeWarehouse,
       },
       {
-        value: inactiveWarehouse.warehouseId,
+        value: inactiveWarehouse.id,
         label: 'مستودع حلب',
         disabled: true,
         payload: inactiveWarehouse,
@@ -204,8 +218,8 @@ describe('useScopedEntityOptions', () => {
   })
 
   it('normalizes results (dedupe, empty labels) and slices to maxResults', async () => {
-    const duplicate: Warehouse = { ...inactiveWarehouse, warehouseId: activeWarehouse.warehouseId }
-    const noLabel: Warehouse = { ...inactiveWarehouse, nameAr: '   ' }
+    const duplicate: Warehouse = { ...inactiveWarehouse, id: activeWarehouse.id }
+    const noLabel: Warehouse = { ...inactiveWarehouse, name: '   ' }
     const loader = vi.fn(async () => [activeWarehouse, duplicate, noLabel])
     const { result } = renderHook(() => useScopedEntityOptions(testWarehouseAdapter, loader, 2))
 
@@ -215,7 +229,7 @@ describe('useScopedEntityOptions', () => {
     })
 
     expect(options).toHaveLength(1)
-    expect(options[0]?.value).toBe(activeWarehouse.warehouseId)
+    expect(options[0]?.value).toBe(activeWarehouse.id)
   })
 
   it('propagates loader failures', async () => {
@@ -294,7 +308,7 @@ describe('filterOptionsByLabel', () => {
 describe('filterEntitiesBySearchLabel', () => {
   it('filters raw entities by a custom searchLabel (code search)', () => {
     const adapter = createEntitySelectorAdapter<Warehouse>({
-      toOption: (warehouse) => ({ value: warehouse.warehouseId, label: warehouse.nameAr }),
+      toOption: (warehouse) => ({ value: warehouse.id, label: warehouse.name }),
       searchLabel: (warehouse) => warehouse.code,
     })
 
@@ -309,7 +323,7 @@ describe('filterEntitiesBySearchLabel', () => {
 
   it('matches Arabic search labels by default', () => {
     const adapter = createEntitySelectorAdapter<Warehouse>({
-      toOption: (warehouse) => ({ value: warehouse.warehouseId, label: warehouse.nameAr }),
+      toOption: (warehouse) => ({ value: warehouse.id, label: warehouse.name }),
     })
 
     expect(
@@ -337,11 +351,14 @@ describe('useWarehouseSelector', () => {
     const { result } = renderHook(() => useWarehouseSelector(vi.fn()))
 
     const active = result.current.options.toOption(activeWarehouse)
-    expect(active.value).toBe(activeWarehouse.warehouseId)
+    expect(active.value).toBe(activeWarehouse.id)
     expect(active.label).toBe('مستودع دمشق الرئيسي')
     expect(active.disabled).toBe(false)
     expect(active.payload?.code).toBe('W-01')
-    expect(active.payload?.locationAr).toBe('دمشق')
+    // `locationAr` is gone from the wire: the warehouse record carries no
+    // address at all. Its site relationship is the FLAT `siteId`, which a
+    // consumer must join against the sites list to turn into a label.
+    expect(active.payload?.siteId).toBe(siteRef.id)
 
     expect(result.current.options.toOption(inactiveWarehouse).disabled).toBe(true)
   })
@@ -352,11 +369,13 @@ describe('useEmployeeSelector', () => {
     const { result } = renderHook(() => useEmployeeSelector(vi.fn()))
 
     const option = result.current.options.toOption(activeEmployee)
-    expect(option.value).toBe(activeEmployee.employeeId)
+    expect(option.value).toBe(activeEmployee.id)
     expect(option.label).toBe('أحمد علي')
     expect(option.disabled).toBe(false)
-    expect(option.payload?.jobTitleAr).toBe('أمين مستودع')
+    expect(option.payload?.jobTitle).toBe('أمين مستودع')
     expect(option.payload?.employeeNumber).toBe('EMP-001')
+    // The employee projection carries a flat `orgUnitId` and no nested unit.
+    expect(option.payload?.orgUnitId).toBe(activeOrgUnit.id)
 
     expect(
       result.current.options.toOption({ ...activeEmployee, status: 'Inactive' }).disabled,
@@ -365,21 +384,23 @@ describe('useEmployeeSelector', () => {
 
   it('keeps a null job title in the payload as a missing hint', () => {
     const { result } = renderHook(() => useEmployeeSelector(vi.fn()))
-    const withoutTitle: Employee = { ...activeEmployee, jobTitleAr: null }
+    const withoutTitle: Employee = { ...activeEmployee, jobTitle: null }
 
-    expect(result.current.options.toOption(withoutTitle).payload?.jobTitleAr).toBeNull()
+    expect(result.current.options.toOption(withoutTitle).payload?.jobTitle).toBeNull()
   })
 })
 
 describe('useOrgUnitSelector', () => {
-  it('maps org units with name label and code hint', () => {
+  it('maps org units with name label and unit-type hint', () => {
     const { result } = renderHook(() => useOrgUnitSelector(vi.fn()))
 
     const option = result.current.options.toOption(activeOrgUnit)
-    expect(option.value).toBe(activeOrgUnit.orgUnitId)
+    expect(option.value).toBe(activeOrgUnit.id)
     expect(option.label).toBe('قسم المستودعات')
     expect(option.disabled).toBe(false)
-    expect(option.payload?.code).toBe('OU-01')
+    // This projection serves no `code`; `unitType` is the secondary line the
+    // org-unit tree renders in its place.
+    expect(option.payload?.unitType).toBe('Department')
 
     expect(result.current.options.toOption({ ...activeOrgUnit, status: 'Inactive' }).disabled).toBe(
       true,
@@ -392,7 +413,7 @@ describe('useSiteSelector', () => {
     const { result } = renderHook(() => useSiteSelector(vi.fn()))
 
     const option = result.current.options.toOption(activeSite)
-    expect(option.value).toBe(activeSite.siteId)
+    expect(option.value).toBe(activeSite.id)
     expect(option.label).toBe('فرع دمشق')
     expect(option.disabled).toBe(false)
     expect(option.payload?.code).toBe('S-01')

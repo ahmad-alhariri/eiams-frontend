@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { okJson } from '@/test/msw/envelope'
 import { render, screen } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
@@ -60,9 +61,7 @@ describe('AuditDetail', () => {
       ],
     })
 
-    server.use(
-      http.get(`${API_BASE_URL}/audit-logs/${AUDIT_LOG_ID}`, () => HttpResponse.json(auditLog)),
-    )
+    server.use(http.get(`${API_BASE_URL}/audit-logs/${AUDIT_LOG_ID}`, () => okJson(auditLog)))
 
     render(<AuditLogExplorerPage />, { wrapper: createWrapper() })
 
@@ -102,9 +101,7 @@ describe('AuditDetail', () => {
       auditLogId: AUDIT_LOG_ID,
       entries: [createAuditLogEntry({ fieldName: 'note', oldValue: 'قديم', newValue: 'جديد' })],
     })
-    server.use(
-      http.get(`${API_BASE_URL}/audit-logs/${AUDIT_LOG_ID}`, () => HttpResponse.json(auditLog)),
-    )
+    server.use(http.get(`${API_BASE_URL}/audit-logs/${AUDIT_LOG_ID}`, () => okJson(auditLog)))
 
     render(<AuditLogExplorerPage />, { wrapper: createWrapper() })
 

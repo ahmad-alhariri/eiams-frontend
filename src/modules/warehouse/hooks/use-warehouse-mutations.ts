@@ -1,13 +1,15 @@
+import type { QueryClient } from '@tanstack/react-query'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
-import { createWarehouseService } from '@/modules/warehouse/services/warehouse.service'
+import { warehouseService } from '@/modules/warehouse/services/warehouse.service'
 import type {
   WarehouseCapabilityUpsertRequest,
+  WarehouseCreateRequest,
   WarehouseMaterialSettingUpsertRequest,
-  WarehouseUpsertRequest,
+  WarehouseUpdateRequest,
 } from '@/modules/warehouse/types/warehouse.types'
 import { toast } from '@/shared/ui/toast-manager'
-import { queryKeys } from '@/shared/services/query-keys'
+import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 
 const WAREHOUSE_PUBLIC_KEY = 'warehouse' as const
 
@@ -15,34 +17,37 @@ function useActiveScopeCacheKey() {
   return useActiveScopeContext().activeScopeCacheKey
 }
 
-let warehouseService: ReturnType<typeof createWarehouseService> = createWarehouseService(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  {} as any,
-)
+// The warehouse service is a single instance owned by
+// services/warehouse.service.ts (9uuf). This file previously kept its own
+// private copy plus a `useWarehouseService`/`setWarehouseService` pair whose
+// exports had zero importers; the copy is what kept these mutation hooks
+// calling an empty transport at runtime. Do not reintroduce a local instance —
+// inject through `setWarehouseService` in the service module instead.
+//
+// Create and update are separate request types because the two bodies are
+// different: `POST /warehouses` binds `siteId` and `code`, `PUT /warehouses/{id}`
+// binds neither and takes `expectedRowVersion`.
+//
+// Cache invalidation stops at the `warehouses` RESOURCE key, with no trailing
+// `{}` query segment. Query keys match by prefix element equality, so a `{}`
+// segment only ever matched a query made with exactly `{}` — it never matched a
+// real list query (`{ page, pageSize, search, ... }`) nor a per-warehouse
+// sub-resource, leaving the list stale after every save. The same idiom
+// `catalog/hooks/use-catalog-mutations.ts` uses.
 
-export function useWarehouseService() {
-  return warehouseService
-}
-
-export function setWarehouseService(transport: Parameters<typeof createWarehouseService>[0]) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  warehouseService = createWarehouseService(transport as any)
+function invalidateWarehouses(client: QueryClient, scope: ScopeCacheKey) {
+  return client.invalidateQueries({
+    queryKey: queryKeys.scoped(scope, WAREHOUSE_PUBLIC_KEY, 'warehouses'),
+  })
 }
 
 export function useCreateWarehouseMutation() {
   const queryClient = useQueryClient()
   const scope = useActiveScopeCacheKey()
   return useMutation({
-    mutationFn: (request: WarehouseUpsertRequest) => warehouseService.createWarehouse(request),
+    mutationFn: (request: WarehouseCreateRequest) => warehouseService.createWarehouse(request),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          WAREHOUSE_PUBLIC_KEY,
-          'warehouses',
-          {},
-        ),
-      })
+      invalidateWarehouses(queryClient, scope ?? { kind: 'enterprise' })
       toast.success({ title: 'تمت إضافة المستودع.' })
     },
   })
@@ -57,25 +62,13 @@ export function useUpdateWarehouseMutation() {
       request,
     }: {
       readonly warehouseId: string
-      readonly request: WarehouseUpsertRequest
+      readonly request: WarehouseUpdateRequest
     }) => warehouseService.updateWarehouse(warehouseId, request),
-    onSuccess: ({ warehouseId }) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          WAREHOUSE_PUBLIC_KEY,
-          'warehouses',
-          warehouseId,
-        ),
-      })
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          WAREHOUSE_PUBLIC_KEY,
-          'warehouses',
-          {},
-        ),
-      })
+    // `updateWarehouse` resolves with NO body, so nothing may be destructured off
+    // the response — the old `onSuccess: ({ warehouseId }) => ...` was a latent
+    // crash, not a style nit.
+    onSuccess: () => {
+      invalidateWarehouses(queryClient, scope ?? { kind: 'enterprise' })
       toast.success({ title: 'تم حفظ تعديلات المستودع.' })
     },
   })
@@ -118,7 +111,7 @@ export function useUpsertWarehouseMaterialSettingMutation() {
       readonly warehouseId: string
       readonly request: WarehouseMaterialSettingUpsertRequest
     }) => warehouseService.upsertWarehouseMaterialSetting(warehouseId, request),
-    onSuccess: ({ warehouseId }) => {
+    onSuccess: (_data, { warehouseId }) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.scoped(
           scope ?? { kind: 'enterprise' },
@@ -126,7 +119,6 @@ export function useUpsertWarehouseMaterialSettingMutation() {
           'warehouses',
           warehouseId,
           'material-settings',
-          {},
         ),
       })
       toast.success({ title: 'تم حفظ إعداد المادة.' })

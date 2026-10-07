@@ -1,7 +1,7 @@
-import type { AxiosInstance } from 'axios'
+﻿import type { ApiTransport } from '@/shared/api/api-transport'
+import { apiTransport } from '@/shared/api/transport'
 
 import type { ListAuditLogsQuery } from '@/modules/audit/types/audit.types'
-import { apiClient } from '@/shared/services/api.client'
 import type {
   AuditLog,
   AuditLogEntry,
@@ -56,22 +56,41 @@ export interface AuditService {
 }
 
 /** Contract-only reads for the append-only, server-owned audit ledger. */
-export function createAuditService(client: AxiosInstance): AuditService {
+export function createAuditService(transport: ApiTransport): AuditService {
   return {
     async listAuditLogs(query) {
-      const response = await client.get<AuditLogPage>(AUDIT_LOGS_PATH, { params: query })
+      const page = await transport.requestPage<AuditLog>({
+        path: AUDIT_LOGS_PATH,
+        method: 'GET',
+        query: query as Record<string, string | number | boolean | undefined>,
+      })
+      // Rebuild the documented `AuditLogPage` from the normalized `ApiPage`, so
+      // the declared generated type and the runtime value describe the same
+      // thing. The generated page type described a body the backend never sends
+      // on its own.
       return {
-        ...response.data,
-        items: response.data.items.map(sanitizeAuditHeader),
-      }
+        items: page.items.map(sanitizeAuditHeader),
+        meta: {
+          pageIndex: page.page - 1,
+          page: page.page,
+          pageSize: page.pageSize,
+          itemCount: page.totalItems,
+          totalItems: page.totalItems,
+          totalCount: page.totalItems,
+          totalPages: page.totalPages,
+          hasNextPage: page.hasNextPage,
+          hasPreviousPage: page.hasPreviousPage,
+        },
+      } as AuditLogPage
     },
     async getAuditLog(auditLogId) {
-      const response = await client.get<AuditLog>(
-        pathWithId(AUDIT_LOG_PATH, '{auditLogId}', auditLogId),
-      )
-      return sanitizeAuditDetail(response.data)
+      const response = await transport.request<AuditLog>({
+        path: pathWithId(AUDIT_LOG_PATH, '{auditLogId}', auditLogId),
+        method: 'GET',
+      })
+      return sanitizeAuditDetail(response)
     },
   }
 }
 
-export const auditService = createAuditService(apiClient)
+export const auditService = createAuditService(apiTransport)

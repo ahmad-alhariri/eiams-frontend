@@ -46,10 +46,10 @@ describe('AppHeader', () => {
     expect(screen.getByText('المستودعات / دمشق')).toBeInTheDocument()
   })
 
-  it('composes an injected scope switcher beside session controls', () => {
-    renderHeader({ scopeSwitcher: <span data-testid="scope-switcher">نطاق دمشق</span> })
+  it('composes an injected user menu beside session controls', () => {
+    renderHeader({ userMenu: <span data-testid="user-menu">مستخدم النظام</span> })
 
-    expect(screen.getByTestId('scope-switcher')).toHaveTextContent('نطاق دمشق')
+    expect(screen.getByTestId('user-menu')).toHaveTextContent('مستخدم النظام')
   })
 
   it('hides the user block when no session identity exists (e06 wiring)', () => {
@@ -65,6 +65,16 @@ describe('AppHeader', () => {
     expect(screen.getByText('أح')).toBeInTheDocument()
     expect(screen.getByText('أحمد الحريري')).toBeInTheDocument()
     expect(screen.getByText('أمين مستودع')).toBeInTheDocument()
+  })
+
+  it('composes an injected user menu in place of the static identity block', () => {
+    const user: HeaderUser = { displayName: 'أحمد الحريري', roleName: 'أمين مستودع' }
+    renderHeader({ user, userMenu: <span data-testid="user-menu">قائمة المستخدم</span> })
+
+    expect(screen.getByTestId('user-menu')).toHaveTextContent('قائمة المستخدم')
+    // One identity source only: the injected auth composition replaces the
+    // static block when both are supplied.
+    expect(document.querySelector('[data-slot="app-header-user"]')).toBeNull()
   })
 
   it('keeps the collapse label consistent with the store', () => {

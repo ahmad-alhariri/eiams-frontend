@@ -9,6 +9,7 @@ import type {
   PolicyBlocker,
 } from '@/shared/types/generated/eiams-v1'
 import { formatNumber } from '@/shared/utils/format'
+import { isSignedOriginalBlockerCode } from '@/shared/documents/policy-blocker-codes'
 
 /**
  * Pure preflight-gate model of the shared document policy-gate coordinator
@@ -42,6 +43,15 @@ export interface PreflightGate {
   gate: 'capability' | 'balance' | 'signedOriginal'
   status: PreflightGateStatus
   messageAr: string | null
+  /**
+   * The server blocker code this gate resolved against, when the gate reads one
+   * from the policy (currently only the signed-original gate). e24-t07: lets a
+   * consumer suppress a gate that restates a blocker the server already renders,
+   * by code rather than by Arabic message text, so reworded server copy cannot
+   * make the same failure appear twice. `null` for gates that have no server
+   * code of their own (balance, capability).
+   */
+  blockerCode: string | null
 }
 
 export type DocumentPreflight = {
@@ -130,7 +140,7 @@ export function evaluateBalanceGate(
   documentType: DocumentType,
 ): PreflightGate {
   if (!isOutboundDocumentType(documentType)) {
-    return { gate: 'balance', status: 'pass', messageAr: null }
+    return { gate: 'balance', status: 'pass', messageAr: null, blockerCode: null }
   }
   for (const line of lines) {
     const balance = line.availableBalance
@@ -139,6 +149,7 @@ export function evaluateBalanceGate(
         gate: 'balance',
         status: 'blocked',
         messageAr: `الكمية المطلوبة (${formatNumber(line.quantity)}) تتجاوز الرصيد المتاح (${formatNumber(balance)}) للمادة «${line.materialNameAr ?? ''}».`,
+        blockerCode: null,
       }
     }
   }
@@ -148,10 +159,11 @@ export function evaluateBalanceGate(
         gate: 'balance',
         status: 'unknown',
         messageAr: balanceUnknownNote(line.materialNameAr),
+        blockerCode: null,
       }
     }
   }
-  return { gate: 'balance', status: 'pass', messageAr: null }
+  return { gate: 'balance', status: 'pass', messageAr: null, blockerCode: null }
 }
 
 /**
@@ -162,12 +174,6 @@ export function evaluateBalanceGate(
  * surfaces the server's Arabic blocker message when a signed-original blocker
  * code is present, otherwise the canonical default Arabic message.
  */
-const SIGNED_BLOCKER_SUFFIXES: readonly string[] = [
-  'signed_original_missing',
-  'signed_original_invalid',
-  'signed_original_immutable',
-]
-
 const SIGNED_GATE_PENDING = 'بانتظار تقييم سياسة الخادم للنسخة الموقعة...'
 const SIGNED_GATE_DEFAULT_BLOCKED = 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.'
 
@@ -180,8 +186,8 @@ export const SIGNED_GATE_MOOT_STATUSES: ReadonlySet<DocumentStatus> = new Set([
 
 function isSignedOriginalBlocker(code: string): boolean {
   // Accepts both the canonical machine codes and the `document.*`-prefixed
-  // vocabulary the dev mock API serves.
-  return SIGNED_BLOCKER_SUFFIXES.some((suffix) => code === suffix || code.endsWith(`.${suffix}`))
+  // vocabulary the contract producers serve (e24-t07).
+  return isSignedOriginalBlockerCode(code)
 }
 
 export function signedOriginalGate(
@@ -192,19 +198,27 @@ export function signedOriginalGate(
   // missing-original alert is stale: the requirement only constrains the
   // pre-post workflow, so the gate reports pass regardless of the policy.
   if (documentStatus !== undefined && SIGNED_GATE_MOOT_STATUSES.has(documentStatus)) {
-    return { gate: 'signedOriginal', status: 'pass', messageAr: null }
+    return { gate: 'signedOriginal', status: 'pass', messageAr: null, blockerCode: null }
   }
   if (policy === null) {
-    return { gate: 'signedOriginal', status: 'unknown', messageAr: SIGNED_GATE_PENDING }
+    return {
+      gate: 'signedOriginal',
+      status: 'unknown',
+      messageAr: SIGNED_GATE_PENDING,
+      blockerCode: null,
+    }
   }
   if (policy.signedOriginalSatisfied) {
-    return { gate: 'signedOriginal', status: 'pass', messageAr: null }
+    return { gate: 'signedOriginal', status: 'pass', messageAr: null, blockerCode: null }
   }
   const blocker = policy.blockers.find((entry) => isSignedOriginalBlocker(entry.code))
   return {
     gate: 'signedOriginal',
     status: 'blocked',
     messageAr: blocker?.messageAr ?? SIGNED_GATE_DEFAULT_BLOCKED,
+    // Exposed so a consumer can suppress this gate when the server already
+    // renders the same blocker, matching on code instead of Arabic text.
+    blockerCode: blocker?.code ?? null,
   }
 }
 
@@ -225,7 +239,7 @@ export function evaluateCapabilityGate(
   operation: CapabilityOperation | undefined,
 ): PreflightGate {
   if (operation === undefined) {
-    return { gate: 'capability', status: 'pass', messageAr: null }
+    return { gate: 'capability', status: 'pass', messageAr: null, blockerCode: null }
   }
   const participatingDomains: string[] = []
   for (const line of lines) {
@@ -235,7 +249,7 @@ export function evaluateCapabilityGate(
     }
   }
   if (participatingDomains.length === 0) {
-    return { gate: 'capability', status: 'unknown', messageAr: null }
+    return { gate: 'capability', status: 'unknown', messageAr: null, blockerCode: null }
   }
   const byDomain = new Map(capability.map((evaluation) => [evaluation.domainId, evaluation]))
   for (const domainId of participatingDomains) {
@@ -245,16 +259,22 @@ export function evaluateCapabilityGate(
         gate: 'capability',
         status: 'blocked',
         messageAr: evaluation.messageAr ?? CAPABILITY_GATE_DEFAULT_BLOCKED,
+        blockerCode: null,
       }
     }
   }
   for (const domainId of participatingDomains) {
     const evaluation = byDomain.get(domainId)
     if (evaluation === undefined || evaluation.status === 'unknown') {
-      return { gate: 'capability', status: 'unknown', messageAr: CAPABILITY_GATE_UNKNOWN }
+      return {
+        gate: 'capability',
+        status: 'unknown',
+        messageAr: CAPABILITY_GATE_UNKNOWN,
+        blockerCode: null,
+      }
     }
   }
-  return { gate: 'capability', status: 'pass', messageAr: null }
+  return { gate: 'capability', status: 'pass', messageAr: null, blockerCode: null }
 }
 
 export interface DocumentPreflightInput {
