@@ -128,7 +128,23 @@ describe('MaterialCategoryTree', () => {
 
     render(<MaterialCategoryTree categories={[root, child]} />)
 
-    await user.click(screen.getByRole('button', { name: /الأجهزة/ }))
+    // The shared `HierarchyTree` starts EXPANDED — every descendant is reachable
+    // without interaction, which is what makes a category's parent chain
+    // readable on first paint. So the first toggle a reader reaches is the
+    // COLLAPSE action, and asserting the child appears only after a click would
+    // be asserting a collapsed-by-default tree this component does not render.
+    const collapseToggle = screen.getByRole('button', { name: 'طي الأجهزة' })
+    expect(collapseToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('الحواسيب')).toBeInTheDocument()
+
+    await user.click(collapseToggle)
+
+    const expandToggle = screen.getByRole('button', { name: 'توسيع الأجهزة' })
+    expect(expandToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('الحواسيب')).not.toBeInTheDocument()
+
+    await user.click(expandToggle)
+
     expect(screen.getByText('الحواسيب')).toBeInTheDocument()
   })
 })

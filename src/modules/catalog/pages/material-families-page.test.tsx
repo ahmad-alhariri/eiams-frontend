@@ -1,4 +1,4 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
@@ -7,7 +7,12 @@ import { describe, expect, it, vi } from 'vitest'
 
 import MaterialFamiliesPage from '@/modules/catalog/pages/material-families-page'
 import { createQueryClient } from '@/shared/services/query.client'
-import { createMaterialCategory, createMaterialFamily } from '@/test/msw/factories'
+import {
+  wireMaterialCategory,
+  wireMaterialFamily,
+  wireNamedReference,
+} from '@/test/msw/catalog-wire-fixtures'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const scope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -32,17 +37,24 @@ function PageWrapper({ children }: PropsWithChildren) {
 describe('MaterialFamiliesPage', () => {
   it('shows the contract hierarchy and hides write actions without catalog.manage', async () => {
     permissions.canManage = false
-    const family = createMaterialFamily()
+    const category = wireMaterialCategory()
+    const family = wireMaterialFamily({
+      materialCategory: wireNamedReference(category.materialCategoryId, category.nameAr),
+    })
     server.use(
-      http.get(`${API_BASE_URL}/catalog/families`, () => HttpResponse.json([family])),
-      http.get(`${API_BASE_URL}/catalog/categories`, () => HttpResponse.json([])),
+      http.get(`${API_BASE_URL}/catalog/material-families`, () => okPageJson([family])),
+      http.get(`${API_BASE_URL}/catalog/material-categories`, () => okPageJson([])),
     )
 
     render(<MaterialFamiliesPage />, { wrapper: PageWrapper })
 
     await waitFor(() => expect(screen.getByText(family.nameAr)).toBeInTheDocument())
-    expect(screen.getByText(family.domain.displayName)).toBeInTheDocument()
-    expect(screen.getByText(family.category.displayName)).toBeInTheDocument()
+    expect(screen.getByText(family.code)).toBeInTheDocument()
+    // A family carries its CATEGORY reference only; its domain is the server's
+    // to derive from that category, so the directory joins on
+    // `materialCategory.displayName` and never on a nested domain.
+    expect(screen.getByText(family.materialCategory.displayName)).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'التصنيف' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'إضافة عائلة' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: `تعديل ${family.nameAr}` })).not.toBeInTheDocument()
   })
@@ -50,30 +62,29 @@ describe('MaterialFamiliesPage', () => {
   it('submits the exact family request using an active category only', async () => {
     permissions.canManage = true
     const user = userEvent.setup()
-    const activeCategory = createMaterialCategory({ nameAr: 'الأجهزة', status: 'Active' })
-    const inactiveCategory = createMaterialCategory({
-      categoryId: '00000000-0000-4000-8000-000000000099',
+    const activeCategory = wireMaterialCategory({ nameAr: 'الأجهزة', status: 'Active' })
+    const inactiveCategory = wireMaterialCategory({
+      materialCategoryId: '00000000-0000-4000-8000-000000000099',
       nameAr: 'تصنيف متوقف',
       status: 'Inactive',
     })
-    const createdFamily = createMaterialFamily({
-      category: {
-        ...activeCategory.domain,
-        id: activeCategory.categoryId,
-        displayName: activeCategory.nameAr,
-      },
+    const createdFamily = wireMaterialFamily({
+      materialCategory: wireNamedReference(
+        activeCategory.materialCategoryId,
+        activeCategory.nameAr,
+      ),
       code: 'IT-HW-PC',
       nameAr: 'الحواسيب',
     })
     let requestBody: unknown
     server.use(
-      http.get(`${API_BASE_URL}/catalog/families`, () => HttpResponse.json([])),
-      http.get(`${API_BASE_URL}/catalog/categories`, () =>
-        HttpResponse.json([activeCategory, inactiveCategory]),
+      http.get(`${API_BASE_URL}/catalog/material-families`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/catalog/material-categories`, () =>
+        okPageJson([activeCategory, inactiveCategory]),
       ),
-      http.post(`${API_BASE_URL}/catalog/families`, async ({ request }) => {
+      http.post(`${API_BASE_URL}/catalog/material-families`, async ({ request }) => {
         requestBody = await request.json()
-        return HttpResponse.json(createdFamily, { status: 201 })
+        return okJson(createdFamily)
       }),
     )
 
@@ -86,14 +97,17 @@ describe('MaterialFamiliesPage', () => {
     expect(screen.queryByRole('option', { name: 'تصنيف متوقف' })).not.toBeInTheDocument()
     await user.click(
       await screen.findByRole('option', {
-        name: activeCategory.pathDisplay ?? activeCategory.nameAr,
+        name: activeCategory.nameAr,
       }),
     )
     await user.click(screen.getByRole('button', { name: 'إضافة العائلة' }))
 
     await waitFor(() =>
       expect(requestBody).toEqual({
-        categoryId: activeCategory.categoryId,
+        materialCategoryId: activeCategory.materialCategoryId,
+        // The family's own parent is not editable in v1 and is sent explicitly
+        // rather than omitted, because it is part of the request contract.
+        parentFamilyId: null,
         code: 'IT-HW-PC',
         nameAr: 'الحواسيب',
         rowVersion: 0,
@@ -105,16 +119,22 @@ describe('MaterialFamiliesPage', () => {
   it('preserves the current row version when a catalog manager edits a family', async () => {
     permissions.canManage = true
     const user = userEvent.setup()
-    const category = createMaterialCategory()
-    const family = createMaterialFamily({ rowVersion: 7 })
+    const category = wireMaterialCategory()
+    const family = wireMaterialFamily({
+      materialCategory: wireNamedReference(category.materialCategoryId, category.nameAr),
+      rowVersion: 7,
+    })
     let requestBody: unknown
     server.use(
-      http.get(`${API_BASE_URL}/catalog/families`, () => HttpResponse.json([family])),
-      http.get(`${API_BASE_URL}/catalog/categories`, () => HttpResponse.json([category])),
-      http.put(`${API_BASE_URL}/catalog/families/${family.familyId}`, async ({ request }) => {
-        requestBody = await request.json()
-        return HttpResponse.json(family)
-      }),
+      http.get(`${API_BASE_URL}/catalog/material-families`, () => okPageJson([family])),
+      http.get(`${API_BASE_URL}/catalog/material-categories`, () => okPageJson([category])),
+      http.put(
+        `${API_BASE_URL}/catalog/material-families/${family.materialFamilyId}`,
+        async ({ request }) => {
+          requestBody = await request.json()
+          return okJson(family)
+        },
+      ),
     )
 
     render(<MaterialFamiliesPage />, { wrapper: PageWrapper })
@@ -127,7 +147,8 @@ describe('MaterialFamiliesPage', () => {
 
     await waitFor(() =>
       expect(requestBody).toEqual({
-        categoryId: category.categoryId,
+        materialCategoryId: category.materialCategoryId,
+        parentFamilyId: null,
         code: family.code,
         nameAr: 'حواسيب محدّثة',
         rowVersion: 7,
@@ -139,20 +160,20 @@ describe('MaterialFamiliesPage', () => {
   it('retries the directory request and debounces the contract search query', async () => {
     permissions.canManage = false
     const user = userEvent.setup()
-    const family = createMaterialFamily()
+    const family = wireMaterialFamily()
     let remainingInitialFailures = 2
     const searches: string[] = []
     server.use(
-      http.get(`${API_BASE_URL}/catalog/families`, ({ request }) => {
+      http.get(`${API_BASE_URL}/catalog/material-families`, ({ request }) => {
         const search = new URL(request.url).searchParams.get('search') ?? ''
         searches.push(search)
         if (remainingInitialFailures > 0) {
           remainingInitialFailures -= 1
-          return HttpResponse.json({ titleAr: 'تعذّر التحميل' }, { status: 500 })
+          return new HttpResponse(null, { status: 500 })
         }
-        return HttpResponse.json([family])
+        return okPageJson([family])
       }),
-      http.get(`${API_BASE_URL}/catalog/categories`, () => HttpResponse.json([])),
+      http.get(`${API_BASE_URL}/catalog/material-categories`, () => okPageJson([])),
     )
 
     render(<MaterialFamiliesPage />, { wrapper: PageWrapper })
@@ -170,9 +191,10 @@ describe('MaterialFamiliesPage', () => {
     permissions.canManage = true
     const user = userEvent.setup()
     server.use(
-      http.get(`${API_BASE_URL}/catalog/families`, () => HttpResponse.json([])),
-      http.get(`${API_BASE_URL}/catalog/categories`, () =>
-        HttpResponse.json({ titleAr: 'تعذّر تحميل التصنيفات' }, { status: 500 }),
+      http.get(`${API_BASE_URL}/catalog/material-families`, () => okPageJson([])),
+      http.get(
+        `${API_BASE_URL}/catalog/material-categories`,
+        () => new HttpResponse(null, { status: 500 }),
       ),
     )
 

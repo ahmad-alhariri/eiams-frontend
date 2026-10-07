@@ -1,13 +1,14 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { catalogQueryKeys } from '@/modules/catalog/hooks/use-catalog-queries'
 import { createQueryClient } from '@/shared/services/query.client'
 import { queryKeys } from '@/shared/services/query-keys'
-import { createMaterialDomain } from '@/test/msw/factories'
+import { wireMaterialDomain } from '@/test/msw/catalog-wire-fixtures'
+import { okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -24,25 +25,21 @@ describe('catalog mutation hooks', () => {
   it('invalidates every affected catalog hierarchy key while preserving other scoped resources', async () => {
     const client = createQueryClient()
     const scope = { kind: 'enterprise' as const }
-    const domain = createMaterialDomain()
+    const domain = wireMaterialDomain()
     const domainRequest = {
-      code: domain.code,
       nameAr: domain.nameAr,
+      code: domain.code,
       rowVersion: domain.rowVersion,
       status: domain.status,
     }
     const catalogListKey = catalogQueryKeys.materialDomains(scope, {})
     const materialKey = catalogQueryKeys.material(scope, 'material-1')
     const organizationKey = queryKeys.scoped(scope, 'organization', 'sites')
-    client.setQueryData(catalogListKey, [])
+    client.setQueryData(catalogListKey, { items: [], meta: {} })
     client.setQueryData(materialKey, {})
     client.setQueryData(organizationKey, [])
 
-    server.use(
-      http.post(`${API_BASE_URL}/catalog/domains`, () =>
-        HttpResponse.json(domain, { status: 201 }),
-      ),
-    )
+    server.use(http.post(`${API_BASE_URL}/catalog/material-domains`, () => okJson(domain)))
 
     function QueryWrapper({ children }: PropsWithChildren) {
       return <QueryClientProvider client={client}>{children}</QueryClientProvider>

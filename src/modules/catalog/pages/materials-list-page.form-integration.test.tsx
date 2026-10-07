@@ -1,17 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import MaterialsListPage from '@/modules/catalog/pages/materials-list-page'
 import {
-  createMaterial,
-  createMaterialFamily,
-  createPage,
-  createUnitOfMeasure,
-} from '@/test/msw/factories'
+  wireMaterial,
+  wireMaterialFamily,
+  wireUnitOfMeasure,
+} from '@/test/msw/catalog-wire-fixtures'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -41,14 +41,14 @@ function createWrapper() {
 }
 
 function registerReferenceHandlers() {
-  const family = createMaterialFamily()
-  const unit = createUnitOfMeasure()
-  const material = createMaterial()
+  const family = wireMaterialFamily()
+  const unit = wireUnitOfMeasure()
+  const material = wireMaterial()
 
   server.use(
-    http.get(`${API_BASE_URL}/catalog/materials`, () => HttpResponse.json(createPage([material]))),
-    http.get(`${API_BASE_URL}/catalog/families`, () => HttpResponse.json([family])),
-    http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => HttpResponse.json([unit])),
+    http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material])),
+    http.get(`${API_BASE_URL}/catalog/material-families`, () => okPageJson([family])),
+    http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => okPageJson([unit])),
   )
 
   return { family, material, unit }
@@ -80,7 +80,7 @@ describe('MaterialsListPage material form integration', () => {
     server.use(
       http.put(`${API_BASE_URL}/catalog/materials/${material.materialId}`, async ({ request }) => {
         received = await request.json()
-        return HttpResponse.json(material)
+        return okJson(material)
       }),
     )
 

@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
@@ -6,7 +6,8 @@ import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import MaterialsListPage from '@/modules/catalog/pages/materials-list-page'
-import { createMaterial, createMaterialFamily, createPage } from '@/test/msw/factories'
+import { wireMaterial, wireMaterialFamily } from '@/test/msw/catalog-wire-fixtures'
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -35,19 +36,20 @@ afterEach(() => {
 
 describe('MaterialsListPage', () => {
   it('renders contract-backed materials and sends zero-based server pagination', async () => {
-    const material = createMaterial()
-    const family = createMaterialFamily()
-    let receivedPageIndex: string | null = null
+    const family = wireMaterialFamily()
+    const material = wireMaterial()
+    let receivedPage: string | null = null
     let receivedPageSize: string | null = null
 
     server.use(
       http.get(`${API_BASE_URL}/catalog/materials`, ({ request }) => {
         const url = new URL(request.url)
-        receivedPageIndex = url.searchParams.get('pageIndex')
+        receivedPage = url.searchParams.get('page')
         receivedPageSize = url.searchParams.get('pageSize')
-        return HttpResponse.json(createPage([material], { totalItems: 11, totalPages: 2 }))
+        return okPageJson([material], { page: 1, pageSize: 10, totalCount: 11, totalPages: 2 })
       }),
-      http.get(`${API_BASE_URL}/catalog/families`, () => HttpResponse.json([family])),
+      http.get(`${API_BASE_URL}/catalog/material-families`, () => okPageJson([family])),
+      http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => okPageJson([])),
     )
 
     render(<MaterialsListPage />, { wrapper: createWrapper() })
@@ -58,15 +60,21 @@ describe('MaterialsListPage', () => {
       'href',
       `/catalog/materials/${material.materialId}`,
     )
-    expect(screen.getByText(material.baseUnit.displayName)).toBeInTheDocument()
-    expect(screen.getByText('بالكمية')).toBeInTheDocument()
-    expect(receivedPageIndex).toBe('0')
+    // The material's unit reference is `unit`; `baseUnit` was the frozen
+    // generated snapshot's fiction and no real record carries it.
+    expect(screen.getByText(material.unit.displayName)).toBeInTheDocument()
+    expect(screen.getByText(family.nameAr)).toBeInTheDocument()
+    expect(screen.getByText('مستهلكة')).toBeInTheDocument()
+    expect(screen.getByText('غير مطلوب')).toBeInTheDocument()
+    // `ListMaterialsQuery` declares `page`, which is the parameter the backend
+    // binds; `pageIndex` was the snapshot's name and the server discards it.
+    expect(receivedPage).toBe('0')
     expect(receivedPageSize).toBe('10')
   })
 
   it('forwards family, kind, and status filters to the server', async () => {
     const user = userEvent.setup()
-    const family = createMaterialFamily()
+    const family = wireMaterialFamily()
     const receivedFilters: Array<{
       familyId: string | null
       materialKind: string | null
@@ -74,7 +82,8 @@ describe('MaterialsListPage', () => {
     }> = []
 
     server.use(
-      http.get(`${API_BASE_URL}/catalog/families`, () => HttpResponse.json([family])),
+      http.get(`${API_BASE_URL}/catalog/material-families`, () => okPageJson([family])),
+      http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => okPageJson([])),
       http.get(`${API_BASE_URL}/catalog/materials`, ({ request }) => {
         const url = new URL(request.url)
         receivedFilters.push({
@@ -82,9 +91,7 @@ describe('MaterialsListPage', () => {
           materialKind: url.searchParams.get('materialKind'),
           status: url.searchParams.get('status'),
         })
-        return HttpResponse.json(
-          createPage([createMaterial({ family: { ...family.category, id: family.familyId } })]),
-        )
+        return okPageJson([wireMaterial()])
       }),
     )
 
@@ -100,7 +107,7 @@ describe('MaterialsListPage', () => {
 
     await waitFor(() =>
       expect(receivedFilters).toContainEqual({
-        familyId: family.familyId,
+        familyId: family.materialFamilyId,
         materialKind: 'Asset',
         status: 'Inactive',
       }),
@@ -113,13 +120,14 @@ describe('MaterialsListPage', () => {
     let attempts = 0
 
     server.use(
-      http.get(`${API_BASE_URL}/catalog/families`, () => HttpResponse.json([])),
+      http.get(`${API_BASE_URL}/catalog/material-families`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => okPageJson([])),
       http.get(`${API_BASE_URL}/catalog/materials`, ({ request }) => {
         attempts += 1
         searches.push(new URL(request.url).searchParams.get('search') ?? '')
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(createPage([createMaterial()]))
+          : okPageJson([wireMaterial()])
       }),
     )
 

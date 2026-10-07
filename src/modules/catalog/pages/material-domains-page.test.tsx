@@ -5,8 +5,8 @@ import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createMaterialDomain } from '@/test/msw/factories'
-import { errJson } from '@/test/msw/envelope'
+import { wireMaterialDomain } from '@/test/msw/catalog-wire-fixtures'
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -44,12 +44,12 @@ afterEach(() => {
 
 describe('MaterialDomainsPage', () => {
   it('renders the scoped contract list and hides write actions without catalog.manage', async () => {
-    const domain = createMaterialDomain()
+    const domain = wireMaterialDomain()
     let receivedStatus: string | null = null
     server.use(
-      http.get(`${API_BASE_URL}/catalog/domains`, ({ request }) => {
+      http.get(`${API_BASE_URL}/catalog/material-domains`, ({ request }) => {
         receivedStatus = new URL(request.url).searchParams.get('status')
-        return HttpResponse.json([domain])
+        return okPageJson([domain])
       }),
     )
 
@@ -67,9 +67,9 @@ describe('MaterialDomainsPage', () => {
     const receivedStatuses: Array<string | null> = []
     const user = userEvent.setup()
     server.use(
-      http.get(`${API_BASE_URL}/catalog/domains`, ({ request }) => {
+      http.get(`${API_BASE_URL}/catalog/material-domains`, ({ request }) => {
         receivedStatuses.push(new URL(request.url).searchParams.get('status'))
-        return HttpResponse.json([createMaterialDomain({ status: 'Inactive' })])
+        return okPageJson([wireMaterialDomain({ status: 'Inactive' })])
       }),
     )
 
@@ -84,11 +84,11 @@ describe('MaterialDomainsPage', () => {
   it('retries a failed domain request from the Arabic error state', async () => {
     let attempts = 0
     server.use(
-      http.get(`${API_BASE_URL}/catalog/domains`, () => {
+      http.get(`${API_BASE_URL}/catalog/material-domains`, () => {
         attempts += 1
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json([createMaterialDomain()])
+          : okPageJson([wireMaterialDomain()])
       }),
     )
 
@@ -98,16 +98,17 @@ describe('MaterialDomainsPage', () => {
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
     await waitFor(() => expect(attempts).toBe(2))
+    expect(await screen.findByText('تقنية المعلومات')).toBeInTheDocument()
   })
 
   it('creates the exact v1 payload and exposes field errors inline', async () => {
     permissions.canManage = true
-    const domain = createMaterialDomain()
+    const domain = wireMaterialDomain()
     const receivedBodies: unknown[] = []
     const user = userEvent.setup()
     server.use(
-      http.get(`${API_BASE_URL}/catalog/domains`, () => HttpResponse.json([domain])),
-      http.post(`${API_BASE_URL}/catalog/domains`, async ({ request }) => {
+      http.get(`${API_BASE_URL}/catalog/material-domains`, () => okPageJson([domain])),
+      http.post(`${API_BASE_URL}/catalog/material-domains`, async ({ request }) => {
         receivedBodies.push(await request.json())
         return errJson(422, {
           code: 'MATERIAL_DOMAINS_CODE_NOT_UNIQUE',
@@ -134,15 +135,18 @@ describe('MaterialDomainsPage', () => {
 
   it('updates the selected domain with its concurrency version', async () => {
     permissions.canManage = true
-    const domain = createMaterialDomain({ rowVersion: 7 })
+    const domain = wireMaterialDomain({ rowVersion: 7 })
     let receivedBody: unknown = null
     const user = userEvent.setup()
     server.use(
-      http.get(`${API_BASE_URL}/catalog/domains`, () => HttpResponse.json([domain])),
-      http.put(`${API_BASE_URL}/catalog/domains/${domain.domainId}`, async ({ request }) => {
-        receivedBody = await request.json()
-        return HttpResponse.json({ ...domain, nameAr: 'تقنية محدثة' })
-      }),
+      http.get(`${API_BASE_URL}/catalog/material-domains`, () => okPageJson([domain])),
+      http.put(
+        `${API_BASE_URL}/catalog/material-domains/${domain.materialDomainId}`,
+        async ({ request }) => {
+          receivedBody = await request.json()
+          return okJson({ ...domain, nameAr: 'تقنية محدثة' })
+        },
+      ),
     )
 
     render(<MaterialDomainsPage />, { wrapper: createWrapper() })
