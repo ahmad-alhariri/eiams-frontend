@@ -1,11 +1,12 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ExternalPartyReference } from '@/modules/organization/components/external-party-reference'
 import { createQueryClient } from '@/shared/services/query.client'
+import { okJson } from '@/test/msw/envelope'
 import { createExternalParty } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
@@ -25,9 +26,7 @@ describe('ExternalPartyReference', () => {
   it('keeps an inactive party readable for historic IssueTo and Custody views', async () => {
     const party = createExternalParty({ nameAr: 'الجهة المؤرشفة', status: 'Inactive' })
     server.use(
-      http.get(`${API_BASE_URL}/external-parties/${party.externalPartyId}`, () =>
-        HttpResponse.json(party),
-      ),
+      http.get(`${API_BASE_URL}/external-parties/${party.externalPartyId}`, () => okJson(party)),
     )
 
     render(<ExternalPartyReference externalPartyId={party.externalPartyId} />, {

@@ -1,4 +1,4 @@
-﻿import { HttpResponse, http } from 'msw'
+﻿import { http } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -6,6 +6,7 @@ import {
   setCounterpartLookupService,
 } from '@/modules/organization/services/counterpart-lookup.service'
 import type { ExternalParty } from '@/modules/organization/types/organization.types'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
@@ -22,6 +23,12 @@ function setupService() {
   return counterpartLookupService
 }
 
+/**
+ * `ExternalParty` is the one organization contract that was genuinely correct:
+ * `Application/ExternalParties/ExternalPartyResponse.cs` projects
+ * `NameAr`, `Code`, `ContactInfo`, `Notes`, `Status` and `RowVersion`, which is
+ * why the failures here were envelope failures rather than field renames.
+ */
 function createExternalParty(overrides: Partial<ExternalParty> = {}): ExternalParty {
   return {
     externalPartyId: fixtureUuid(61),
@@ -44,7 +51,7 @@ describe('CounterpartLookupService', () => {
     server.use(
       http.get(`${API_BASE_URL}/external-parties`, ({ request }) => {
         requestedUrl = new URL(request.url).toString()
-        return HttpResponse.json({ items: [party], page: 0, pageSize: 100 })
+        return okPageJson([party], { page: 1, pageSize: 100, totalCount: 1, totalPages: 1 })
       }),
     )
 
@@ -66,7 +73,7 @@ describe('CounterpartLookupService', () => {
     server.use(
       http.get(
         `${API_BASE_URL}/external-parties/${encodeURIComponent(party.externalPartyId)}`,
-        () => HttpResponse.json(party),
+        () => okJson(party),
       ),
     )
 
@@ -82,7 +89,7 @@ describe('CounterpartLookupService', () => {
     server.use(
       http.get(
         `${API_BASE_URL}/external-parties/${encodeURIComponent(party.externalPartyId)}`,
-        () => HttpResponse.json(party),
+        () => okJson(party),
       ),
     )
 

@@ -20,12 +20,16 @@ import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { pageRows } from '@/shared/utils/table-data'
 import { formatDateTime, formatIdentifier, formatNumber, formatUuid } from '@/shared/utils/format'
-import type {
-  StockMovement,
-  StockMovementSortField,
-  StockMovementType,
-} from '@/shared/types/generated/eiams-v1'
+import type { StockMovement } from '@/modules/inventory/types/inventory.types'
+import type { StockMovementSortField, StockMovementType } from '@/shared/types/generated/eiams-v1'
 
+// The ROW type is the handwritten wire contract the inventory service returns
+// (`inventory.api-types`), NOT the frozen generated snapshot: `postedBy` is a
+// UUID string on the wire (see `inventory-wire-fixtures.ts` for the backend
+// DTO evidence), so a generated `postedBy: NamedReference` here is what made
+// this table read a `.displayName` the API never sends. Sorting/label unions
+// stay on the generated snapshot because they are UI-side presentation
+// vocabularies, not wire payloads.
 const movementColumnHelper = createColumnHelper<typeof dataTableFeatures, StockMovement>()
 
 const MOVEMENT_SORT_FIELDS = [
@@ -249,10 +253,19 @@ function StockMovementsPage() {
             )
           },
         }),
-        movementColumnHelper.accessor((movement) => movement.postedBy.displayName, {
+        movementColumnHelper.accessor('postedBy', {
           id: 'postedBy',
           header: 'رُحّلت بواسطة',
           enableSorting: false,
+          // `postedBy` is the posting user's UUID string. There is no display
+          // name on the movement projection to resolve, so the cell shows the
+          // same raw identifier the detail page renders rather than a field
+          // the API never sends.
+          cell: ({ getValue }) => (
+            <span dir="ltr" className="break-all">
+              {getValue()}
+            </span>
+          ),
         }),
       ]),
     [],
