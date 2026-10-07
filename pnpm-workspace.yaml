@@ -22,4 +22,10 @@
 # service worker and runs nothing at install time.
 
 allowBuilds:
-  msw: set this to true or false
+  # Explicitly denied, which is what the paragraph above argues for. pnpm >= 10
+  # fails the install with ERR_PNPM_IGNORED_BUILDS when a dependency has an
+  # install script that is neither allowed nor denied, so "no opinion" is not an
+  # option: it broke the CI Quality Gate at `pnpm install --frozen-lockfile`
+  # before any quality script ran. `false` states the decision the comment
+  # already makes, and keeps public/mockServiceWorker.js from being generated.
+  msw: false
