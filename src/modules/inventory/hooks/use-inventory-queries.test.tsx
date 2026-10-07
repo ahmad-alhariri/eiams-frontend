@@ -5,13 +5,8 @@ import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import type { StockMovement } from '@/shared/types/generated/eiams-v1'
-import {
-  createInventoryBalance,
-  createNamedReference,
-  createPage,
-  fixtureUuid,
-} from '@/test/msw/factories'
+import { okJson, okPageJson } from '@/test/msw/envelope'
+import { wireInventoryBalance, wireStockMovement } from '@/test/msw/inventory-wire-fixtures'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -32,21 +27,6 @@ import {
 
 const API_BASE_URL = '/api/v1'
 
-function createStockMovement(): StockMovement {
-  return {
-    documentId: fixtureUuid(60),
-    documentLineId: fixtureUuid(61),
-    documentReference: 'RCP-2026-0001',
-    material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
-    movementId: fixtureUuid(70),
-    movementType: 'Receipt',
-    postedAt: '2026-08-21T10:00:00.000Z',
-    postedBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مدير المستودع' }),
-    quantityDelta: 5,
-    warehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
-  }
-}
-
 function createWrapper() {
   const client = createQueryClient()
   return {
@@ -63,9 +43,9 @@ afterEach(() => {
 
 describe('inventory query hooks', () => {
   it('uses scope-isolated keys that retain every server filter and sort selection', () => {
-    const movement = createStockMovement()
-    const scope = { kind: 'warehouse' as const, id: movement.warehouse.id }
-    const balanceQuery = { warehouseId: movement.warehouse.id }
+    const movement = wireStockMovement()
+    const scope = { kind: 'warehouse' as const, id: movement.warehouseId }
+    const balanceQuery = { warehouseId: movement.warehouseId }
     const movementQuery = { movementType: 'Receipt' as const }
 
     expect(inventoryQueryKeys.balances(scope, balanceQuery)).toEqual([
@@ -103,30 +83,24 @@ describe('inventory query hooks', () => {
   })
 
   it('reads every inventory resource through scoped operational queries', async () => {
-    const balance = createInventoryBalance()
-    const movement = createStockMovement()
+    const balance = wireInventoryBalance()
+    const movement = wireStockMovement()
 
     server.use(
-      http.get(`${API_BASE_URL}/inventory/balances`, () =>
-        HttpResponse.json(createPage([balance])),
-      ),
-      http.get(`${API_BASE_URL}/inventory/balances/${balance.balanceId}`, () =>
-        HttpResponse.json(balance),
-      ),
-      http.get(`${API_BASE_URL}/inventory/movements`, () =>
-        HttpResponse.json(createPage([movement])),
-      ),
+      http.get(`${API_BASE_URL}/inventory/balances`, () => okPageJson([balance])),
+      http.get(`${API_BASE_URL}/inventory/balances/${balance.balanceId}`, () => okJson(balance)),
+      http.get(`${API_BASE_URL}/inventory/movements`, () => okPageJson([movement])),
       http.get(`${API_BASE_URL}/inventory/movements/${movement.movementId}`, () =>
-        HttpResponse.json(movement),
+        okJson(movement),
       ),
     )
 
     const listWrapper = createWrapper()
     const balanceList = renderHook(
-      () => useInventoryBalancesQuery({ warehouseId: movement.warehouse.id }),
+      () => useInventoryBalancesQuery({ warehouseId: balance.warehouseId }),
       { wrapper: listWrapper.Wrapper },
     )
-    const balanceDetail = renderHook(() => useInventoryBalanceQuery(movement.movementId), {
+    const balanceDetail = renderHook(() => useInventoryBalanceQuery(balance.balanceId), {
       wrapper: createWrapper().Wrapper,
     })
     const movementList = renderHook(() => useStockMovementsQuery({ movementType: 'Receipt' }), {
@@ -155,11 +129,11 @@ describe('inventory query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, () => {
         requestCount += 1
-        return HttpResponse.json(createPage([createInventoryBalance()]))
+        return okPageJson([wireInventoryBalance()])
       }),
       http.get(`${API_BASE_URL}/inventory/movements`, () => {
         requestCount += 1
-        return HttpResponse.json(createPage([createStockMovement()]))
+        return okPageJson([wireStockMovement()])
       }),
     )
 
@@ -182,11 +156,11 @@ describe('inventory query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances/:balanceId`, () => {
         requestCount += 1
-        return HttpResponse.json(createInventoryBalance())
+        return HttpResponse.json(wireInventoryBalance())
       }),
       http.get(`${API_BASE_URL}/inventory/movements/:movementId`, () => {
         requestCount += 1
-        return HttpResponse.json(createStockMovement())
+        return HttpResponse.json(wireStockMovement())
       }),
     )
 
