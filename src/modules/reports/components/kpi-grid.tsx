@@ -29,7 +29,9 @@ interface KpiGridProps {
 export function KpiGrid({ kpis, 'aria-label': ariaLabel = 'لوحة مؤشرات الأداء' }: KpiGridProps) {
   // Split into period KPIs (anchor context) and snapshot KPIs (status) per D-RPT-02 §3.
   // Codes ending with `_this_period` or `_posted` are period-bound.
-  const periodKpis = kpis.filter((k) => k.code.includes('_this_period') || k.code.includes('_posted'))
+  const periodKpis = kpis.filter(
+    (k) => k.code.includes('_this_period') || k.code.includes('_posted'),
+  )
   const snapshotKpis = kpis.filter((k) => !periodKpis.includes(k))
 
   const renderCard = useCallback(
@@ -46,10 +48,7 @@ export function KpiGrid({ kpis, 'aria-label': ariaLabel = 'لوحة مؤشرات
 
   if (kpis.length === 0) {
     return (
-      <Card
-        aria-label={ariaLabel}
-        className="flex min-h-40 items-center justify-center p-8"
-      >
+      <Card aria-label={ariaLabel} className="flex min-h-40 items-center justify-center p-8">
         <p className="text-sm text-muted-foreground" role="status">
           لا توجد بيانات مؤشرات لهذه الفترة والمخزون المحددين
         </p>
@@ -63,17 +62,13 @@ export function KpiGrid({ kpis, 'aria-label': ariaLabel = 'لوحة مؤشرات
       {periodKpis.length > 0 && (
         <div className="mb-4">
           <h2 className="sr-only">مؤشرات الفترة المحددة</h2>
-          <div className={`grid gap-4 ${KPI_GRID_COLS}`}>
-            {periodKpis.map(renderCard)}
-          </div>
+          <div className={`grid gap-4 ${KPI_GRID_COLS}`}>{periodKpis.map(renderCard)}</div>
         </div>
       )}
 
       {/* Snapshot KPIs — current-state row */}
       {snapshotKpis.length > 0 && (
-        <div className={`grid gap-4 ${KPI_GRID_COLS}`}>
-          {snapshotKpis.map(renderCard)}
-        </div>
+        <div className={`grid gap-4 ${KPI_GRID_COLS}`}>{snapshotKpis.map(renderCard)}</div>
       )}
     </section>
   )

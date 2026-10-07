@@ -111,10 +111,7 @@ const CHART_HEIGHT = 260
  * the charts are secondary to the primary KPI cards; screen-reader users rely on
  * the KPI card live-region for the primary numeric data.
  */
-export function DashboardCharts({
-  movementTrend,
-  assetStatusDistribution,
-}: DashboardChartsProps) {
+export function DashboardCharts({ movementTrend, assetStatusDistribution }: DashboardChartsProps) {
   const hasTrend = movementTrend.length > 0
   const hasDistribution = assetStatusDistribution.length > 0
   const hasAnyChart = hasTrend || hasDistribution
@@ -142,9 +139,7 @@ export function DashboardCharts({
       <Card>
         <CardHeader>
           <CardTitle>
-            <h3 className="text-base font-semibold text-foreground">
-              اتجاه الحركات اليومية
-            </h3>
+            <h3 className="text-base font-semibold text-foreground">اتجاه الحركات اليومية</h3>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -156,15 +151,9 @@ export function DashboardCharts({
               className="min-h-52"
             />
           ) : (
-            <div
-              role="img"
-              aria-label="مخطط خطي يوضح اتجاه الحركات اليومية للفترة المحددة"
-            >
+            <div role="img" aria-label="مخطط خطي يوضح اتجاه الحركات اليومية للفترة المحددة">
               <ResponsiveContainer height={CHART_HEIGHT} width="100%">
-                <LineChart
-                  data={movementTrend}
-                  margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
-                >
+                <LineChart data={movementTrend} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
                   <CartesianGrid
                     strokeDasharray="3 3"
                     stroke="var(--color-row-divider, #e8ecf0)"
@@ -186,7 +175,10 @@ export function DashboardCharts({
                       new Intl.NumberFormat('ar-EG', { notation: 'compact' }).format(v)
                     }
                   />
-                  <RechartsTooltip content={<MovementTooltip />} cursor={{ stroke: '#428177', strokeWidth: 1 }} />
+                  <RechartsTooltip
+                    content={<MovementTooltip />}
+                    cursor={{ stroke: '#428177', strokeWidth: 1 }}
+                  />
                   <Line
                     type="monotone"
                     dataKey="value"
@@ -207,9 +199,7 @@ export function DashboardCharts({
       <Card>
         <CardHeader>
           <CardTitle>
-            <h3 className="text-base font-semibold text-foreground">
-              توزيع حالات الأصول
-            </h3>
+            <h3 className="text-base font-semibold text-foreground">توزيع حالات الأصول</h3>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -221,10 +211,7 @@ export function DashboardCharts({
               className="min-h-52"
             />
           ) : (
-            <div
-              role="img"
-              aria-label="مخطط دائري يوضح توزيع حالات الأصول الحالية"
-            >
+            <div role="img" aria-label="مخطط دائري يوضح توزيع حالات الأصول الحالية">
               <ResponsiveContainer height={CHART_HEIGHT} width="100%">
                 <PieChart>
                   <Pie

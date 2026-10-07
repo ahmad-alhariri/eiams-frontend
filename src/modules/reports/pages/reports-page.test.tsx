@@ -46,11 +46,11 @@ describe('ReportsPage', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'التقارير' })).toBeInTheDocument()
 
-    expect(screen.getByRole('tab', { name: 'لوحة المؤشرات' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: 'نشاط حديث' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'لوحة المؤشرات' })).toHaveAttribute(
       'aria-selected',
-      'false',
+      'true',
     )
+    expect(screen.getByRole('tab', { name: 'نشاط حديث' })).toHaveAttribute('aria-selected', 'false')
     expect(screen.getByRole('tab', { name: 'أرصدة المخزون' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'حركات المخزون' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'الأصول والتكليف' })).toBeInTheDocument()
@@ -70,6 +70,9 @@ describe('ReportsPage', () => {
       'aria-selected',
       'true',
     )
-    expect(screen.getByRole('tab', { name: 'لوحة المؤشرات' })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('tab', { name: 'لوحة المؤشرات' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    )
   })
 })

@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
+import { okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -40,7 +41,7 @@ describe('DashboardPanel', () => {
   it('renders KPI cards when the dashboard endpoint returns data', async () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/dashboard`, () =>
-        HttpResponse.json({
+        okJson({
           generatedAt: '2026-09-25T10:00:00.000Z',
           kpis: [
             {
@@ -75,9 +76,7 @@ describe('DashboardPanel', () => {
 
   it('renders loading skeletons while fetching', () => {
     // Override with a slow response to allow skeleton assertion
-    server.use(
-      http.get(`${API_BASE_URL}/reports/dashboard`, () => new Promise(() => {})),
-    )
+    server.use(http.get(`${API_BASE_URL}/reports/dashboard`, () => new Promise(() => {})))
 
     render(<DashboardPanel />, { wrapper: createWrapper() })
 
@@ -103,7 +102,7 @@ describe('DashboardPanel', () => {
   it('renders charts section when data is available', async () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/dashboard`, () =>
-        HttpResponse.json({
+        okJson({
           generatedAt: '2026-09-25T10:00:00.000Z',
           kpis: [],
           movementTrend: [
@@ -126,7 +125,7 @@ describe('DashboardPanel', () => {
   it('renders the server timestamp when data is loaded', async () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/dashboard`, () =>
-        HttpResponse.json({
+        okJson({
           generatedAt: '2026-09-25T10:00:00.000Z',
           kpis: [],
           movementTrend: [],

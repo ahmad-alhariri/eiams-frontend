@@ -136,9 +136,7 @@ function InventoryBalanceReportTableImpl() {
               <ExportButton
                 reportType="inventory"
                 requiredPermission="inventory.view"
-                filters={
-                  warehouseId !== undefined ? { warehouseId } : undefined
-                }
+                filters={warehouseId !== undefined ? { warehouseId } : undefined}
                 label="تصدير تقرير أرصدة المخزون"
               />
             </div>

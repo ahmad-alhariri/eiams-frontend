@@ -3,9 +3,10 @@ import { render, screen } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 
-import { createAsset, createPage } from '@/test/msw/factories'
+import { createAsset } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -45,7 +46,7 @@ describe('AssetReportTable', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/reports/assets`, () =>
-        HttpResponse.json(createPage([asset], { totalItems: 1, totalPages: 1 })),
+        okPageJson([asset], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 }),
       ),
     )
 
@@ -61,7 +62,7 @@ describe('AssetReportTable', () => {
   it('renders Arabic empty state when the server returns no assets', async () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/assets`, () =>
-        HttpResponse.json(createPage([], { totalItems: 0, totalPages: 0 })),
+        okPageJson([], { page: 1, pageSize: 10, totalCount: 0, totalPages: 0 }),
       ),
     )
 
@@ -75,7 +76,7 @@ describe('AssetReportTable', () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/assets`, ({ request }) => {
         requests.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json(createPage([createAsset()]))
+        return okPageJson([createAsset()], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
       }),
     )
 

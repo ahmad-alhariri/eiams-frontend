@@ -70,8 +70,7 @@ function KpiCard({ kpi, trendAriaLabel, className }: KpiCardProps) {
   const trendDirection: 'up' | 'down' | 'flat' =
     change === null || change === 0 ? 'flat' : change > 0 ? 'up' : 'down'
 
-  const changeLabel =
-    change !== null ? `${PERCENT_FIXED(change)}٪` : '—'
+  const changeLabel = change !== null ? `${PERCENT_FIXED(change)}٪` : '—'
 
   return (
     <article
@@ -128,66 +127,159 @@ function KpiIcon({ code }: { code: string }) {
     // Inventory
     case 'total_balance_items':
       return (
-        <svg aria-hidden className="size-4 text-stone" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        <svg
+          aria-hidden
+          className="size-4 text-stone"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+          />
         </svg>
       )
     case 'total_stock_quantity':
       return (
-        <svg aria-hidden className="size-4 text-stone" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <svg
+          aria-hidden
+          className="size-4 text-stone"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          viewBox="0 0 24 24"
+        >
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h18v18H3zM9 9h6m-3-3v6" />
         </svg>
       )
     case 'low_stock_items':
       return (
-        <svg aria-hidden className="size-4 text-stone" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        <svg
+          aria-hidden
+          className="size-4 text-stone"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+          />
         </svg>
       )
     // Assets
     case 'active_assets':
       return (
-        <svg aria-hidden className="size-4 text-stone" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 3v10M15 3v10M5 20h14M7 20V10m10 10V10" />
+        <svg
+          aria-hidden
+          className="size-4 text-stone"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9 3v10M15 3v10M5 20h14M7 20V10m10 10V10"
+          />
         </svg>
       )
     // Documents
     case 'documents_posted':
       return (
-        <svg aria-hidden className="size-4 text-stone" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <svg
+          aria-hidden
+          className="size-4 text-stone"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
         </svg>
       )
     case 'pending_documents':
       return (
-        <svg aria-hidden className="size-4 text-stone" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <svg
+          aria-hidden
+          className="size-4 text-stone"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
         </svg>
       )
     // Movements
     case 'movements_this_period':
       return (
-        <svg aria-hidden className="size-4 text-stone" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <svg
+          aria-hidden
+          className="size-4 text-stone"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          viewBox="0 0 24 24"
+        >
           <path strokeLinecap="round" strokeLinejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
         </svg>
       )
     // Custody
     case 'open_custodies':
       return (
-        <svg aria-hidden className="size-4 text-stone" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+        <svg
+          aria-hidden
+          className="size-4 text-stone"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
+          />
         </svg>
       )
     default:
       return (
-        <svg aria-hidden className="size-4 text-stone" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <svg
+          aria-hidden
+          className="size-4 text-stone"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
         </svg>
       )
   }
 }
 
-const KpiCardMemo = memo(KpiCard) as React.MemoExoticComponent<typeof KpiCard> & { displayName: string }
+const KpiCardMemo = memo(KpiCard) as React.MemoExoticComponent<typeof KpiCard> & {
+  displayName: string
+}
 KpiCardMemo.displayName = 'KpiCard'
 
 export { KpiCardMemo as KpiCard }

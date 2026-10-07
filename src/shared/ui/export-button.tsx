@@ -18,7 +18,13 @@
 
 import { useState } from 'react'
 
-import { IconDownload, IconFileTypePdf, IconFileTypeCsv, IconLoader2, IconChevronDown } from '@tabler/icons-react'
+import {
+  IconDownload,
+  IconFileTypePdf,
+  IconFileTypeCsv,
+  IconLoader2,
+  IconChevronDown,
+} from '@tabler/icons-react'
 
 import { Button } from '@/shared/ui/button'
 import { Popover, PopoverContent } from '@/shared/ui/popover'
@@ -71,7 +77,9 @@ const FORMAT_OPTIONS: Array<{
     format: 'csv',
     primaryLabel: 'تصدير CSV',
     menuLabel: 'CSV',
-    icon: <IconFileTypeCsv className="size-4 text-[var(--chart-2,theme.colors.forest))]" aria-hidden />,
+    icon: (
+      <IconFileTypeCsv className="size-4 text-[var(--chart-2,theme.colors.forest))]" aria-hidden />
+    ),
   },
 ]
 
@@ -167,14 +175,8 @@ export function ExportButton({
           <IconChevronDown className="size-4" aria-hidden />
         </Button>
 
-        <PopoverContent
-          align="end"
-          className="flex min-w-32 flex-col gap-0.5 p-1.5"
-          sideOffset={4}
-        >
-          <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-            {label}
-          </div>
+        <PopoverContent align="end" className="flex min-w-32 flex-col gap-0.5 p-1.5" sideOffset={4}>
+          <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{label}</div>
 
           {isError && (
             <div className="px-2 py-1.5 text-xs text-destructive" role="alert">

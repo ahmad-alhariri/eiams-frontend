@@ -12,11 +12,11 @@
 import { useMutation } from '@tanstack/react-query'
 
 import {
-  createReportsExportService,
   type ExportFilters,
   type ExportFormat,
   type ExportJobStatusReady,
   type ReportExportType,
+  reportsExportService,
 } from '@/modules/reports/services/reports-export.service'
 import { apiClient } from '@/shared/services/api.client'
 
@@ -46,7 +46,12 @@ function triggerDownload(blob: Blob, filename: string): void {
 // Service instance
 // ---------------------------------------------------------------------------
 
-const exportService = createReportsExportService(apiClient)
+// The export service is contract-only over the shared transport, so this hook
+// uses the service's singleton rather than building a second one over the raw
+// Axios client. (The download-URL fetch below is presentation-side: it turns a
+// server-named file into a browser download, and the service deliberately does
+// not construct download URLs.)
+const exportService = reportsExportService
 
 // ---------------------------------------------------------------------------
 // Hook

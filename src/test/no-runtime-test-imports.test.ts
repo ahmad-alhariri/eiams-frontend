@@ -89,7 +89,7 @@ import {
  * scope picker loader for the single role-scope assignment (D-SRS-01), which
  * replaces the raw UUID field the collection editor used.
  */
-const SCANNED_FILE_COUNT = 360
+const SCANNED_FILE_COUNT = 379
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

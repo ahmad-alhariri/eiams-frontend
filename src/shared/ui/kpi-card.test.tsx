@@ -81,10 +81,7 @@ describe('KpiCard', () => {
     // The card value "412" has a 0 in it, so we check the ARIA label specifically
     const article = screen.getByRole('article')
     // aria-label should NOT contain the word "تغيّر" (trend is absent for zero change)
-    expect(article).toHaveAttribute(
-      'aria-label',
-      expect.not.stringContaining('تغيّر'),
-    )
+    expect(article).toHaveAttribute('aria-label', expect.not.stringContaining('تغيّر'))
   })
 
   it('renders null changePercent without trend badge', () => {
@@ -96,10 +93,7 @@ describe('KpiCard', () => {
   it('has correct ARIA article role', () => {
     renderCard({ kpi: fixtures.positive })
     const article = screen.getByRole('article')
-    expect(article).toHaveAttribute(
-      'aria-label',
-      expect.stringContaining('المستندات المرحّلة'),
-    )
+    expect(article).toHaveAttribute('aria-label', expect.stringContaining('المستندات المرحّلة'))
   })
 
   it('renders without unitAr (unit falls back to label)', () => {

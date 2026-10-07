@@ -3,8 +3,9 @@ import { render, screen } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -40,8 +41,8 @@ describe('CountAdjustmentReportTable', () => {
   it('renders Arabic headers and Arabic adjustment labels', async () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/count-adjustments`, () =>
-        HttpResponse.json({
-          items: [
+        okPageJson(
+          [
             {
               adjustmentId: 'a1',
               documentId: 'd1',
@@ -70,8 +71,8 @@ describe('CountAdjustmentReportTable', () => {
               attachments: [],
             },
           ],
-          meta: { pageIndex: 0, pageSize: 10, totalItems: 1, totalPages: 1 },
-        }),
+          { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 },
+        ),
       ),
     )
 
@@ -91,10 +92,7 @@ describe('CountAdjustmentReportTable', () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/count-adjustments`, ({ request }) => {
         requests.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json({
-          items: [],
-          meta: { pageIndex: 0, pageSize: 10, totalItems: 0, totalPages: 0 },
-        })
+        return okPageJson([], { page: 1, pageSize: 10, totalCount: 0, totalPages: 0 })
       }),
     )
 
@@ -114,10 +112,7 @@ describe('CountAdjustmentReportTable', () => {
   it('renders the Arabic empty state when the server returns no adjustments', async () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/count-adjustments`, () =>
-        HttpResponse.json({
-          items: [],
-          meta: { pageIndex: 0, pageSize: 10, totalItems: 0, totalPages: 0 },
-        }),
+        okPageJson([], { page: 1, pageSize: 10, totalCount: 0, totalPages: 0 }),
       ),
     )
 

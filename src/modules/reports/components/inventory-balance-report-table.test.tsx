@@ -6,7 +6,8 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
-import { createInventoryBalance, createPage } from '@/test/msw/factories'
+import { createInventoryBalance } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -47,7 +48,7 @@ describe('InventoryBalanceReportTable', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/reports/inventory`, () =>
-        HttpResponse.json(createPage([balance], { totalItems: 1, totalPages: 1 })),
+        okPageJson([balance], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 }),
       ),
     )
 
@@ -66,9 +67,12 @@ describe('InventoryBalanceReportTable', () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/inventory`, ({ request }) => {
         requests.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json(
-          createPage([createInventoryBalance()], { totalItems: 21, totalPages: 3 }),
-        )
+        return okPageJson([createInventoryBalance()], {
+          page: 1,
+          pageSize: 10,
+          totalCount: 21,
+          totalPages: 3,
+        })
       }),
     )
 
@@ -91,7 +95,7 @@ describe('InventoryBalanceReportTable', () => {
   it('renders an empty Arabic state when the server returns no balances', async () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/inventory`, () =>
-        HttpResponse.json(createPage([], { totalItems: 0, totalPages: 0 })),
+        okPageJson([], { page: 1, pageSize: 10, totalCount: 0, totalPages: 0 }),
       ),
     )
 
@@ -107,7 +111,7 @@ describe('InventoryBalanceReportTable', () => {
         attempts += 1
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(createPage([]))
+          : okPageJson([], { page: 1, pageSize: 10, totalCount: 0, totalPages: 0 })
       }),
     )
 

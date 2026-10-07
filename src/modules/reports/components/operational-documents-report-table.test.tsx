@@ -3,8 +3,9 @@ import { render, screen } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -40,8 +41,8 @@ describe('OperationalDocumentsReportTable', () => {
   it('renders Arabic document-type labels and does not expose an uncontracted type filter', async () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/documents`, () =>
-        HttpResponse.json({
-          items: [
+        okPageJson(
+          [
             {
               documentId: 'd1',
               systemReferenceNumber: 'DOC-2026-0042',
@@ -70,8 +71,8 @@ describe('OperationalDocumentsReportTable', () => {
               rowVersion: 1,
             },
           ],
-          meta: { pageIndex: 0, pageSize: 10, totalItems: 1, totalPages: 1 },
-        }),
+          { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 },
+        ),
       ),
     )
 
@@ -90,10 +91,7 @@ describe('OperationalDocumentsReportTable', () => {
   it('renders the Arabic empty state when the server returns no documents', async () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/documents`, () =>
-        HttpResponse.json({
-          items: [],
-          meta: { pageIndex: 0, pageSize: 10, totalItems: 0, totalPages: 0 },
-        }),
+        okPageJson([], { page: 1, pageSize: 10, totalCount: 0, totalPages: 0 }),
       ),
     )
 

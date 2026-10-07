@@ -180,9 +180,7 @@ function AssetReportTableImpl() {
               <ExportButton
                 reportType="assets"
                 requiredPermission="asset.view"
-                filters={
-                  warehouseId !== undefined ? { warehouseId } : undefined
-                }
+                filters={warehouseId !== undefined ? { warehouseId } : undefined}
                 label="تصدير تقرير الأصول والتكليف"
               />
             </div>
