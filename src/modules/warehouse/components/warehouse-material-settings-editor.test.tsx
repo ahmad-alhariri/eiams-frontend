@@ -1,15 +1,17 @@
 ﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Toaster } from '@/shared/ui/toaster'
 import { createMaterial, createWarehouseMaterialSetting, fixtureUuid } from '@/test/msw/factories'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
-import type { WarehouseMaterialSettingUpsertRequest } from '@/shared/types/generated/eiams-v1'
+import type { Material } from '@/modules/catalog/types/catalog.api-types'
+import type { WarehouseMaterialSettingUpsertRequest } from '@/modules/warehouse/types/warehouse.api-types'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
@@ -21,13 +23,50 @@ import { WarehouseMaterialSettingsEditor } from './warehouse-material-settings-e
 const API_BASE_URL = '/api/v1'
 
 const WAREHOUSE_ID = fixtureUuid(30)
-const INK = createMaterial({
+
+/**
+ * Re-projects the shared `createMaterial()` fixture onto the HANDWRITTEN catalog
+ * contract, which is the shape `GET /catalog/materials` actually serves.
+ *
+ * The shared factory is still typed against the frozen generated snapshot and
+ * mints `domain` / `category` / `family` / `baseUnit`; the catalog service is
+ * typed against `catalog.api-types.Material`, which carries `materialDomain` /
+ * `materialCategory` / `materialFamily` / `unit`. Serving the generated shape
+ * here would have the fixture assert against a record the service is not typed
+ * against — the same fiction the shared factory was left in for the document
+ * suites. Mirrors the projection in the receiving/opening/transfer suites.
+ */
+function contractMaterial(overrides: Partial<Material> = {}): Material {
+  const base = createMaterial()
+  return {
+    code: base.code,
+    descriptionAr: base.descriptionAr ?? null,
+    materialCategory: base.category,
+    materialCategoryId: base.category.id,
+    materialDomain: base.domain,
+    materialDomainId: base.domain.id,
+    materialFamily: base.family,
+    materialFamilyId: base.family.id,
+    materialId: base.materialId,
+    materialKind: base.materialKind === 'Asset' ? 'Asset' : 'Consumable',
+    nameAr: base.nameAr,
+    nominalConversionFactor: 1,
+    requiresAssetNumber: base.requiresAssetNumber,
+    rowVersion: base.rowVersion,
+    status: 'Active',
+    unit: base.baseUnit,
+    unitId: base.baseUnit.id,
+    ...overrides,
+  }
+}
+
+const INK = contractMaterial({
   materialId: fixtureUuid(62),
   nameAr: 'حبر أسود',
   code: 'INK-001',
   status: 'Active',
 })
-const PC = createMaterial({
+const PC = contractMaterial({
   materialId: fixtureUuid(63),
   nameAr: 'حاسوب مكتبي',
   code: 'PC-001',
@@ -55,6 +94,9 @@ function createWrapper() {
   }
 }
 
+// `catalogService.listMaterials` reads the real envelope (`response.data.data`
+// plus `pagination`). A bare `{ items, meta }` body therefore resolved to ZERO
+// rows and the picker rendered no options at all.
 function materialsHandler(materials = [INK, PC]) {
   return http.get(`${API_BASE_URL}/catalog/materials`, ({ request }) => {
     const url = new URL(request.url)
@@ -63,7 +105,7 @@ function materialsHandler(materials = [INK, PC]) {
       (material) =>
         search === '' || material.nameAr.includes(search) || material.code.includes(search),
     )
-    return HttpResponse.json({ items, meta: {} })
+    return okPageJson(items)
   })
 }
 
@@ -76,7 +118,9 @@ function putHandler(capture: PutCapture) {
       capture.requestCount += 1
       const body = (await request.json()) as WarehouseMaterialSettingUpsertRequest
       capture.bodies.push(body)
-      return HttpResponse.json(
+      // `warehouseId` is NOT in the body — the route carries it, and the request
+      // contract omits it.
+      return okJson(
         createWarehouseMaterialSetting({
           warehouseId: WAREHOUSE_ID,
           material: { id: body.materialId, displayName: 'مادة مخزنية' },
@@ -146,8 +190,13 @@ describe('WarehouseMaterialSettingsEditor', () => {
   })
 
   it('edits an existing setting: material is locked, thresholds update, rowVersion preserved', async () => {
+    // `materialId` and `material.id` are the same material on the wire and must
+    // agree: the picker de-duplicates on `materialId`, so overriding only the
+    // nested `material` reference left the setting pointing at fixtureUuid(24)
+    // while the row it describes is fixtureUuid(62).
     const existing = createWarehouseMaterialSetting({
       warehouseId: WAREHOUSE_ID,
+      materialId: INK.materialId,
       material: { id: INK.materialId, displayName: 'حبر أسود', code: 'INK-001' },
       minQuantity: 2,
       maxQuantity: 10,
@@ -209,6 +258,7 @@ describe('WarehouseMaterialSettingsEditor', () => {
   it('excludes already-configured materials from the picker', async () => {
     const existing = createWarehouseMaterialSetting({
       warehouseId: WAREHOUSE_ID,
+      materialId: INK.materialId,
       material: { id: INK.materialId, displayName: 'حبر أسود' },
       status: 'Active',
     })

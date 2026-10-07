@@ -10,7 +10,7 @@ import {
   warehouseCapabilitiesSchema,
   type WarehouseCapabilitiesFormValues,
 } from '@/modules/warehouse/schemas/warehouse-capabilities.schemas'
-import { Form, FormControl, FormField } from '@/shared/forms/form'
+import { Form, FormControl, FormField, FormItem, useFormField } from '@/shared/forms/form'
 import { useConfirm } from '@/shared/hooks/use-confirm'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
@@ -31,6 +31,30 @@ import type { WarehouseCapability } from '@/modules/warehouse/types/warehouse.ap
 
 const EMPTY_VALUES: WarehouseCapabilitiesFormValues = { capabilities: [] }
 
+type WatchedCapability = WarehouseCapabilitiesFormValues['capabilities'][number]
+
+const NO_CAPABILITIES: readonly WatchedCapability[] = []
+
+/**
+ * The Arabic reason a rejected capability replacement carries.
+ *
+ * `FormMessage` renders a `<p aria-live="polite">`, which is the right channel for
+ * a message attached to one control; a whole-request rejection is announced
+ * assertively instead, so assistive technology interrupts rather than waits for a
+ * pause in typing.
+ */
+function CapabilitiesSubmitError() {
+  const message = useFormField().error?.message
+  if (message === undefined || message === '') {
+    return null
+  }
+  return (
+    <p role="alert" className="text-sm font-medium text-destructive">
+      {message}
+    </p>
+  )
+}
+
 export interface WarehouseCapabilitiesEditorProps {
   warehouseId: string
   capabilities: readonly WarehouseCapability[]
@@ -50,7 +74,10 @@ export function WarehouseCapabilitiesEditor({
     defaultValues: EMPTY_VALUES,
   })
   const { fields, remove } = useFieldArray({ control: form.control, name: 'capabilities' })
-  const watchedCapabilities = useWatch({ control: form.control, name: 'capabilities' }) ?? []
+  const watched = useWatch({ control: form.control, name: 'capabilities' })
+  // One stable empty array rather than a fresh `?? []` per render: a new
+  // identity on every render invalidates every memo keyed on this value.
+  const watchedCapabilities = watched ?? NO_CAPABILITIES
 
   const selectedDomainIds = useMemo(
     () => new Set(watchedCapabilities.map((c) => c.domainId)),
@@ -69,13 +96,6 @@ export function WarehouseCapabilitiesEditor({
     () => new Map(capabilities.map((cap) => [cap.domainId, cap.operations] as const)),
     [capabilities],
   )
-
-  const watchedDomains = useMemo(
-    () => new Set(watchedCapabilities.map((c) => c.domainId)),
-    [watchedCapabilities],
-  )
-
-  void watchedDomains
 
   const currentOpsFor = (domainId: string) => domainOps.get(domainId) ?? []
 
@@ -168,16 +188,18 @@ export function WarehouseCapabilitiesEditor({
                   <div className="grid gap-3">
                     {fields.map((field, index) => (
                       <div key={field.id} className="flex items-center gap-3">
-                        <FormControl>
+                        <FormItem className="flex-1">
                           <Select
                             value={field.domainId}
                             onValueChange={(value) => {
                               form.setValue(`capabilities.${index}.domainId`, value ?? '')
                             }}
                           >
-                            <SelectTrigger className="flex-1">
-                              <SelectValue placeholder="اختر المجال" />
-                            </SelectTrigger>
+                            <FormControl>
+                              <SelectTrigger className="flex-1">
+                                <SelectValue placeholder="اختر المجال" />
+                              </SelectTrigger>
+                            </FormControl>
                             <SelectContent>
                               <SelectItem value="">اختر المجال</SelectItem>
                               {domainOptions?.map((opt) => (
@@ -187,25 +209,29 @@ export function WarehouseCapabilitiesEditor({
                               ))}
                             </SelectContent>
                           </Select>
-                        </FormControl>
+                        </FormItem>
 
                         <div className="flex gap-2 flex-wrap">
                           {CAPABILITY_OPERATIONS.map((op) => {
                             const currentOps = currentOpsFor(field.domainId)
                             const enabled = currentOps.includes(op)
+                            const checkboxId = `capability-${field.id}-${op}`
                             return (
-                              <Checkbox
-                                key={op}
-                                checked={enabled}
-                                onCheckedChange={(checked) => {
-                                  const next = checked
-                                    ? [...currentOps, op]
-                                    : currentOps.filter((o) => o !== op)
-                                  form.setValue(`capabilities.${index}.operations`, next)
-                                }}
-                              >
-                                {op}
-                              </Checkbox>
+                              <div key={op} className="flex items-center gap-2">
+                                <Checkbox
+                                  id={checkboxId}
+                                  checked={enabled}
+                                  onCheckedChange={(checked) => {
+                                    const next = checked
+                                      ? [...currentOps, op]
+                                      : currentOps.filter((o) => o !== op)
+                                    form.setValue(`capabilities.${index}.operations`, next)
+                                  }}
+                                />
+                                <label htmlFor={checkboxId} className="cursor-pointer text-sm">
+                                  {op}
+                                </label>
+                              </div>
                             )
                           })}
                         </div>
@@ -234,19 +260,28 @@ export function WarehouseCapabilitiesEditor({
                 control={form.control}
                 name="capabilities"
                 render={() => (
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    {watchedCapabilities.length > 0 ? (
-                      <>
-                        {watchedCapabilities.map((cap) => (
-                          <span key={cap.domainId} className="rounded bg-muted px-2 py-1 text-xs">
-                            {cap.domainId} — {cap.operations.join(', ')}
-                          </span>
-                        ))}
-                      </>
-                    ) : (
-                      <span className="italic">لا توجد قدرات محددة</span>
-                    )}
-                  </div>
+                  <FormItem>
+                    {/* A rejected PUT lands its Arabic reason here: `submit` calls
+                        setFormServerErrors with `schemaKeys: ['capabilities']`, and the
+                        replacement is rejected as a whole — no single field owns it — so
+                        it is surfaced as one assertive alert region, the same shape
+                        lifecycle-action-bar.tsx and document-detail-page.tsx use for a
+                        form-level rejection. */}
+                    <CapabilitiesSubmitError />
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                      {watchedCapabilities.length > 0 ? (
+                        <>
+                          {watchedCapabilities.map((cap) => (
+                            <span key={cap.domainId} className="rounded bg-muted px-2 py-1 text-xs">
+                              {cap.domainId} — {cap.operations.join(', ')}
+                            </span>
+                          ))}
+                        </>
+                      ) : (
+                        <span className="italic">لا توجد قدرات محددة</span>
+                      )}
+                    </div>
+                  </FormItem>
                 )}
               />
 

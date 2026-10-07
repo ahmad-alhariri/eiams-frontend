@@ -19,6 +19,16 @@ export const OPERATION_LABELS: Record<CapabilityOperation, string> = {
 
 const EMPTY_CAPABILITIES: readonly WarehouseCapability[] = []
 
+/**
+ * Shared empty result so a miss is referentially stable.
+ *
+ * `getOperationsForDomain` is consumed from render and its result is a dependency
+ * of the callers' memos; handing back a fresh `new Set()` per miss made every
+ * lookup a new reference and defeated that memoization for the common case (the
+ * overwhelmingly frequent one being "no capability row for this domain").
+ */
+const EMPTY_OPERATIONS: ReadonlySet<CapabilityOperation> = new Set<CapabilityOperation>()
+
 export interface UseWarehouseCapabilityValidationReturn {
   validationFor: (
     domainId: string | undefined,
@@ -57,8 +67,8 @@ export function useWarehouseCapabilityValidation(
   const getOperationsForDomain = useCallback(
     (domainId: string): ReadonlySet<CapabilityOperation> => {
       const warehouseMap = operationsByWarehouseDomain.get(warehouseId ?? '')
-      if (warehouseMap === undefined) return new Set<CapabilityOperation>()
-      return warehouseMap.get(domainId) ?? new Set<CapabilityOperation>()
+      if (warehouseMap === undefined) return EMPTY_OPERATIONS
+      return warehouseMap.get(domainId) ?? EMPTY_OPERATIONS
     },
     [operationsByWarehouseDomain, warehouseId],
   )
@@ -68,7 +78,13 @@ export function useWarehouseCapabilityValidation(
       if (isLoading || isError || warehouseId === undefined) {
         return { status: 'unknown' }
       }
-      const ops = getOperationsForDomain(domainId ?? '')
+      // An absent or empty domainId means the line has no material chosen yet, so
+      // there is nothing to check against. Reporting `blocked` there would paint a
+      // red "unsupported operation" under every untouched line of an open form.
+      if (domainId === undefined || domainId === '') {
+        return { status: 'unknown' }
+      }
+      const ops = getOperationsForDomain(domainId)
       if (ops.has(operation)) {
         return { status: 'supported' }
       }

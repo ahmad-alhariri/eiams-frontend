@@ -258,13 +258,26 @@ function QuantityLineRow({
                 onValueChange={(nextValue, option) => {
                   const payload = option?.payload
                   materialField.onChange(nextValue ?? '')
-                  setValue(`lines.${index}.materialNameAr`, payload?.nameAr ?? '')
-                  setValue(`lines.${index}.materialDomainId`, payload?.materialDomain.id ?? '')
-                  setValue(
-                    `lines.${index}.materialKind`,
-                    payload?.materialKind as string | undefined,
-                  )
-                  setValue(`lines.${index}.baseUnitNameAr`, payload?.unit.displayName ?? '')
+                  // Everything below is DERIVED from the payload. The optional
+                  // chain above stops at `payload`, so a material option carrying
+                  // no domain/unit reference used to THROW here and abort the rest
+                  // of the handler — which silently skipped the unit reset and left
+                  // the line posting quantity 0 against no base unit.
+                  if (payload === undefined) {
+                    setValue(`lines.${index}.materialNameAr`, '')
+                    setValue(`lines.${index}.materialDomainId`, '')
+                    setValue(`lines.${index}.materialKind`, undefined)
+                    setValue(`lines.${index}.baseUnitNameAr`, '')
+                    setValue(`lines.${index}.assetIds`, [])
+                    setValue(`lines.${index}.unitId`, undefined)
+                    setValue(`lines.${index}.conversionId`, null)
+                    setValue(`lines.${index}.baseQuantity`, undefined)
+                    return
+                  }
+                  setValue(`lines.${index}.materialNameAr`, payload.nameAr)
+                  setValue(`lines.${index}.materialDomainId`, payload.materialDomain.id)
+                  setValue(`lines.${index}.materialKind`, payload.materialKind)
+                  setValue(`lines.${index}.baseUnitNameAr`, payload.unit.displayName)
                   // D-IAR-01: a material change invalidates a previously
                   // selected asset set (they belong to the old material).
                   setValue(`lines.${index}.assetIds`, [])

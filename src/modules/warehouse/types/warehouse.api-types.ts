@@ -133,8 +133,18 @@ export interface WarehouseMaterialSetting {
   readonly rowVersion: number
 }
 
+/**
+ * `PUT /warehouses/{warehouseId}/material-settings`.
+ *
+ * `warehouseId` is carried by the ROUTE, so it is deliberately absent from the
+ * body. The mapper previously emitted `warehouseId: existing?.warehouseId ?? ''`,
+ * which for a NEW setting sent the empty string — and the backend's create
+ * request binds `[JsonRequired] Guid WarehouseId`, so the placeholder was a
+ * guaranteed rejection rather than a harmless extra field. This mirrors the
+ * `WarehouseUpdateRequest` rule: a field the route already names is not repeated
+ * in the body.
+ */
 export interface WarehouseMaterialSettingUpsertRequest {
-  readonly warehouseId: Uuid
   readonly materialId: Uuid
   readonly minQuantity?: number | null
   readonly maxQuantity?: number | null

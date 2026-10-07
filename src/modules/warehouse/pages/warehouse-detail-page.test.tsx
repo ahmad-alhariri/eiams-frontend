@@ -239,9 +239,9 @@ describe('WarehouseDetailPage', () => {
     await user.click(await screen.findByRole('button', { name: 'إدارة القدرات' }))
     const dialog = screen.getByRole('dialog', { name: 'إدارة قدرات المستودع' })
     await user.click(within(dialog).getByRole('checkbox', { name: 'Transfer' }))
-    await user.click(within(dialog).getByRole('button', { name: 'حفظ القدرات' }))
-    const confirmation = screen.getByRole('alertdialog', { name: 'تأكيد حفظ قدرات المستودع' })
-    await user.click(within(confirmation).getByRole('button', { name: 'حفظ القدرات' }))
+await user.click(within(dialog).getByRole('button', { name: 'حفظ القدرات' }))
+    const confirmation = screen.getByRole('alertdialog', { name: 'تأكيد حفظ القدرات' })
+    await user.click(within(confirmation).getByRole('button', { name: 'حفظ التغييرات' }))
 
     await waitFor(() => expect(receivedBody).not.toBeNull())
     expect(receivedBody).toEqual([
@@ -281,7 +281,7 @@ describe('WarehouseDetailPage', () => {
     await user.click(await screen.findByRole('button', { name: 'إدارة القدرات' }))
     const dialog = screen.getByRole('dialog', { name: 'إدارة قدرات المستودع' })
     await user.click(within(dialog).getByRole('button', { name: 'حفظ القدرات' }))
-    const confirmation = screen.getByRole('alertdialog', { name: 'تأكيد حفظ قدرات المستودع' })
+    const confirmation = screen.getByRole('alertdialog', { name: 'تأكيد حفظ القدرات' })
     await user.click(within(confirmation).getByRole('button', { name: 'إلغاء' }))
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
@@ -317,8 +317,8 @@ describe('WarehouseDetailPage', () => {
     await user.click(await screen.findByRole('button', { name: 'إدارة القدرات' }))
     const dialog = screen.getByRole('dialog', { name: 'إدارة قدرات المستودع' })
     await user.click(within(dialog).getByRole('button', { name: 'حفظ القدرات' }))
-    const confirmation = screen.getByRole('alertdialog', { name: 'تأكيد حفظ قدرات المستودع' })
-    await user.click(within(confirmation).getByRole('button', { name: 'حفظ القدرات' }))
+    const confirmation = screen.getByRole('alertdialog', { name: 'تأكيد حفظ القدرات' })
+    await user.click(within(confirmation).getByRole('button', { name: 'حفظ التغييرات' }))
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       'لا يمكن لهذا المستودع الاحتفاظ بالمخزون.',

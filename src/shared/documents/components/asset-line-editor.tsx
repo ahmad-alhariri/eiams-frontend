@@ -330,14 +330,24 @@ function AssetLineRow({
     }
     clearErrors(`${linePath}.materialId`)
     onMaterialIdChange(nextValue ?? '')
-    setValue(`${linePath}.materialNameAr`, payload?.nameAr ?? '')
-    setValue(`${linePath}.materialDomainId`, payload?.materialDomain.id ?? '')
-    setValue(`${linePath}.baseUnitId`, payload?.unit.id ?? '')
-    setValue(`${linePath}.baseUnitNameAr`, payload?.unit.displayName ?? '')
-    if (payload !== undefined) {
-      setValue(`${linePath}.assetInputs`, [createEmptyAssetInput()])
-      setValue(`${linePath}.quantity`, 1)
+    // Everything below is DERIVED from the payload. The optional chain on
+    // `option?.payload` stops at `payload`, so an option carrying no
+    // domain/unit reference used to THROW here and abort the rest of the
+    // handler — skipping the quantity/asset seed and leaving the asset line
+    // posting quantity 0.
+    if (payload === undefined) {
+      setValue(`${linePath}.materialNameAr`, '')
+      setValue(`${linePath}.materialDomainId`, '')
+      setValue(`${linePath}.baseUnitId`, '')
+      setValue(`${linePath}.baseUnitNameAr`, '')
+      return
     }
+    setValue(`${linePath}.materialNameAr`, payload.nameAr)
+    setValue(`${linePath}.materialDomainId`, payload.materialDomain.id)
+    setValue(`${linePath}.baseUnitId`, payload.unit.id)
+    setValue(`${linePath}.baseUnitNameAr`, payload.unit.displayName)
+    setValue(`${linePath}.assetInputs`, [createEmptyAssetInput()])
+    setValue(`${linePath}.quantity`, 1)
   }
 
   const addUnit = () => {

@@ -52,13 +52,18 @@ function toNullableQuantity(value: string | undefined): number | null {
   return Number(value)
 }
 
-/** Maps form-owned values to the exact contract request, including concurrency. */
+/** Maps form-owned values to the exact contract request, including concurrency.
+ *
+ * `warehouseId` is NOT set here: it is the route parameter
+ * (`PUT /warehouses/{warehouseId}/material-settings`) and the contract body
+ * omits it. The previous `existing?.warehouseId ?? ''` sent an empty string for a
+ * new setting, which the backend's `[JsonRequired] Guid WarehouseId` rejects.
+ */
 export function toWarehouseMaterialSettingRequest(
   values: WarehouseMaterialSettingFormValues,
   existing: WarehouseMaterialSetting | null,
 ): WarehouseMaterialSettingUpsertRequest {
   return {
-    warehouseId: existing?.warehouseId ?? '',
     materialId: values.materialId,
     minQuantity: toNullableQuantity(values.minQuantity),
     maxQuantity: toNullableQuantity(values.maxQuantity),

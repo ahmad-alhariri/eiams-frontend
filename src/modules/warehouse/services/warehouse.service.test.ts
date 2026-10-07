@@ -154,8 +154,10 @@ describe('WarehouseService', () => {
         rowVersion: capability.rowVersion,
       },
     ]
+    // The material-setting body carries NO `warehouseId`: the route already names
+    // the warehouse (`PUT /warehouses/{warehouseId}/material-settings`) and the
+    // request contract omits it.
     const settingRequest: Parameters<typeof service.upsertWarehouseMaterialSetting>[1] = {
-      warehouseId: setting.warehouseId,
       materialId: setting.materialId,
       rowVersion: setting.rowVersion,
       status: setting.status,
