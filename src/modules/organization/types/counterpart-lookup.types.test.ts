@@ -4,24 +4,24 @@ import {
   counterpartStatusLabelAr,
   validateCounterpartForWrite,
 } from '@/modules/organization/types/counterpart-lookup.types'
-import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
+import type { CounterpartResolution } from '@/modules/organization/types/counterpart-lookup.types'
 import { fixtureUuid } from '@/test/msw/factories'
 
-function createCounterpart(status: 'Active' | 'Inactive'): ExternalParty {
+function createCounterpart(status: 'Active' | 'Inactive'): CounterpartResolution {
   return {
-    externalPartyId: fixtureUuid(63),
-    nameAr: 'الجهة التجريبية',
-    code: ' ExtTest',
+    type: 'External',
+    id: fixtureUuid(63),
+    displayName: 'الجهة التجريبية',
+    secondaryLabelAr: null,
     status,
-    rowVersion: 1,
-  } as ExternalParty
+  }
 }
 
 describe('counterpart write validation', () => {
   it('allows active server choices and blocks missing or inactive choices in Arabic', () => {
     expect(validateCounterpartForWrite(createCounterpart('Active'))).toEqual({
       isValid: true,
-      reference: { type: 'ExternalParty', id: expect.any(String) },
+      reference: { type: 'External', id: expect.any(String) },
     })
     expect(validateCounterpartForWrite(undefined)).toEqual({
       isValid: false,

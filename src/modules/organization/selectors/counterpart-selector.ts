@@ -1,4 +1,4 @@
-import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
+import type { CounterpartResolution } from '@/modules/organization/types/counterpart-lookup.types'
 import {
   createEntitySelectorAdapter,
   useScopedEntityOptions,
@@ -7,10 +7,20 @@ import {
   type EntitySelectorResult,
 } from '@/shared/selectors/selector-adapter'
 
-export type CounterpartLoader = EntityLoader<ExternalParty>
+export type CounterpartLoader = EntityLoader<CounterpartResolution>
 
-function counterpartLabel(counterpart: ExternalParty): string {
-  return counterpart.code ? `${counterpart.nameAr} — ${counterpart.code}` : counterpart.nameAr
+/**
+ * Compose the AsyncSelect option label from the wire fields.
+ *
+ * `secondaryLabelAr` is the operation-specific hint the backend attaches —
+ * job title for an Employee, location for a Site, etc. — and surfaces as a
+ * subtitle so the user can distinguish two same-named counterparts
+ * (e.g. two Sites named "المستودع الرئيسي" in different governorates).
+ */
+function counterpartLabel(counterpart: CounterpartResolution): string {
+  return counterpart.secondaryLabelAr
+    ? `${counterpart.displayName} — ${counterpart.secondaryLabelAr}`
+    : counterpart.displayName
 }
 
 /**
@@ -18,10 +28,10 @@ function counterpartLabel(counterpart: ExternalParty): string {
  * contract, while the status guard prevents an unexpected stale option from
  * becoming a new write choice.
  */
-export const counterpartSelectorAdapter: EntitySelectorAdapter<ExternalParty> =
-  createEntitySelectorAdapter<ExternalParty>({
+export const counterpartSelectorAdapter: EntitySelectorAdapter<CounterpartResolution> =
+  createEntitySelectorAdapter<CounterpartResolution>({
     toOption: (counterpart) => ({
-      value: counterpart.externalPartyId,
+      value: counterpart.id,
       label: counterpartLabel(counterpart),
       disabled: counterpart.status !== 'Active',
       payload: counterpart,
@@ -30,7 +40,7 @@ export const counterpartSelectorAdapter: EntitySelectorAdapter<ExternalParty> =
 
 export function useCounterpartSelector(
   loadCounterparts: CounterpartLoader,
-): EntitySelectorResult<ExternalParty> {
+): EntitySelectorResult<CounterpartResolution> {
   const loadOptions = useScopedEntityOptions(counterpartSelectorAdapter, loadCounterparts)
   return { options: counterpartSelectorAdapter, loadOptions }
 }

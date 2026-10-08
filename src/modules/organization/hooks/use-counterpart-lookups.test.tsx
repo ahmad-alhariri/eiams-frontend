@@ -17,16 +17,16 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 }))
 
 import { useActiveCounterpartOptions } from '@/modules/organization/hooks/use-counterpart-lookups'
-import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
+import type { CounterpartResolution } from '@/modules/organization/types/counterpart-lookup.types'
 
 const API_BASE_URL = '/api/v1'
 
 /**
  * `useActiveCounterpartOptions` delegates to `counterpartLookupService`, which
- * reads the REAL `GET /external-parties` route. The previous handler pointed at
- * a fictional `/organization/external-parties/active/search` path that no
- * production code and no backend route (`[Route("external-parties")]`) uses, so
- * it never matched. It also rendered the hook with no `QueryClientProvider`,
+ * reads the REAL `GET /counterparts` route (operation=Issue, type=Employee).
+ * The previous handler pointed at a fictional `/organization/external-parties/
+ * active/search` path that no production code and no backend route uses, so it
+ * never matched. It also rendered the hook with no `QueryClientProvider`,
  * which threw "No QueryClient set" before any assertion ran.
  */
 function createWrapper() {
@@ -36,20 +36,20 @@ function createWrapper() {
   }
 }
 
-const active: ExternalParty = {
-  externalPartyId: 'aaaaaaaa-4aaa-0aaa-8aaa-aaaaaaaaaaaa',
-  code: 'EXT-001',
-  nameAr: 'أحمد محمد',
+const active: CounterpartResolution = {
+  type: 'Employee',
+  id: 'aaaaaaaa-4aaa-0aaa-8aaa-aaaaaaaaaaaa',
+  displayName: 'أحمد محمد',
+  secondaryLabelAr: 'مهندس مدني',
   status: 'Active',
-  rowVersion: 0,
 }
 
-const archived: ExternalParty = {
-  externalPartyId: 'bbbbbbbb-4bbb-0bbb-8bbb-bbbbbbbbbbbb',
-  code: 'EXT-002',
-  nameAr: 'جهة مؤرشفة',
+const archived: CounterpartResolution = {
+  type: 'Employee',
+  id: 'bbbbbbbb-4bbb-0bbb-8bbb-bbbbbbbbbbbb',
+  displayName: 'جهة مؤرشفة',
+  secondaryLabelAr: null,
   status: 'Inactive',
-  rowVersion: 3,
 }
 
 afterEach(() => {
@@ -61,41 +61,46 @@ describe('use-active-counterpart-options', () => {
     const requestedQueries: Record<string, string>[] = []
 
     server.use(
-      http.get(`${API_BASE_URL}/external-parties`, ({ request }) => {
+      http.get(`${API_BASE_URL}/counterparts`, ({ request }) => {
         requestedQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-        return okPageJson([active], { page: 1, pageSize: 100, totalCount: 1, totalPages: 1 })
+        return okPageJson([active], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
       }),
     )
 
-    const { result } = renderHook(() => useActiveCounterpartOptions(), {
-      wrapper: createWrapper(),
-    })
+    const { result } = renderHook(
+      () => useActiveCounterpartOptions({ operation: 'Issue', type: 'Employee' }),
+      { wrapper: createWrapper() },
+    )
 
     await waitFor(() => expect(result.current.loadOptions).toBeInstanceOf(Function))
     const options = await result.current.loadOptions('أحمد')
 
     expect(options).toEqual([
       expect.objectContaining({
-        value: active.externalPartyId,
-        label: 'أحمد محمد — EXT-001',
+        value: active.id,
+        label: 'أحمد محمد — مهندس مدني',
         disabled: false,
       }),
     ])
     expect(requestedQueries.at(-1)?.['search']).toBe('أحمد')
-    // The write selector asks for Active rows server-side and narrows to ten.
-    expect(requestedQueries.at(-1)?.['pageSize']).toBe('100')
+    expect(requestedQueries.at(-1)?.['operation']).toBe('Issue')
+    expect(requestedQueries.at(-1)?.['type']).toBe('Employee')
+    // The write selector asks for ten records, the default page size for a
+    // single debounced search; the backend's own cap is wider.
+    expect(requestedQueries.at(-1)?.['pageSize']).toBe('10')
   })
 
   it('returns an empty option list when no counterpart matches', async () => {
     server.use(
-      http.get(`${API_BASE_URL}/external-parties`, () =>
-        okPageJson([], { page: 1, pageSize: 100, totalCount: 0, totalPages: 0 }),
+      http.get(`${API_BASE_URL}/counterparts`, () =>
+        okPageJson([], { page: 1, pageSize: 10, totalCount: 0, totalPages: 0 }),
       ),
     )
 
-    const { result } = renderHook(() => useActiveCounterpartOptions(), {
-      wrapper: createWrapper(),
-    })
+    const { result } = renderHook(
+      () => useActiveCounterpartOptions({ operation: 'Issue', type: 'Employee' }),
+      { wrapper: createWrapper() },
+    )
 
     await waitFor(() => expect(result.current.loadOptions).toBeInstanceOf(Function))
     await expect(result.current.loadOptions('xyz')).resolves.toEqual([])
@@ -103,18 +108,19 @@ describe('use-active-counterpart-options', () => {
 
   it('keeps an archived counterpart out of the active write choices', async () => {
     server.use(
-      http.get(`${API_BASE_URL}/external-parties`, () =>
-        okPageJson([active, archived], { page: 1, pageSize: 100, totalCount: 2, totalPages: 1 }),
+      http.get(`${API_BASE_URL}/counterparts`, () =>
+        okPageJson([active, archived], { page: 1, pageSize: 10, totalCount: 2, totalPages: 1 }),
       ),
     )
 
-    const { result } = renderHook(() => useActiveCounterpartOptions(), {
-      wrapper: createWrapper(),
-    })
+    const { result } = renderHook(
+      () => useActiveCounterpartOptions({ operation: 'Issue', type: 'Employee' }),
+      { wrapper: createWrapper() },
+    )
 
     await waitFor(() => expect(result.current.loadOptions).toBeInstanceOf(Function))
     const options = await result.current.loadOptions('')
 
-    expect(options.map((option) => option.value)).toEqual([active.externalPartyId])
+    expect(options.map((option) => option.value)).toEqual([active.id])
   })
 })

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
+import type { CounterpartResolution } from '@/modules/organization/types/counterpart-lookup.types'
 import { assignCustodySchema } from '@/modules/custody/schemas/assign-custody.schema'
 import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
@@ -43,20 +43,19 @@ const custody = {
 } as const
 
 /**
- * The employee choice is a `GET /external-parties` row in the handwritten
- * organization contract, not a generated `CounterpartOption`: the shared
- * `CounterpartLookupService` reads `externalPartyId` / `nameAr` / `status`, and
+ * The employee choice is a `GET /counterparts?operation=Issue&type=Employee`
+ * row in the live wire (`CounterpartResolution`), not a generated
+ * `CounterpartOption`: the shared `CounterpartLookupService` reads
+ * `type` / `id` / `displayName` / `secondaryLabelAr` / `status`, and
  * `counterpartSelectorAdapter` builds the selectable option from exactly those
  * fields. A generated-shaped row is disabled-or-absent rather than selectable.
  */
-const EMPLOYEE: ExternalParty = {
-  externalPartyId: EMPLOYEE_ID,
-  nameAr: 'محمد السيد',
-  code: null,
-  contactInfo: null,
-  notes: null,
+const EMPLOYEE: CounterpartResolution = {
+  type: 'Employee',
+  id: EMPLOYEE_ID,
+  displayName: 'محمد السيد',
+  secondaryLabelAr: null,
   status: 'Active',
-  rowVersion: 1,
 }
 
 /**
@@ -68,10 +67,15 @@ const EMPLOYEE_SEARCH_TERM = 'محمد'
 
 function useEmployeeHandler() {
   server.use(
-    http.get(`${API_BASE_URL}/external-parties`, ({ request }) => {
+    http.get(`${API_BASE_URL}/counterparts`, ({ request }) => {
       const url = new URL(request.url)
+      // The custody holder is always an Employee for the Issue operation; the
+      // backend validator restricts `type` against `operation`, so the wire
+      // query carries both.
+      expect(url.searchParams.get('operation')).toBe('Issue')
+      expect(url.searchParams.get('type')).toBe('Employee')
       expect(url.searchParams.get('search')).toBe(EMPLOYEE_SEARCH_TERM)
-      return okPageJson([EMPLOYEE], { page: 1, pageSize: 100, totalCount: 1, totalPages: 1 })
+      return okPageJson([EMPLOYEE], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
     }),
   )
 }

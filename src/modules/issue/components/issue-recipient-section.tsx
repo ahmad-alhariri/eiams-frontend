@@ -9,8 +9,10 @@ import {
   type IssueInfoFormValues,
   type IssueRecipientType,
 } from '@/modules/issue/schemas/issue-info.schema'
-import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
-import type { CounterpartReference } from '@/modules/organization/types/counterpart-lookup.types'
+import type {
+  CounterpartReference,
+  CounterpartResolution,
+} from '@/modules/organization/types/counterpart-lookup.types'
 import {
   FormControl,
   FormField,
@@ -167,7 +169,7 @@ export function IssueRecipientSection({ disabled = false }: IssueRecipientSectio
                     form.setValue('petal.issueTo.recipientId', reference?.id ?? '', {
                       shouldValidate: true,
                     })
-                    form.setValue('petal.issueToDisplayName', option?.nameAr ?? '', {
+                    form.setValue('petal.issueToDisplayName', option?.displayName ?? '', {
                       shouldValidate: false,
                     })
                   }}
@@ -206,7 +208,10 @@ interface RecipientSelectorControlProps {
   disabled: boolean
   value: string
   recipientType: IssueRecipientType
-  onValueChange: (reference: CounterpartReference | null, option: ExternalParty | undefined) => void
+  onValueChange: (
+    reference: CounterpartReference | null,
+    option: CounterpartResolution | undefined,
+  ) => void
 }
 
 /**
@@ -224,7 +229,7 @@ function RecipientSelectorControl({
   const { error, formDescriptionId, formItemId, formMessageId, required } = useFormField()
   return (
     <CounterpartSelect
-      type={recipientType}
+      recipientType={recipientType}
       value={value}
       disabled={disabled}
       inputProps={{
