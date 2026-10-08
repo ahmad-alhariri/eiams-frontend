@@ -1,44 +1,84 @@
-import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
 import type { ApiTransport } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 
-const EXTERNAL_PARTIES_PATH = '/external-parties'
+import type {
+  CounterpartOperation,
+  CounterpartReference,
+  CounterpartResolution,
+  CounterpartType,
+  SearchCounterpartsQuery,
+} from '@/modules/organization/types/counterpart-lookup.types'
 
-export type CounterpartReference = { readonly type: 'ExternalParty'; readonly id: string }
+/**
+ * Backend polymorphic-counterpart routes (live API source of truth).
+ *
+ *  - `GET /counterparts`              → CounterpartLookupService.searchCounterparts
+ *  - `GET /counterparts/{type}/{id}`  → CounterpartLookupService.resolveCounterpart
+ *
+ * Replaces the previous `CounterpartLookupService` shape, which targeted
+ * `/external-parties` for a record the backend does not serve on that route
+ * (the `/external-parties` controller serves the admin ExternalParty CRUD
+ * aggregate, not the polymorphic counterpart write-flow read). The previous
+ * call returned zero usable options because the wire produced an
+ * `ExternalParty` and the consuming UI expected a `CounterpartResolution`.
+ */
+const COUNTERPARTS_PATH = '/counterparts'
+
+export type { CounterpartReference }
 
 export interface CounterpartLookupService {
-  searchCounterparts: (query: {
-    search?: string
-    status?: 'Active' | 'Inactive'
-  }) => Promise<readonly ExternalParty[]>
-  resolveCounterpart: (reference: CounterpartReference | string) => Promise<ExternalParty>
+  /** `GET /counterparts` — `operation` REQUIRED, `type` validator-restricted. */
+  searchCounterparts: (
+    query: Omit<SearchCounterpartsQuery, 'page' | 'pageSize'> & { pageSize?: number },
+  ) => Promise<readonly CounterpartResolution[]>
+  /** `GET /counterparts/{type}/{counterpartId}` */
+  resolveCounterpart: (reference: CounterpartReference | string) => Promise<CounterpartResolution>
 }
 
 export function createCounterpartLookupService(transport: ApiTransport): CounterpartLookupService {
   return {
     async searchCounterparts({
       search,
-      status,
+      operation,
+      type,
+      pageSize,
     }: {
       search?: string
-      status?: 'Active' | 'Inactive'
+      operation: CounterpartOperation
+      type?: CounterpartType
+      pageSize?: number
     }) {
-      const result = await transport.requestPage<ExternalParty>({
-        path: EXTERNAL_PARTIES_PATH,
+      // The backend handler accepts the `page` parameter through its
+      // `PaginationQueryParameters` binding; we send `page: 1` (one-based per
+      // D-INT-02) and rely on the server-side `SearchActiveAsync` to filter
+      // to Active records. The handler filters out inactive counterparts
+      // server-side (the result items will never carry `status: 'Inactive'`).
+      const result = await transport.requestPage<CounterpartResolution>({
+        path: COUNTERPARTS_PATH,
         method: 'GET',
         query: {
-          ...(search !== undefined ? { search } : {}),
-          ...(status !== undefined ? { status } : {}),
-          pageSize: 100,
+          ...(search !== undefined && search !== '' ? { search } : {}),
+          operation,
+          ...(type !== undefined ? { type } : {}),
+          page: 1,
+          pageSize: pageSize ?? 10,
         } as Record<string, string | number | boolean | undefined>,
       })
       return result.items
     },
 
     async resolveCounterpart(reference) {
-      const id = typeof reference === 'string' ? reference : reference.id
-      const response = await transport.request<ExternalParty>({
-        path: `${EXTERNAL_PARTIES_PATH}/${encodeURIComponent(id)}`,
+      // `reference` may be a bare string (a previous call site) or the
+      // structured `{type, id}` form. The bare-string form was the legacy
+      // `ExternalParty` lookup which we no longer support — callers should
+      // pass `{type, id}` from the resolution result of `searchCounterparts`.
+      if (typeof reference === 'string') {
+        throw new Error(
+          'resolveCounterpart requires a structured CounterpartReference {type, id}; bare-id resolution was retired when the route moved to /counterparts/{type}/{counterpartId}.',
+        )
+      }
+      const response = await transport.request<CounterpartResolution>({
+        path: `${COUNTERPARTS_PATH}/${encodeURIComponent(reference.type)}/${encodeURIComponent(reference.id)}`,
         method: 'GET',
       })
       return response
