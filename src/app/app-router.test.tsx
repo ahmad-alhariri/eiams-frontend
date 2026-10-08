@@ -1,5 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { AppProviders } from '@/app/providers/app-providers'
@@ -9,6 +9,7 @@ import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { queryClient } from '@/shared/services/query.client'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { okJson } from '@/test/msw/envelope'
 import { createSession, createSessionScope } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
@@ -27,7 +28,12 @@ function signIn() {
     useAuthSessionStore.setState({ status: 'authenticated' })
   })
   server.use(
-    http.get(`${API_BASE_URL}/auth/session`, () => HttpResponse.json(authenticatedSession())),
+    // `okJson`, not a bare `HttpResponse.json(session)`. `auth.service.ts` reads
+    // this through `ApiTransport.request`, which unwraps `response.data.data` —
+    // so a bare payload made `session` `undefined` and this handler was serving
+    // a shape the code under test cannot read. It passed only because the
+    // store was seeded directly two lines above, bypassing the fetch entirely.
+    http.get(`${API_BASE_URL}/auth/session`, () => okJson(authenticatedSession())),
   )
 }
 

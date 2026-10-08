@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { useCreateMaterialMutation } from '@/modules/catalog/hooks/use-catalog-mutations'
 import { toMaterialRequest } from '@/modules/catalog/schemas/material.schemas'
+import { apiJson } from '@/test/msw/envelope'
 import { createMaterial, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
@@ -41,7 +42,10 @@ describe('material core mutation integration', () => {
     server.use(
       http.post(`${API_BASE_URL}/catalog/materials`, async ({ request: httpRequest }) => {
         received = await httpRequest.json()
-        return HttpResponse.json(material, { status: 201 })
+        // `apiJson` with an explicit 2xx, so the classification is by STATUS and
+        // not by key-name guessing — `Material` legitimately owns a business
+        // `code` property, and the shape heuristic would read it as an error.
+        return apiJson(material, { status: 201 })
       }),
     )
 

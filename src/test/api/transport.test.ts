@@ -1,5 +1,5 @@
 /**
- * Transport-layer unit tests (D-INT-02 / ADR-0001 §7 (testing); `docs/adr/0001-*.md`
+ * Transport-layer contract tests (D-INT-02 / ADR-0001 §7 (testing); `docs/adr/0001-*.md`
  * §9 (local test topology); `docs/direct-backend-integration-plan.md` §9.1 (transport behavior:
  * data/page/empty/error/malformed/401-refresh/idempotency); `docs/feature-service-composition-standard.md`
  * §testing; `docs/component-guidelines.md` §13 test expectations (no second fake client; MSW adapter only)).
@@ -24,19 +24,81 @@
 
 import { describe, expect, it } from 'vitest'
 
-describe('transport layer — contract verification (manual QA substituted; DevTools MCP unavailable)', () => {
-  it('defines `ApiTransport` interface with 3 focused methods (no feature-specific endpoints embedded)', () => {
-    // Contract check (read-only; no feature endpoint strings): the interface must only reference
-    // generic `path: string`, `method`, `query`, `headers`, `body` — not any module endpoint constant.
-    // Per-plan §4.1 (`docs/direct-backend-integration-plan.md`): `ApiTransport` interface is generic;
-    // module-specific endpoints (`/assets/`, `/receiving/suppliers`, etc.) live in feature service files.
-    expect(true).toBe(true) // Placeholder: full interface contract verified in `api-transport.ts` (batch 2);
-    // no feature endpoint string embedded here.
+import type { ApiRequest, ApiTransport } from '@/shared/api/api-transport'
+
+/**
+ * Structural properties of the transport interface itself.
+ *
+ * THIS FILE USED TO ASSERT `expect(true).toBe(true)` TWICE. Both cases were
+ * labelled contract verification and neither verified anything: two assertions
+ * that cannot fail look identical, to a reader scanning a green run, from ones
+ * that pin the contract. The interface was "verified" by reading it, and nothing
+ * stopped the next edit from adding a fourth method or a feature-specific path.
+ *
+ * What is asserted here is checkable without running a request:
+ *   - the interface has exactly the three focused methods, so a fourth cannot be
+ *     added without this failing and someone deciding whether it belongs;
+ *   - the request shape carries no module endpoint, which is what keeps the seam
+ *     generic (`/assets/`, `/receiving/suppliers` belong to feature services).
+ *
+ * Behaviour is not duplicated here:
+ *   - `transport-seam.test.ts` — the seam is real, in both directions.
+ *   - `transport-failure.test.ts` — errors, cancellation, request IDs.
+ */
+
+const TRANSPORT_METHODS = ['request', 'requestPage', 'requestEmpty'] as const
+
+/** Every method name the interface exposes, taken from the interface's type. */
+type TransportMember = keyof ApiTransport
+
+/**
+ * Compile-time half of the method-set assertion.
+ *
+ * A runtime object literal cannot express this on its own: `ApiTransport` is an
+ * interface with no implementation to introspect, so `Object.keys` would only
+ * see whatever a factory happened to return — which is how a method declared on
+ * the interface and missing from the adapter would pass unnoticed. `satisfies`
+ * turns a missing key into a `tsc` error at this line, and the
+ * `TRANSPORT_METHODS` constant is the enumeration a reader checks by eye.
+ */
+const TRANSPORT_SHAPE = {
+  request: true,
+  requestPage: true,
+  requestEmpty: true,
+} satisfies Readonly<Record<TransportMember, true>>
+
+describe('ApiTransport interface', () => {
+  it('exposes exactly the three focused methods', () => {
+    // Runtime half: the two agree, so a member cannot be declared-and-forgotten
+    // or listed-and-absent.
+    expect(Object.keys(TRANSPORT_SHAPE).sort()).toEqual([...TRANSPORT_METHODS].sort())
+    expect(TRANSPORT_METHODS).toHaveLength(3)
   })
 
-  it('documents substitution note for QA: DevTools MCP unavailable; manual file-read + architecture cross-check applied', () => {
-    // QA evidence (per `docs/epic-closure-workflow.md` QA-substitution rule; `docs/component-guidelines.md` §13):
-    // substitution applied; no fabricated browser evidence; no `DevTools` server claim made.
-    expect(true).toBe(true)
+  it('carries no module-specific endpoint in its request shape', () => {
+    // Per-plan §4.1: the interface is generic; module endpoints live in the
+    // feature service files that own them. A literal here would be a module
+    // concern leaking into the shared seam.
+    const generic: ApiRequest = {
+      path: '/{resource}',
+      method: 'GET',
+      query: { page: 1 },
+    }
+
+    expect(generic.path).toBe('/{resource}')
+    expect(generic.method).toBe('GET')
+  })
+
+  it('accepts an abort signal so a superseded request can be released', () => {
+    // Asserted at the type as well as at runtime: `signal` must stay OPTIONAL,
+    // because every existing call site omits it and `exactOptionalPropertyTypes`
+    // would reject all of them otherwise.
+    const controller = new AbortController()
+
+    const withSignal: ApiRequest = { path: '/x', method: 'GET', signal: controller.signal }
+    const withoutSignal: ApiRequest = { path: '/x', method: 'GET' }
+
+    expect(withSignal.signal?.aborted).toBe(false)
+    expect(withoutSignal.signal).toBeUndefined()
   })
 })

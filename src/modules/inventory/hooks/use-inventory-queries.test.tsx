@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -156,11 +156,16 @@ describe('inventory query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances/:balanceId`, () => {
         requestCount += 1
-        return HttpResponse.json(wireInventoryBalance())
+        // `okJson`, not a bare payload: `ApiTransport.request` unwraps
+        // `response.data.data`, so a bare body arrives `undefined` and the
+        // assertion below would be reading `undefined` and comparing it to a
+        // fixture — which is how a whole hook can pass against a shape the API
+        // never sends.
+        return okJson(wireInventoryBalance())
       }),
       http.get(`${API_BASE_URL}/inventory/movements/:movementId`, () => {
         requestCount += 1
-        return HttpResponse.json(wireStockMovement())
+        return okJson(wireStockMovement())
       }),
     )
 

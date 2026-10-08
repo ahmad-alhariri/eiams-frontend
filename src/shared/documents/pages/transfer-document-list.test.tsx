@@ -1,17 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import DocumentListPage from './document-list-page'
 import {
-  createPage,
   createSessionRole,
   createSessionScope,
   createSessionUser,
   createWarehouseDocument,
 } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
@@ -73,9 +73,16 @@ describe('Transfer documents list (e17-t02)', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
         received.documentType = new URL(request.url).searchParams.get('documentType')
-        return HttpResponse.json(createPage([transferDocument]))
+        // `okPageJson`, NOT `HttpResponse.json(createPage([...]))`.
+        // `createPage` from factories returns a UI page (`{items, meta}`); the
+        // transport reads the wire envelope, where the rows sit under `data`
+        // and the counters are snake_case siblings of it. A `createPage` body
+        // makes `requestPage` see `undefined` items and throw on the next
+        // `.page` access, which is the failure mode recorded in
+        // `transport-seam.test.ts`.
+        return okPageJson([transferDocument])
       }),
-      http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )
 
     render(<DocumentListPage />, {

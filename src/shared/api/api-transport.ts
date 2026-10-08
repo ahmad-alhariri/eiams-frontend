@@ -6,6 +6,21 @@ export interface ApiRequest<TBody = unknown> {
   readonly query?: Readonly<Record<string, string | number | boolean | undefined>>
   readonly headers?: Readonly<Record<string, string>>
   readonly body?: Readonly<TBody>
+  /**
+   * Aborts the request when the caller can no longer use the answer.
+   *
+   * Added for `eiams-frontend-whhu.13`, whose acceptance criteria name
+   * cancellation, and it existed nowhere before: `ApiRequest` had no way to
+   * cancel, so a TanStack Query unmount or a superseded keystroke could not
+   * release the socket. `useQuery` already receives an `AbortSignal` in its
+   * context and discards it, because no service could accept one.
+   *
+   * Axios has supported `signal` since 0.22 and rejects with
+   * `CanceledError` rather than resolving a partial body, which is the
+   * behaviour wanted here: a cancelled read must not resolve to data the
+   * caller has already discarded.
+   */
+  readonly signal?: AbortSignal
 }
 
 export interface ApiTransport {

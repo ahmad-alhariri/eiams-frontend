@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
-import { okJson } from '@/test/msw/envelope'
+import { errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -145,7 +145,7 @@ describe('shared API client', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, () => {
         protectedCalls += 1
-        return HttpResponse.json({ code: 'auth.unauthorized' }, { status: 401 })
+        return errJson(401, { code: 'AUTHENTICATION_REQUIRED' })
       }),
       http.post(`${API_BASE_URL}/auth/refresh`, () => {
         refreshCalls += 1
@@ -179,7 +179,7 @@ describe('shared API client', () => {
       }),
       http.post(`${API_BASE_URL}/auth/refresh`, () => {
         refreshCalls += 1
-        return HttpResponse.json({ code: 'auth.session_expired' }, { status: 401 })
+        return errJson(401, { code: 'AUTHENTICATION_REQUIRED' })
       }),
       http.get(`${API_BASE_URL}/reports/dashboard`, ({ request }) => {
         observedAuthorization.push(request.headers.get('Authorization'))
@@ -208,11 +208,11 @@ describe('shared API client', () => {
 
     server.use(
       http.post(`${API_BASE_URL}/auth/login`, () => {
-        return HttpResponse.json({ code: 'auth.invalid_credentials' }, { status: 401 })
+        return errJson(401, { code: 'AUTHENTICATION_REQUIRED' })
       }),
       http.post(`${API_BASE_URL}/auth/refresh`, () => {
         refreshCalls += 1
-        return HttpResponse.json({ code: 'auth.session_expired' }, { status: 401 })
+        return errJson(401, { code: 'AUTHENTICATION_REQUIRED' })
       }),
     )
 
@@ -236,7 +236,7 @@ describe('shared API client', () => {
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, ({ request }) => {
         observedAuthorization.push(request.headers.get('Authorization'))
-        return HttpResponse.json({ code: 'auth.permission_denied' }, { status: 403 })
+        return errJson(403, { code: 'AUTHORIZATION_FORBIDDEN' })
       }),
       http.post(`${API_BASE_URL}/auth/refresh`, () => {
         refreshCalls += 1

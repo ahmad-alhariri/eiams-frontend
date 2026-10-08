@@ -131,6 +131,15 @@ const REQUEST: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'تعذر إتمام العملية حالياً.',
     detailAr: 'حاول مجدداً بعد قليل، أو تواصل مع الدعم الفني إذا استمرت المشكلة.',
   },
+  // Frontend-SYNTHESIZED, not emitted by the API: `api.client.ts` turns a
+  // non-JSON response (a proxy answering `200 text/html`) into a 502 carrying
+  // this code, because there is no wire code to read. It needs its own Arabic
+  // or the failure degrades to the generic `status >= 500` string, which blames
+  // the server for what is more often a routing problem.
+  GATEWAY_UNEXPECTED_RESPONSE: {
+    titleAr: 'استجابة الخدمة غير صالحة.',
+    detailAr: 'لم تُرجع الخدمة البيانات المتوقعة. تحقق من إعدادات الخادم ثم أعد المحاولة.',
+  },
   SERVICE_UNAVAILABLE: {
     titleAr: 'الخدمة غير متاحة مؤقتاً. حاول مجدداً بعد قليل.',
     detailAr: null,
