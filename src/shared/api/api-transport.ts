@@ -23,6 +23,42 @@ export interface ApiRequest<TBody = unknown> {
   readonly signal?: AbortSignal
 }
 
+/**
+ * The per-call context a service read may accept, so a caller can cancel it.
+ *
+ * WHY THIS EXISTS RATHER THAN A SIGNAL ON EVERY METHOD SIGNATURE. TanStack Query
+ * hands every `queryFn` an `AbortSignal` that is aborted the moment the query is
+ * cancelled or its observer unmounts. Nothing in this repository could accept
+ * one: `ApiRequest` had no `signal`, so the signal every query was already
+ * generating was discarded at the `queryFn` boundary. Reads therefore kept
+ * running after the component that wanted them was gone.
+ *
+ * It is a context OBJECT rather than a bare second `signal` parameter so that
+ * `exactOptionalPropertyTypes` accepts an absent context from the ~50 existing
+ * call sites and test invocations that pass only the query. Widening those to
+ * `(query, signal)` would have forced an edit at every one of them for no
+ * behavioural gain, and a mechanical ripple across every module is the failure
+ * mode this seam exists to avoid.
+ *
+ * MUTATIONS DELIBERATELY DO NOT TAKE ONE. A half-applied document post is worse
+ * than a wasted request, so a mutation must not be cancelable by a caller that
+ * no longer wants to wait for it. Only reads are cancellable.
+ */
+export interface RequestContext {
+  readonly signal?: AbortSignal
+}
+
+/**
+ * Projects a context onto the `signal` key of an `ApiRequest`.
+ *
+ * Needed because `exactOptionalPropertyTypes` forbids assigning `undefined` to
+ * an optional property, so `signal: context?.signal` does not compile and the
+ * service cannot simply spell the field out at each call site.
+ */
+export function withSignal(context?: RequestContext): { readonly signal?: AbortSignal } {
+  return context?.signal === undefined ? {} : { signal: context.signal }
+}
+
 export interface ApiTransport {
   /**
    * Resolves to the PAYLOAD.

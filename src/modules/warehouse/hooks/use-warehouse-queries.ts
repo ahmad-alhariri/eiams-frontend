@@ -43,6 +43,12 @@ function useActiveScopeCacheKey() {
 // exports had zero importers; the copy is what kept these query hooks calling
 // an empty transport at runtime. Do not reintroduce a local instance — inject
 // through `setWarehouseService` in the service module instead.
+//
+// CANCELLATION. Every `queryFn` below destructures the `signal` TanStack Query
+// supplies and forwards it to the service as a `RequestContext`. Querying used
+// to discard that signal, so a warehouse list kept resolving after the page
+// that wanted it was gone. This is the tracer pattern the other module hooks
+// copy: reads forward the signal, mutations never do.
 
 export function useWarehousesQuery(query: ListWarehousesQuery = EMPTY_QUERY) {
   const scope = useActiveScopeCacheKey()
@@ -51,7 +57,7 @@ export function useWarehousesQuery(query: ListWarehousesQuery = EMPTY_QUERY) {
       scope === undefined
         ? queryKeys.public(WAREHOUSE_RESOURCE, 'warehouses', query)
         : warehouseQueryKeys.warehouses(scope, query),
-    queryFn: () => warehouseService.listWarehouses(query),
+    queryFn: ({ signal }) => warehouseService.listWarehouses(query, { signal }),
     enabled: scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -64,7 +70,7 @@ export function useWarehouseQuery(warehouseId: string | undefined) {
       scope === undefined || warehouseId === undefined
         ? queryKeys.public(WAREHOUSE_RESOURCE, 'warehouses', warehouseId)
         : warehouseQueryKeys.warehouse(scope, warehouseId),
-    queryFn: () => warehouseService.getWarehouse(warehouseId ?? ''),
+    queryFn: ({ signal }) => warehouseService.getWarehouse(warehouseId ?? '', { signal }),
     enabled: scope !== undefined && warehouseId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -77,7 +83,8 @@ export function useWarehouseCapabilitiesQuery(warehouseId: string | undefined) {
       scope === undefined || warehouseId === undefined
         ? queryKeys.public(WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'capabilities')
         : warehouseQueryKeys.capabilities(scope, warehouseId),
-    queryFn: () => warehouseService.getWarehouseCapabilities(warehouseId ?? ''),
+    queryFn: ({ signal }) =>
+      warehouseService.getWarehouseCapabilities(warehouseId ?? '', { signal }),
     enabled: scope !== undefined && warehouseId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -99,7 +106,8 @@ export function useWarehouseMaterialSettingsQuery(
             query,
           )
         : warehouseQueryKeys.materialSettings(scope, warehouseId, query),
-    queryFn: () => warehouseService.listWarehouseMaterialSettings(warehouseId ?? '', query),
+    queryFn: ({ signal }) =>
+      warehouseService.listWarehouseMaterialSettings(warehouseId ?? '', query, { signal }),
     enabled: scope !== undefined && warehouseId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
