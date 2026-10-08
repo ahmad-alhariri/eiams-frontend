@@ -11,7 +11,7 @@ import {
   ISSUE_RECIPIENT_TYPE_LABELS_AR,
   toIssueInfo,
 } from '@/modules/issue/schemas/issue-info.schema'
-import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
+import type { CounterpartResolution } from '@/modules/organization/types/counterpart-lookup.types'
 import { createQueryClient } from '@/shared/services/query.client'
 import { okPageJson } from '@/test/msw/envelope'
 import { fixtureUuid } from '@/test/msw/factories'
@@ -45,18 +45,16 @@ const API_BASE_URL = '/api/v1'
  * and `counterpartSelectorAdapter` reads `externalPartyId` and `nameAr` — so a
  * generated-shaped option yielded zero selectable results.
  */
-const RECIPIENT: ExternalParty = {
-  externalPartyId: fixtureUuid(64),
-  nameAr: 'أحمد محمد',
-  code: null,
-  contactInfo: null,
-  notes: null,
+const RECIPIENT: CounterpartResolution = {
+  type: 'External',
+  id: fixtureUuid(64),
+  displayName: 'أحمد محمد',
+  secondaryLabelAr: null,
   status: 'Active',
-  rowVersion: 1,
 }
 
 function useCounterpartHandler() {
-  server.use(http.get(`${API_BASE_URL}/external-parties`, () => okPageJson([RECIPIENT])))
+  server.use(http.get(`${API_BASE_URL}/counterparts`, () => okPageJson([RECIPIENT])))
 }
 
 type SubmitSpy = (values: IssuePetalFormValues) => void
@@ -139,7 +137,7 @@ describe('IssueRecipientSection', () => {
     await user.type(screen.getByLabelText('سبب الصرف'), 'تجهيز مكتب إدارة التقنية')
 
     await user.click(screen.getByRole('button', { name: 'حفظ' }))
-    expect(submitted?.petal.issueTo.recipientId).toBe(RECIPIENT.externalPartyId)
+    expect(submitted?.petal.issueTo.recipientId).toBe(RECIPIENT.id)
     expect(submitted?.petal.issueToDisplayName).toBe('أحمد محمد')
     expect(submitted?.petal.issueTo.issueReason).toBe('تجهيز مكتب إدارة التقنية')
     // The page maps out with the captured sibling name.
@@ -196,10 +194,7 @@ describe('IssueRecipientSection', () => {
     await user.click(combo)
     await user.type(combo, 'أحمد')
     await user.click(await screen.findByRole('option', { name: /أحمد محمد/ }))
-    expect(screen.getByTestId('state-probe')).toHaveAttribute(
-      'data-recipient-id',
-      RECIPIENT.externalPartyId,
-    )
+    expect(screen.getByTestId('state-probe')).toHaveAttribute('data-recipient-id', RECIPIENT.id)
     expect(screen.getByTestId('state-probe')).toHaveAttribute('data-display-name', 'أحمد محمد')
 
     // Switch type: the previously captured Employee selection must not survive.

@@ -2,7 +2,10 @@ import { Controller } from 'react-hook-form'
 
 import { CounterpartSelect } from '@/modules/organization/components/counterpart-select'
 import type { AssignCustodyFormValues } from '@/modules/custody/schemas/assign-custody.schema'
-import type { CounterpartReference } from '@/modules/organization/types/counterpart-lookup.types'
+import type {
+  CounterpartReference,
+  CounterpartResolution,
+} from '@/modules/organization/types/counterpart-lookup.types'
 
 interface CounterpartSelectFieldProps {
   control: import('react-hook-form').Control<AssignCustodyFormValues>
@@ -17,6 +20,12 @@ interface CounterpartSelectFieldProps {
  * zod message for an unselected holder never reaches the user. The id is a
  * constant rather than a generated one because this field has exactly one
  * instance per dialog.
+ *
+ * Assign-custody is a personal-custody write (`CustodyKind.Personal`,
+ * counterpart is an Employee) — the backend validator only accepts `type:
+ * Employee` for the Issue operation when custody-kind is Personal. We pass
+ * `operation: 'Issue', type: 'Employee'` explicitly so the wire query
+ * matches without forcing the validator to reject every other combination.
  */
 const EMPLOYEE_FIELD_ID = 'assign-custody-holder'
 
@@ -36,10 +45,15 @@ export function CounterpartSelectField({ control, disabled }: CounterpartSelectF
             name="holderDisplayName"
             render={({ field: nameField }) => (
               <CounterpartSelect
+                operation="Issue"
+                type="Employee"
                 value={holderIdField.value === '' ? null : holderIdField.value}
-                onValueChange={(reference: CounterpartReference | null, counterpart) => {
+                onValueChange={(
+                  reference: CounterpartReference | null,
+                  counterpart: CounterpartResolution | undefined,
+                ) => {
                   holderIdField.onChange(reference === null ? '' : reference.id)
-                  nameField.onChange(reference === null ? '' : (counterpart?.nameAr ?? ''))
+                  nameField.onChange(reference === null ? '' : (counterpart?.displayName ?? ''))
                 }}
                 disabled={disabled}
                 inputProps={{
