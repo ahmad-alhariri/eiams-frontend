@@ -8,6 +8,13 @@
  * label `displayName` while the server sends `scopeName`. Reading through it produced
  * `undefined` in Arabic-facing chrome.
  *
+ * The same argument covers the REQUESTS this boundary sends, not just the responses it
+ * reads: `LoginRequest` is declared here for the identical reason. A generated request
+ * body is validated against a snapshot that is scheduled for deletion, so it buys a
+ * compile-time check whose removal is a planned change rather than a defect — while a
+ * handwritten body next to the audited response keeps the whole auth wire contract in
+ * one file that a reviewer can check against the backend in a single read.
+ *
  * Two properties of this shape are load-bearing and must not be relaxed:
  *
  * - `role` is SINGULAR. The user holds exactly one role; the plural `activeRoles[]` from
@@ -57,6 +64,15 @@ export interface SessionResponse {
   readonly role: SessionRole
   readonly activeScope: SessionScope
   readonly permissionCodes: readonly string[]
+}
+
+/**
+ * The `POST /auth/login` body. Exactly the two credential fields the backend binds; the
+ * refresh credential is a host-only cookie and is never part of a client request body.
+ */
+export interface LoginRequest {
+  readonly username: string
+  readonly password: string
 }
 
 /** The login response: the token envelope plus the session it grants. */

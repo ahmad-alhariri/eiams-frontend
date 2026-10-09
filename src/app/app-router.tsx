@@ -9,6 +9,7 @@ import {
   RouteAccessGuard,
 } from '@/modules/auth/components/route-guards'
 import { SessionUserMenu } from '@/modules/auth/components/session-user-menu'
+import { AuthSessionExpiredBridge } from '@/modules/auth/components/auth-session-expired-bridge'
 import { ROUTE_METADATA } from '@/config/routes'
 import {
   getWiredRouteKeys,
@@ -39,6 +40,15 @@ import {
  * first, and an unmarked page there reads as integration evidence. Login is
  * therefore wrapped in the same `UiSandboxMarker` the frame uses, so there is
  * one element and one profile read, not two of each.
+ *
+ * `AuthSessionExpiredBridge` is mounted inside EVERY top-level branch rather
+ * than above `RouterProvider`, for two reasons. It calls `useNavigate`, so it
+ * must sit inside the router context — and `AppRouter` sits outside it. And it
+ * must be mounted even on branches that no session guard wraps (the dev gallery
+ * and the not-found frame): the bridge is the navigation half of D-AUTH-01
+ * §"Token and session lifecycle", and a user sitting on an unguarded URL when a
+ * refresh fails has no `RequireActiveScope` to return them anywhere. Exactly one
+ * branch renders at a time, so all four mounts still yield one live listener.
  */
 const PROTECTED_ROUTE_OBJECTS = getWiredRouteKeys().flatMap((key) => {
   if (ROUTE_METADATA[key].public) {
@@ -65,27 +75,43 @@ const appRouter = createBrowserRouter([
   {
     ...LOGIN_ROUTE,
     element: (
-      <UiSandboxMarker>
-        <AnonymousRoute>
-          <RouteSuspense>{LOGIN_ROUTE.element}</RouteSuspense>
-        </AnonymousRoute>
-      </UiSandboxMarker>
+      <>
+        <AuthSessionExpiredBridge />
+        <UiSandboxMarker>
+          <AnonymousRoute>
+            <RouteSuspense>{LOGIN_ROUTE.element}</RouteSuspense>
+          </AnonymousRoute>
+        </UiSandboxMarker>
+      </>
     ),
   },
   {
-    element: <AppLayout />,
+    element: (
+      <>
+        <AuthSessionExpiredBridge />
+        <AppLayout />
+      </>
+    ),
     children: DEV_GALLERY_ROUTE,
   },
   {
     element: (
-      <RequireActiveScope>
-        <AppLayout userMenu={<SessionUserMenu />} />
-      </RequireActiveScope>
+      <>
+        <AuthSessionExpiredBridge />
+        <RequireActiveScope>
+          <AppLayout userMenu={<SessionUserMenu />} />
+        </RequireActiveScope>
+      </>
     ),
     children: PROTECTED_ROUTE_OBJECTS,
   },
   {
-    element: <AppLayout />,
+    element: (
+      <>
+        <AuthSessionExpiredBridge />
+        <AppLayout />
+      </>
+    ),
     children: NOT_FOUND_ROUTE,
   },
 ])

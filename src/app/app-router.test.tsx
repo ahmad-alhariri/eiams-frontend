@@ -8,8 +8,9 @@ import { ROUTE_PATHS } from '@/config/routes'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { queryClient } from '@/shared/services/query.client'
+import { sessionAdapter } from '@/shared/services/api.client'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
-import { okJson } from '@/test/msw/envelope'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import { createSession, createSessionScope } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
@@ -228,5 +229,51 @@ describe('Session user menu wiring (e24-t10)', () => {
     })
     expect(appRouter.state.location.pathname).toBe(ROUTE_PATHS.settings)
     expect(await screen.findByRole('heading', { name: 'الإعدادات' })).toBeInTheDocument()
+  })
+})
+
+/**
+ * The navigation half of D-AUTH-01 §"Token and session lifecycle".
+ *
+ * `AuthSessionExpiredBridge` shipped with a passing unit test and was still never
+ * mounted, because a component test renders the component — nothing asserted it
+ * was reachable from the route tree. This suite drives the REAL router
+ * composition and the REAL `sessionAdapter` singleton, so deleting the mount from
+ * `app-router.tsx` fails here.
+ *
+ * The not-found branch is the discriminating URL on purpose. It renders
+ * `AppLayout` with NO `RequireActiveScope` and no user menu, so nothing but the
+ * bridge can move the URL when a refresh fails. Asserting this on a protected
+ * route would pass whether or not the bridge existed, because the guard reaches
+ * `/login` by itself — which is precisely how the defect survived review.
+ */
+describe('AuthSessionExpiredBridge wiring (D-AUTH-01)', () => {
+  it('returns an authenticated user on an unguarded route to the Arabic login surface', async () => {
+    signIn()
+    renderAppRouter()
+
+    act(() => {
+      appRouter.navigate('/not-a-real-route')
+    })
+    expect(await screen.findByRole('heading', { name: 'الصفحة غير موجودة' })).toBeInTheDocument()
+
+    // A real refresh failure on the singleton adapter, so the event under test is
+    // the transport's own `session-expired` publication rather than a hand-fired
+    // stub.
+    server.use(
+      http.post(`${API_BASE_URL}/auth/refresh`, () =>
+        apiJson({ code: 'USERS_INVALID_REFRESH_TOKEN' }, { status: 401 }),
+      ),
+    )
+
+    await act(async () => {
+      await sessionAdapter.refreshSession().catch(() => undefined)
+    })
+
+    await waitFor(() => expect(appRouter.state.location.pathname).toBe(ROUTE_PATHS.login))
+    expect(
+      await screen.findByRole('heading', { name: 'نظام إدارة المخزون والأصول' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'الصفحة غير موجودة' })).not.toBeInTheDocument()
   })
 })

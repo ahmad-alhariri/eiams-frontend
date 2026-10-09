@@ -185,6 +185,43 @@ describe('Arabic error copy (frontend-owned, D-OAS-01 inverted)', () => {
     )
   })
 
+  it('speaks the two assignment faults the session projection raises', () => {
+    // `GetUserSessionQueryHandler` (`Application/Users/GetSession`) refuses to build
+    // a session when the CALLER's own account has zero or more than one role+scope
+    // assignment, so `GET /auth/session` and `POST /auth/refresh` can put either
+    // code on the wire. Unmapped, both rendered as generic per-status Arabic, which
+    // reads like a missing record instead of an account nobody has configured.
+    expect(arabicCopyForCode('USER_ROLE_SCOPES_NO_ASSIGNMENT')).toEqual({
+      titleAr: 'حسابك غير مرتبط بأي دور.',
+      detailAr: 'تواصل مع مسؤول النظام لإتمام إسناد دور لك.',
+    })
+    expect(arabicCopyForCode('USER_ROLE_SCOPES_MULTIPLE_ASSIGNMENTS')).toEqual({
+      titleAr: 'حسابك مرتبط بأكثر من دور.',
+      detailAr: 'تواصل مع مسؤول النظام لمراجعة إسنادات حسابك.',
+    })
+  })
+
+  it('tells the two assignment faults apart without naming the account', () => {
+    const none = arabicCopyForCode('USER_ROLE_SCOPES_NO_ASSIGNMENT')
+    const many = arabicCopyForCode('USER_ROLE_SCOPES_MULTIPLE_ASSIGNMENTS')
+
+    // Distinct from each other: no role and more than one role are different
+    // administrator faults, and the administrator has to correct different things.
+    expect(none?.titleAr).not.toBe(many?.titleAr)
+    expect(none?.detailAr).not.toBe(many?.detailAr)
+    // Distinct from the generic 404 / 409 wording, which is what this pair used to
+    // render as and what an unmapped code still renders as today.
+    expect(none?.titleAr).not.toBe(arabicCopyForCode('RESOURCE_NOT_FOUND')?.titleAr)
+    expect(many?.titleAr).not.toBe(arabicCopyForCode('RESOURCE_CONFLICT')?.titleAr)
+    // Neither names a role, a scope or an account, and neither offers the user a
+    // fix they can apply themselves: both are administrator-configuration faults.
+    for (const copy of [none, many]) {
+      expect(copy?.detailAr).toContain('مسؤول النظام')
+      expect(copy?.detailAr).not.toMatch(/[A-Za-z]/)
+      expect(copy?.titleAr).not.toMatch(/[A-Za-z]/)
+    }
+  })
+
   it('does not speak a code the wire cannot produce', () => {
     // Guards against a key that no longer matches what the backend normalizes
     // to; such a key is dead copy that would never be selected.

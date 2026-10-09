@@ -57,7 +57,6 @@ const SRC_ROOT = join(process.cwd(), 'src')
 const ALLOWED_FILES: ReadonlySet<string> = new Set([
   'src/shared/api/error-envelope.ts', // builds the envelope; uses `new Response`.
   'src/test/msw/envelope.ts', // the helpers themselves.
-  'src/test/msw/server.test.ts', // asserts the harness, not an endpoint.
   'src/test/fixture-envelope-discipline.test.ts', // this file.
 ])
 

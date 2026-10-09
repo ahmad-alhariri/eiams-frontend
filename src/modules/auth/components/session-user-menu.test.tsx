@@ -12,7 +12,7 @@ import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { queryClient } from '@/shared/services/query.client'
 import type { SessionResponse, SessionScope } from '@/modules/auth/types/session.types'
-import { errJson } from '@/test/msw/envelope'
+import { errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -142,7 +142,7 @@ describe('SessionUserMenu', () => {
     server.use(
       http.post(`${API_BASE_URL}/auth/logout`, () => {
         logoutCalls += 1
-        return new HttpResponse(null, { status: 204 })
+        return okJson({})
       }),
     )
     renderMenu(sessionWith('أحمد الحريري'))

@@ -267,6 +267,22 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'لا يمكن إزالة آخر إسناد لمدير المؤسسة.',
     detailAr: null,
   },
+  // Raised by the SESSION PROJECTION, not by the grant form: `GetSessionController`
+  // and `RefreshTokenCommandHandler` build the caller's own assignment set and
+  // refuse when it is not exactly one row. Both are administrator-configuration
+  // faults, so the copy names the state of the caller's account and routes the
+  // user to an administrator instead of offering a retry.
+  // `GetUserSessionQueryHandler` only ever inspects `userContext.UserId`, so these
+  // two codes speak about the caller and cannot be steered at another account —
+  // no identifier, role name or assignment count is therefore put in the copy.
+  USER_ROLE_SCOPES_NO_ASSIGNMENT: {
+    titleAr: 'حسابك غير مرتبط بأي دور.',
+    detailAr: 'تواصل مع مسؤول النظام لإتمام إسناد دور لك.',
+  },
+  USER_ROLE_SCOPES_MULTIPLE_ASSIGNMENTS: {
+    titleAr: 'حسابك مرتبط بأكثر من دور.',
+    detailAr: 'تواصل مع مسؤول النظام لمراجعة إسنادات حسابك.',
+  },
   USERS_EMPLOYEE_ALREADY_LINKED: {
     titleAr: 'هذا الموظف مرتبط بحساب مستخدم آخر.',
     detailAr: null,

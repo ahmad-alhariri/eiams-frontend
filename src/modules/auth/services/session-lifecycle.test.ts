@@ -82,7 +82,9 @@ describe('auth session lifecycle', () => {
       http.post(`${API_BASE_URL}/auth/refresh`, () => okJson(tokenResponse)),
       http.post(`${API_BASE_URL}/auth/logout`, ({ request }) => {
         authorization = request.headers.get('Authorization')
-        return new HttpResponse(null, { status: 204 })
+        // 200 with the real empty success envelope — the backend does not answer
+        // 204 here, so a bare 204 fixture tested a wire shape that never ships.
+        return okJson({})
       }),
     )
 

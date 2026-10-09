@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { createAxiosTransport } from '@/shared/api/axios-transport'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -94,10 +94,17 @@ describe('AuthService', () => {
     server.use(
       http.post(`${API_BASE_URL}/auth/logout`, () => {
         logoutCalls += 1
-        return new HttpResponse(null, { status: 204 })
+        // The backend answers 200 with a normal success envelope, NOT 204. The
+        // fixture used to answer a bare 204, so this assertion was reached over
+        // a wire shape the API never sends — and a `requestEmpty` that insisted
+        // on an empty body would still have passed.
+        return okJson({})
       }),
     )
 
+    // `requestEmpty` awaits the Axios call and reads nothing from the response,
+    // so the real 200 + envelope body is discarded rather than rejected: this
+    // resolves against the shape the backend actually sends.
     await expect(service.logout()).resolves.toBeUndefined()
     expect(logoutCalls).toBe(1)
   })
