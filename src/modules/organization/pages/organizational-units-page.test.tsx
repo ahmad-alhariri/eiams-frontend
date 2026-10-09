@@ -65,9 +65,13 @@ describe('OrganizationalUnitsPage', () => {
     expect(screen.getByText(child.name)).toBeInTheDocument()
     expect(screen.getByRole('list', { name: 'شجرة الوحدات التنظيمية' })).toBeInTheDocument()
     // The query key the backend binds is `page`, not the frozen snapshot's
-    // `pageIndex` (which it silently discards).
-    expect(receivedPage).toBe('0')
-    expect(receivedPageSize).toBe('200')
+    // `pageIndex` (which it silently discards), and it is ONE-based — the
+    // `pageSize: 200` this screen used to ask for was never a page size the
+    // server accepts either: `PaginationQueryParameters.PageSize` is
+    // `[Range(1, 100)]`, so the tree now asks for that ceiling and admits it
+    // with `ReferenceLimitNote` when the directory is longer.
+    expect(receivedPage).toBe('1')
+    expect(receivedPageSize).toBe('100')
   })
 
   it('nests a child under its parent using the wire id/parentId relation', async () => {

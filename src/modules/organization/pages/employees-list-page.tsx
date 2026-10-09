@@ -22,6 +22,8 @@ import {
   type EmployeeFormValues,
 } from '@/modules/organization/schemas/employee.schemas'
 import { StatusBadge } from '@/shared/feedback/status-badge'
+import { ReferenceLimitNote } from '@/shared/feedback/reference-limit-note'
+import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { ContentCard } from '@/shared/layout/content-card'
@@ -36,7 +38,15 @@ import type { Employee, RecordStatus } from '@/modules/organization/types/organi
 
 const employeeColumnHelper = createColumnHelper<typeof dataTableFeatures, Employee>()
 
-const REFERENCE_PAGE = { page: 0, pageSize: 200 } as const
+/**
+ * The sites/org-units lookups below are JOINS, not lists: they exist so a flat
+ * `orgUnitId` can be shown as a name and so the site filter has names. The
+ * backend caps `pageSize` at 100 (`MAX_WIRE_PAGE_SIZE`), so these ask for the
+ * maximum one page can hold and the screen admits it with
+ * `ReferenceLimitNote` when the directory is longer than that — the unit
+ * column would otherwise fall back to `—` past row 100 without saying why.
+ */
+const REFERENCE_PAGE = { page: 1, pageSize: MAX_WIRE_PAGE_SIZE } as const
 
 function isRecordStatus(value: string | null): value is RecordStatus {
   return value === 'Active' || value === 'Inactive'
@@ -67,8 +77,12 @@ function EmployeesListPage() {
 
   const employeesQueryInput = useMemo<ListEmployeesQuery>(
     () => ({
-      // Table controls are intentionally 1-based for people; the v1 API is 0-based.
-      page: currentPage - 1,
+      // One-based controls, one-based wire: the page crosses unchanged. The
+      // comment that used to sit here claimed "the v1 API is 0-based"; it is
+      // not. `PaginationQueryParameters.Page` is `[Range(1, 21474836)]` with
+      // default 1, so subtracting one sent `page=0` and the backend answered
+      // 400 REQUEST_VALIDATION_FAILED.
+      page: currentPage,
       pageSize,
       ...(search === '' ? {} : { search }),
       ...(siteId === undefined ? {} : { siteId }),
@@ -269,13 +283,18 @@ function EmployeesListPage() {
           emptyDescription="لم يتم العثور على موظفين يطابقون معايير البحث الحالية."
           page={currentPage}
           pageSize={pageSize}
-          totalCount={page?.meta.totalItems}
-          totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
+          totalCount={page?.totalItems}
+          totalPages={Math.max(page?.totalPages ?? 1, 1)}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           searchQuery={search}
           onSearchChange={handleSearchChange}
           searchPlaceholder="ابحث بالاسم أو الرقم الوظيفي..."
+        />
+        <ReferenceLimitNote
+          loadedCount={unitsQuery.data?.items.length}
+          totalCount={unitsQuery.data?.totalItems}
+          hint="وحدات إضافية قد لا تظهر في عمود الوحدة التنظيمية."
         />
       </ContentCard>
       <EmployeeFormDialog

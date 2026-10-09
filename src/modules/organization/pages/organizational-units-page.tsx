@@ -17,6 +17,8 @@ import {
 import { EmptyState } from '@/shared/feedback/empty-state'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
+import { ReferenceLimitNote } from '@/shared/feedback/reference-limit-note'
+import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { useDebounce } from '@/shared/hooks/use-debounce'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { ContentCard } from '@/shared/layout/content-card'
@@ -26,7 +28,16 @@ import { Input } from '@/shared/ui/input'
 import { toast } from '@/shared/ui/toast-manager'
 import type { OrganizationalUnit } from '@/modules/organization/types/organization.types'
 
-const ORGANIZATIONAL_UNIT_TREE_PAGE_SIZE = 200
+/**
+ * Read-only organizational structure. The v1 contract supplies a paginated
+ * flat list with optional parent references, so this page requests the maximum
+ * page size the backend accepts — `pageSize` is `[Range(1, 100)]`, so the
+ * previous constant of 200 could only ever be rejected or silently truncated —
+ * and derives the visible hierarchy locally from what comes back. A directory
+ * longer than that one page says so, because a truncated tree looks exactly
+ * like a small organization.
+ */
+const ORGANIZATIONAL_UNIT_TREE_PAGE_SIZE = MAX_WIRE_PAGE_SIZE
 
 /**
  * Read-only organizational structure. The v1 contract supplies a paginated
@@ -41,7 +52,8 @@ function OrganizationalUnitsPage() {
   const search = useDebounce(searchInput)
   const queryInput = useMemo(
     () => ({
-      page: 0,
+      // One-based on both sides; `page: 0` here was a 400 on every load.
+      page: 1,
       pageSize: ORGANIZATIONAL_UNIT_TREE_PAGE_SIZE,
       ...(search === '' ? {} : { search }),
     }),
@@ -155,12 +167,11 @@ function OrganizationalUnitsPage() {
               units={page.items}
               {...(canManage ? { onEdit: (unit: OrganizationalUnit) => setDialogUnit(unit) } : {})}
             />
-            {page.meta.totalPages > 1 ? (
-              <p className="text-sm text-muted-foreground" role="status">
-                يعرض الهيكل أول {ORGANIZATIONAL_UNIT_TREE_PAGE_SIZE} وحدة. استخدم البحث لتضييق
-                النتائج.
-              </p>
-            ) : null}
+            <ReferenceLimitNote
+              loadedCount={page.items.length}
+              totalCount={page.totalItems}
+              hint="استخدم البحث لتضييق النتائج."
+            />
           </>
         ) : null}
       </ContentCard>

@@ -51,11 +51,11 @@ describe('external-party mutation cache invalidation', () => {
           totalPages: 1,
         })
       }),
-      http.get(`${API_BASE_URL}/external-parties/${party.externalPartyId}`, () => {
+      http.get(`${API_BASE_URL}/external-parties/${party.id}`, () => {
         detailRequests += 1
         return okJson(detailRequests === 1 ? party : updated)
       }),
-      http.put(`${API_BASE_URL}/external-parties/${party.externalPartyId}`, async ({ request }) => {
+      http.put(`${API_BASE_URL}/external-parties/${party.id}`, async ({ request }) => {
         updateBodies.push(await request.json())
         return okJson(updated)
       }),
@@ -63,8 +63,8 @@ describe('external-party mutation cache invalidation', () => {
 
     const { result } = renderHook(
       () => ({
-        list: useExternalPartiesQuery({ page: 0, pageSize: 10 }),
-        detail: useExternalPartyQuery(party.externalPartyId),
+        list: useExternalPartiesQuery({ page: 1, pageSize: 10 }),
+        detail: useExternalPartyQuery(party.id),
         update: useUpdateExternalPartyMutation(),
       }),
       { wrapper: createWrapper() },
@@ -75,8 +75,11 @@ describe('external-party mutation cache invalidation', () => {
 
     await act(async () => {
       await result.current.update.mutateAsync({
-        externalPartyId: party.externalPartyId,
-        request: { ...party, rowVersion: 1 },
+        externalPartyId: party.id,
+        // `expectedRowVersion` is REQUIRED by the real update body: it echoes the
+        // `rowVersion` the read served. The retired upsert type carried a bare
+        // `rowVersion` instead, which the binder drops.
+        request: { nameAr: party.nameAr, expectedRowVersion: party.rowVersion },
       })
     })
 
@@ -84,7 +87,9 @@ describe('external-party mutation cache invalidation', () => {
     await waitFor(() => expect(detailRequests).toBeGreaterThanOrEqual(2))
     expect(result.current.list.data?.items[0]?.nameAr).toBe('الجهة المحدّثة')
     expect(result.current.detail.data?.nameAr).toBe('الجهة المحدّثة')
-    // `PUT` sends the versioned upsert body the backend's Update command binds.
-    expect(updateBodies).toEqual([{ ...party, rowVersion: 1 }])
+    // `PUT` sends the update body the backend's Update command binds: the
+    // editable fields plus the required concurrency guard, and NOT the retired
+    // single upsert shape that smuggled `status`/`rowVersion` into the payload.
+    expect(updateBodies).toEqual([{ nameAr: party.nameAr, expectedRowVersion: 1 }])
   })
 })

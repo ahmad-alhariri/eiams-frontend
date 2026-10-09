@@ -1,9 +1,13 @@
 import { z } from 'zod'
 
-import type { ExternalParty, ExternalPartyUpsertRequest } from '@/shared/types/generated/eiams-v1'
+import type {
+  CreateExternalPartyRequest,
+  ExternalParty,
+  UpdateExternalPartyRequest,
+} from '@/modules/organization/types/organization.api-types'
 
 /**
- * Client-side shape for the contract-backed ExternalParty upsert request.
+ * Client-side shape for the ExternalParty create/update form.
  * Optional text is normalized at the boundary so the API receives null rather
  * than whitespace-only values.
  */
@@ -25,16 +29,45 @@ function emptyToNull(value: string | undefined): string | null {
   return trimmed === undefined || trimmed === '' ? null : trimmed
 }
 
-export function toExternalPartyRequest(
-  values: ExternalPartyFormValues,
-  party: ExternalParty | null,
-): ExternalPartyUpsertRequest {
+/** The four editable text fields, shared by both commands. */
+function editableFields(values: ExternalPartyFormValues) {
   return {
     nameAr: values.nameAr.trim(),
     code: emptyToNull(values.code),
     contactInfo: emptyToNull(values.contactInfo),
     notes: emptyToNull(values.notes),
-    rowVersion: party?.rowVersion ?? 0,
-    status: party?.status ?? 'Active',
+  }
+}
+
+/**
+ * `POST /external-parties` body: editable fields ONLY.
+ *
+ * No `status` and no `rowVersion` — create has no prior version to guard, and a
+ * new party is Active by definition. Activation is a separate guarded command.
+ */
+export function toCreateExternalPartyRequest(
+  values: ExternalPartyFormValues,
+): CreateExternalPartyRequest {
+  return editableFields(values)
+}
+
+/**
+ * `PUT /external-parties/{id}` body: editable fields plus the REQUIRED
+ * `expectedRowVersion`.
+ *
+ * The version comes from the record the edit dialog was opened with, because the
+ * backend compares it against the stored column and refuses a stale value. This
+ * is the only write in the module that carries one: the retired single "upsert"
+ * type sent the raw `rowVersion` under the wrong key, which the
+ * `additionalProperties: false` body discards and the required guard then fails
+ * for being missing.
+ */
+export function toUpdateExternalPartyRequest(
+  values: ExternalPartyFormValues,
+  party: ExternalParty,
+): UpdateExternalPartyRequest {
+  return {
+    ...editableFields(values),
+    expectedRowVersion: party.rowVersion,
   }
 }

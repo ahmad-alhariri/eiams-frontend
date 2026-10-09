@@ -88,8 +88,13 @@ import {
  * `src/modules/admin/hooks/use-assignment-scope-selector.ts` - the Arabic
  * scope picker loader for the single role-scope assignment (D-SRS-01), which
  * replaces the raw UUID field the collection editor used.
+ * Re-measured at 380 by `eiams-frontend-whhu.14` (slice S3), which added the
+ * application file `src/shared/feedback/reference-limit-note.tsx` - the Arabic
+ * "this directory is capped" note the organization screens render instead of
+ * silently showing a truncated reference list (`pageSize` is `[Range(1, 100)]`,
+ * so "load everything" is not available).
  */
-const SCANNED_FILE_COUNT = 379
+const SCANNED_FILE_COUNT = 380
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

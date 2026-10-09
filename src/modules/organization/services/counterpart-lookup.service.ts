@@ -56,13 +56,18 @@ export function createCounterpartLookupService(transport: ApiTransport): Counter
       const result = await transport.requestPage<CounterpartResolution>({
         path: COUNTERPARTS_PATH,
         method: 'GET',
+        // No `as Record<...>` on this literal. The cast is exactly what let a
+        // wrong pagination key reach the wire unnoticed in the sibling
+        // `organization.service.ts` (`pageIndex: 0`, a key
+        // `ListExternalPartiesQuery` does not even declare), and an object
+        // literal types fine against the query index signature without it.
         query: {
           ...(search !== undefined && search !== '' ? { search } : {}),
           operation,
           ...(type !== undefined ? { type } : {}),
           page: 1,
           pageSize: pageSize ?? 10,
-        } as Record<string, string | number | boolean | undefined>,
+        },
       })
       return result.items
     },

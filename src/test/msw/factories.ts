@@ -12,7 +12,6 @@ import type {
   DocumentLine,
   DocumentPolicy,
   DocumentStatus,
-  ExternalParty,
   FieldError,
   InventoryBalance,
   LifecycleActorSnapshot,
@@ -44,15 +43,19 @@ import type {
   WarehouseCapability,
   WarehouseMaterialSetting,
 } from '@/modules/warehouse/types/warehouse.api-types'
-// txq4: Site / OrganizationalUnit / Employee / Warehouse are typed against the
-// handwritten contracts, NOT the frozen generated snapshot. Importing them from
-// `@/shared/types/generated/eiams-v1` is what let these factories keep minting
-// `warehouseId` / `nameAr` / nested `site` fixtures while production code had
-// already moved to `id` / `name` — the suite validated fiction against itself.
+// txq4: Site / OrganizationalUnit / Employee / ExternalParty / Warehouse are
+// typed against the handwritten contracts, NOT the frozen generated snapshot.
+// Importing them from `@/shared/types/generated/eiams-v1` is what let these
+// factories keep minting `warehouseId` / `nameAr` / nested `site` fixtures while
+// production code had already moved to `id` / `name` — the suite validated
+// fiction against itself. For ExternalParty the generated snapshot was worse
+// than merely stale: it named the identifier `externalPartyId`, so a factory
+// typed against it kept minting an id field the backend never sends.
 import type {
   Site,
   OrganizationalUnit,
   Employee,
+  ExternalParty,
 } from '@/modules/organization/types/organization.api-types'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 import type {
@@ -603,13 +606,15 @@ export function createExternalParty(
 ): ExternalParty {
   return withOverrides(
     {
-      externalPartyId: fixtureUuid(54),
+      id: fixtureUuid(54),
       code: 'EXT-001',
       contactInfo: '011-0000000',
       nameAr: 'جهة خارجية تجريبية',
       notes: null,
       rowVersion: 1,
       status: 'Active',
+      createdAtUtc: '2026-10-05T08:00:00Z',
+      updatedAtUtc: '2026-10-05T08:00:00Z',
     },
     overrides,
   )

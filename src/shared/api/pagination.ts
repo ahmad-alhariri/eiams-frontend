@@ -96,8 +96,33 @@ export const WIRE_PAGE_SIZE_FIELD = 'pageSize' as const
 export const MAX_WIRE_PAGE_SIZE = 100
 
 /**
- * Builds the pagination half of a list query, converting the UI's zero-based
- * page to the API's one-based page.
+ * The backend's maximum page; `PaginationQueryParameters.Page` is
+ * `[Range(1, MaximumPage)]` and `MaximumPage` is 21474836.
+ */
+export const MAX_WIRE_PAGE = 21474836
+
+/**
+ * Clamps a page size into the only range the backend binds.
+ *
+ * A request for more rows than this either fails with 400
+ * `REQUEST_VALIDATION_FAILED` or is silently truncated, so a reference list
+ * asking for "everything" has to be clamped here AND told so in the UI — see
+ * `ReferenceLimitNote`.
+ */
+function clampWirePageSize(pageSize: number): number {
+  return Math.min(MAX_WIRE_PAGE_SIZE, Math.max(1, Math.trunc(pageSize)))
+}
+
+/**
+ * Builds the pagination half of a list query from a ZERO-BASED UI page index,
+ * converting it to the API's one-based `page`.
+ *
+ * Use this only where the caller genuinely holds a zero-based index (TanStack
+ * Table's `pageIndex`, the frozen generated query types). Where the caller holds
+ * a one-based page — which is what `useServerPagination` and every DataTable
+ * control in this repository produce — use
+ * {@link toWireOneBasedPaginationParams} instead: subtracting one there and
+ * adding it back here is how `page=0` reached the wire in the first place.
  *
  * Values below `0` clamp to the first page rather than being sent as an invalid
  * `page=0`, which the backend rejects with 400 `REQUEST_VALIDATION_FAILED`.
@@ -119,10 +144,39 @@ export function toWirePaginationParams(input: {
   }
 
   if (input.pageSize !== undefined) {
-    params[WIRE_PAGE_SIZE_FIELD] = Math.min(
-      MAX_WIRE_PAGE_SIZE,
-      Math.max(1, Math.trunc(input.pageSize)),
-    )
+    params[WIRE_PAGE_SIZE_FIELD] = clampWirePageSize(input.pageSize)
+  }
+
+  return params
+}
+
+/**
+ * Builds the pagination half of a list query from a ONE-BASED page.
+ *
+ * The UI page and the wire page are both one-based, so this is an identity
+ * conversion plus a clamp — which is the point. It puts the backend's numeric
+ * bounds in ONE place (`[1, 21474836]` and `[1, 100]`) instead of letting each
+ * list screen hand a raw number to the transport, so a `page=0` or a
+ * `pageSize=200` cannot be typed at a call site at all.
+ *
+ * Both the measured failure (`GET /api/v1/employees?page=0` → 400
+ * `REQUEST_VALIDATION_FAILED`, `details.Page = ["The field Page must be between
+ * 1 and 21474836."]`) and the silent one (`pageSize: 200` on a list that
+ * quietly serves 100 rows, so names past row 100 render as `—`) are now
+ * impossible to express from a caller.
+ */
+export function toWireOneBasedPaginationParams(input: {
+  readonly page?: number | undefined
+  readonly pageSize?: number | undefined
+}): Record<string, number> {
+  const params: Record<string, number> = {}
+
+  if (input.page !== undefined) {
+    params[WIRE_PAGE_FIELD] = Math.min(MAX_WIRE_PAGE, Math.max(1, Math.trunc(input.page)))
+  }
+
+  if (input.pageSize !== undefined) {
+    params[WIRE_PAGE_SIZE_FIELD] = clampWirePageSize(input.pageSize)
   }
 
   return params

@@ -71,7 +71,10 @@ describe('SitesListPage', () => {
     expect(screen.getByText(site.governorateCode ?? '')).toBeInTheDocument()
     expect(screen.getByText('نشط')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'إضافة موقع' })).not.toBeInTheDocument()
-    expect(receivedPage).toBe('0')
+    // One-based on both sides of the boundary: the table control's page IS the
+    // wire page. A `page=0` here is what `GET /sites` rejects with 400
+    // REQUEST_VALIDATION_FAILED (`details.Page` must be between 1 and 21474836).
+    expect(receivedPage).toBe('1')
     expect(receivedPageSize).toBe('10')
   })
 

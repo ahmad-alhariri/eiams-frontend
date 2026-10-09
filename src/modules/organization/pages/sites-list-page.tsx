@@ -47,13 +47,11 @@ function SitesListPage() {
   const [dialogSite, setDialogSite] = useState<Site | null | undefined>(undefined)
   const sitesQueryInput = useMemo(
     () => ({
-      // Table controls are 1-based; the value is passed as a 0-based index,
-      // matching `warehouses-list-page.tsx`. `ListSitesQuery` declares `page`,
-      // which is the name the backend binds — this previously sent `pageIndex`,
-      // a name the server silently discards. Correcting the base is a
-      // behaviour change to every organization list query and is out of scope
-      // here (see report); sending the declared key is not.
-      page: currentPage - 1,
+      // Table controls are one-based and so is the wire, so the page crosses the
+      // boundary unchanged. The `- 1` that used to sit here was not a
+      // conversion: it put `page=0` on the wire for the first page of the list,
+      // which `GET /sites` answers with 400 REQUEST_VALIDATION_FAILED.
+      page: currentPage,
       pageSize,
       ...(search ? { search } : {}),
       ...(status ? { status } : {}),
@@ -161,8 +159,8 @@ function SitesListPage() {
   )
 
   const page = sitesQuery.data
-  const totalCount = page?.meta.totalItems
-  const totalPages = Math.max(page?.meta.totalPages ?? 1, 1)
+  const totalCount = page?.totalItems
+  const totalPages = Math.max(page?.totalPages ?? 1, 1)
 
   return (
     <div dir="rtl" className="min-w-0">

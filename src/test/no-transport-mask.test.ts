@@ -87,7 +87,9 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // Pinned, not `> 0`: a narrowed glob leaves a few files rather than none,
     // and every "no offenders" assertion below would then pass silently.
     // 359 = 358 plus this work's src/modules/admin/types/user.types.ts.
-    assertScannedFiles(PRODUCTION_FILES, 379)
+    // 380 = 379 plus `src/shared/feedback/reference-limit-note.tsx`, the Arabic
+    // directory-cap note added by `eiams-frontend-whhu.14` slice S3.
+    assertScannedFiles(PRODUCTION_FILES, 380)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

@@ -67,18 +67,23 @@ describe('organization query hooks', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.items).toEqual([site])
     expect(search).toBe('دمشق')
-    // The wire's snake_case pagination block is normalized into the module
-    // `PageMeta` the tables read.
-    expect(result.current.data?.meta).toEqual({
+    // The wire's `ApiPaginationResponse` (1-based snake_case) reaches the hook
+    // normalized into the shared `ApiPage<T>` envelope, which has exactly seven
+    // fields: `items` plus the pagination block. The hook returns that envelope
+    // as-is — the table control reads `data.page` and `data.pageSize` directly,
+    // with no module-local `PageMeta` in between. The previous `data.meta` was
+    // a per-aggregate shim whose `pageIndex` lied about its own value (held the
+    // one-based wire `page` under a zero-based name) and whose `totalItems` was
+    // a COUNT of the current slice, so a page of 1 row claimed a directory of 1;
+    // both are gone, and so is the phantom `totalCount` the shim advertised.
+    expect(result.current.data).toEqual({
+      items: [site],
       page: 3,
-      pageIndex: 3,
       pageSize: 10,
-      itemCount: 41,
       totalItems: 41,
-      totalCount: 41,
       totalPages: 5,
-      hasNextPage: true,
       hasPreviousPage: true,
+      hasNextPage: true,
     })
     expect(result.current.dataUpdatedAt).toBeGreaterThan(0)
   })
@@ -116,9 +121,7 @@ describe('organization query hooks', () => {
       http.get(`${API_BASE_URL}/employees`, () => okPageJson([employee])),
       http.get(`${API_BASE_URL}/employees/${employee.id}`, () => okJson(employee)),
       http.get(`${API_BASE_URL}/external-parties`, () => okPageJson([externalParty])),
-      http.get(`${API_BASE_URL}/external-parties/${externalParty.externalPartyId}`, () =>
-        okJson(externalParty),
-      ),
+      http.get(`${API_BASE_URL}/external-parties/${externalParty.id}`, () => okJson(externalParty)),
     )
 
     const unitsList = renderHook(() => useOrganizationalUnitsQuery({ siteId: unit.siteId }), {
@@ -136,10 +139,9 @@ describe('organization query hooks', () => {
     const externalPartiesList = renderHook(() => useExternalPartiesQuery({ search: 'خارجي' }), {
       wrapper: createWrapper(),
     })
-    const externalPartyDetail = renderHook(
-      () => useExternalPartyQuery(externalParty.externalPartyId),
-      { wrapper: createWrapper() },
-    )
+    const externalPartyDetail = renderHook(() => useExternalPartyQuery(externalParty.id), {
+      wrapper: createWrapper(),
+    })
 
     await waitFor(() => {
       expect(unitsList.result.current.isSuccess).toBe(true)

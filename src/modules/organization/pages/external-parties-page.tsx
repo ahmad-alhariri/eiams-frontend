@@ -11,23 +11,53 @@ import {
 import { useExternalPartiesQuery } from '@/modules/organization/hooks/use-organization-queries'
 import { ExternalPartyFormDialog } from '@/modules/organization/components/external-party-form-dialog'
 import {
-  toExternalPartyRequest,
+  toCreateExternalPartyRequest,
+  toUpdateExternalPartyRequest,
   type ExternalPartyFormValues,
 } from '@/modules/organization/schemas/external-party.schemas'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
+import { isConflictError } from '@/shared/services/mutation-safety'
+import { normalizeApiError } from '@/shared/services/api-error'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
+import { ConflictRecoveryDialog } from '@/shared/ui/conflict-recovery-dialog'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { toast } from '@/shared/ui/toast-manager'
 import { pageRows } from '@/shared/utils/table-data'
-import type { ExternalParty } from '@/shared/types/generated/eiams-v1'
+import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, ExternalParty>()
+
+/**
+ * Arabic copy for the shared conflict dialog. It names neither outcome: a 409
+ * from `EXTERNAL_PARTIES_ROW_VERSION_MISMATCH` carries
+ * `{ external_party_id, expected_row_version, current_row_version }` and no
+ * statement about whether the write landed, so "لم يتم الحفظ" would be a
+ * fabricated fact. The dialog offers exactly the two honest moves — load the
+ * server's version, or keep what is on screen.
+ */
+const CONFLICT_COPY = {
+  titleAr: 'تغيّرت البيانات لدى خادم',
+  descriptionAr:
+    'رفض الخادم العملية لأن هذا السجل تغيّر منذ تحميله. لم يحدّد الخادم ما إذا كانت العملية قد نُفّذت، لذا لا يزعم النظام ذلك أيضاً. يمكنك تحميل النسخة الحالية من الخادم، أو البقاء على ما هو معروض الآن.',
+  recoverLabelAr: 'تحميل النسخة الحالية',
+  recoveringLabelAr: 'جارٍ التحميل...',
+  stayLabelAr: 'البقاء على المعروض',
+} as const
+
+/** One Arabic error toast for a non-conflict failure, as `useSubmitFeedback` does. */
+function reportApiError(error: unknown): void {
+  const apiError = normalizeApiError(error)
+  toast.error({
+    title: apiError.titleAr,
+    ...(apiError.detailAr === null ? {} : { description: apiError.detailAr }),
+  })
+}
 
 function ExternalPartiesPage() {
   const { has } = usePermission()
@@ -36,10 +66,12 @@ function ExternalPartiesPage() {
   const [search, setSearch] = useState('')
   const [dialogParty, setDialogParty] = useState<ExternalParty | null | undefined>(undefined)
   const [deactivationTarget, setDeactivationTarget] = useState<ExternalParty | null>(null)
+  const [conflictActive, setConflictActive] = useState(false)
+  const [isRecovering, setIsRecovering] = useState(false)
 
   const partiesQuery = useExternalPartiesQuery({
-    // Table controls are 1-based; EIAMS v1 list endpoints are 0-based.
-    page: pagination.page - 1,
+    // One-based controls, one-based wire: no conversion, and none is needed.
+    page: pagination.page,
     pageSize: pagination.pageSize,
     ...(search === '' ? {} : { search }),
   })
@@ -57,29 +89,90 @@ function ExternalPartiesPage() {
   const submitForm = useCallback(
     async (values: ExternalPartyFormValues) => {
       const party = dialogParty ?? null
-      await submitFeedback(async () => {
-        const request = toExternalPartyRequest(values, party)
-        if (party === null) {
-          await createMutation.mutateAsync(request)
+      if (party === null) {
+        // Create is unguarded: there is no prior row version to reject against.
+        await submitFeedback(async () => {
+          await createMutation.mutateAsync(toCreateExternalPartyRequest(values))
           toast.success({ title: 'تمت إضافة الجهة الخارجية.' })
-        } else {
-          await updateMutation.mutateAsync({ externalPartyId: party.externalPartyId, request })
-          toast.success({ title: 'تم حفظ تعديلات الجهة الخارجية.' })
+          setDialogParty(undefined)
+        })
+        return
+      }
+
+      try {
+        await updateMutation.mutateAsync({
+          externalPartyId: party.id,
+          request: toUpdateExternalPartyRequest(values, party),
+        })
+      } catch (error: unknown) {
+        // Not routed through `submitFeedback`, because that helper prints the
+        // generic 409 guidance ("refresh the page") before the caller can see
+        // the error — and a refresh is precisely what discards the row version
+        // this dialog is holding. `EXTERNAL_PARTIES_ROW_VERSION_MISMATCH` is
+        // the one failure here the screen can act on, so it gets the recovery
+        // dialog instead.
+        if (isConflictError(error)) {
+          setConflictActive(true)
+          return
         }
-        setDialogParty(undefined)
-      })
+        // Everything else keeps the existing contract: one Arabic toast, then
+        // re-thrown so the dialog maps `fieldErrors` onto the fields inline.
+        reportApiError(error)
+        throw error
+      }
+
+      toast.success({ title: 'تم حفظ تعديلات الجهة الخارجية.' })
+      setDialogParty(undefined)
     },
     [createMutation, dialogParty, submitFeedback, updateMutation],
   )
 
   const confirmDeactivation = useCallback(async () => {
     if (deactivationTarget === null) return
-    await submitFeedback(async () => {
-      await deactivateMutation.mutateAsync(deactivationTarget.externalPartyId)
-      toast.success({ title: 'تم تعطيل الجهة الخارجية مع الاحتفاظ بالمراجع السابقة.' })
+    // The status command carries the same version guard as the update, so it
+    // can 409 for the same reason and is handled the same way.
+    try {
+      await deactivateMutation.mutateAsync({
+        externalPartyId: deactivationTarget.id,
+        expectedRowVersion: deactivationTarget.rowVersion,
+      })
+    } catch (error: unknown) {
+      if (isConflictError(error)) {
+        // Close the confirm first: two stacked modals is one too many, and the
+        // conflict dialog supersedes it.
+        setDeactivationTarget(null)
+        setConflictActive(true)
+        return
+      }
+      reportApiError(error)
+      return
+    }
+    toast.success({ title: 'تم تعطيل الجهة الخارجية مع الاحتفاظ بالمراجع السابقة.' })
+    setDeactivationTarget(null)
+  }, [deactivateMutation, deactivationTarget])
+
+  /**
+   * Load the server's version and start over from it.
+   *
+   * Both dialogs close rather than being re-seeded. The row version the server
+   * just rejected is the only thing the dialog could have been holding, so
+   * leaving the form open would offer a retry that is guaranteed to 409 again.
+   * Reopening the edit dialog then reads the refetched row, so the next attempt
+   * carries a version the server actually has.
+   */
+  const recoverFromConflict = useCallback(async () => {
+    setIsRecovering(true)
+    try {
+      // `allSettled`-equivalent semantics through try/finally: a failed refetch
+      // must not strand the dialog in a permanent busy state.
+      await partiesQuery.refetch()
+    } finally {
+      setIsRecovering(false)
+      setConflictActive(false)
+      setDialogParty(undefined)
       setDeactivationTarget(null)
-    })
-  }, [deactivateMutation, deactivationTarget, submitFeedback])
+    }
+  }, [partiesQuery])
 
   const columns = useMemo(
     () =>
@@ -163,8 +256,8 @@ function ExternalPartiesPage() {
           }
           page={pagination.page}
           pageSize={pagination.pageSize}
-          totalCount={partiesQuery.data?.meta.totalItems}
-          totalPages={partiesQuery.data?.meta.totalPages ?? 1}
+          totalCount={partiesQuery.data?.totalItems}
+          totalPages={partiesQuery.data?.totalPages ?? 1}
           onPageChange={pagination.setPage}
           onPageSizeChange={pagination.setPageSize}
           searchQuery={search}
@@ -192,6 +285,19 @@ function ExternalPartiesPage() {
         busy={deactivateMutation.isPending}
         onConfirm={() => void confirmDeactivation()}
       />
+      {conflictActive ? (
+        <ConflictRecoveryDialog
+          descriptionAr={CONFLICT_COPY.descriptionAr}
+          isRefreshing={isRecovering}
+          onDismiss={() => setConflictActive(false)}
+          onRecover={() => void recoverFromConflict()}
+          recoveringLabelAr={CONFLICT_COPY.recoveringLabelAr}
+          recoverLabelAr={CONFLICT_COPY.recoverLabelAr}
+          slot="external-party-conflict-dialog"
+          stayLabelAr={CONFLICT_COPY.stayLabelAr}
+          titleAr={CONFLICT_COPY.titleAr}
+        />
+      ) : null}
     </div>
   )
 }

@@ -1,26 +1,42 @@
-export type { PageMeta } from './organization.api-types'
-
 export type {
+  Organization,
+  CreateOrganizationRequest,
+  UpdateOrganizationRequest,
+  SetOrganizationStatusRequest,
+  OrganizationPage,
   Site,
   SiteCreateRequest,
   SiteUpdateRequest,
+  SetSiteStatusRequest,
   SitePage,
   OrganizationalUnit,
   OrganizationalUnitCreateRequest,
   OrganizationalUnitUpdateRequest,
+  SetOrganizationalUnitStatusRequest,
   OrganizationalUnitPage,
   Employee,
   EmployeeCreateRequest,
   EmployeeUpdateRequest,
+  SetEmployeeStatusRequest,
   EmployeePage,
   ExternalParty,
-  ExternalPartyUpsertRequest,
+  CreateExternalPartyRequest,
+  UpdateExternalPartyRequest,
+  SetExternalPartyStatusRequest,
   ExternalPartyPage,
+  ListOrganizationsQuery,
   ListSitesQuery,
   ListOrganizationalUnitsQuery,
   ListEmployeesQuery,
   ListExternalPartiesQuery,
+  ResourceIdResponse,
   NamedReference,
   Uuid,
   RecordStatus,
+  RecordStatusCommandValue,
 } from './organization.api-types'
+
+// `statusCommandValue` is a runtime value (a `RecordStatus` → integer map used by
+// `Set*Status` command bodies), so it cannot ride on the `export type` block
+// above; `organization.api-types.ts` documents why the mapping exists.
+export { statusCommandValue } from './organization.api-types'
