@@ -128,9 +128,12 @@ describe('MaterialFormDialog', () => {
 
     await user.click(within(confirmation).getByRole('button', { name: 'تغيير النوع' }))
 
+    // The trigger shows the Arabic label for the applied kind, not the raw
+    // `Asset` enum value that `Select` used to fall back to.
     await waitFor(() =>
-      expect(within(dialog).getByLabelText('نوع المادة')).toHaveTextContent('Asset'),
+      expect(within(dialog).getByLabelText('نوع المادة')).toHaveTextContent('أصل ثابت'),
     )
+    expect(within(dialog).getByLabelText('نوع المادة')).not.toHaveTextContent('Asset')
   })
 
   it('preserves the consumable policy on direct selection', async () => {

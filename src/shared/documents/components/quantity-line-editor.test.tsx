@@ -238,7 +238,12 @@ describe('QuantityLineEditor', () => {
       expect(line?.conversionId).toBe(CARTON_CONVERSION.materialUnitConversionId)
       expect(line?.baseQuantity).toBe(50)
     })
-    expect(screen.getByText('لفة')).toBeInTheDocument()
+    // The trigger itself must show the chosen unit's Arabic label, not the raw
+    // conversion id: `getByText` alone would also match the popup option.
+    const unitTrigger = screen.getByLabelText('وحدة البند 1')
+    expect(unitTrigger).toHaveTextContent('لفة')
+    expect(unitTrigger).toHaveTextContent('× 10')
+    expect(unitTrigger).not.toHaveTextContent(CARTON_CONVERSION.materialUnitConversionId)
   })
 
   it('surfaces a blocked warehouse capability as an Arabic hint per row', async () => {
