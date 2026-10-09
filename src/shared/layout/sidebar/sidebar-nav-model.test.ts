@@ -15,9 +15,9 @@ const ALLOW_ALL = () => true
 const DENY_ALL = () => false
 
 describe('Sidebar nav model', () => {
-  it('exposes 13 groups and 29 items', () => {
+  it('exposes 13 groups and 30 items', () => {
     expect(SIDEBAR_NAV_GROUPS).toHaveLength(13)
-    expect(SIDEBAR_NAV_ITEM_COUNT).toBe(29)
+    expect(SIDEBAR_NAV_ITEM_COUNT).toBe(30)
     expect(SIDEBAR_NAV_GROUP_IDS).toHaveLength(13)
   })
 
@@ -75,7 +75,7 @@ describe('filterSidebarNav', () => {
   it('keeps everything when all permissions are granted', () => {
     const filtered = filterSidebarNav(SIDEBAR_NAV_GROUPS, ALLOW_ALL)
     expect(filtered).toHaveLength(13)
-    expect(filtered.reduce((sum, g) => sum + g.items.length, 0)).toBe(29)
+    expect(filtered.reduce((sum, g) => sum + g.items.length, 0)).toBe(30)
   })
 
   it('requires every listed code for "all" mode', () => {

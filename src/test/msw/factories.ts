@@ -56,6 +56,7 @@ import type {
   OrganizationalUnit,
   Employee,
   ExternalParty,
+  Organization,
 } from '@/modules/organization/types/organization.api-types'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 import type {
@@ -550,6 +551,18 @@ export function createWarehouseMaterialSetting(
       minQuantity: 2,
       maxQuantity: 10,
       rowVersion: 1,
+      status: 'Active',
+    },
+    overrides,
+  )
+}
+
+export function createOrganization(overrides: FixtureOverrides<Organization> = {}): Organization {
+  return withOverrides(
+    {
+      id: fixtureUuid(51),
+      code: 'ORG-001',
+      name: 'الهيئة العامة للرقابة والتفتيش',
       status: 'Active',
     },
     overrides,

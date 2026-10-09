@@ -93,8 +93,13 @@ import {
  * "this directory is capped" note the organization screens render instead of
  * silently showing a truncated reference list (`pageSize` is `[Range(1, 100)]`,
  * so "load everything" is not available).
+ * Re-measured at 384 by `eiams-frontend-whhu.14` (slice S4), which added the
+ * four Organizations application files - `hooks/use-organization-mutations.ts`,
+ * `schemas/organization.schemas.ts`, `components/organization-form-dialog.tsx`
+ * and `pages/organizations-list-page.tsx` - because the enterprise root of the
+ * hierarchy had a service layer and no UI to drive it.
  */
-const SCANNED_FILE_COUNT = 380
+const SCANNED_FILE_COUNT = 384
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

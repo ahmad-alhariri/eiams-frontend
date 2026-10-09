@@ -89,7 +89,10 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // 359 = 358 plus this work's src/modules/admin/types/user.types.ts.
     // 380 = 379 plus `src/shared/feedback/reference-limit-note.tsx`, the Arabic
     // directory-cap note added by `eiams-frontend-whhu.14` slice S3.
-    assertScannedFiles(PRODUCTION_FILES, 380)
+    // 384 = 380 plus the four Organizations files added by slice S4
+    // (`use-organization-mutations.ts`, `organization.schemas.ts`,
+    // `organization-form-dialog.tsx`, `organizations-list-page.tsx`).
+    assertScannedFiles(PRODUCTION_FILES, 384)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

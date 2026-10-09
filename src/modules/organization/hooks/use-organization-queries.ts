@@ -5,6 +5,7 @@ import { organizationService } from '@/modules/organization/services/organizatio
 import type {
   ListEmployeesQuery,
   ListExternalPartiesQuery,
+  ListOrganizationsQuery,
   ListOrganizationalUnitsQuery,
   ListSitesQuery,
 } from '@/modules/organization/types/organization.types'
@@ -19,6 +20,10 @@ type OrganizationQueryOptions = {
 }
 
 export const organizationQueryKeys = {
+  organizations: (scope: ScopeCacheKey, query: ListOrganizationsQuery) =>
+    queryKeys.scoped(scope, ORGANIZATION_RESOURCE, 'organizations', query),
+  organization: (scope: ScopeCacheKey, organizationId: string) =>
+    queryKeys.scoped(scope, ORGANIZATION_RESOURCE, 'organizations', organizationId),
   sites: (scope: ScopeCacheKey, query: ListSitesQuery) =>
     queryKeys.scoped(scope, ORGANIZATION_RESOURCE, 'sites', query),
   site: (scope: ScopeCacheKey, siteId: string) =>
@@ -39,6 +44,35 @@ export const organizationQueryKeys = {
 
 function useActiveScopeCacheKey() {
   return useActiveScopeContext().activeScopeCacheKey
+}
+
+export function useOrganizationsQuery(
+  query: ListOrganizationsQuery = EMPTY_QUERY,
+  options: OrganizationQueryOptions = {},
+) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey:
+      scope === undefined
+        ? queryKeys.public(ORGANIZATION_RESOURCE, 'organizations', query)
+        : organizationQueryKeys.organizations(scope, query),
+    queryFn: () => organizationService.listOrganizations(query),
+    enabled: scope !== undefined && (options.enabled ?? true),
+    staleTime: MASTER_DATA_STALE_TIME,
+  })
+}
+
+export function useOrganizationQuery(organizationId: string | undefined) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey:
+      scope === undefined || organizationId === undefined
+        ? queryKeys.public(ORGANIZATION_RESOURCE, 'organizations', organizationId)
+        : organizationQueryKeys.organization(scope, organizationId),
+    queryFn: () => organizationService.getOrganization(organizationId ?? ''),
+    enabled: scope !== undefined && organizationId !== undefined,
+    staleTime: MASTER_DATA_STALE_TIME,
+  })
 }
 
 export function useSitesQuery(

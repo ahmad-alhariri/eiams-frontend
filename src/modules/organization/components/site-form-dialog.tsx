@@ -1,7 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 
+import { useOrganizationsQuery } from '@/modules/organization/hooks/use-organization-queries'
 import {
   siteFormSchema,
   toSiteFormValues,
@@ -10,7 +11,9 @@ import {
 import type { Site } from '@/modules/organization/types/organization.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
+import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { normalizeApiError } from '@/shared/services/api-error'
+import { ReferenceLimitNote } from '@/shared/feedback/reference-limit-note'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -21,12 +24,20 @@ import {
   DialogTitle,
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { Textarea } from '@/shared/ui/textarea'
 
+/**
+ * The organization options are a REFERENCE list, not a directory to page
+ * through: the backend caps `pageSize` at 100, so this asks for one full page and
+ * the dialog says so when more organizations exist — a silently truncated option
+ * list reads as "this organization does not exist".
+ */
+const REFERENCE_PAGE = { page: 1, pageSize: MAX_WIRE_PAGE_SIZE } as const
 const SERVER_ERROR_KEYS = ['organizationId', 'code', 'name', 'location', 'governorateCode'] as const
 
 /** Arabic note shown in place of an editable control on the create-only fields. */
-const CREATE_ONLY_NOTE = 'يُحدَّد معرّف الجهة والرمز عند إنشاء الموقع ولا يمكن تعديلهما بعد ذلك.'
+const CREATE_ONLY_NOTE = 'تُحدَّد الجهة المالكة والرمز عند إنشاء الموقع ولا يمكن تعديلهما بعد ذلك.'
 
 export interface SiteFormDialogProps {
   site: Site | null
@@ -41,8 +52,11 @@ export interface SiteFormDialogProps {
  *
  * `organizationId` and `code` bind only to `POST /sites`, so on edit they render
  * disabled and carry the record's own values; `toUpdateSiteRequest` drops them.
- * There is no status control: `PUT /sites/{id}` accepts no status and Site has
- * no activation route in this contract.
+ * The owning organization is chosen from the real `GET /organizations`
+ * directory rather than typed as a GUID — the endpoint exists, and a free-text
+ * UUID field produced a 400 model-binding failure on every typo. There is no
+ * status control: `PUT /sites/{id}` accepts no status and Site has no
+ * activation route in this contract.
  */
 export function SiteFormDialog({
   site,
@@ -52,6 +66,12 @@ export function SiteFormDialog({
   onSubmit,
 }: SiteFormDialogProps) {
   const isCreate = site === null
+  const organizationsQuery = useOrganizationsQuery(REFERENCE_PAGE, { enabled: open })
+  const organizations = useMemo(
+    () => organizationsQuery.data?.items ?? [],
+    [organizationsQuery.data],
+  )
+  const organizationsUnavailable = organizationsQuery.isLoading || organizationsQuery.isError
   const form = useForm<SiteFormValues>({
     resolver: zodResolver(siteFormSchema(isCreate)),
     defaultValues: toSiteFormValues(null),
@@ -68,7 +88,10 @@ export function SiteFormDialog({
   // One subscription for both fields the submit gate depends on. `useWatch`
   // rather than `form.watch` keeps this out of the React Compiler's
   // incompatible-library path.
-  const [name, code] = useWatch({ control: form.control, name: ['name', 'code'] })
+  const [name, code, organizationId] = useWatch({
+    control: form.control,
+    name: ['name', 'code', 'organizationId'],
+  })
 
   const submit = async (values: SiteFormValues) => {
     form.clearErrors()
@@ -80,7 +103,10 @@ export function SiteFormDialog({
     }
   }
 
-  const isSubmittable = name.trim().length >= 2 && (!isCreate || code.trim() !== '')
+  const isSubmittable =
+    name.trim().length >= 2 &&
+    (!isCreate || (code.trim() !== '' && organizationId.trim() !== '')) &&
+    !organizationsUnavailable
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,10 +117,26 @@ export function SiteFormDialog({
             أدخل بيانات الموقع المعتمدة. حقل العنوان والمحافظة اختياريان.
           </DialogDescription>
         </DialogHeader>
+        {organizationsQuery.isError ? (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
+          >
+            تعذّر تحميل دليل الجهات. أعد المحاولة قبل الحفظ.
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void organizationsQuery.refetch()}
+            >
+              إعادة تحميل الجهات
+            </Button>
+          </div>
+        ) : null}
         <Form {...form}>
           <form
             noValidate
-            aria-busy={isPending}
+            aria-busy={isPending || organizationsUnavailable}
             className="grid gap-5"
             onSubmit={form.handleSubmit(submit)}
           >
@@ -109,17 +151,47 @@ export function SiteFormDialog({
             <FormField
               control={form.control}
               name="organizationId"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
-                  <FormLabel>معرّف الجهة المالكة</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      dir="ltr"
-                      disabled={isPending || !isCreate}
-                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    />
-                  </FormControl>
+                  <FormLabel>الجهة المالكة</FormLabel>
+                  <Select
+                    value={field.value === '' ? null : field.value}
+                    disabled={isPending || organizationsUnavailable || !isCreate}
+                    onValueChange={(value) => field.onChange(value ?? '')}
+                  >
+                    <FormControl>
+                      <SelectTrigger
+                        aria-label="الجهة المالكة"
+                        aria-invalid={fieldState.invalid || undefined}
+                      >
+                        <SelectValue placeholder="اختر الجهة المالكة">
+                          {organizations.find((organization) => organization.id === field.value)
+                            ?.name ?? (
+                            <span dir="ltr" className="font-mono text-sm">
+                              {field.value}
+                            </span>
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {organizations.map((organization) => (
+                        <SelectItem key={organization.id} value={organization.id}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{organization.name}</span>
+                            {organization.code === '' ? null : (
+                              <>
+                                {/* The explicit space keeps the accessible name
+                                    of the option from running the two labels
+                                    together into one word. */}{' '}
+                                <span className="text-muted text-sm">{organization.code}</span>
+                              </>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -204,6 +276,13 @@ export function SiteFormDialog({
             </DialogFooter>
           </form>
         </Form>
+        {isCreate ? (
+          <ReferenceLimitNote
+            loadedCount={organizationsQuery.data?.items.length}
+            totalCount={organizationsQuery.data?.totalItems}
+            hint="جهات إضافية قد لا تظهر في قائمة الاختيار."
+          />
+        ) : null}
       </DialogContent>
     </Dialog>
   )

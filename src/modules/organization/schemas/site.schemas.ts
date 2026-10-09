@@ -32,8 +32,9 @@ const GOVERNORATE_TOO_LONG_MESSAGE = 'المحافظة يجب ألّا يتجا�
 export function siteFormSchema(isCreate: boolean) {
   return z.object({
     // Create-only: shown read-only on edit and never sent to the update body.
-    // No organization lookup endpoint exists in this contract, so the owning
-    // organization identifier stays an explicit form field.
+    // The owning organization is picked from the real `GET /organizations`
+    // directory (see `SiteFormDialog`), so the value is always a UUID the
+    // server actually holds.
     organizationId: isCreate ? z.uuid(UUID_MESSAGE) : z.string(),
     code: isCreate
       ? z.string().trim().min(1, CODE_REQUIRED_MESSAGE).max(50, CODE_TOO_LONG_MESSAGE)

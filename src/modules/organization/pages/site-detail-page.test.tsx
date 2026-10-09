@@ -6,8 +6,8 @@ import { type PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { okJson } from '@/test/msw/envelope'
-import { createSite } from '@/test/msw/factories'
+import { okJson, okPageJson } from '@/test/msw/envelope'
+import { createOrganization, createSite } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -119,6 +119,10 @@ describe('SiteDetailPage', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/sites/${site.id}`, () => okJson(site)),
+      // The dialog now resolves the owning organization from the real
+      // directory instead of asking for a typed GUID, so the reference list has
+      // to answer too.
+      http.get(`${API_BASE_URL}/organizations`, () => okPageJson([createOrganization()])),
       http.put(`${API_BASE_URL}/sites/${site.id}`, async ({ request }) => {
         receivedBody = await request.json()
         // `PUT /sites/{id}` answers with an empty body.

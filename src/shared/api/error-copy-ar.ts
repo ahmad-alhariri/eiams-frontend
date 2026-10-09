@@ -167,6 +167,14 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'رمز الموقع مستخدم مسبقاً.',
     detailAr: null,
   },
+  ORGANIZATIONS_CODE_NOT_UNIQUE: {
+    titleAr: 'رمز الجهة مستخدم مسبقاً.',
+    detailAr: null,
+  },
+  ORGANIZATIONS_FORBIDDEN: {
+    titleAr: 'لا تملك صلاحية إدارة الجهات.',
+    detailAr: null,
+  },
   WAREHOUSES_CODE_NOT_UNIQUE: {
     titleAr: 'رمز المستودع مستخدم مسبقاً.',
     detailAr: null,
@@ -479,6 +487,7 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     detailAr: null,
   },
   MATERIAL_DOMAINS_NOT_FOUND: { titleAr: 'لم يتم العثور على مجال المادة.', detailAr: null },
+  ORGANIZATIONS_NOT_FOUND: { titleAr: 'لم يتم العثور على الجهة.', detailAr: null },
   SITES_NOT_FOUND: { titleAr: 'لم يتم العثور على الموقع.', detailAr: null },
   WAREHOUSES_NOT_FOUND: { titleAr: 'لم يتم العثور على المستودع.', detailAr: null },
   INVENTORY_ADJUSTMENTS_ALREADY_EXISTS_FOR_COUNT: {

@@ -6,7 +6,7 @@ import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { errJson, okPageJson } from '@/test/msw/envelope'
-import { createSite } from '@/test/msw/factories'
+import { createOrganization, createSite } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -135,10 +135,14 @@ describe('SitesListPage', () => {
     permissions.canManage = true
     const user = userEvent.setup()
     const site = createSite()
+    const organization = createOrganization()
     const receivedBodies: unknown[] = []
 
     server.use(
       http.get(`${API_BASE_URL}/sites`, () => okPageJson([site])),
+      // The owning organization is chosen from the REAL directory now, not
+      // typed as a GUID: `GET /organizations` exists and the dialog loads it.
+      http.get(`${API_BASE_URL}/organizations`, () => okPageJson([organization])),
       http.post(`${API_BASE_URL}/sites`, async ({ request }) => {
         receivedBodies.push(await request.json())
         return errJson(422, {
@@ -154,9 +158,13 @@ describe('SitesListPage', () => {
     await screen.findByText(site.name)
     await user.click(screen.getByRole('button', { name: 'إضافة موقع' }))
     const dialog = screen.getByRole('dialog')
-    await user.type(
-      within(dialog).getByLabelText('معرّف الجهة المالكة'),
-      '00000000-0000-4000-8000-000000000051',
+    const organizationSelect = within(dialog).getByLabelText('الجهة المالكة')
+    // A combobox of real organizations, not a free-text UUID input.
+    expect(organizationSelect.tagName).toBe('BUTTON')
+    await waitFor(() => expect(organizationSelect).toBeEnabled())
+    await user.click(organizationSelect)
+    await user.click(
+      await screen.findByRole('option', { name: `${organization.name} ${organization.code}` }),
     )
     await user.type(within(dialog).getByLabelText('اسم الموقع'), 'موقع تجريبي')
     await user.type(within(dialog).getByLabelText('رمز الموقع'), 'TEST-01')
@@ -168,7 +176,7 @@ describe('SitesListPage', () => {
     // Site is not a versioned aggregate.
     expect(receivedBodies).toEqual([
       {
-        organizationId: '00000000-0000-4000-8000-000000000051',
+        organizationId: organization.id,
         code: 'TEST-01',
         name: 'موقع تجريبي',
         governorateCode: null,
@@ -178,16 +186,44 @@ describe('SitesListPage', () => {
     expect(await within(dialog).findByText('رمز الموقع مستخدم مسبقاً.')).toBeInTheDocument()
   })
 
+  it('admits in Arabic when the organization directory outgrows one reference page', async () => {
+    permissions.canManage = true
+    const user = userEvent.setup()
+    const site = createSite()
+    const organization = createOrganization()
+
+    server.use(
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([site])),
+      // 101 organizations exist and the backend caps `pageSize` at 100, so the
+      // picker holds one page and must SAY so rather than look exhaustive.
+      http.get(`${API_BASE_URL}/organizations`, () =>
+        okPageJson([organization], { page: 1, pageSize: 100, totalCount: 101, totalPages: 2 }),
+      ),
+      http.post(`${API_BASE_URL}/sites`, () => new HttpResponse(null, { status: 204 })),
+    )
+
+    render(<SitesListPage />, { wrapper: createWrapper() })
+
+    await screen.findByText(site.name)
+    await user.click(screen.getByRole('button', { name: 'إضافة موقع' }))
+    const dialog = screen.getByRole('dialog')
+
+    expect(await within(dialog).findByRole('status')).toBeInTheDocument()
+    expect(within(dialog).getByText(/يعرض النظام أول 1 عنصراً من أصل 101/)).toBeInTheDocument()
+  })
+
   it('updates an existing site by sending only the fields the update body binds', async () => {
     permissions.canManage = true
     const user = userEvent.setup()
     // Site serves no row version; the record is NOT an optimistic-concurrency
     // aggregate, so nothing about concurrency appears in the update body.
     const site = createSite()
+    const organization = createOrganization()
     let receivedBody: unknown = null
 
     server.use(
       http.get(`${API_BASE_URL}/sites`, () => okPageJson([site])),
+      http.get(`${API_BASE_URL}/organizations`, () => okPageJson([organization])),
       http.put(`${API_BASE_URL}/sites/${site.id}`, async ({ request }) => {
         receivedBody = await request.json()
         // `PUT /sites/{id}` answers with an empty body.
@@ -204,7 +240,11 @@ describe('SitesListPage', () => {
     await user.clear(nameInput)
     await user.type(nameInput, 'المقر المحدّث')
     // `organizationId` and `code` are create-only and render disabled on edit.
-    expect(within(dialog).getByLabelText('معرّف الجهة المالكة')).toBeDisabled()
+    // The organization control is now a Select, so the disabled element is its
+    // trigger; the option the site was created under is still the one shown.
+    const organizationSelect = within(dialog).getByLabelText('الجهة المالكة')
+    expect(organizationSelect).toBeDisabled()
+    expect(organizationSelect).toHaveTextContent(organization.name)
     expect(within(dialog).getByLabelText('رمز الموقع')).toBeDisabled()
     await user.click(within(dialog).getByRole('button', { name: 'حفظ التعديلات' }))
 

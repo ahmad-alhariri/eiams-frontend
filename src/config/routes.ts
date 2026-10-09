@@ -26,6 +26,7 @@ export const ROUTE_PATHS = {
   catalogMaterialDetail: '/catalog/materials/:materialId',
   catalogUnits: '/catalog/units',
   /** Organization. */
+  organizationOrganizations: '/organization/organizations',
   organizationSites: '/organization/sites',
   organizationSiteDetail: '/organization/sites/:siteId',
   organizationOrgUnits: '/organization/org-units',
@@ -215,6 +216,12 @@ export const ROUTE_METADATA: RouteMetaMap = {
     parent: 'dashboard',
   },
 
+  organizationOrganizations: {
+    labelAr: 'المنظمات',
+    group: 'organization',
+    permissions: ['organization.view'],
+    parent: 'dashboard',
+  },
   organizationSites: {
     labelAr: 'المواقع',
     group: 'organization',
