@@ -87,8 +87,9 @@ export function OrganizationFormDialog({
         <DialogHeader>
           <DialogTitle>{isCreate ? 'إضافة جهة' : 'تعديل الجهة'}</DialogTitle>
           <DialogDescription>
-            أدخل اسم الجهة ورمزها المعتمد. الجهة هي المستوى الأعلى في الهيكل التنظيمي، وتتفرّع عنها
-            المواقع.
+            {isCreate
+              ? 'أدخل اسم الجهة ورمزها المعتمد. الجهة هي المستوى الأعلى في الهيكل التنظيمي، وتتفرّع عنها المواقع.'
+              : 'عدّل اسم الجهة ضمن نطاق العمل الحالي. رمز الجهة غير قابل للتعديل بعد الإنشاء.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

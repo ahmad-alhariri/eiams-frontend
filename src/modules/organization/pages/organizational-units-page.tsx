@@ -6,6 +6,7 @@ import { OrganizationalUnitFormDialog } from '@/modules/organization/components/
 import { OrganizationalUnitTree } from '@/modules/organization/components/organizational-unit-tree'
 import {
   useCreateOrganizationalUnitMutation,
+  useSetOrganizationalUnitStatusMutation,
   useUpdateOrganizationalUnitMutation,
 } from '@/modules/organization/hooks/use-organizational-unit-mutations'
 import { useOrganizationalUnitsQuery } from '@/modules/organization/hooks/use-organization-queries'
@@ -24,9 +25,13 @@ import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
+import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { Input } from '@/shared/ui/input'
 import { toast } from '@/shared/ui/toast-manager'
-import type { OrganizationalUnit } from '@/modules/organization/types/organization.types'
+import type {
+  OrganizationalUnit,
+  RecordStatus,
+} from '@/modules/organization/types/organization.types'
 
 /**
  * Read-only organizational structure. The v1 contract supplies a paginated
@@ -43,12 +48,18 @@ const ORGANIZATIONAL_UNIT_TREE_PAGE_SIZE = MAX_WIRE_PAGE_SIZE
  * Read-only organizational structure. The v1 contract supplies a paginated
  * flat list with optional parent references, so this page requests its maximum
  * contract page size and derives the visible hierarchy locally.
+ *
+ * "Read-only" refers to the tree's own shape: the contract cannot re-site or
+ * re-parent a unit, so neither is offered. Writes that DO exist — name/type
+ * edits and the status command — run through the row actions, gated on
+ * `organization.manage`.
  */
 function OrganizationalUnitsPage() {
   const { has } = usePermission()
   const canManage = has('organization.manage')
   const [searchInput, setSearchInput] = useState('')
   const [dialogUnit, setDialogUnit] = useState<OrganizationalUnit | null | undefined>(undefined)
+  const [statusTarget, setStatusTarget] = useState<OrganizationalUnit | null>(null)
   const search = useDebounce(searchInput)
   const queryInput = useMemo(
     () => ({
@@ -62,12 +73,49 @@ function OrganizationalUnitsPage() {
   const unitsQuery = useOrganizationalUnitsQuery(queryInput)
   const createMutation = useCreateOrganizationalUnitMutation()
   const updateMutation = useUpdateOrganizationalUnitMutation()
+  const statusMutation = useSetOrganizationalUnitStatusMutation()
   const submitFeedback = useSubmitFeedback()
   const page = unitsQuery.data
 
   const closeDialog = (open: boolean) => {
     if (!open) setDialogUnit(undefined)
   }
+
+  /**
+   * Activation is the SAME route as deactivation with the other ordinal, so the
+   * one command serves both directions and the copy is chosen from the status the
+   * row actually carries. There is no delete in this module: suspending a unit is
+   * the only removal mechanism it has, and reactivating is the way back.
+   *
+   * `submitFeedback` is what turns a rejected write into one Arabic toast — the
+   * confirm dialog stays open, because nothing about the row is known to have
+   * changed.
+   */
+  const confirmStatusChange = useCallback(async () => {
+    if (statusTarget === null) return
+    const nextStatus: RecordStatus = statusTarget.status === 'Active' ? 'Inactive' : 'Active'
+
+    try {
+      await submitFeedback(async () => {
+        await statusMutation.mutateAsync({
+          orgUnitId: statusTarget.id,
+          status: nextStatus,
+        })
+      })
+    } catch {
+      return
+    }
+
+    toast.success({
+      title:
+        nextStatus === 'Inactive'
+          ? 'تم تعطيل الوحدة التنظيمية مع الاحتفاظ بالمراجع السابقة.'
+          : 'تم تنشيط الوحدة التنظيمية من جديد.',
+    })
+    setStatusTarget(null)
+  }, [statusMutation, statusTarget, submitFeedback])
+
+  const isStatusTargetActive = statusTarget?.status === 'Active'
 
   const submitForm = useCallback(
     async (values: OrganizationalUnitFormValues) => {
@@ -166,6 +214,9 @@ function OrganizationalUnitsPage() {
             <OrganizationalUnitTree
               units={page.items}
               {...(canManage ? { onEdit: (unit: OrganizationalUnit) => setDialogUnit(unit) } : {})}
+              {...(canManage
+                ? { onToggleStatus: (unit: OrganizationalUnit) => setStatusTarget(unit) }
+                : {})}
             />
             <ReferenceLimitNote
               loadedCount={page.items.length}
@@ -181,6 +232,20 @@ function OrganizationalUnitsPage() {
         isPending={createMutation.isPending || updateMutation.isPending}
         onOpenChange={closeDialog}
         onSubmit={submitForm}
+      />
+      <ConfirmDialog
+        open={statusTarget !== null}
+        onOpenChange={(open) => !open && setStatusTarget(null)}
+        title={isStatusTargetActive ? 'تعطيل وحدة تنظيمية' : 'تنشيط وحدة تنظيمية'}
+        message={
+          isStatusTargetActive
+            ? 'سيبقى اسم الوحدة ظاهراً في الموظفين والمستودعات المرتبطة، لكنه لن يكون متاحاً للاختيار في العمليات الجديدة.'
+            : 'سيصبح اسم الوحدة متاحاً مرة أخرى للاختيار في العمليات الجديدة.'
+        }
+        confirmLabel={isStatusTargetActive ? 'تعطيل الوحدة' : 'تنشيط الوحدة'}
+        variant={isStatusTargetActive ? 'destructive' : 'confirm'}
+        busy={statusMutation.isPending}
+        onConfirm={() => void confirmStatusChange()}
       />
     </div>
   )

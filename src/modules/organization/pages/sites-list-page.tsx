@@ -1,4 +1,4 @@
-import { IconEdit, IconPlus } from '@tabler/icons-react'
+import { IconCheck, IconEdit, IconPlus, IconUserOff } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
@@ -6,6 +6,7 @@ import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { SiteFormDialog } from '@/modules/organization/components/site-form-dialog'
 import {
   useCreateSiteMutation,
+  useSetSiteStatusMutation,
   useUpdateSiteMutation,
 } from '@/modules/organization/hooks/use-site-mutations'
 import { useSitesQuery } from '@/modules/organization/hooks/use-organization-queries'
@@ -20,6 +21,7 @@ import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
+import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
@@ -45,6 +47,7 @@ function SitesListPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<RecordStatus | undefined>()
   const [dialogSite, setDialogSite] = useState<Site | null | undefined>(undefined)
+  const [statusTarget, setStatusTarget] = useState<Site | null>(null)
   const sitesQueryInput = useMemo(
     () => ({
       // Table controls are one-based and so is the wire, so the page crosses the
@@ -61,6 +64,7 @@ function SitesListPage() {
   const sitesQuery = useSitesQuery(sitesQueryInput)
   const createMutation = useCreateSiteMutation()
   const updateMutation = useUpdateSiteMutation()
+  const statusMutation = useSetSiteStatusMutation()
   const submitFeedback = useSubmitFeedback()
 
   const handleSearchChange = useCallback(
@@ -84,6 +88,40 @@ function SitesListPage() {
   const closeDialog = useCallback((open: boolean) => {
     if (!open) setDialogSite(undefined)
   }, [])
+
+  /**
+   * Activation is the SAME route as deactivation with the other ordinal, so the
+   * one command serves both directions and the copy is chosen from the status the
+   * row actually carries. There is no delete in this module: suspending a site is
+   * the only removal mechanism it has, and reactivating is the way back.
+   *
+   * `submitFeedback` is what turns a rejected write into one Arabic toast — the
+   * confirm dialog stays open, because nothing about the row is known to have
+   * changed.
+   */
+  const confirmStatusChange = useCallback(async () => {
+    if (statusTarget === null) return
+    const nextStatus: RecordStatus = statusTarget.status === 'Active' ? 'Inactive' : 'Active'
+
+    try {
+      await submitFeedback(async () => {
+        await statusMutation.mutateAsync({
+          siteId: statusTarget.id,
+          status: nextStatus,
+        })
+      })
+    } catch {
+      return
+    }
+
+    toast.success({
+      title:
+        nextStatus === 'Inactive'
+          ? 'تم تعطيل الموقع مع الاحتفاظ بالمراجع السابقة.'
+          : 'تم تنشيط الموقع من جديد.',
+    })
+    setStatusTarget(null)
+  }, [statusMutation, statusTarget, submitFeedback])
 
   const submitForm = useCallback(
     async (values: SiteFormValues) => {
@@ -140,17 +178,31 @@ function SitesListPage() {
               siteColumnHelper.display({
                 id: 'actions',
                 header: 'إجراءات',
-                cell: ({ row }) => (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`تعديل ${row.original.name}`}
-                    onClick={() => openEdit(row.original)}
-                  >
-                    <IconEdit aria-hidden />
-                  </Button>
-                ),
+                cell: ({ row }) => {
+                  const isActive = row.original.status === 'Active'
+                  return (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`تعديل ${row.original.name}`}
+                        onClick={() => openEdit(row.original)}
+                      >
+                        <IconEdit aria-hidden />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`${isActive ? 'تعطيل' : 'تنشيط'} ${row.original.name}`}
+                        onClick={() => setStatusTarget(row.original)}
+                      >
+                        {isActive ? <IconUserOff aria-hidden /> : <IconCheck aria-hidden />}
+                      </Button>
+                    </div>
+                  )
+                },
               }),
             ]
           : []),
@@ -161,6 +213,7 @@ function SitesListPage() {
   const page = sitesQuery.data
   const totalCount = page?.totalItems
   const totalPages = Math.max(page?.totalPages ?? 1, 1)
+  const isStatusTargetActive = statusTarget?.status === 'Active'
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -232,6 +285,20 @@ function SitesListPage() {
         isPending={createMutation.isPending || updateMutation.isPending}
         onOpenChange={closeDialog}
         onSubmit={submitForm}
+      />
+      <ConfirmDialog
+        open={statusTarget !== null}
+        onOpenChange={(open) => !open && setStatusTarget(null)}
+        title={isStatusTargetActive ? 'تعطيل موقع' : 'تنشيط موقع'}
+        message={
+          isStatusTargetActive
+            ? 'سيبقى اسم الموقع ظاهراً في الوحدات والمستودعات المرتبطة، لكنه لن يكون متاحاً للاختيار في العمليات الجديدة.'
+            : 'سيصبح اسم الموقع متاحاً مرة أخرى للاختيار في العمليات الجديدة.'
+        }
+        confirmLabel={isStatusTargetActive ? 'تعطيل الموقع' : 'تنشيط الموقع'}
+        variant={isStatusTargetActive ? 'destructive' : 'confirm'}
+        busy={statusMutation.isPending}
+        onConfirm={() => void confirmStatusChange()}
       />
     </div>
   )

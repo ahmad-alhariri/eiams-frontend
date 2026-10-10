@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/shared/ui/toast-manager'
 import { listRows } from '@/shared/utils/table-data'
 import type { MaterialDomain } from '@/modules/catalog/types/catalog.types'
-import type { RecordStatus } from '@/shared/types/generated/eiams-v1'
+import type { RecordStatus } from '@/shared/api/api-contracts'
 
 const materialDomainColumnHelper = createColumnHelper<typeof dataTableFeatures, MaterialDomain>()
 

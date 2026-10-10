@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { HierarchyTree, type HierarchyTreeProps } from '@/shared/ui/hierarchy-tree'
 import type { HierarchyTreeNode } from '@/shared/ui/hierarchy-tree.model'
-import type { RecordStatus } from '@/shared/types/generated/eiams-v1'
+import type { RecordStatus } from '@/shared/api/api-contracts'
 /**
  * The shared primitive's own contract.
  *

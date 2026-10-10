@@ -142,7 +142,9 @@ export function OrganizationalUnitFormDialog({
         <DialogHeader>
           <DialogTitle>{isCreate ? 'إضافة وحدة تنظيمية' : 'تعديل الوحدة التنظيمية'}</DialogTitle>
           <DialogDescription>
-            أدخل بيانات الوحدة التنظيمية الجديدة ضمن نطاق العمل الحالي.
+            {isCreate
+              ? 'أدخل بيانات الوحدة التنظيمية الجديدة ضمن نطاق العمل الحالي.'
+              : 'عدّل اسم الوحدة ونوعها ضمن نطاق العمل الحالي. الموقع والوحدة الأب غير قابلين للتعديل بعد الإنشاء.'}
           </DialogDescription>
         </DialogHeader>
 

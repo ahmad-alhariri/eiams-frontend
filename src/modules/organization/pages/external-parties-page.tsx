@@ -1,11 +1,11 @@
-import { IconEdit, IconPlus, IconUserOff } from '@tabler/icons-react'
+import { IconCheck, IconEdit, IconPlus, IconUserOff } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
 import { usePermission } from '@/modules/auth/hooks/use-permission'
 import {
   useCreateExternalPartyMutation,
-  useDeactivateExternalPartyMutation,
+  useSetExternalPartyStatusMutation,
   useUpdateExternalPartyMutation,
 } from '@/modules/organization/hooks/use-external-party-mutations'
 import { useExternalPartiesQuery } from '@/modules/organization/hooks/use-organization-queries'
@@ -65,7 +65,7 @@ function ExternalPartiesPage() {
   const pagination = useServerPagination()
   const [search, setSearch] = useState('')
   const [dialogParty, setDialogParty] = useState<ExternalParty | null | undefined>(undefined)
-  const [deactivationTarget, setDeactivationTarget] = useState<ExternalParty | null>(null)
+  const [statusTarget, setStatusTarget] = useState<ExternalParty | null>(null)
   const [conflictActive, setConflictActive] = useState(false)
   const [isRecovering, setIsRecovering] = useState(false)
 
@@ -77,7 +77,7 @@ function ExternalPartiesPage() {
   })
   const createMutation = useCreateExternalPartyMutation()
   const updateMutation = useUpdateExternalPartyMutation()
-  const deactivateMutation = useDeactivateExternalPartyMutation()
+  const statusMutation = useSetExternalPartyStatusMutation()
   const submitFeedback = useSubmitFeedback()
 
   const openCreate = useCallback(() => setDialogParty(null), [])
@@ -127,29 +127,53 @@ function ExternalPartiesPage() {
     [createMutation, dialogParty, submitFeedback, updateMutation],
   )
 
-  const confirmDeactivation = useCallback(async () => {
-    if (deactivationTarget === null) return
+  /**
+   * One status command, TWO directions.
+   *
+   * Deactivation and reactivation are the same route with the other ordinal, so
+   * the choice comes from the status the row actually carries — which is what
+   * keeps an inactive party from becoming a dead end. There is no delete here:
+   * deactivation is the only removal mechanism, and reactivation is the way
+   * back.
+   *
+   * `expectedRowVersion` is the version the ROW was read with. A status write
+   * bumps it, so the `invalidate` in the hook is load-bearing: without the
+   * refetch it triggers, a deactivate-then-reactivate would replay the version
+   * the server has already left behind and answer 409.
+   */
+  const confirmStatusChange = useCallback(async () => {
+    if (statusTarget === null) return
+    const nextStatus = statusTarget.status === 'Active' ? 'Inactive' : 'Active'
+
     // The status command carries the same version guard as the update, so it
     // can 409 for the same reason and is handled the same way.
     try {
-      await deactivateMutation.mutateAsync({
-        externalPartyId: deactivationTarget.id,
-        expectedRowVersion: deactivationTarget.rowVersion,
+      await submitFeedback(async () => {
+        await statusMutation.mutateAsync({
+          externalPartyId: statusTarget.id,
+          expectedRowVersion: statusTarget.rowVersion,
+          status: nextStatus,
+        })
       })
     } catch (error: unknown) {
       if (isConflictError(error)) {
         // Close the confirm first: two stacked modals is one too many, and the
         // conflict dialog supersedes it.
-        setDeactivationTarget(null)
+        setStatusTarget(null)
         setConflictActive(true)
         return
       }
-      reportApiError(error)
       return
     }
-    toast.success({ title: 'تم تعطيل الجهة الخارجية مع الاحتفاظ بالمراجع السابقة.' })
-    setDeactivationTarget(null)
-  }, [deactivateMutation, deactivationTarget])
+
+    toast.success({
+      title:
+        nextStatus === 'Inactive'
+          ? 'تم تعطيل الجهة الخارجية مع الاحتفاظ بالمراجع السابقة.'
+          : 'تم تنشيط الجهة الخارجية من جديد.',
+    })
+    setStatusTarget(null)
+  }, [statusMutation, statusTarget, submitFeedback])
 
   /**
    * Load the server's version and start over from it.
@@ -170,7 +194,7 @@ function ExternalPartiesPage() {
       setIsRecovering(false)
       setConflictActive(false)
       setDialogParty(undefined)
-      setDeactivationTarget(null)
+      setStatusTarget(null)
     }
   }, [partiesQuery])
 
@@ -190,36 +214,65 @@ function ExternalPartiesPage() {
           header: 'الحالة',
           cell: ({ getValue }) => <StatusBadge entity="record" status={getValue()} />,
         }),
-        columnHelper.display({
-          id: 'actions',
-          header: 'إجراءات',
-          cell: ({ row }) =>
-            canManage && row.original.status === 'Active' ? (
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`تعديل ${row.original.nameAr}`}
-                  onClick={() => openEdit(row.original)}
-                >
-                  <IconEdit aria-hidden />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`تعطيل ${row.original.nameAr}`}
-                  onClick={() => setDeactivationTarget(row.original)}
-                >
-                  <IconUserOff aria-hidden />
-                </Button>
-              </div>
-            ) : null,
-        }),
+        // The column is OMITTED for a reader, exactly as the sites and
+        // organizations screens do. Declaring it unconditionally left a header
+        // over an empty cell in every row — a control that says an action exists
+        // and never provides one.
+        ...(canManage
+          ? [
+              columnHelper.display({
+                id: 'actions',
+                header: 'إجراءات',
+                cell: ({ row }) => {
+                  const isActive = row.original.status === 'Active'
+                  return (
+                    <div className="flex items-center gap-1">
+                      {isActive ? (
+                        <>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`تعديل ${row.original.nameAr}`}
+                            onClick={() => openEdit(row.original)}
+                          >
+                            <IconEdit aria-hidden />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`تعطيل ${row.original.nameAr}`}
+                            onClick={() => setStatusTarget(row.original)}
+                          >
+                            <IconUserOff aria-hidden />
+                          </Button>
+                        </>
+                      ) : (
+                        // The only action an inactive party needs is the way
+                        // back. Rendering nothing here is what stranded a
+                        // deactivated record with no route to reactivation.
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`تنشيط ${row.original.nameAr}`}
+                          onClick={() => setStatusTarget(row.original)}
+                        >
+                          <IconCheck aria-hidden />
+                        </Button>
+                      )}
+                    </div>
+                  )
+                },
+              }),
+            ]
+          : []),
       ]),
     [canManage, openEdit],
   )
+
+  const isStatusTargetActive = statusTarget?.status === 'Active'
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -276,14 +329,18 @@ function ExternalPartiesPage() {
         onSubmit={submitForm}
       />
       <ConfirmDialog
-        open={deactivationTarget !== null}
-        onOpenChange={(open) => !open && setDeactivationTarget(null)}
-        title="تعطيل جهة خارجية"
-        message="سيبقى اسم الجهة ظاهراً في السندات والعهد السابقة، لكنه لن يكون متاحاً للاختيار في العمليات الجديدة."
-        confirmLabel="تعطيل الجهة"
-        variant="destructive"
-        busy={deactivateMutation.isPending}
-        onConfirm={() => void confirmDeactivation()}
+        open={statusTarget !== null}
+        onOpenChange={(open) => !open && setStatusTarget(null)}
+        title={isStatusTargetActive ? 'تعطيل جهة خارجية' : 'تنشيط جهة خارجية'}
+        message={
+          isStatusTargetActive
+            ? 'سيبقى اسم الجهة ظاهراً في السندات والعهد السابقة، لكنه لن يكون متاحاً للاختيار في العمليات الجديدة.'
+            : 'سيصبح اسم الجهة متاحاً مرة أخرى للاختيار في العمليات الجديدة.'
+        }
+        confirmLabel={isStatusTargetActive ? 'تعطيل الجهة' : 'تنشيط الجهة'}
+        variant={isStatusTargetActive ? 'destructive' : 'confirm'}
+        busy={statusMutation.isPending}
+        onConfirm={() => void confirmStatusChange()}
       />
       {conflictActive ? (
         <ConflictRecoveryDialog

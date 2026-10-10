@@ -6,7 +6,7 @@
  * (`material-category-tree`, `organizational-unit-tree`, and downstream
  * custody / count trees) used to duplicate. The component is generic over the
  * record type `T`; consumers supply the key, label, code, and status getters
- * plus an optional edit callback.
+ * plus an optional edit callback and an optional activate/deactivate callback.
  *
  * Interaction model
  * -----------------
@@ -14,7 +14,7 @@
  * optional edit action is a separate real `<button>` with an Arabic
  * `aria-label` that names the record being edited. The root list exposes the
  * tree under a consumer-supplied `ariaLabel`. Keyboard activation follows the
- * native semantics of those controls — focus, Enter/Space, and screen-reader
+ * native semantics of those controls â€” focus, Enter/Space, and screen-reader
  * announcement work without extra wiring.
  *
  * Status type
@@ -33,12 +33,12 @@
  * the consumer's module, so neither feature tree carries duplicated tree
  * markup or duplicated parent-resolution logic.
  */
-import { IconChevronDown, IconEdit } from '@tabler/icons-react'
+import { IconChevronDown, IconCheck, IconEdit, IconUserOff } from '@tabler/icons-react'
 import { useCallback, useState, type ReactNode } from 'react'
 
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { Button } from '@/shared/ui/button'
-import type { RecordStatus } from '@/shared/types/generated/eiams-v1'
+import type { RecordStatus } from '@/shared/api/api-contracts'
 import { cn } from '@/shared/utils/class-names'
 import type { HierarchyTreeNode } from '@/shared/ui/hierarchy-tree.model'
 
@@ -55,6 +55,13 @@ export interface HierarchyTreeProps<T> {
   getCode: (record: T) => string
   getStatus: (record: T) => RecordStatus
   onEdit?: (record: T) => void
+  /**
+   * Optional activate/deactivate action, drawn from `getStatus` so the button
+   * offers the direction the row actually needs. Symmetrical with `onEdit`:
+   * omitted means the tree is read-only for that record, and a consumer that
+   * passes it is expected to gate it on its own permission.
+   */
+  onToggleStatus?: (record: T) => void
 }
 
 type TreeBranchProps<T> = {
@@ -62,14 +69,24 @@ type TreeBranchProps<T> = {
   depth: number
   node: HierarchyTreeNode<T>
   onEdit: ((record: T) => void) | undefined
+  onToggleStatus: ((record: T) => void) | undefined
   onToggle: (recordId: string) => void
   props: Pick<HierarchyTreeProps<T>, 'getCode' | 'getKey' | 'getLabel' | 'getStatus' | 'leadIcon'>
 }
 
-function TreeBranch<T>({ collapsedIds, depth, node, onEdit, onToggle, props }: TreeBranchProps<T>) {
+function TreeBranch<T>({
+  collapsedIds,
+  depth,
+  node,
+  onEdit,
+  onToggleStatus,
+  onToggle,
+  props,
+}: TreeBranchProps<T>) {
   const { children, data: record } = node
   const hasChildren = children.length > 0
   const isExpanded = !collapsedIds.has(props.getKey(record))
+  const isRecordActive = props.getStatus(record) === 'Active'
 
   return (
     <li data-depth={depth}>
@@ -114,6 +131,17 @@ function TreeBranch<T>({ collapsedIds, depth, node, onEdit, onToggle, props }: T
             <IconEdit aria-hidden />
           </Button>
         )}
+        {onToggleStatus === undefined ? null : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`${isRecordActive ? 'تعطيل' : 'تنشيط'} ${props.getLabel(record)}`}
+            onClick={() => onToggleStatus(record)}
+          >
+            {isRecordActive ? <IconUserOff aria-hidden /> : <IconCheck aria-hidden />}
+          </Button>
+        )}
       </div>
       {hasChildren && isExpanded ? (
         <ul className="me-5 border-e border-border pe-3">
@@ -124,6 +152,7 @@ function TreeBranch<T>({ collapsedIds, depth, node, onEdit, onToggle, props }: T
               depth={depth + 1}
               collapsedIds={collapsedIds}
               onEdit={onEdit}
+              onToggleStatus={onToggleStatus}
               onToggle={onToggle}
               props={props}
             />
@@ -137,9 +166,16 @@ function TreeBranch<T>({ collapsedIds, depth, node, onEdit, onToggle, props }: T
 /**
  * Collapsible, keyboard-accessible hierarchy built from server-derived nodes.
  * Each branch exposes an expand/collapse toggle (`aria-expanded`), a status
- * badge, and an optional edit action for permission-gated administration.
+ * badge, and optional edit and activate/deactivate actions for
+ * permission-gated administration.
  */
-export function HierarchyTree<T>({ nodes, ariaLabel, onEdit, ...props }: HierarchyTreeProps<T>) {
+export function HierarchyTree<T>({
+  nodes,
+  ariaLabel,
+  onEdit,
+  onToggleStatus,
+  ...props
+}: HierarchyTreeProps<T>) {
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set())
 
   const toggleExpanded = useCallback((recordId: string) => {
@@ -163,6 +199,7 @@ export function HierarchyTree<T>({ nodes, ariaLabel, onEdit, ...props }: Hierarc
           depth={1}
           collapsedIds={collapsedIds}
           onEdit={onEdit}
+          onToggleStatus={onToggleStatus}
           onToggle={toggleExpanded}
           props={props}
         />

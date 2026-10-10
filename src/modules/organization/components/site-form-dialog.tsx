@@ -55,8 +55,9 @@ export interface SiteFormDialogProps {
  * The owning organization is chosen from the real `GET /organizations`
  * directory rather than typed as a GUID — the endpoint exists, and a free-text
  * UUID field produced a 400 model-binding failure on every typo. There is no
- * status control: `PUT /sites/{id}` accepts no status and Site has no
- * activation route in this contract.
+ * status control here: `PUT /sites/{id}` accepts no status, and activation /
+ * deactivation is the separate `PUT /sites/{id}/status` command (see
+ * `useSetSiteStatusMutation`).
  */
 export function SiteFormDialog({
   site,

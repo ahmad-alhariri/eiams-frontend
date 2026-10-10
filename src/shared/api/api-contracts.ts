@@ -122,6 +122,23 @@ export interface ResourceIdResponse {
   readonly id: string
 }
 
+/**
+ * The lifecycle state shared by every master-data aggregate the backend can
+ * suspend (Organization, Site, OrganizationalUnit, Employee, ExternalParty).
+ *
+ * Declared here rather than imported from `@/shared/types/generated/eiams-v1`
+ * because that artifact is frozen migration scaffolding scheduled for deletion
+ * at `whhu.5`. A `shared/` import is exactly what keeps the generated count above
+ * zero once every feature module has been migrated off it, so it has to end too.
+ *
+ * This is the READ side, and it is deliberately a string union even though the
+ * status command binds an ordinal: query filters and read projections serialise
+ * the enum by name (`"Active"` / `"Inactive"`), while a `SetStatus` request body
+ * is `[JsonRequired] int Status`. The write mapping belongs to the module that
+ * owns the command, not to the shared seam.
+ */
+export type RecordStatus = 'Active' | 'Inactive'
+
 /** Contract-shape validation helpers (not feature-level validation — feature-level `zod` schemas
  * live in `src/modules/<m>/schemas/*.schema.ts`, e.g. `receiving-info.schema.ts`).
  *

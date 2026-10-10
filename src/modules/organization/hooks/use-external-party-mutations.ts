@@ -5,6 +5,7 @@ import { organizationService } from '@/modules/organization/services/organizatio
 import { queryKeys } from '@/shared/services/query-keys'
 import {
   statusCommandValue,
+  type RecordStatus,
   type UpdateExternalPartyRequest,
 } from '@/modules/organization/types/organization.types'
 
@@ -16,7 +17,8 @@ type UpdateExternalPartyVariables = {
 }
 
 /**
- * Deactivation variables.
+ * Status-command variables, in the LANGUAGE OF THE RECORD — plus the version
+ * guard.
  *
  * `expectedRowVersion` is REQUIRED, not optional polish. ExternalParty is the
  * only versioned aggregate in this module, and `PUT /external-parties/{id}/status`
@@ -24,11 +26,13 @@ type UpdateExternalPartyVariables = {
  * guard as the update body. There is no `POST /external-parties/{id}/deactivate`
  * route to fall back on: that path does not exist, and asking for it returns 404.
  * The page therefore has to hand over the version it read off the row it is
- * acting on.
+ * acting on, and because a successful status write BUMPED that version, the
+ * invalidation below is what makes the next attempt carry a fresh one.
  */
-type DeactivateExternalPartyVariables = {
+type SetExternalPartyStatusVariables = {
   externalPartyId: string
   expectedRowVersion: number
+  status: RecordStatus
 }
 
 function useInvalidateExternalParties() {
@@ -65,16 +69,25 @@ export function useUpdateExternalPartyMutation() {
   })
 }
 
-export function useDeactivateExternalPartyMutation() {
+/**
+ * The single status route, addressed with the ORDINAL the command body binds
+ * (`statusCommandValue('Inactive')` → 1, `statusCommandValue('Active')` → 0),
+ * not the record's `status` string. Reactivation is the same route with the
+ * other ordinal; nothing else about the write changes.
+ *
+ * There is no delete route: deactivation is the only removal mechanism an
+ * external party has, which is why one command serves both directions.
+ */
+export function useSetExternalPartyStatusMutation() {
   const invalidate = useInvalidateExternalParties()
   return useMutation({
-    // The single status route, addressed with the ORDINAL the command body
-    // binds (`statusCommandValue('Inactive')` → 1), not the record's `status`
-    // string. Reactivation is the same route with `Active` → 0; nothing else
-    // about the write changes.
-    mutationFn: ({ externalPartyId, expectedRowVersion }: DeactivateExternalPartyVariables) =>
+    mutationFn: ({
+      externalPartyId,
+      expectedRowVersion,
+      status,
+    }: SetExternalPartyStatusVariables) =>
       organizationService.setExternalPartyStatus(externalPartyId, {
-        status: statusCommandValue.Inactive,
+        status: statusCommandValue[status],
         expectedRowVersion,
       }),
     onSuccess: invalidate,

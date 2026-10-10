@@ -8,6 +8,12 @@ import type { OrganizationalUnit } from '@/modules/organization/types/organizati
 type OrganizationalUnitTreeProps = {
   units: readonly OrganizationalUnit[]
   onEdit?: (unit: OrganizationalUnit) => void
+  /**
+   * Activate/deactivate action, offered per row from the unit's own status. The
+   * shared tree draws the button and chooses the glyph from `getStatus`, so the
+   * page only has to say WHERE the confirmation happens.
+   */
+  onToggleStatus?: (unit: OrganizationalUnit) => void
 }
 
 /**
@@ -16,7 +22,7 @@ type OrganizationalUnitTreeProps = {
  * The label is `name` (the wire field; there is no `nameAr`) and the secondary
  * line is `unitType`, which replaces the `code` this projection never served.
  */
-function OrganizationalUnitTree({ units, onEdit }: OrganizationalUnitTreeProps) {
+function OrganizationalUnitTree({ units, onEdit, onToggleStatus }: OrganizationalUnitTreeProps) {
   const tree = useMemo(() => buildOrganizationalUnitTree(units), [units])
 
   return (
@@ -29,6 +35,7 @@ function OrganizationalUnitTree({ units, onEdit }: OrganizationalUnitTreeProps) 
       getCode={(unit) => unit.unitType}
       getStatus={(unit) => unit.status}
       {...(onEdit === undefined ? {} : { onEdit })}
+      {...(onToggleStatus === undefined ? {} : { onToggleStatus })}
     />
   )
 }

@@ -101,7 +101,9 @@ export function EmployeeFormDialog({
         <DialogHeader>
           <DialogTitle>{isCreate ? 'إضافة موظف' : 'تعديل الموظف'}</DialogTitle>
           <DialogDescription>
-            اختر الوحدة التنظيمية من الدليل المعتمد ضمن نطاق العمل الحالي.
+            {isCreate
+              ? 'اختر الوحدة التنظيمية من الدليل المعتمد ضمن نطاق العمل الحالي.'
+              : 'عدّل بيانات الموظف ضمن نطاق العمل الحالي. الرقم الوظيفي والوحدة التنظيمية غير قابلين للتعديل بعد الإنشاء.'}
           </DialogDescription>
         </DialogHeader>
         {unitsQuery.isError ? (
