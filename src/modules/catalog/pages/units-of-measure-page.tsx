@@ -16,14 +16,17 @@ import {
   type UnitOfMeasureFormValues,
 } from '@/modules/catalog/schemas/unit-of-measure.schemas'
 import { StatusBadge } from '@/shared/feedback/status-badge'
+import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
-import { DataTable, dataTableFeatures } from '@/shared/ui/data-table'
+import { dataTableFeatures } from '@/shared/ui/data-table'
+import { DataTableServer } from '@/shared/ui/data-table-server'
 import { toast } from '@/shared/ui/toast-manager'
-import { listRows } from '@/shared/utils/table-data'
+import { pageRows } from '@/shared/utils/table-data'
+import type { ListUnitsOfMeasureQuery } from '@/modules/catalog/types/catalog.api-types'
 import type { RecordStatus, UnitOfMeasure } from '@/modules/catalog/types/catalog.types'
 
 const unitColumnHelper = createColumnHelper<typeof dataTableFeatures, UnitOfMeasure>()
@@ -32,11 +35,21 @@ const unitColumnHelper = createColumnHelper<typeof dataTableFeatures, UnitOfMeas
  * The v1 unit reference list: pagination only, no filter at all — not even
  * `status` — so this screen shows every record the server returns, inactive
  * ones included, and offers the status command per row.
+ *
+ * Pagination is `useServerPagination` + `DataTableServer`, the composition
+ * `/catalog/materials` uses. `GET /catalog/units-of-measure` defaults to 20
+ * rows a page, so the unparameterised query this screen used to send truncated
+ * the directory at row 20 with nothing on screen able to reach the rest.
  */
 function UnitsOfMeasurePage() {
   const { has } = usePermission()
   const canManage = has('catalog.manage')
-  const unitsQuery = useUnitsOfMeasureQuery()
+  const { page: currentPage, pageSize, setPage, setPageSize } = useServerPagination()
+  const unitsQueryInput = useMemo<ListUnitsOfMeasureQuery>(
+    () => ({ page: currentPage, pageSize }),
+    [currentPage, pageSize],
+  )
+  const unitsQuery = useUnitsOfMeasureQuery(unitsQueryInput)
   const createMutation = useCreateUnitOfMeasureMutation()
   const updateMutation = useUpdateUnitOfMeasureMutation()
   const statusMutation = useSetUnitOfMeasureStatusMutation()
@@ -162,6 +175,9 @@ function UnitsOfMeasurePage() {
   )
 
   const isStatusTargetActive = statusTarget?.status === 'Active'
+  const unitsPage = unitsQuery.data
+  const totalCount = unitsPage?.totalItems
+  const totalPages = Math.max(unitsPage?.totalPages ?? 1, 1)
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -179,11 +195,11 @@ function UnitsOfMeasurePage() {
       />
       <ContentCard
         title="قائمة وحدات القياس"
-        description="جميع الوحدات المتاحة ضمن نطاق العمل الحالي، مع عرض السجلات غير النشطة للحفاظ على المراجع التاريخية."
+        description="جميع الوحدات المتاحة ضمن نطاق العمل الحالي، مع عرض السجلات غير النشطة للحفاظ على المراجع التاريخية، وينفّذ الخادم التنقل بين الصفحات."
       >
-        <DataTable
+        <DataTableServer
           columns={columns}
-          data={listRows(unitsQuery.data?.items, unitsQuery.isError)}
+          data={pageRows(unitsPage, unitsQuery.isError)}
           isLoading={unitsQuery.isLoading}
           isError={unitsQuery.isError}
           onRetry={() => void unitsQuery.refetch()}
@@ -198,6 +214,12 @@ function UnitsOfMeasurePage() {
               </Button>
             ) : undefined
           }
+          page={currentPage}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
         />
       </ContentCard>
       <UnitOfMeasureFormDialog

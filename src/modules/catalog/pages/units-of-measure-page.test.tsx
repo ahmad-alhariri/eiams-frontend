@@ -50,6 +50,41 @@ function PageWrapper({ children }: PropsWithChildren) {
 }
 
 describe('UnitsOfMeasurePage', () => {
+  it('paginates server-side from page 1 and reaches rows past the default page size', async () => {
+    const receivedPages: Array<string | null> = []
+    const user = userEvent.setup()
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/units-of-measure`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        receivedPages.push(params.get('page'))
+        const page = Number(params.get('page') ?? '1')
+        const names = Array.from(
+          { length: page === 2 ? 3 : 10 },
+          (_, index) => `وحدة ${page}-${index + 1}`,
+        )
+
+        return okPageJson(
+          names.map((name, index) => makeUnit({ id: fixtureUuid(70 + page * 10 + index), name })),
+          { page, pageSize: 10, totalCount: 13, totalPages: 2 },
+        )
+      }),
+    )
+
+    render(<UnitsOfMeasurePage />, { wrapper: PageWrapper })
+
+    const pager = await screen.findByRole('navigation', { name: 'تنقل بين الصفحات' })
+    // `useServerPagination` and the wire are both one-based: `page=0` is a 400.
+    expect(receivedPages[0]).toBe('1')
+    expect(await within(pager).findByText('صفحة ١ من ٢')).toBeInTheDocument()
+    expect(within(pager).getByText('عرض ١–١٠ من ١٣')).toBeInTheDocument()
+
+    await user.click(within(pager).getByRole('button', { name: 'الصفحة التالية' }))
+
+    await waitFor(() => expect(receivedPages.at(-1)).toBe('2'))
+    expect(await screen.findByText('وحدة 2-1')).toBeInTheDocument()
+    expect(within(pager).getByText('عرض ١١–١٣ من ١٣')).toBeInTheDocument()
+  })
+
   it('lists active and inactive contract records and hides write actions without catalog.manage', async () => {
     permissions.canManage = false
     const activeUnit = makeUnit({ name: 'قطعة', symbol: 'EA', status: 'Active' })

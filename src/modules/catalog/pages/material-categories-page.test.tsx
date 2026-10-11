@@ -196,10 +196,14 @@ describe('MaterialCategoriesPage', () => {
     expect(requestedPaths).toEqual([child.id, `${child.id}/parent`])
   })
 
-  it('refuses a self-parent and a descendant as parent before any request goes out', async () => {
+  it('never offers the edited category or its descendants as a parent', async () => {
     permissions.canManage = true
     const root = makeCategory({ id: fixtureUuid(25), name: 'أجهزة رئيسية' })
-    const child = makeCategory({ id: fixtureUuid(26), name: 'أجهزة فرعية' })
+    const child = makeCategory({
+      id: fixtureUuid(26),
+      name: 'أجهزة فرعية',
+      parentCategoryId: root.id,
+    })
     const updateBodies: unknown[] = []
     const user = userEvent.setup()
     server.use(
@@ -220,15 +224,84 @@ describe('MaterialCategoriesPage', () => {
     await user.click(screen.getByRole('button', { name: `تعديل ${root.name}` }))
     const dialog = screen.getByRole('dialog')
     await user.click(within(dialog).getByRole('combobox', { name: 'التصنيف الأب' }))
-    await user.click(await screen.findByRole('option', { name: root.name }))
-    await user.click(within(dialog).getByRole('button', { name: 'حفظ التعديلات' }))
 
-    // The client-side guard blocks the write; the server-side rules are the
-    // authority but a self-parent never needs to reach them.
+    // A self-parent and a descendant are the two shapes the server refuses with
+    // 409 MATERIAL_CATEGORIES_CIRCULAR_PARENT, so they are not choices at all —
+    // the option list must not contain them, so no request can be built from one.
+    // The listbox is portalled out of the dialog, hence the document-scoped query.
+    expect(await screen.findByRole('option', { name: 'بدون تصنيف أب' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: root.name })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: child.name })).not.toBeInTheDocument()
+  })
+
+  it('shows the real parent of a nested category on the edit trigger', async () => {
+    permissions.canManage = true
+    const parent = makeCategory({ id: fixtureUuid(25), name: 'أجهزة رئيسية' })
+    const child = makeCategory({
+      id: fixtureUuid(26),
+      name: 'أجهزة فرعية',
+      parentCategoryId: parent.id,
+    })
+    const user = userEvent.setup()
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/categories`, () => okPageJson([parent, child])),
+      http.get(`${API_BASE_URL}/catalog/domains`, () => okPageJson([makeDomain()])),
+    )
+
+    render(<MaterialCategoriesPage />, { wrapper: createWrapper() })
+    await screen.findByText(child.name)
+    await user.click(screen.getByRole('button', { name: `تعديل ${child.name}` }))
+
+    const dialog = screen.getByRole('dialog')
+    const trigger = within(dialog).getByRole('combobox', { name: 'التصنيف الأب' })
+    // The stored parent is right; the TRIGGER used to render a hardcoded
+    // "بدون تصنيف أب" for every value, so a nested category looked parentless.
+    expect(trigger).toHaveTextContent('أجهزة رئيسية')
+    expect(trigger).not.toHaveTextContent('بدون تصنيف أب')
+  })
+
+  it('loads the tree and its domain names as bounded reference pages', async () => {
+    const requests: Record<string, { page: string | null; pageSize: string | null }> = {}
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/categories`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        requests['categories'] = { page: params.get('page'), pageSize: params.get('pageSize') }
+        return okPageJson([makeCategory()], { page: 1, pageSize: 100, totalCount: 140 })
+      }),
+      http.get(`${API_BASE_URL}/catalog/domains`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        requests['domains'] = { page: params.get('page'), pageSize: params.get('pageSize') }
+        return okPageJson([makeDomain()], { page: 1, pageSize: 100, totalCount: 120 })
+      }),
+    )
+
+    render(<MaterialCategoriesPage />, { wrapper: createWrapper() })
+
+    // A tree is read whole or not at all: `pageSize` is the backend maximum and
+    // is never larger, because 200 is rejected or silently truncated.
+    await waitFor(() => expect(Object.keys(requests)).toHaveLength(2))
+    expect(requests['categories']).toEqual({ page: '1', pageSize: '100' })
+    expect(requests['domains']).toEqual({ page: '1', pageSize: '100' })
+    // Both truncations are admitted in Arabic rather than shown as a whole tree.
+    expect(await screen.findByText(/أول مئة تصنيف/)).toBeInTheDocument()
+    expect(screen.getByText(/أول مئة مجال/)).toBeInTheDocument()
+  })
+
+  it('never renders a blank group heading for a domain whose name did not load', async () => {
+    const orphan = makeCategory({ id: fixtureUuid(27), name: 'تصنيف بلا مجال محمّل' })
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/categories`, () => okPageJson([orphan])),
+      // The domains list answered without the category's domain.
+      http.get(`${API_BASE_URL}/catalog/domains`, () => okPageJson([])),
+    )
+
+    render(<MaterialCategoriesPage />, { wrapper: createWrapper() })
+
+    // An empty `<h2>` reads as a rendering bug; the section names itself instead.
     expect(
-      await within(dialog).findByText('لا يمكن اختيار التصنيف نفسه كتصنيف أب.'),
+      await screen.findByRole('heading', { name: 'مجال غير معروف (تعذّر عرض اسمه)' }),
     ).toBeInTheDocument()
-    await waitFor(() => expect(updateBodies).toEqual([]))
+    expect(screen.getByText(orphan.name)).toBeInTheDocument()
   })
 
   it('deactivates a tree node through the integer status command', async () => {

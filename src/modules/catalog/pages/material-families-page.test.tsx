@@ -176,13 +176,76 @@ describe('MaterialFamiliesPage', () => {
 
     render(<MaterialFamiliesPage />, { wrapper: PageWrapper })
     await screen.findByText(first.name)
-    await user.type(screen.getByLabelText('البحث في العائلات'), 'طابعات')
+    // The search box is the shared server-table input, and its placeholder says
+    // out loud that the scope is the page on screen.
+    expect(
+      screen.getByPlaceholderText('ابحث في الصفحة الحالية بالاسم أو الرمز...'),
+    ).toBeInTheDocument()
+    await user.type(screen.getByRole('searchbox', { name: 'بحث' }), 'طابعات')
 
     await waitFor(() => expect(screen.queryByText(first.name)).not.toBeInTheDocument())
     expect(screen.getByText(second.name)).toBeInTheDocument()
     // The route binds `categoryId` and `status` — never `search`. Sending one
     // was fiction the server silently ignored.
     expect(searches.every((search) => search === null)).toBe(true)
+  })
+
+  it('paginates server-side from page 1 and offers no page=0', async () => {
+    permissions.canManage = false
+    const user = userEvent.setup()
+    const category = makeCategory()
+    const receivedPages: Array<string | null> = []
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/families`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        receivedPages.push(params.get('page'))
+        const page = Number(params.get('page') ?? '1')
+        const names = Array.from(
+          { length: page === 2 ? 2 : 10 },
+          (_, index) => `عائلة ${page}-${index + 1}`,
+        )
+
+        return okPageJson(
+          names.map((name, index) => makeFamily({ id: fixtureUuid(80 + page * 10 + index), name })),
+          { page, pageSize: 10, totalCount: 12, totalPages: 2 },
+        )
+      }),
+      http.get(`${API_BASE_URL}/catalog/categories`, () => okPageJson([category])),
+    )
+
+    render(<MaterialFamiliesPage />, { wrapper: PageWrapper })
+
+    const pager = await screen.findByRole('navigation', { name: 'تنقل بين الصفحات' })
+    expect(receivedPages[0]).toBe('1')
+    expect(await within(pager).findByText('صفحة ١ من ٢')).toBeInTheDocument()
+
+    await user.click(within(pager).getByRole('button', { name: 'الصفحة التالية' }))
+
+    await waitFor(() => expect(receivedPages.at(-1)).toBe('2'))
+    expect(receivedPages.every((page) => page !== '0')).toBe(true)
+    expect(await screen.findByText('عائلة 2-1')).toBeInTheDocument()
+  })
+
+  it('loads the category reference at the backend maximum and admits the limit', async () => {
+    permissions.canManage = false
+    const categoryRequests: Array<{ page: string | null; pageSize: string | null }> = []
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/families`, () => okPageJson([makeFamily()])),
+      http.get(`${API_BASE_URL}/catalog/categories`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        categoryRequests.push({ page: params.get('page'), pageSize: params.get('pageSize') })
+        return okPageJson([makeCategory()], { page: 1, pageSize: 100, totalCount: 240 })
+      }),
+    )
+
+    render(<MaterialFamiliesPage />, { wrapper: PageWrapper })
+
+    // The `التصنيف` column is a join against the category list, so that list is
+    // a reference load: it asks for the largest legal page (100, never more) and
+    // says in Arabic when even that is not the whole directory.
+    await waitFor(() => expect(categoryRequests.length).toBeGreaterThan(0))
+    expect(categoryRequests[0]).toEqual({ page: '1', pageSize: '100' })
+    expect(await screen.findByText(/أول مئة تصنيف/)).toBeInTheDocument()
   })
 
   it('retries a failed directory request from the Arabic error state', async () => {

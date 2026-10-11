@@ -15,16 +15,19 @@ import {
   toUpdateMaterialDomainRequest,
   type MaterialDomainFormValues,
 } from '@/modules/catalog/schemas/material-domain.schemas'
+import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
-import { dataTableFeatures, DataTable } from '@/shared/ui/data-table'
+import { dataTableFeatures } from '@/shared/ui/data-table'
+import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { toast } from '@/shared/ui/toast-manager'
-import { listRows } from '@/shared/utils/table-data'
+import { pageRows } from '@/shared/utils/table-data'
+import type { ListMaterialDomainsQuery } from '@/modules/catalog/types/catalog.api-types'
 import type { MaterialDomain, RecordStatus } from '@/modules/catalog/types/catalog.types'
 
 const materialDomainColumnHelper = createColumnHelper<typeof dataTableFeatures, MaterialDomain>()
@@ -33,17 +36,46 @@ function isRecordStatus(value: string | null): value is RecordStatus {
   return value === 'Active' || value === 'Inactive'
 }
 
-/** Scoped, contract-backed material domain directory. */
+/**
+ * Scoped, contract-backed material domain directory.
+ *
+ * Pagination is the same `useServerPagination` + `DataTableServer` composition
+ * `/catalog/materials` already uses, for the same reason: `GET /catalog/domains`
+ * defaults to 20 rows a page and returns no filter but `status`, so a plain
+ * `DataTable` over an unparameterised query silently dropped every domain past
+ * row 20 — 22 exist, so two were unreachable with no control to reach them.
+ * The wire is one-based and so is the hook, so the page crosses unchanged; the
+ * service clamps it into `[1, 21474836]` / `[1, 100]`.
+ */
 function MaterialDomainsPage() {
   const { has } = usePermission()
   const canManage = has('catalog.manage')
+  const pagination = useServerPagination()
+  const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [status, setStatus] = useState<RecordStatus | undefined>()
   const [dialogDomain, setDialogDomain] = useState<MaterialDomain | null | undefined>(undefined)
   const [statusTarget, setStatusTarget] = useState<MaterialDomain | null>(null)
-  const domainsQuery = useMaterialDomainsQuery(status === undefined ? {} : { status })
+  const domainsQueryInput = useMemo<ListMaterialDomainsQuery>(
+    () => ({
+      page: currentPage,
+      pageSize,
+      ...(status === undefined ? {} : { status }),
+    }),
+    [currentPage, pageSize, status],
+  )
+  const domainsQuery = useMaterialDomainsQuery(domainsQueryInput)
   const createMutation = useCreateMaterialDomainMutation()
   const updateMutation = useUpdateMaterialDomainMutation()
   const statusMutation = useSetMaterialDomainStatusMutation()
+
+  /** A filter change starts a new result set, so it returns to the first page. */
+  const handleStatusChange = useCallback(
+    (value: string | null) => {
+      setPage(1)
+      setStatus(isRecordStatus(value) ? value : undefined)
+    },
+    [setPage],
+  )
 
   const openCreate = useCallback(() => setDialogDomain(null), [])
   const openEdit = useCallback((domain: MaterialDomain) => setDialogDomain(domain), [])
@@ -165,6 +197,9 @@ function MaterialDomainsPage() {
   )
 
   const isStatusTargetActive = statusTarget?.status === 'Active'
+  const domainsPage = domainsQuery.data
+  const totalCount = domainsPage?.totalItems
+  const totalPages = Math.max(domainsPage?.totalPages ?? 1, 1)
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -175,10 +210,7 @@ function MaterialDomainsPage() {
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end">
             <div className="flex w-full flex-col gap-2 sm:w-52">
               <span className="text-sm font-medium text-foreground">حالة المجال</span>
-              <Select
-                value={status ?? 'all'}
-                onValueChange={(value) => setStatus(isRecordStatus(value) ? value : undefined)}
-              >
+              <Select value={status ?? 'all'} onValueChange={handleStatusChange}>
                 <SelectTrigger aria-label="تصفية حسب حالة المجال">
                   <SelectValue>
                     {status === undefined ? 'كل الحالات' : status === 'Active' ? 'نشط' : 'غير نشط'}
@@ -202,11 +234,11 @@ function MaterialDomainsPage() {
       />
       <ContentCard
         title="قائمة مجالات التصنيف"
-        description="تُدار المجالات عبر خادم النظام، بما في ذلك نطاق الصلاحيات وحالة السجل."
+        description="تُدار المجالات عبر خادم النظام، بما في ذلك نطاق الصلاحيات وحالة السجل، وينفّذ الخادم التنقل بين الصفحات والتصفية بالحالة."
       >
-        <DataTable
+        <DataTableServer
           columns={columns}
-          data={listRows(domainsQuery.data?.items, domainsQuery.isError)}
+          data={pageRows(domainsPage, domainsQuery.isError)}
           isLoading={domainsQuery.isLoading}
           isError={domainsQuery.isError}
           onRetry={() => void domainsQuery.refetch()}
@@ -215,6 +247,12 @@ function MaterialDomainsPage() {
           emptyTitle="لا توجد مجالات تصنيف"
           emptyDescription="لم يتم العثور على مجالات تطابق حالة السجل المحددة."
           emptyAction={canManage ? <Button onClick={openCreate}>إضافة مجال</Button> : undefined}
+          page={currentPage}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
         />
       </ContentCard>
       <MaterialDomainFormDialog

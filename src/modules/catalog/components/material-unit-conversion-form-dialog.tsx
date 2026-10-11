@@ -45,6 +45,13 @@ type MaterialUnitConversionFormDialogProps = {
  * Edits one material-specific alternative unit. The base unit is supplied by
  * the server and is never a selectable conversion target.
  *
+ * The candidates are restricted to units of the BASE unit's `unitType`. The
+ * backend compares the source and base unit types case-insensitively and refuses
+ * anything else with 400 `MATERIAL_UNIT_CONVERSIONS_UNIT_TYPE_MISMATCH`
+ * ("The source and base units must have the same unit type"), so offering such a
+ * unit is offering a request that cannot succeed — and the failure arrived as a
+ * generic toast with nothing pointing at the cause.
+ *
  * There is NO status field: a conversion is not a suspendable master record,
  * its lifecycle ends in DELETE, and the update route binds `factor` ONLY. So an
  * existing conversion shows its unit read-only — re-pointing the units means
@@ -62,16 +69,32 @@ export function MaterialUnitConversionFormDialog({
   onOpenChange,
   onSubmit,
 }: MaterialUnitConversionFormDialogProps) {
+  const baseUnit = useMemo(
+    () => units.find((unit) => unit.id === material.baseUnitId),
+    [material.baseUnitId, units],
+  )
+  /** The backend's comparison is case-insensitive, so the offer must be too. */
+  const baseUnitType = baseUnit?.unitType.trim().toLocaleLowerCase('ar')
   const selectableUnits = useMemo(
     () =>
       units.filter(
         (unit) =>
           unit.status === 'Active' &&
           unit.id !== material.baseUnitId &&
-          !activeUnitIds.has(unit.id),
+          !activeUnitIds.has(unit.id) &&
+          unit.unitType.trim().toLocaleLowerCase('ar') === baseUnitType,
       ),
-    [activeUnitIds, material.baseUnitId, units],
+    [activeUnitIds, baseUnitType, material.baseUnitId, units],
   )
+  /**
+   * Two distinct "nothing to offer" cases, and they say different things: an
+   * unknown base unit means the reference list did not answer, while an empty
+   * candidate list means every same-type unit is already taken.
+   */
+  const noCandidatesMessage =
+    baseUnit === undefined
+      ? 'تعذّر تحديد نوع وحدة الأساس من قائمة الوحدات، أغلق النافذة وحاول مرة أخرى.'
+      : 'لا توجد وحدة نشطة من نفس نوع وحدة الأساس متاحة، لأن التحويل يتطلب أن تكون وحدة المصدر ووحدة الأساس من النوع نفسه.'
   const form = useForm<MaterialUnitConversionFormValues>({
     resolver: zodResolver(materialUnitConversionSchema),
     defaultValues: EMPTY_VALUES,
@@ -88,7 +111,10 @@ export function MaterialUnitConversionFormDialog({
   const submit = async (values: MaterialUnitConversionFormValues) => {
     if (conversion === null && !selectableUnits.some((unit) => unit.id === values.fromUnitId)) {
       form.setError('fromUnitId', {
-        message: 'اختر وحدة بديلة نشطة وغير مكررة لهذه المادة.',
+        message:
+          baseUnit === undefined
+            ? 'تعذّر التحقق من نوع وحدة الأساس، أغلق النافذة وحاول مرة أخرى.'
+            : 'اختر وحدة بديلة نشطة من نفس نوع وحدة الأساس وغير مرتبطة بهذه المادة.',
       })
       return
     }
@@ -112,7 +138,7 @@ export function MaterialUnitConversionFormDialog({
           <DialogDescription>
             {conversion
               ? `يبقى التحويل مرتبطًا بالمادة ووحدة أساسها ${material.baseUnitSymbol} فقط.`
-              : `وحدة أساس المادة هي ${material.baseUnitSymbol}. مثال: كرتونة واحدة = 12 ${material.baseUnitSymbol}.`}
+              : `وحدة أساس المادة هي ${material.baseUnitSymbol}. مثال: وحدة بديلة واحدة = 12 ${material.baseUnitSymbol}. لا يمكن اختيار وحدة من نوع مختلف عن وحدة الأساس.`}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -156,9 +182,7 @@ export function MaterialUnitConversionFormDialog({
                       </p>
                     ) : null}
                     {!isUnitsLoading && !isUnitsError && selectableUnits.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        لا توجد وحدة نشطة متاحة بعد استبعاد وحدة الأساس والوحدات المرتبطة.
-                      </p>
+                      <p className="text-sm text-muted-foreground">{noCandidatesMessage}</p>
                     ) : null}
                     <FormMessage />
                   </FormItem>

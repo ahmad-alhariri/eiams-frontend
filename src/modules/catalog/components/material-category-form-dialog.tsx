@@ -4,6 +4,7 @@ import { useForm, useWatch } from 'react-hook-form'
 
 import {
   createMaterialCategorySchema,
+  findDescendantIds,
   type MaterialCategoryFormValues,
 } from '@/modules/catalog/schemas/material-category.schemas'
 import type { MaterialCategory, MaterialDomain } from '@/modules/catalog/types/catalog.types'
@@ -23,6 +24,14 @@ import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 
 const NO_PARENT = '__none__'
+const NO_PARENT_LABEL = 'بدون تصنيف أب'
+/**
+ * Shown when a parent IS selected but its record is not among the loaded
+ * options — the reference slice did not contain it. Saying "بدون تصنيف أب" here
+ * would be a false statement about the stored value, so the trigger says the
+ * opposite instead: a parent exists, its name is not on screen.
+ */
+const PARENT_NOT_IN_OPTIONS_LABEL = 'تصنيف أب غير معروض ضمن البيانات الحالية'
 const EMPTY_VALUES: MaterialCategoryFormValues = {
   code: '',
   materialDomainId: '',
@@ -48,8 +57,9 @@ export interface MaterialCategoryFormDialogProps {
  * guarded command taking an INTEGER ordinal. `parentCategoryId` IS editable on
  * an existing category — re-parenting has its own dedicated route
  * (`PUT /catalog/categories/{id}/parent`), which the page fires through
- * `toMoveMaterialCategoryRequest` after this form's update succeeds. The
- * client-side cycle/self-parent guards in the schema still run unchanged.
+ * `toMoveMaterialCategoryRequest` after this form's update succeeds. The parent
+ * list offers neither the edited category nor its descendants, and the client
+ * guards in the schema that refuse them still run unchanged.
  */
 export function MaterialCategoryFormDialog({
   categories,
@@ -70,10 +80,26 @@ export function MaterialCategoryFormDialog({
     defaultValues: EMPTY_VALUES,
   })
   const selectedDomainId = useWatch({ control: form.control, name: 'materialDomainId' })
-  const parentOptions = useMemo(
-    () => categories.filter((candidate) => candidate.materialDomainId === selectedDomainId),
-    [categories, selectedDomainId],
-  )
+  /**
+   * Parent candidates are the categories of the SAME domain, minus the category
+   * being edited and everything under it. A category used to be offered as its
+   * own parent, and a descendant was offered too — the two shapes the server
+   * refuses with 409 `MATERIAL_CATEGORIES_CIRCULAR_PARENT`. Both are removed
+   * here using the SAME walk the schema guard uses, so the list cannot offer
+   * what the guard would reject; the guard itself stays as the authority for
+   * scope and for state that changed after this dialog opened.
+   */
+  const parentOptions = useMemo(() => {
+    const descendantIds =
+      category === null ? new Set<string>() : findDescendantIds(category.id, categories)
+
+    return categories.filter(
+      (candidate) =>
+        candidate.materialDomainId === selectedDomainId &&
+        candidate.id !== category?.id &&
+        !descendantIds.has(candidate.id),
+    )
+  }, [categories, category, selectedDomainId])
 
   useEffect(() => {
     if (!open) return
@@ -216,11 +242,25 @@ export function MaterialCategoryFormDialog({
                   >
                     <FormControl>
                       <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                        <SelectValue>بدون تصنيف أب</SelectValue>
+                        {/*
+                          The label is resolved from the CURRENT value on purpose.
+                          Hardcoding one label as `SelectValue` children overrides
+                          both the shared Select's derived `items` map and any item
+                          label, which is why reopening a NESTED category's dialog
+                          showed "بدون تصنيف أب" while its listbox correctly marked
+                          the real parent as selected. The domain select directly
+                          above does the same thing.
+                        */}
+                        <SelectValue>
+                          {field.value === null
+                            ? NO_PARENT_LABEL
+                            : (parentOptions.find((option) => option.id === field.value)?.name ??
+                              PARENT_NOT_IN_OPTIONS_LABEL)}
+                        </SelectValue>
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value={NO_PARENT}>بدون تصنيف أب</SelectItem>
+                      <SelectItem value={NO_PARENT}>{NO_PARENT_LABEL}</SelectItem>
                       {parentOptions.map((candidate) => (
                         <SelectItem key={candidate.id} value={candidate.id}>
                           {candidate.name}

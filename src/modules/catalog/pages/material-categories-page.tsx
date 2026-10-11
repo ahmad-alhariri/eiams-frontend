@@ -24,6 +24,8 @@ import {
 import { EmptyState } from '@/shared/feedback/empty-state'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
+import { ReferenceLimitNote } from '@/shared/feedback/reference-limit-note'
+import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { useDebounce } from '@/shared/hooks/use-debounce'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
@@ -33,6 +35,22 @@ import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { Input } from '@/shared/ui/input'
 import { toast } from '@/shared/ui/toast-manager'
 import type { MaterialCategory, RecordStatus } from '@/modules/catalog/types/catalog.types'
+
+/**
+ * Both lists behind the TREE are REFERENCE loads, not paged screens, and the
+ * wire caps a page at 100 (`MAX_WIRE_PAGE_SIZE`) — `pageSize: 200` is either
+ * rejected or silently truncated, and a truncated slice fails quietly: a
+ * category whose parent never arrived renders as a detached root, and a domain
+ * that never arrived renders as a BLANK group heading.
+ *
+ * So the tree asks for the largest legal page, and `ReferenceLimitNote` admits
+ * the limit in Arabic when even that page is not the whole set. This is the same
+ * decision `organizational-units-page.tsx` takes for the org tree, and the
+ * alternative — paginating a hierarchy — would break the thing a tree is for:
+ * a child on page 2 has no visible ancestor.
+ */
+const CATEGORY_TREE_PAGE = { page: 1, pageSize: MAX_WIRE_PAGE_SIZE } as const
+const DOMAIN_REFERENCE_PAGE = { page: 1, pageSize: MAX_WIRE_PAGE_SIZE } as const
 
 /** Contract-backed hierarchy with guarded create/edit/status actions for catalog managers. */
 function MaterialCategoriesPage() {
@@ -44,13 +62,15 @@ function MaterialCategoriesPage() {
   )
   const [statusTarget, setStatusTarget] = useState<MaterialCategory | null>(null)
   const search = useDebounce(searchInput)
-  const categoriesQuery = useMaterialCategoriesQuery()
-  const domainsQuery = useMaterialDomainsQuery()
+  const categoriesQuery = useMaterialCategoriesQuery(CATEGORY_TREE_PAGE)
+  const domainsQuery = useMaterialDomainsQuery(DOMAIN_REFERENCE_PAGE)
   const createMutation = useCreateMaterialCategoryMutation()
   const updateMutation = useUpdateMaterialCategoryMutation()
   const moveMutation = useMoveMaterialCategoryMutation()
   const statusMutation = useSetMaterialCategoryStatusMutation()
   const domains = useMemo(() => domainsQuery.data?.items ?? [], [domainsQuery.data])
+  const categoriesPage = categoriesQuery.data
+  const domainsPage = domainsQuery.data
   const categories = useMemo(
     () => filterMaterialCategories(categoriesQuery.data?.items ?? [], search),
     [categoriesQuery.data, search],
@@ -141,21 +161,21 @@ function MaterialCategoriesPage() {
 
       <ContentCard
         title="شجرة تصنيفات المواد"
-        description="تُستمد علاقة الأب والابن من قائمة التصنيفات المعتمدة في النظام."
+        description="تُستمد علاقة الأب والابن من قائمة التصنيفات المعتمدة في النظام، وتُحمَّل الشجرة بمرة واحدة بدل صفحات متتابعة لأن التصنيف قد يكون ابن تصنيف في صفحة أخرى."
       >
         <div className="max-w-80">
           <label
             htmlFor="material-category-tree-search"
             className="mb-2 block text-sm font-medium text-foreground"
           >
-            البحث في التصنيفات
+            البحث في التصنيفات المحمّلة
           </label>
           <Input
             id="material-category-tree-search"
             type="search"
             value={searchInput}
             onChange={(event) => setSearchInput(event.currentTarget.value)}
-            placeholder="ابحث بالاسم أو الرمز..."
+            placeholder="ابحث بالاسم أو الرمز ضمن ما تم تحميله من الشجرة..."
           />
         </div>
 
@@ -195,17 +215,29 @@ function MaterialCategoriesPage() {
         ) : null}
 
         {!categoriesQuery.isLoading && !categoriesQuery.isError && categories.length > 0 ? (
-          <MaterialCategoryTree
-            categories={categories}
-            domains={domains}
-            {...(canManage ? { onEdit: openEdit, onToggleStatus: setStatusTarget } : {})}
-          />
+          <>
+            <MaterialCategoryTree
+              categories={categories}
+              domains={domains}
+              {...(canManage ? { onEdit: openEdit, onToggleStatus: setStatusTarget } : {})}
+            />
+            <ReferenceLimitNote
+              loadedCount={categoriesPage?.items.length}
+              totalCount={categoriesPage?.totalItems}
+              hint="الشجرة تعرض أول مئة تصنيف من أصل المجموع، وقد ينقص منها التصنيفات الأبناء."
+            />
+            <ReferenceLimitNote
+              loadedCount={domainsPage?.items.length}
+              totalCount={domainsPage?.totalItems}
+              hint="أسماء المجالات المعروضة أعلاه محمّلة من أول مئة مجال فقط."
+            />
+          </>
         ) : null}
       </ContentCard>
       <MaterialCategoryFormDialog
         open={dialogCategory !== undefined}
         category={dialogCategory ?? null}
-        categories={categoriesQuery.data?.items ?? []}
+        categories={categoriesPage?.items ?? []}
         domains={domains}
         isPending={createMutation.isPending || moveMutation.isPending || updateMutation.isPending}
         onOpenChange={closeDialog}

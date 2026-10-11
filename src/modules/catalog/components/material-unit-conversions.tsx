@@ -19,6 +19,8 @@ import {
   type MaterialUnitConversionFormValues,
 } from '@/modules/catalog/schemas/material-unit-conversion.schemas'
 import type { Material, MaterialUnitConversion } from '@/modules/catalog/types/catalog.types'
+import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
+import { ReferenceLimitNote } from '@/shared/feedback/reference-limit-note'
 import { ContentCard } from '@/shared/layout/content-card'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
@@ -30,6 +32,15 @@ const conversionColumnHelper = createColumnHelper<
   typeof dataTableFeatures,
   MaterialUnitConversion
 >()
+
+/**
+ * The unit list behind this card is a REFERENCE load for two joins: the
+ * alternative-unit label in the rows, and the base unit's `unitType` the create
+ * dialog filters candidates by. Both need the whole directory, so it is asked
+ * for at the backend's maximum page — 100, never more — instead of inheriting
+ * the server default of 20 and silently offering a truncated picker.
+ */
+const UNITS_REFERENCE_PAGE = { page: 1, pageSize: MAX_WIRE_PAGE_SIZE } as const
 
 /**
  * Manages alternative units for one material only. Factors always resolve
@@ -44,7 +55,7 @@ export function MaterialUnitConversions({ material }: { material: Material }) {
   const { has } = usePermission()
   const canManage = has('catalog.manage')
   const conversionsQuery = useMaterialUnitConversionsQuery(material.id)
-  const unitsQuery = useUnitsOfMeasureQuery()
+  const unitsQuery = useUnitsOfMeasureQuery(UNITS_REFERENCE_PAGE)
   const createMutation = useCreateMaterialUnitConversionMutation()
   const updateMutation = useUpdateMaterialUnitConversionMutation()
   const removeMutation = useRemoveMaterialUnitConversionMutation()
@@ -220,6 +231,11 @@ export function MaterialUnitConversions({ material }: { material: Material }) {
           emptyAction={
             canManage ? <Button onClick={openCreate}>إضافة وحدة بديلة</Button> : undefined
           }
+        />
+        <ReferenceLimitNote
+          loadedCount={unitsQuery.data?.items.length}
+          totalCount={unitsQuery.data?.totalItems}
+          hint="تُختار الوحدة البديلة من أول مئة وحدة قياس فقط."
         />
       </ContentCard>
       <MaterialUnitConversionFormDialog

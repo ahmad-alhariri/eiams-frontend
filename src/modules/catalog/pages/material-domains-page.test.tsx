@@ -61,6 +61,98 @@ afterEach(() => {
 })
 
 describe('MaterialDomainsPage', () => {
+  it('requests the first one-based page on load and never sends page=0', async () => {
+    const received: Array<{ page: string | null; pageSize: string | null }> = []
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/domains`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        received.push({ page: params.get('page'), pageSize: params.get('pageSize') })
+        return okPageJson([makeDomain()])
+      }),
+    )
+
+    render(<MaterialDomainsPage />, { wrapper: createWrapper() })
+    await screen.findByText('تقنية المعلومات')
+
+    // The wire is ONE-based and the controls are one-based, so the page crosses
+    // unchanged: `page=0` is a 400 REQUEST_VALIDATION_FAILED on the backend.
+    expect(received[0]).toEqual({ page: '1', pageSize: '10' })
+    expect(received.every((query) => query.page === '1')).toBe(true)
+  })
+
+  it('reaches rows past the server default page size through the pager', async () => {
+    const receivedPages: Array<string | null> = []
+    const user = userEvent.setup()
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/domains`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        receivedPages.push(params.get('page'))
+        const page = Number(params.get('page') ?? '1')
+        // 22 domains over a 10-row page is three pages — the live API reports
+        // total_items: 22, total_pages: 3, has_next_page: true at this size.
+        const names =
+          page >= 3
+            ? ['معدات تقنية المعلومات والاتصالات', 'معدات المكاتب الإدارية']
+            : Array.from({ length: 10 }, (_, index) => `مجال ${page}-${index + 1}`)
+
+        return okPageJson(
+          names.map((name, index) => makeDomain({ id: fixtureUuid(40 + page * 10 + index), name })),
+          { page, pageSize: 10, totalCount: 22, totalPages: 3 },
+        )
+      }),
+    )
+
+    render(<MaterialDomainsPage />, { wrapper: createWrapper() })
+
+    const pager = await screen.findByRole('navigation', { name: 'تنقل بين الصفحات' })
+    // The bar renders before the page resolves, so the totals are awaited.
+    expect(await within(pager).findByText('صفحة ١ من ٣')).toBeInTheDocument()
+    expect(within(pager).getByText('عرض ١–١٠ من ٢٢')).toBeInTheDocument()
+
+    await user.click(within(pager).getByRole('button', { name: 'الصفحة التالية' }))
+
+    await waitFor(() => expect(receivedPages).toContain('2'))
+    expect(await screen.findByText('مجال 2-1')).toBeInTheDocument()
+    expect(within(pager).getByText('عرض ١١–٢٠ من ٢٢')).toBeInTheDocument()
+  })
+
+  it('returns to the first page when the status filter changes', async () => {
+    const receivedPages: Array<string | null> = []
+    const user = userEvent.setup()
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/domains`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        receivedPages.push(params.get('page'))
+        const page = Number(params.get('page') ?? '1')
+        const items =
+          page >= 3
+            ? [makeDomain({ id: fixtureUuid(61), name: 'معدات المكاتب الإدارية' })]
+            : Array.from({ length: 10 }, (_, index) =>
+                makeDomain({
+                  id: fixtureUuid(40 + page * 10 + index),
+                  name: `مجال ${page}-${index + 1}`,
+                }),
+              )
+
+        return okPageJson(items, { page, pageSize: 10, totalCount: 22, totalPages: 3 })
+      }),
+    )
+
+    render(<MaterialDomainsPage />, { wrapper: createWrapper() })
+    const pager = await screen.findByRole('navigation', { name: 'تنقل بين الصفحات' })
+    expect(await within(pager).findByText('صفحة ١ من ٣')).toBeInTheDocument()
+    await user.click(within(pager).getByRole('button', { name: 'الصفحة التالية' }))
+    await waitFor(() => expect(receivedPages).toContain('2'))
+
+    await user.click(screen.getByRole('combobox', { name: 'تصفية حسب حالة المجال' }))
+    await user.click(await screen.findByRole('option', { name: 'نشط' }))
+
+    // A new filter is a new result set; staying on page 3 of it would show an
+    // empty table with no obvious cause.
+    await waitFor(() => expect(receivedPages.at(-1)).toBe('1'))
+    expect(within(pager).getByText('صفحة ١ من ٣')).toBeInTheDocument()
+  })
+
   it('renders the scoped contract list and hides write actions without catalog.manage', async () => {
     const domain = makeDomain()
     let receivedStatus: string | null = null

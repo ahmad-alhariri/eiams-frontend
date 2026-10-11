@@ -63,17 +63,51 @@ function makeConversion(overrides: Partial<MaterialUnitConversion> = {}): Materi
 }
 
 describe('MaterialUnitConversionFormDialog', () => {
-  it('excludes the material base unit and an existing active alternative from a new conversion', () => {
+  it('offers only units whose unitType matches the base unit, case-insensitively', async () => {
+    const user = userEvent.setup()
     const material = makeMaterial()
-    const carton = makeUnit()
+    const baseUnit = makeUnit({ id: material.baseUnitId, name: 'قطعة', unitType: 'Counting' })
+    // The backend compares unit types case-insensitively, so `counting` must
+    // still be offered against a `Counting` base unit.
+    const sameType = makeUnit({ id: fixtureUuid(27), name: 'صندوق ورقي', unitType: 'counting' })
+    const otherType = makeUnit({ id: fixtureUuid(28), name: 'كيلوغرام', unitType: 'الوزن' })
 
     render(
       <MaterialUnitConversionFormDialog
         open
         material={material}
         conversion={null}
-        activeUnitIds={new Set([carton.id])}
-        units={[makeUnit({ id: material.baseUnitId, name: 'قطعة' }), carton]}
+        activeUnitIds={new Set()}
+        units={[baseUnit, sameType, otherType]}
+        isUnitsLoading={false}
+        isUnitsError={false}
+        isPending={false}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+
+    await user.click(screen.getByRole('combobox', { name: 'الوحدة البديلة' }))
+
+    expect(await screen.findByRole('option', { name: 'صندوق ورقي' })).toBeInTheDocument()
+    // A cross-type unit is a request the backend refuses with 400
+    // MATERIAL_UNIT_CONVERSIONS_UNIT_TYPE_MISMATCH, so it is never offered.
+    expect(screen.queryByRole('option', { name: 'كيلوغرام' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'قطعة' })).not.toBeInTheDocument()
+  })
+
+  it('says in Arabic why nothing qualifies, instead of offering doomed choices', () => {
+    const material = makeMaterial()
+    const baseUnit = makeUnit({ id: material.baseUnitId, name: 'قطعة', unitType: 'Counting' })
+    const otherType = makeUnit({ id: fixtureUuid(28), name: 'كيلوغرام', unitType: 'الوزن' })
+
+    render(
+      <MaterialUnitConversionFormDialog
+        open
+        material={material}
+        conversion={null}
+        activeUnitIds={new Set()}
+        units={[baseUnit, otherType]}
         isUnitsLoading={false}
         isUnitsError={false}
         isPending={false}
@@ -83,7 +117,65 @@ describe('MaterialUnitConversionFormDialog', () => {
     )
 
     expect(
-      screen.getByText('لا توجد وحدة نشطة متاحة بعد استبعاد وحدة الأساس والوحدات المرتبطة.'),
+      screen.getByText(
+        'لا توجد وحدة نشطة من نفس نوع وحدة الأساس متاحة، لأن التحويل يتطلب أن تكون وحدة المصدر ووحدة الأساس من النوع نفسه.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('stops the helper text from suggesting a pairing the backend refuses', () => {
+    const material = makeMaterial()
+
+    render(
+      <MaterialUnitConversionFormDialog
+        open
+        material={material}
+        conversion={null}
+        activeUnitIds={new Set()}
+        units={[makeUnit({ id: material.baseUnitId, name: 'قطعة', unitType: 'Counting' })]}
+        isUnitsLoading={false}
+        isUnitsError={false}
+        isPending={false}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+
+    // "كرتونة واحدة" named a concrete carton for a `Counting` base unit — an
+    // example the backend refuses. The example is now unit-agnostic and the
+    // same-type rule is stated.
+    expect(screen.queryByText(/كرتونة/)).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'وحدة أساس المادة هي EA. مثال: وحدة بديلة واحدة = 12 EA. لا يمكن اختيار وحدة من نوع مختلف عن وحدة الأساس.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('excludes the material base unit and an existing active alternative from a new conversion', () => {
+    const material = makeMaterial()
+    const carton = makeUnit({ unitType: 'Quantity' })
+    const baseUnit = makeUnit({ id: material.baseUnitId, name: 'قطعة', unitType: 'Quantity' })
+
+    render(
+      <MaterialUnitConversionFormDialog
+        open
+        material={material}
+        conversion={null}
+        activeUnitIds={new Set([carton.id])}
+        units={[baseUnit, carton]}
+        isUnitsLoading={false}
+        isUnitsError={false}
+        isPending={false}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+
+    expect(
+      screen.getByText(
+        'لا توجد وحدة نشطة من نفس نوع وحدة الأساس متاحة، لأن التحويل يتطلب أن تكون وحدة المصدر ووحدة الأساس من النوع نفسه.',
+      ),
     ).toBeInTheDocument()
   })
 

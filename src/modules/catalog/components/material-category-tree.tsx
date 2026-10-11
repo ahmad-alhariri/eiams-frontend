@@ -25,6 +25,15 @@ function toHierarchyNodes(
   return nodes.map((node) => ({ data: node.category, children: toHierarchyNodes(node.children) }))
 }
 
+/**
+ * A domain whose NAME never arrived — it was outside the loaded reference page,
+ * or the domain itself was deleted — still gets its section, because the
+ * categories under it exist and must stay reachable. What it must never get is
+ * a BLANK heading: an empty `<h2>` reads as a rendering bug and hides the fact
+ * that the label is missing, so the section names itself in Arabic instead.
+ */
+const UNKNOWN_DOMAIN_NAME = 'مجال غير معروف (تعذّر عرض اسمه)'
+
 function CategoryDomainSection({
   domain,
   onEdit,
@@ -34,6 +43,8 @@ function CategoryDomainSection({
   onEdit: ((category: MaterialCategory) => void) | undefined
   onToggleStatus: ((category: MaterialCategory) => void) | undefined
 }) {
+  const domainName = domain.domainName.trim() === '' ? UNKNOWN_DOMAIN_NAME : domain.domainName
+
   return (
     <section aria-labelledby={`material-category-domain-${domain.domainId}`}>
       <h2
@@ -41,11 +52,11 @@ function CategoryDomainSection({
         className="mb-2 flex items-center gap-2 border-b border-border pb-2 text-sm font-semibold text-foreground"
       >
         <IconFolders aria-hidden className="size-4 text-golden-wheat" />
-        {domain.domainName}
+        {domainName}
       </h2>
       <HierarchyTree
         nodes={toHierarchyNodes(domain.nodes)}
-        ariaLabel={`شجرة تصنيفات ${domain.domainName}`}
+        ariaLabel={`شجرة تصنيفات ${domainName}`}
         leadIcon={<IconFolder aria-hidden className="size-4 shrink-0 text-golden-wheat" />}
         getKey={(category) => category.id}
         getLabel={(category) => category.name}

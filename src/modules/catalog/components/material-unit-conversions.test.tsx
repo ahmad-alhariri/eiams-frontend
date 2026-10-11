@@ -80,6 +80,35 @@ function createWrapper() {
 }
 
 describe('MaterialUnitConversions', () => {
+  it('loads the unit reference at the backend maximum and admits the limit', async () => {
+    const material = makeMaterial()
+    const conversion = makeConversion(fixtureUuid(33))
+    const unitRequests: Array<{ page: string | null; pageSize: string | null }> = []
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/materials/${MATERIAL_ID}/unit-conversions`, () =>
+        okPageJson([conversion]),
+      ),
+      http.get(`${API_BASE_URL}/catalog/units-of-measure`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        unitRequests.push({ page: params.get('page'), pageSize: params.get('pageSize') })
+        return okPageJson([makeUnit(BASE_UNIT_ID, 'قطعة'), makeUnit(CARTON_UNIT_ID, 'كرتونة')], {
+          page: 1,
+          pageSize: 100,
+          totalCount: 140,
+        })
+      }),
+    )
+
+    render(<MaterialUnitConversions material={material} />, { wrapper: createWrapper() })
+
+    // The picker resolves the base unit's `unitType` from this list, so an
+    // unparameterised request (the server default of 20) would filter on a type
+    // it never received. It is bounded at the backend maximum, never above it.
+    await waitFor(() => expect(unitRequests.length).toBeGreaterThan(0))
+    expect(unitRequests[0]).toEqual({ page: '1', pageSize: '100' })
+    expect(await screen.findByText(/أول مئة وحدة قياس/)).toBeInTheDocument()
+  })
+
   it('renders the flat wire shape: resolved unit label and numeric factor', async () => {
     const material = makeMaterial()
     const conversion = makeConversion(fixtureUuid(33))

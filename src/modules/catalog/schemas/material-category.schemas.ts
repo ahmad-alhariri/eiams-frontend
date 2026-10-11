@@ -33,7 +33,16 @@ export const materialCategorySchema = z.object({
 
 export type MaterialCategoryFormValues = z.infer<typeof materialCategorySchema>
 
-function findDescendantIds(
+/**
+ * Every category reachable DOWNWARD from `categoryId`, itself excluded.
+ *
+ * Exported because the cycle rule has two halves and both need the same graph:
+ * the schema refuses such a parent on submit, and the dialog must not OFFER one
+ * in the first place — an option the server answers with 409
+ * `MATERIAL_CATEGORIES_CIRCULAR_PARENT` is not a choice the user should be able
+ * to make. Duplicating the walk in the component is how the two halves drift.
+ */
+export function findDescendantIds(
   categoryId: string,
   categories: readonly MaterialCategory[],
 ): ReadonlySet<string> {
