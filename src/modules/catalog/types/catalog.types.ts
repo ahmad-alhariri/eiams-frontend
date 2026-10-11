@@ -1,23 +1,42 @@
-export type { PageMeta } from './catalog.api-types'
-
 export type {
+  RecordStatus,
+  RecordStatusOrdinal,
+  MaterialStatus,
+  MaterialStatusOrdinal,
+  MaterialKind,
+  TrackingType,
+  Uuid,
+  NamedReference,
+  ResourceIdResponse,
   UnitOfMeasure,
-  UnitOfMeasureUpsertRequest,
+  CreateUnitOfMeasureRequest,
+  UpdateUnitOfMeasureRequest,
+  SetUnitOfMeasureStatusRequest,
   UnitOfMeasurePage,
   MaterialDomain,
-  MaterialDomainUpsertRequest,
+  CreateMaterialDomainRequest,
+  UpdateMaterialDomainRequest,
+  SetMaterialDomainStatusRequest,
   MaterialDomainPage,
   MaterialCategory,
-  MaterialCategoryUpsertRequest,
+  CreateMaterialCategoryRequest,
+  UpdateMaterialCategoryRequest,
+  MoveMaterialCategoryRequest,
+  SetMaterialCategoryStatusRequest,
   MaterialCategoryPage,
   MaterialFamily,
-  MaterialFamilyUpsertRequest,
+  CreateMaterialFamilyRequest,
+  UpdateMaterialFamilyRequest,
+  SetMaterialFamilyStatusRequest,
   MaterialFamilyPage,
   Material,
-  MaterialUpsertRequest,
+  CreateMaterialRequest,
+  UpdateMaterialRequest,
+  SetMaterialStatusRequest,
   MaterialPage,
   MaterialUnitConversion,
-  MaterialUnitConversionUpsertRequest,
+  CreateMaterialUnitConversionRequest,
+  UpdateMaterialUnitConversionRequest,
   MaterialUnitConversionPage,
   ListUnitsOfMeasureQuery,
   ListMaterialDomainsQuery,
@@ -25,8 +44,11 @@ export type {
   ListMaterialFamiliesQuery,
   ListMaterialsQuery,
   ListMaterialUnitConversionsQuery,
-  NamedReference,
-  Uuid,
-  RecordStatus,
-  CatalogStatus,
 } from './catalog.api-types'
+
+// `statusCommandValue` and `materialStatusCommandValue` are runtime values
+// (`RecordStatus`/`MaterialStatus` → integer maps used by the `Set*Status`
+// command bodies), so they cannot ride on the `export type` block above;
+// `catalog.api-types.ts` documents why the mappings exist and why no call site
+// writes a bare `0`/`1`/`2`.
+export { statusCommandValue, materialStatusCommandValue } from './catalog.api-types'

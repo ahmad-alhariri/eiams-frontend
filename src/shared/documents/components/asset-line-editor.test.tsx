@@ -32,38 +32,40 @@ const API_BASE_URL = '/api/v1'
 const IT_DOMAIN_ID = fixtureUuid(20)
 
 /**
- * Materials in the REAL catalog wire shape (`catalog.api-types`): `materialDomain`
- * / `unit`, no `trackingType`, and `materialKind` narrowed to
- * `'Consumable' | 'Asset'`. `wireMaterial` is the shared builder for that contract
- * (see `catalog-wire-fixtures.ts`); the frozen generated `createMaterial` this
- * file used before carries `domain` / `baseUnit` / `trackingType` and a
- * `'Durable'` kind the wire does not have, so the editor's payload derivation
- * found no domain or unit and no option was ever selected.
+ * Materials in the REAL catalog wire shape (`catalog.api-types`): the flat
+ * `materialDomainId` / `baseUnitId` / `baseUnitSymbol` pairs, and
+ * `materialKind` narrowed to `'Consumable' | 'Durable' | 'Asset'`.
+ * `wireMaterial` is the shared builder for that contract (see
+ * `catalog-wire-fixtures.ts`); the frozen generated `createMaterial` this file
+ * used before carries `domain` / `baseUnit` and a `materialId` the wire does not
+ * have, so the editor's payload derivation found no domain or unit and no
+ * option was ever selected.
  */
 const PRINTER = wireMaterial({
-  materialId: fixtureUuid(61),
+  id: fixtureUuid(61),
   code: 'IT-HW-PRT-001',
   nameAr: 'طابعة ليزر',
   materialKind: 'Asset',
   requiresAssetNumber: true,
+  trackingType: 'Serial',
   materialDomainId: IT_DOMAIN_ID,
-  materialDomain: { id: IT_DOMAIN_ID, displayName: 'تقنية المعلومات' },
-  unitId: fixtureUuid(23),
-  unit: { id: fixtureUuid(23), displayName: 'قطعة' },
+  materialDomainName: 'تقنية المعلومات',
+  baseUnitId: fixtureUuid(23),
+  baseUnitSymbol: 'قطعة',
 })
 /** The excluded kind: this editor only offers `materialKind === 'Asset'` rows. */
 const DURABLE = wireMaterial({
-  materialId: fixtureUuid(60),
+  id: fixtureUuid(60),
   code: 'IT-HW-PC-001',
   nameAr: 'حاسوب مكتبي',
   materialDomainId: IT_DOMAIN_ID,
-  materialDomain: { id: IT_DOMAIN_ID, displayName: 'تقنية المعلومات' },
-  unitId: fixtureUuid(23),
-  unit: { id: fixtureUuid(23), displayName: 'قطعة' },
+  materialDomainName: 'تقنية المعلومات',
+  baseUnitId: fixtureUuid(23),
+  baseUnitSymbol: 'قطعة',
 })
 
 const SEEDED_LINE = {
-  materialId: PRINTER.materialId,
+  materialId: PRINTER.id,
   materialNameAr: PRINTER.nameAr,
   materialDomainId: IT_DOMAIN_ID,
   baseUnitId: fixtureUuid(23),
@@ -180,7 +182,7 @@ describe('AssetLineEditor', () => {
 
     await waitFor(() => {
       const line = linesValue()[0]
-      expect(line?.materialId).toBe(PRINTER.materialId)
+      expect(line?.materialId).toBe(PRINTER.id)
       expect(line?.materialNameAr).toBe('طابعة ليزر')
       expect(line?.materialDomainId).toBe(IT_DOMAIN_ID)
       expect(line?.baseUnitNameAr).toBe('قطعة')

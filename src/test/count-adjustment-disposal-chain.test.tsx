@@ -183,7 +183,7 @@ describe('count adjustment and disposal chain', () => {
     countHandlers()
     const balance = scenario.ledgers.balances.find(
       (row) =>
-        row.material.id === scenario.catalog.consumableMaterial.materialId &&
+        row.material.id === scenario.catalog.consumableMaterial.id &&
         row.warehouse.id === count.warehouse.id,
     )!
     const movement = scenario.ledgers.stockMovements.find(

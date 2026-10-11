@@ -98,8 +98,11 @@ import {
  * `schemas/organization.schemas.ts`, `components/organization-form-dialog.tsx`
  * and `pages/organizations-list-page.tsx` - because the enterprise root of the
  * hierarchy had a service layer and no UI to drive it.
+ * Re-measured at 385 by `eiams-frontend-whhu.15`, which added the application
+ * file `src/modules/catalog/components/material-status-badge.tsx` - the Arabic
+ * status badge the catalog screens render per record.
  */
-const SCANNED_FILE_COUNT = 384
+const SCANNED_FILE_COUNT = 385
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

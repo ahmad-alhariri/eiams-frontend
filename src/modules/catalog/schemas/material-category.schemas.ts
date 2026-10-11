@@ -1,24 +1,34 @@
 import { z } from 'zod'
 
 import type {
+  CreateMaterialCategoryRequest,
   MaterialCategory,
-  MaterialCategoryUpsertRequest,
+  MoveMaterialCategoryRequest,
+  UpdateMaterialCategoryRequest,
 } from '@/modules/catalog/types/catalog.types'
 
+/**
+ * `status` is NOT a form field: a new category is Active by definition and
+ * status afterwards is its own command, whose body is an INTEGER ordinal rather
+ * than this string. `materialDomainId` IS a form field even though it is not
+ * updatable, because the create body binds it and the guards below need it to
+ * keep the parent in the same domain.
+ */
 export const materialCategorySchema = z.object({
   code: z
     .string()
     .trim()
     .min(1, 'رمز التصنيف مطلوب.')
     .max(50, 'لا يمكن أن يتجاوز رمز التصنيف 50 حرفاً.'),
-  materialDomainId: z.string().uuid('اختر مجال التصنيف.'),
-  nameAr: z
+  materialDomainId: z.string('اختر مجال التصنيف.').uuid('اختر مجال التصنيف.'),
+  name: z
     .string()
     .trim()
     .min(1, 'اسم التصنيف مطلوب.')
     .max(200, 'لا يمكن أن يتجاوز اسم التصنيف 200 حرف.'),
-  parentCategoryId: z.string().uuid().optional(),
-  status: z.enum(['Active', 'Inactive']),
+  // `null`, not `undefined`: the create body's own root sentinel is `null`, so
+  // the form speaks the wire's language instead of converting at the mapper.
+  parentCategoryId: z.union([z.string().uuid('اختر تصنيفاً أباً صالحاً.'), z.null()]),
 })
 
 export type MaterialCategoryFormValues = z.infer<typeof materialCategorySchema>
@@ -29,9 +39,9 @@ function findDescendantIds(
 ): ReadonlySet<string> {
   const childrenByParentId = new Map<string, string[]>()
   for (const category of categories) {
-    if (category.parentCategoryId === undefined || category.parentCategoryId === null) continue
+    if (category.parentCategoryId === null) continue
     const children = childrenByParentId.get(category.parentCategoryId) ?? []
-    children.push(category.materialCategoryId)
+    children.push(category.id)
     childrenByParentId.set(category.parentCategoryId, children)
   }
 
@@ -54,16 +64,12 @@ export function createMaterialCategorySchema(
   categories: readonly MaterialCategory[],
   category: MaterialCategory | null,
 ) {
-  const categoriesById = new Map(
-    categories.map((candidate) => [candidate.materialCategoryId, candidate]),
-  )
+  const categoriesById = new Map(categories.map((candidate) => [candidate.id, candidate]))
   const descendantIds =
-    category === null
-      ? new Set<string>()
-      : findDescendantIds(category.materialCategoryId, categories)
+    category === null ? new Set<string>() : findDescendantIds(category.id, categories)
 
   return materialCategorySchema.superRefine((values, context) => {
-    if (values.parentCategoryId === undefined) return
+    if (values.parentCategoryId === null) return
 
     const parent = categoriesById.get(values.parentCategoryId)
     if (parent === undefined) {
@@ -81,7 +87,7 @@ export function createMaterialCategorySchema(
         message: 'يجب أن يكون التصنيف الأب ضمن المجال نفسه.',
       })
     }
-    if (category !== null && values.parentCategoryId === category.materialCategoryId) {
+    if (category !== null && values.parentCategoryId === category.id) {
       context.addIssue({
         code: 'custom',
         path: ['parentCategoryId'],
@@ -98,17 +104,49 @@ export function createMaterialCategorySchema(
   })
 }
 
-/** Maps form values to the exact v1 payload, including optimistic concurrency on edit. */
-export function toMaterialCategoryRequest(
+/**
+ * `POST /catalog/categories` body — the only request that carries the domain
+ * and the parent. Both are create-only from here on.
+ */
+export function toCreateMaterialCategoryRequest(
   values: MaterialCategoryFormValues,
-  category: MaterialCategory | null,
-): MaterialCategoryUpsertRequest {
+): CreateMaterialCategoryRequest {
   return {
-    code: values.code.trim(),
     materialDomainId: values.materialDomainId,
-    nameAr: values.nameAr.trim(),
-    parentCategoryId: values.parentCategoryId ?? null,
-    rowVersion: category?.rowVersion ?? 0,
-    status: values.status,
+    parentCategoryId: values.parentCategoryId,
+    name: values.name.trim(),
+    code: values.code.trim(),
   }
+}
+
+/**
+ * `PUT /catalog/categories/{materialCategoryId}` body — `name` and `code` only.
+ *
+ * `materialDomainId` is NOT here because re-domaining is not exposed by this
+ * route, and `parentCategoryId` is NOT here because re-parenting has its own
+ * command, {@link toMoveMaterialCategoryRequest}. Folding either into this body
+ * is what the old single "upsert" shape invited.
+ */
+export function toUpdateMaterialCategoryRequest(
+  values: MaterialCategoryFormValues,
+): UpdateMaterialCategoryRequest {
+  return {
+    name: values.name.trim(),
+    code: values.code.trim(),
+  }
+}
+
+/**
+ * `PUT /catalog/categories/{materialCategoryId}/parent` body, or `null` when
+ * the selection did not move and no move command is worth sending.
+ *
+ * Returning `null` rather than always sending keeps an edit that never touched
+ * the parent from making a second write the user did not ask for.
+ */
+export function toMoveMaterialCategoryRequest(
+  values: MaterialCategoryFormValues,
+  category: MaterialCategory,
+): MoveMaterialCategoryRequest | null {
+  if (values.parentCategoryId === category.parentCategoryId) return null
+  return { parentCategoryId: values.parentCategoryId }
 }

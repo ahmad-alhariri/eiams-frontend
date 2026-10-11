@@ -87,8 +87,11 @@ export function WarehouseCapabilitiesEditor({
   const domainOptions = useMemo(
     () =>
       domainsQuery.data?.items
-        .filter((domain) => !selectedDomainIds.has(domain.materialDomainId))
-        .map((domain) => ({ value: domain.materialDomainId, label: domain.nameAr })),
+        // The catalog identifier is `id` on every projection (`materialDomainId`
+        // was the frozen snapshot's fiction), and the label is `name`, not
+        // `nameAr`.
+        .filter((domain) => !selectedDomainIds.has(domain.id))
+        .map((domain) => ({ value: domain.id, label: domain.name })),
     [domainsQuery.data?.items, selectedDomainIds],
   )
 

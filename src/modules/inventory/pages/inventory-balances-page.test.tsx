@@ -178,7 +178,7 @@ describe('InventoryBalancesPage', () => {
     await waitFor(() =>
       expect(receivedQueries).toContainEqual(
         expect.objectContaining({
-          materialId: assetMaterial.materialId,
+          materialId: assetMaterial.id,
           warehouseId: warehouse.id,
         }),
       ),

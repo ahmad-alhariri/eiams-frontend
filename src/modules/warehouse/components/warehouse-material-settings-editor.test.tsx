@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -7,10 +7,10 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Toaster } from '@/shared/ui/toaster'
-import { createMaterial, createWarehouseMaterialSetting, fixtureUuid } from '@/test/msw/factories'
+import { createWarehouseMaterialSetting, fixtureUuid } from '@/test/msw/factories'
+import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
 import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
-import type { Material } from '@/modules/catalog/types/catalog.api-types'
 import type { WarehouseMaterialSettingUpsertRequest } from '@/modules/warehouse/types/warehouse.api-types'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -25,49 +25,25 @@ const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = fixtureUuid(30)
 
 /**
- * Re-projects the shared `createMaterial()` fixture onto the HANDWRITTEN catalog
- * contract, which is the shape `GET /catalog/materials` actually serves.
+ * Materials in the REAL catalog wire shape. `wireMaterial` from
+ * `catalog-wire-fixtures.ts` mints `catalog.api-types.Material`, which is what
+ * `GET /catalog/materials` serves and what `catalogService.listMaterials` is
+ * typed against — its identifier is `id`, not `materialId`, and it carries no
+ * `rowVersion`.
  *
- * The shared factory is still typed against the frozen generated snapshot and
- * mints `domain` / `category` / `family` / `baseUnit`; the catalog service is
- * typed against `catalog.api-types.Material`, which carries `materialDomain` /
- * `materialCategory` / `materialFamily` / `unit`. Serving the generated shape
- * here would have the fixture assert against a record the service is not typed
- * against — the same fiction the shared factory was left in for the document
- * suites. Mirrors the projection in the receiving/opening/transfer suites.
+ * Serving the shared `createMaterial()` here instead would answer with the
+ * frozen generated shape the picker cannot read, so no option would ever be
+ * selected and the suite would certify a fixture the service is not typed
+ * against. Mirrors the receiving/opening/transfer page suites.
  */
-function contractMaterial(overrides: Partial<Material> = {}): Material {
-  const base = createMaterial()
-  return {
-    code: base.code,
-    descriptionAr: base.descriptionAr ?? null,
-    materialCategory: base.category,
-    materialCategoryId: base.category.id,
-    materialDomain: base.domain,
-    materialDomainId: base.domain.id,
-    materialFamily: base.family,
-    materialFamilyId: base.family.id,
-    materialId: base.materialId,
-    materialKind: base.materialKind === 'Asset' ? 'Asset' : 'Consumable',
-    nameAr: base.nameAr,
-    nominalConversionFactor: 1,
-    requiresAssetNumber: base.requiresAssetNumber,
-    rowVersion: base.rowVersion,
-    status: 'Active',
-    unit: base.baseUnit,
-    unitId: base.baseUnit.id,
-    ...overrides,
-  }
-}
-
-const INK = contractMaterial({
-  materialId: fixtureUuid(62),
+const INK = wireMaterial({
+  id: fixtureUuid(62),
   nameAr: 'حبر أسود',
   code: 'INK-001',
   status: 'Active',
 })
-const PC = contractMaterial({
-  materialId: fixtureUuid(63),
+const PC = wireMaterial({
+  id: fixtureUuid(63),
   nameAr: 'حاسوب مكتبي',
   code: 'PC-001',
   status: 'Active',
@@ -179,7 +155,7 @@ describe('WarehouseMaterialSettingsEditor', () => {
 
     await waitFor(() => expect(capture.requestCount).toBe(1))
     expect(capture.bodies[0]).toEqual({
-      materialId: INK.materialId,
+      materialId: INK.id,
       minQuantity: 2,
       maxQuantity: 10,
       rowVersion: 0,
@@ -190,14 +166,14 @@ describe('WarehouseMaterialSettingsEditor', () => {
   })
 
   it('edits an existing setting: material is locked, thresholds update, rowVersion preserved', async () => {
-    // `materialId` and `material.id` are the same material on the wire and must
-    // agree: the picker de-duplicates on `materialId`, so overriding only the
-    // nested `material` reference left the setting pointing at fixtureUuid(24)
-    // while the row it describes is fixtureUuid(62).
+    // `WarehouseMaterialSetting.materialId` and the material's own `id` are the
+    // same identifier on the wire and must agree: the picker de-duplicates on
+    // `material.id`, so a setting pointing at any other value describes a row
+    // the catalog never served.
     const existing = createWarehouseMaterialSetting({
       warehouseId: WAREHOUSE_ID,
-      materialId: INK.materialId,
-      material: { id: INK.materialId, displayName: 'حبر أسود', code: 'INK-001' },
+      materialId: INK.id,
+      material: { id: INK.id, displayName: 'حبر أسود', code: 'INK-001' },
       minQuantity: 2,
       maxQuantity: 10,
       rowVersion: 3,
@@ -224,7 +200,7 @@ describe('WarehouseMaterialSettingsEditor', () => {
 
     await waitFor(() => expect(capture.requestCount).toBe(1))
     expect(capture.bodies[0]).toEqual({
-      materialId: INK.materialId,
+      materialId: INK.id,
       minQuantity: 5,
       maxQuantity: 10,
       rowVersion: 3,
@@ -258,8 +234,8 @@ describe('WarehouseMaterialSettingsEditor', () => {
   it('excludes already-configured materials from the picker', async () => {
     const existing = createWarehouseMaterialSetting({
       warehouseId: WAREHOUSE_ID,
-      materialId: INK.materialId,
-      material: { id: INK.materialId, displayName: 'حبر أسود' },
+      materialId: INK.id,
+      material: { id: INK.id, displayName: 'حبر أسود' },
       status: 'Active',
     })
     const capture: PutCapture = { bodies: [], requestCount: 0 }

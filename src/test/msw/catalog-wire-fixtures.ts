@@ -4,7 +4,6 @@ import type {
   MaterialDomain,
   MaterialFamily,
   MaterialUnitConversion,
-  NamedReference,
   UnitOfMeasure,
 } from '@/modules/catalog/types/catalog.api-types'
 
@@ -13,23 +12,24 @@ import { fixtureUuid } from './factories'
 /**
  * Catalog fixtures in the REAL wire shape (`catalog.api-types`), built locally.
  *
- * WHY NOT THE SHARED FACTORIES. `createMaterialDomain`, `createMaterialCategory`,
- * `createMaterialFamily`, `createMaterial` and `createUnitOfMeasure` in
- * `./factories` still mint the FROZEN GENERATED snapshot's records — `domainId`,
- * `categoryId`, `familyId`, `baseUnit`, nested `domain` / `category` / `family`,
- * `symbolAr`, `trackingType`, and a string `factor`. The production catalog
- * service and pages read none of those: they read `materialDomainId`,
- * `materialCategoryId`, `materialFamilyId`, `unit`, `materialDomain`,
- * `materialCategory`, `materialFamily` and a numeric `conversionFactor`
- * (D-INT-02 / ADR-0001).
+ * WHY NOT THE SHARED FACTORIES. The master-data factories in `./factories`
+ * (`createMaterialDomain`, `createMaterialCategory`, `createMaterialFamily`,
+ * `createUnitOfMeasure`, `createMaterialUnitConversion`) now mint these same
+ * records; the one that still cannot is `createMaterial`, which is typed
+ * against the frozen generated `Material` (`domain` / `category` / `family` /
+ * `baseUnit`, `materialId`, `rowVersion`) because the DOCUMENT-engine fixtures
+ * embed that shape inside the generated `DocumentLine` / `InventoryBalance` /
+ * `StockMovement`. Serving it from a `/catalog/materials` handler is the same
+ * fiction the organization suite hit before `txq4`: a fixture the production
+ * response could never produce keeps a test green against the wrong contract.
+ * So the material record is minted HERE, and every catalog-consuming suite
+ * reads this builder.
  *
- * That is the same fiction the organization suite hit before `txq4`: a fixture
- * the production response could never produce keeps a test green against the
- * wrong contract. `createMaterial` in particular cannot simply be corrected in
- * place, because the document, inventory, custody and selector suites consume
- * its generated shape; the mismatch is filed against `eiams-frontend-tgl3`.
- * So the catalog wire records are minted HERE instead, once, and every catalog
- * suite reads the same builders.
+ * Everything below is FLAT. No catalog projection nests a
+ * `NamedReference` any more — the material record carries flat
+ * `materialDomainId` / `materialDomainName` / `baseUnitId` / `baseUnitSymbol`,
+ * and a unit conversion carries a flat `fromUnitId` whose label the UI resolves
+ * from the units-of-measure list.
  *
  * The identifiers are the same deterministic UUIDs `fixtureUuid` hands out, so
  * a catalog record here still joins against the shared warehouse/document
@@ -41,91 +41,69 @@ export const CATALOG_CATEGORY_ID = fixtureUuid(21)
 export const CATALOG_FAMILY_ID = fixtureUuid(22)
 export const CATALOG_UNIT_ID = fixtureUuid(23)
 export const CATALOG_MATERIAL_ID = fixtureUuid(24)
-export const CATALOG_CONVERSION_ID = fixtureUuid(26)
+export const CATALOG_CONVERSION_ID = fixtureUuid(25)
+export const CATALOG_ALT_UNIT_ID = fixtureUuid(26)
 
 function withOverrides<T extends object>(defaults: T, overrides: Partial<T>): T {
   return { ...defaults, ...overrides }
 }
 
-export function wireNamedReference(id: string, displayName: string): NamedReference {
-  return { id, displayName }
-}
-
-/** `GET /catalog/units-of-measure` — `descriptionAr`/`baseUnitId`, never `symbolAr`. */
+/** `GET /catalog/units-of-measure` — `{ id, name, symbol, unitType, status }`.
+ *  No `code`, no `nameAr`, no `symbolAr`, no `nominalConversionFactor`: the
+ *  conversion story lives on `MaterialUnitConversion` now. */
 export function wireUnitOfMeasure(overrides: Partial<UnitOfMeasure> = {}): UnitOfMeasure {
   return withOverrides(
     {
-      unitId: CATALOG_UNIT_ID,
-      code: 'EA',
-      nameAr: 'قطعة',
-      descriptionAr: null,
-      nominalConversionFactor: 1,
-      baseUnitId: null,
-      baseUnit: null,
+      id: CATALOG_UNIT_ID,
+      name: 'قطعة',
+      symbol: 'EA',
+      unitType: 'Quantity',
       status: 'Active',
-      rowVersion: 1,
     },
     overrides,
   )
 }
 
-/** `GET /catalog/material-domains` — the id is `materialDomainId`, not `domainId`. */
+/** `GET /catalog/domains` — the id is `id`, not `materialDomainId`/`domainId`,
+ *  and the label is `name`, not `nameAr`. Not versioned: no `rowVersion`. */
 export function wireMaterialDomain(overrides: Partial<MaterialDomain> = {}): MaterialDomain {
   return withOverrides(
     {
-      materialDomainId: CATALOG_DOMAIN_ID,
-      nameAr: 'تقنية المعلومات',
+      id: CATALOG_DOMAIN_ID,
+      name: 'تقنية المعلومات',
       code: 'IT',
       status: 'Active',
-      rowVersion: 1,
     },
     overrides,
   )
 }
 
-/**
- * `GET /catalog/material-categories`.
- *
- * The parent reference is a `NamedReference` (`id` + `displayName`), so to move
- * a record into another domain pass
- * `materialDomain: wireNamedReference(otherDomainId, otherDomainName)`; the flat
- * `materialDomainId` then follows the reference, so a fixture can never pair an
- * id with a reference naming a different domain.
- */
+/** `GET /catalog/categories` — flat `{ id, materialDomainId, parentCategoryId,
+ *  name, code, status }`, with no nested `materialDomain` reference. */
 export function wireMaterialCategory(overrides: Partial<MaterialCategory> = {}): MaterialCategory {
-  const materialDomain =
-    overrides.materialDomain ?? wireNamedReference(CATALOG_DOMAIN_ID, 'تقنية المعلومات')
   return withOverrides(
     {
-      materialCategoryId: CATALOG_CATEGORY_ID,
-      nameAr: 'الأجهزة',
-      code: 'IT-HW',
+      id: CATALOG_CATEGORY_ID,
+      materialDomainId: CATALOG_DOMAIN_ID,
       parentCategoryId: null,
-      parentCategory: null,
-      materialDomainId: materialDomain.id,
-      materialDomain,
+      name: 'الأجهزة',
+      code: 'IT-HW',
       status: 'Active',
-      rowVersion: 1,
     },
     overrides,
   )
 }
 
-/** `GET /catalog/material-families` — the parent reference is `materialCategory`. */
+/** `GET /catalog/families` — the parent reference is the flat `categoryId`
+ *  (`categoryId`, NOT `materialCategoryId`). */
 export function wireMaterialFamily(overrides: Partial<MaterialFamily> = {}): MaterialFamily {
-  const materialCategory =
-    overrides.materialCategory ?? wireNamedReference(CATALOG_CATEGORY_ID, 'الأجهزة')
   return withOverrides(
     {
-      materialFamilyId: CATALOG_FAMILY_ID,
-      nameAr: 'الحواسيب',
+      id: CATALOG_FAMILY_ID,
+      categoryId: CATALOG_CATEGORY_ID,
+      name: 'الحواسيب',
       code: 'IT-HW-PC',
-      parentFamilyId: null,
-      parentFamily: null,
-      materialCategoryId: materialCategory.id,
-      materialCategory,
       status: 'Active',
-      rowVersion: 1,
     },
     overrides,
   )
@@ -134,36 +112,30 @@ export function wireMaterialFamily(overrides: Partial<MaterialFamily> = {}): Mat
 /**
  * `GET /catalog/materials`.
  *
- * `unit` (not `baseUnit`), no `trackingType`, and every level of the hierarchy
- * arrives as a `NamedReference` the detail screen renders directly.
+ * `materialDomainId`/`materialDomainName` are the DERIVED domain pair and
+ * `baseUnitId`/`baseUnitSymbol` the material's own base unit; `familyId` is
+ * create-only. `catalogVersion` is the ONE version field in this module and it
+ * is NOT called `rowVersion`.
  */
 export function wireMaterial(overrides: Partial<Material> = {}): Material {
-  const materialFamily =
-    overrides.materialFamily ?? wireNamedReference(CATALOG_FAMILY_ID, 'الحواسيب')
-  const materialCategory =
-    overrides.materialCategory ?? wireNamedReference(CATALOG_CATEGORY_ID, 'الأجهزة')
-  const materialDomain =
-    overrides.materialDomain ?? wireNamedReference(CATALOG_DOMAIN_ID, 'تقنية المعلومات')
-  const unit = overrides.unit ?? wireNamedReference(CATALOG_UNIT_ID, 'قطعة')
   return withOverrides(
     {
-      materialId: CATALOG_MATERIAL_ID,
-      code: 'IT-HW-PC-001',
+      id: CATALOG_MATERIAL_ID,
+      familyId: CATALOG_FAMILY_ID,
       nameAr: 'حاسوب مكتبي',
-      descriptionAr: 'مادة تجريبية',
-      materialFamilyId: overrides.materialFamilyId ?? materialFamily.id,
-      materialFamily,
-      materialCategoryId: overrides.materialCategoryId ?? materialCategory.id,
-      materialCategory,
-      materialDomainId: overrides.materialDomainId ?? materialDomain.id,
-      materialDomain,
-      unitId: overrides.unitId ?? unit.id,
-      unit,
-      nominalConversionFactor: 1,
+      nameEn: null,
+      code: 'IT-HW-PC-001',
       materialKind: 'Consumable',
+      trackingType: 'Quantity',
+      hasExpiry: false,
       requiresAssetNumber: false,
+      catalogVersion: 1,
+      attributes: null,
       status: 'Active',
-      rowVersion: 1,
+      materialDomainId: CATALOG_DOMAIN_ID,
+      materialDomainName: 'تقنية المعلومات',
+      baseUnitId: CATALOG_UNIT_ID,
+      baseUnitSymbol: 'EA',
     },
     overrides,
   )
@@ -173,22 +145,20 @@ export function wireMaterial(overrides: Partial<Material> = {}): Material {
  * `GET /catalog/materials/{materialId}/unit-conversions`. The factor is the
  * NUMBER the contract declares; the generated fixture's string `'12'` is the
  * fiction `docs/material-unit-conversion-contract-decision.md` retired.
+ *
+ * There is no `status`: a conversion's lifecycle ends in DELETE, so no
+ * fixture may mint a status the route does not serve.
  */
 export function wireMaterialUnitConversion(
   overrides: Partial<MaterialUnitConversion> = {},
 ): MaterialUnitConversion {
-  const material = overrides.material ?? wireNamedReference(CATALOG_MATERIAL_ID, 'حاسوب مكتبي')
-  const unit = overrides.unit ?? wireNamedReference(fixtureUuid(26), 'كرتونة')
   return withOverrides(
     {
-      materialUnitConversionId: CATALOG_CONVERSION_ID,
-      materialId: material.id,
-      material,
-      unitId: unit.id,
-      unit,
-      conversionFactor: 12,
-      status: 'Active',
-      rowVersion: 1,
+      id: CATALOG_CONVERSION_ID,
+      materialId: CATALOG_MATERIAL_ID,
+      fromUnitId: CATALOG_ALT_UNIT_ID,
+      toBaseUnitId: CATALOG_UNIT_ID,
+      factor: 12,
     },
     overrides,
   )

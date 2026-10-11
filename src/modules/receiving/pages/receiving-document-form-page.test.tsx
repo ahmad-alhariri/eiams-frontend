@@ -6,7 +6,6 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ROUTE_PATHS } from '@/config/routes'
-import type { Material } from '@/modules/catalog/types/catalog.api-types'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import {
   createMaterial,
@@ -14,6 +13,7 @@ import {
   createWarehouseCapability,
   fixtureUuid,
 } from '@/test/msw/factories'
+import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
 import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { createReceivingSuppliersHandler } from '@/test/msw/receiving-handlers'
@@ -33,67 +33,57 @@ const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = fixtureUuid(300)
 const MATERIAL_ID = fixtureUuid(401)
 const ASSET_MATERIAL_ID = fixtureUuid(402)
+const MATERIAL_DOMAIN_ID = fixtureUuid(20)
+const MATERIAL_BASE_UNIT_ID = fixtureUuid(23)
 
 const warehouse = createWarehouse({ id: WAREHOUSE_ID })
-const material = contractMaterial({ materialId: MATERIAL_ID })
-const assetMaterial = contractMaterial({
-  materialId: ASSET_MATERIAL_ID,
+/**
+ * Materials in the REAL catalog wire shape — `wireMaterial` mints
+ * `catalog.api-types.Material`, which is what `GET /catalog/materials` serves
+ * and what the line editor's payload derivation reads: the flat
+ * `materialDomainId` / `baseUnitId` / `baseUnitSymbol` pairs and the
+ * identifier `id`.
+ *
+ * The retired local projection off the shared `createMaterial()` minted
+ * `materialId` plus nested `domain` / `category` / `family` / `unit` / `rowVersion`
+ * fields, so the picker's option value never matched the id the response
+ * carried and no material could be selected.
+ */
+const material = wireMaterial({
+  id: MATERIAL_ID,
+  nameAr: 'حاسوب مكتبي',
+  materialDomainId: MATERIAL_DOMAIN_ID,
+  baseUnitId: MATERIAL_BASE_UNIT_ID,
+  baseUnitSymbol: 'قطعة',
+})
+const assetMaterial = wireMaterial({
+  id: ASSET_MATERIAL_ID,
   code: 'IT-HW-PRT-101',
   nameAr: 'طابعة ليزر',
   materialKind: 'Asset',
   requiresAssetNumber: true,
-  unitId: fixtureUuid(23),
-  unit: { id: fixtureUuid(23), displayName: 'قطعة' },
+  trackingType: 'Serial',
+  materialDomainId: MATERIAL_DOMAIN_ID,
+  baseUnitId: MATERIAL_BASE_UNIT_ID,
+  baseUnitSymbol: 'قطعة',
 })
 const capability = createWarehouseCapability({
   warehouseId: WAREHOUSE_ID,
-  domain: material.materialDomain,
+  // The capability's domain reference must name the material's own
+  // `materialDomainId` — the flat pair the line editor reads off the payload.
+  domain: { id: MATERIAL_DOMAIN_ID, displayName: 'تقنية المعلومات' },
   operations: ['Receiving', 'Issue'],
 })
 
 /**
- * Re-projects the shared `createMaterial()` fixture onto the HANDWRITTEN catalog
- * contract the production line editor parses.
- *
- * `createMaterial()` still mints the frozen generated shape (`domain` / `category`
- * / `family` / `baseUnit`); `catalog/api-types` `Material` carries
- * `materialDomain` / `materialCategory` / `materialFamily` / `unit`. Without the
- * projection `quantity-line-editor.tsx` dereferences `payload.materialDomain.id`
- * on `undefined` and every material pick throws.
- */
-function contractMaterial(overrides: Partial<Material> = {}): Material {
-  const base = createMaterial()
-  return {
-    code: base.code,
-    descriptionAr: base.descriptionAr ?? null,
-    materialCategory: base.category,
-    materialCategoryId: base.category.id,
-    materialDomain: base.domain,
-    materialDomainId: base.domain.id,
-    materialFamily: base.family,
-    materialFamilyId: base.family.id,
-    materialId: base.materialId,
-    materialKind: base.materialKind === 'Asset' ? 'Asset' : 'Consumable',
-    nameAr: base.nameAr,
-    nominalConversionFactor: 1,
-    requiresAssetNumber: base.requiresAssetNumber,
-    rowVersion: base.rowVersion,
-    status: 'Active',
-    unit: base.baseUnit,
-    unitId: base.baseUnit.id,
-    ...overrides,
-  }
-}
-
-/**
- * The shared document-create handler mints its created document from the FROZEN
- * generated `Material`, so its `materialOf` lookup answers in that shape while the
- * page and the wire answer in the handwritten one.
+ * The shared document-create handler embeds a material snapshot in its created
+ * document, so its `materialOf` lookup answers with the catalog DTO that the
+ * projection carries across the boundary.
  */
 function generatedMaterialOf(materialId: string) {
   if (materialId === ASSET_MATERIAL_ID) {
     return createMaterial({
-      materialId,
+      id: materialId,
       code: 'IT-HW-PRT-101',
       nameAr: 'طابعة ليزر',
       materialKind: 'Asset',
@@ -101,7 +91,7 @@ function generatedMaterialOf(materialId: string) {
       trackingType: 'Serial',
     })
   }
-  return materialId === MATERIAL_ID ? createMaterial({ materialId }) : undefined
+  return materialId === MATERIAL_ID ? createMaterial({ id: materialId }) : undefined
 }
 
 function createWrapper() {
@@ -171,12 +161,22 @@ async function fillAssetLine(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('الرقم التسلسلي (اختياري)'), 'SN-77')
 }
 
+/**
+ * The shared quantity-line editor resolves an alternative unit's label from the
+ * units-of-measure list, so the handler must exist once a material is picked.
+ * The list is empty here because no material in this suite carries conversions.
+ */
+function unitsOfMeasureHandler() {
+  return http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => okPageJson([]))
+}
+
 function usePageHandlers(store: WarehouseDocument[], nextSystemReference: () => string) {
   server.use(
     http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
     http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material, assetMaterial])),
     http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () => okJson([capability])),
     http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () => okJson([])),
+    unitsOfMeasureHandler(),
     ...createReceivingSuppliersHandler(['Sham Co']),
     ...createWarehouseDocumentCreateHandler({
       documentStore: () => store,
@@ -316,6 +316,7 @@ describe('ReceivingDocumentFormPage', () => {
       http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material])),
       http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () => okJson([capability])),
       http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () => okJson([])),
+      unitsOfMeasureHandler(),
       ...createReceivingSuppliersHandler(['Sham Co']),
     )
 

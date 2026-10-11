@@ -14,10 +14,13 @@ export type MaterialLoader = EntityLoader<Material>
  * Material selector adapter: label = Arabic name, hint = code (carried in the
  * payload), and inactive materials are disabled. Typed against the full
  * `Material` contract entity — no dedicated MaterialReference type exists.
+ *
+ * `value` is the catalog entity id, `id`; `materialId` was the frozen generated
+ * snapshot's fiction and no catalog projection carries it.
  */
 const materialAdapter: EntitySelectorAdapter<Material> = createEntitySelectorAdapter<Material>({
   toOption: (material) => ({
-    value: material.materialId,
+    value: material.id,
     label: material.nameAr,
     disabled: material.status !== 'Active',
     payload: material,

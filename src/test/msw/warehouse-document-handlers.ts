@@ -13,6 +13,7 @@ import {
   createSite,
   createWarehouse,
   createWarehouseDocument,
+  toDocumentLineMaterial,
   DOCUMENT_TRANSITIONS,
   fixtureUuid,
 } from '@/test/msw/factories'
@@ -36,7 +37,6 @@ import type {
   LifecycleActorSnapshot,
   LifecycleConflictProblemDetails,
   LifecycleDocumentReference,
-  Material,
   NamedReference,
   ProblemDetails,
   ReasonedDocumentActionRequest,
@@ -44,6 +44,8 @@ import type {
   WarehouseDocument,
   WarehouseDocumentDraftRequest,
 } from '@/shared/types/generated/eiams-v1'
+
+import type { Material } from '@/modules/catalog/types/catalog.api-types'
 
 /**
  * Scenario handler builders for the shared document engine.
@@ -964,7 +966,7 @@ export interface DraftLookups {
 }
 
 const FALLBACK_LOOKUPS: DraftLookups = {
-  materialOf: (materialId) => createMaterial({ materialId }),
+  materialOf: (materialId) => createMaterial({ id: materialId }),
   unitOf: (unitId) => (unitId === undefined ? undefined : createNamedReference({ id: unitId })),
   warehouseOf: (warehouseId) => createWarehouse({ id: warehouseId }),
   siteOf: (siteId) => createSite({ id: siteId }),
@@ -979,9 +981,14 @@ function mapDraftLine(
   index: number,
   lookups: DraftLookups,
 ): DocumentLine {
-  const material =
-    lookups.materialOf(input.materialId) ?? createMaterial({ materialId: input.materialId })
-  const unit = lookups.unitOf(input.unitId) ?? material.baseUnit
+  const material = lookups.materialOf(input.materialId) ?? createMaterial({ id: input.materialId })
+  // `materialOf` resolves the REAL catalog record; the line still embeds the
+  // generated shape, so the identity/labels are carried across the boundary by
+  // the same projection `createWarehouseDocumentLine` uses. A snapshot taken at
+  // draft time must name the same material and unit the posted line will.
+  const unit =
+    lookups.unitOf(input.unitId) ??
+    createNamedReference({ id: material.baseUnitId, displayName: material.baseUnitSymbol })
   return {
     ...(input.assetInputs === undefined ? {} : { assetInputs: input.assetInputs }),
     // D-IAR-01: Issue lines reference existing assets by id; the draft keeps
@@ -995,7 +1002,7 @@ function mapDraftLine(
     expiryDate: input.expiryDate ?? null,
     lineId: input.lineId ?? fixtureUuid(201 + index),
     lineType: material.materialKind === 'Asset' ? 'Asset' : 'Normal',
-    material,
+    material: toDocumentLineMaterial(material),
     ...(input.openingType === undefined ? {} : { openingType: input.openingType }),
     quantity: input.quantity,
     unit,

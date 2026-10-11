@@ -56,9 +56,7 @@ afterEach(() => {
 beforeEach(() => {
   server.use(
     http.get(`${API_BASE_URL}/warehouses/:warehouseId/material-settings`, () => okPageJson([])),
-    http.get(`${API_BASE_URL}/catalog/material-domains`, () =>
-      okPageJson([createMaterialDomain()]),
-    ),
+    http.get(`${API_BASE_URL}/catalog/domains`, () => okPageJson([createMaterialDomain()])),
     http.get(`${API_BASE_URL}/sites`, () => okPageJson([createSite()])),
     http.get(`${API_BASE_URL}/organizational-units`, () =>
       okPageJson([createOrganizationalUnit()]),
@@ -216,7 +214,7 @@ describe('WarehouseDetailPage', () => {
     const domain = createMaterialDomain()
     const capability = createWarehouseCapability({
       warehouseId: warehouse.id,
-      domain: { id: domain.domainId, displayName: domain.nameAr },
+      domain: { id: domain.id, displayName: domain.name },
       operations: ['Receiving', 'Issue'],
       rowVersion: 12,
     })
@@ -227,7 +225,7 @@ describe('WarehouseDetailPage', () => {
       http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, () =>
         okJson([capability]),
       ),
-      http.get(`${API_BASE_URL}/catalog/material-domains`, () => okPageJson([domain])),
+      http.get(`${API_BASE_URL}/catalog/domains`, () => okPageJson([domain])),
       http.put(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, async ({ request }) => {
         receivedBody = await request.json()
         return okJson([capability])
@@ -247,7 +245,7 @@ describe('WarehouseDetailPage', () => {
     expect(receivedBody).toEqual([
       {
         warehouseId: warehouse.id,
-        domainId: domain.domainId,
+        domainId: domain.id,
         operations: ['Receiving', 'Issue', 'Transfer'],
         rowVersion: 12,
       },
@@ -260,7 +258,7 @@ describe('WarehouseDetailPage', () => {
     const domain = createMaterialDomain()
     const capability = createWarehouseCapability({
       warehouseId: warehouse.id,
-      domain: { id: domain.domainId, displayName: domain.nameAr },
+      domain: { id: domain.id, displayName: domain.name },
     })
     let puts = 0
     const user = userEvent.setup()
@@ -269,7 +267,7 @@ describe('WarehouseDetailPage', () => {
       http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, () =>
         okJson([capability]),
       ),
-      http.get(`${API_BASE_URL}/catalog/material-domains`, () => okPageJson([domain])),
+      http.get(`${API_BASE_URL}/catalog/domains`, () => okPageJson([domain])),
       http.put(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, () => {
         puts += 1
         return okJson([capability])
@@ -294,7 +292,7 @@ describe('WarehouseDetailPage', () => {
     const domain = createMaterialDomain()
     const capability = createWarehouseCapability({
       warehouseId: warehouse.id,
-      domain: { id: domain.domainId, displayName: domain.nameAr },
+      domain: { id: domain.id, displayName: domain.name },
     })
     const user = userEvent.setup()
     server.use(
@@ -302,7 +300,7 @@ describe('WarehouseDetailPage', () => {
       http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, () =>
         okJson([capability]),
       ),
-      http.get(`${API_BASE_URL}/catalog/material-domains`, () => okPageJson([domain])),
+      http.get(`${API_BASE_URL}/catalog/domains`, () => okPageJson([domain])),
       http.put(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, () =>
         errJson(422, {
           code: 'WAREHOUSES_CANNOT_HOLD_STOCK',

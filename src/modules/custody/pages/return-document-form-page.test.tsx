@@ -30,7 +30,7 @@ vi.mock('@/modules/auth/hooks/use-permission', () => ({
 const WAREHOUSE_ID = fixtureUuid(30)
 const WAREHOUSE = createWarehouse({ id: WAREHOUSE_ID })
 const MATERIAL_ID = fixtureUuid(40)
-const MATERIAL = wireMaterial({ materialId: MATERIAL_ID })
+const MATERIAL = wireMaterial({ id: MATERIAL_ID })
 
 async function fillHeader(user: ReturnType<typeof userEvent.setup>) {
   const warehouseCombo = screen.getByRole('combobox', { name: 'المستودع' })
@@ -47,11 +47,20 @@ function useDocumentHandlers() {
   server.use(
     http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([WAREHOUSE])),
     http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([MATERIAL])),
+    // The line editor resolves an alternative unit's label from the real
+    // units-of-measure list; empty here because this suite carries no
+    // conversions.
+    http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => okPageJson([])),
     http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () =>
       okJson([
         createWarehouseCapability({
           warehouseId: WAREHOUSE_ID,
-          domain: MATERIAL.materialDomain,
+          // The capability names the material's own flat `materialDomainId`;
+          // the retired nested `materialDomain` reference is not on the record.
+          domain: {
+            id: MATERIAL.materialDomainId,
+            displayName: MATERIAL.materialDomainName,
+          },
           operations: ['Return', 'Issue', 'Receiving'],
         }),
       ]),

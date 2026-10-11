@@ -1,26 +1,29 @@
 import { catalogService } from '@/modules/catalog/services/catalog.service'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import type {
-  ListUnitsOfMeasureQuery,
-  ListMaterialDomainsQuery,
   ListMaterialCategoriesQuery,
+  ListMaterialDomainsQuery,
   ListMaterialFamiliesQuery,
   ListMaterialsQuery,
   ListMaterialUnitConversionsQuery,
-  UnitOfMeasureUpsertRequest,
-  MaterialDomainUpsertRequest,
-  MaterialCategoryUpsertRequest,
-  MaterialFamilyUpsertRequest,
-  MaterialUpsertRequest,
-  MaterialUnitConversionUpsertRequest,
+  ListUnitsOfMeasureQuery,
 } from '@/modules/catalog/types/catalog.api-types'
 import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 
 const CATALOG_RESOURCE = 'catalog'
 
+/**
+ * The catalog module's cache namespace.
+ *
+ * A key is `scoped` + the active scope + `catalog` + the module's own resource
+ * segment + the query object. The segment AFTER `catalog` is the module's
+ * vocabulary (`materialDomains`, `unitsOfMeasure`, ...), NOT the wire endpoint
+ * spelling — that lives in the service, which is what lets `/catalog/domains`
+ * and the `materialDomains` cache segment disagree without breaking anything.
+ */
 export const catalogQueryKeys = {
   unitsOfMeasure: (scope: ScopeCacheKey, query: ListUnitsOfMeasureQuery) =>
     queryKeys.scoped(scope, CATALOG_RESOURCE, 'unitsOfMeasure', query),
@@ -53,6 +56,17 @@ function useActiveScopeCacheKey() {
   return useActiveScopeContext().activeScopeCacheKey
 }
 
+/**
+ * These hooks are NOT the place to translate pagination: the UI controls are
+ * one-based already (`useServerPagination` starts at 1, `DataTableServer` counts
+ * from 1) and so is the wire, so a conversion here would be exactly the
+ * subtract-then-add that produced `page=0` — which the backend answers with 400
+ * `REQUEST_VALIDATION_FAILED`. The clamp into the ranges the backend actually
+ * binds (`page` in `[1, 21474836]`, `pageSize` in `[1, 100]`) happens once, in
+ * `toWireOneBasedPaginationParams` inside the service. A caller holding a
+ * ZERO-based index converts with `toWirePaginationParams` BEFORE reaching these
+ * hooks, never after.
+ */
 export function useUnitsOfMeasureQuery(
   query: ListUnitsOfMeasureQuery = {},
   options: { enabled?: boolean } = {},
@@ -238,194 +252,5 @@ export function useMaterialUnitConversionsQuery(
       (options.enabled !== undefined ? options.enabled : scope !== undefined) &&
       materialId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
-
-export function useUpdateUnitOfMeasureMutation() {
-  const queryClient = useQueryClient()
-  const scope = useActiveScopeCacheKey()
-  return useMutation({
-    mutationFn: ({
-      unitId,
-      request,
-    }: {
-      readonly unitId: string
-      readonly request: UnitOfMeasureUpsertRequest
-    }) => catalogService.updateUnitOfMeasure(unitId, request),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          CATALOG_RESOURCE,
-          'unitsOfMeasure',
-          variables.unitId,
-        ),
-      })
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          CATALOG_RESOURCE,
-          'unitsOfMeasure',
-          {},
-        ),
-      })
-    },
-  })
-}
-
-export function useUpdateMaterialDomainMutation() {
-  const queryClient = useQueryClient()
-  const scope = useActiveScopeCacheKey()
-  return useMutation({
-    mutationFn: ({
-      materialDomainId,
-      request,
-    }: {
-      readonly materialDomainId: string
-      readonly request: MaterialDomainUpsertRequest
-    }) => catalogService.updateMaterialDomain(materialDomainId, request),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          CATALOG_RESOURCE,
-          'materialDomains',
-          variables.materialDomainId,
-        ),
-      })
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          CATALOG_RESOURCE,
-          'materialDomains',
-          {},
-        ),
-      })
-    },
-  })
-}
-
-export function useUpdateMaterialCategoryMutation() {
-  const queryClient = useQueryClient()
-  const scope = useActiveScopeCacheKey()
-  return useMutation({
-    mutationFn: ({
-      materialCategoryId,
-      request,
-    }: {
-      readonly materialCategoryId: string
-      readonly request: MaterialCategoryUpsertRequest
-    }) => catalogService.updateMaterialCategory(materialCategoryId, request),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          CATALOG_RESOURCE,
-          'materialCategories',
-          variables.materialCategoryId,
-        ),
-      })
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          CATALOG_RESOURCE,
-          'materialCategories',
-          {},
-        ),
-      })
-    },
-  })
-}
-
-export function useUpdateMaterialFamilyMutation() {
-  const queryClient = useQueryClient()
-  const scope = useActiveScopeCacheKey()
-  return useMutation({
-    mutationFn: ({
-      materialFamilyId,
-      request,
-    }: {
-      readonly materialFamilyId: string
-      readonly request: MaterialFamilyUpsertRequest
-    }) => catalogService.updateMaterialFamily(materialFamilyId, request),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          CATALOG_RESOURCE,
-          'materialFamilies',
-          variables.materialFamilyId,
-        ),
-      })
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          CATALOG_RESOURCE,
-          'materialFamilies',
-          {},
-        ),
-      })
-    },
-  })
-}
-
-export function useUpdateMaterialMutation() {
-  const queryClient = useQueryClient()
-  const scope = useActiveScopeCacheKey()
-  return useMutation({
-    mutationFn: ({
-      materialId,
-      request,
-    }: {
-      readonly materialId: string
-      readonly request: MaterialUpsertRequest
-    }) => catalogService.updateMaterial(materialId, request),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          CATALOG_RESOURCE,
-          'materials',
-          variables.materialId,
-        ),
-      })
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          CATALOG_RESOURCE,
-          'materials',
-          {},
-        ),
-      })
-    },
-  })
-}
-
-export function useUpdateMaterialUnitConversionMutation() {
-  const queryClient = useQueryClient()
-  const scope = useActiveScopeCacheKey()
-  return useMutation({
-    mutationFn: ({
-      materialId,
-      materialUnitConversionId,
-      request,
-    }: {
-      readonly materialId: string
-      readonly materialUnitConversionId: string
-      readonly request: MaterialUnitConversionUpsertRequest
-    }) =>
-      catalogService.updateMaterialUnitConversion(materialId, materialUnitConversionId, request),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(
-          scope ?? { kind: 'enterprise' },
-          CATALOG_RESOURCE,
-          'materials',
-          {},
-          'unitConversions',
-          {},
-        ),
-      })
-    },
   })
 }

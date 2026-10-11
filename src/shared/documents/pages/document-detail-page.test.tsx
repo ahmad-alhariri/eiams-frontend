@@ -293,7 +293,7 @@ describe('DocumentDetailPage', () => {
         createWarehouseDocumentLine({
           lineId: fixtureUuid(252),
           openingType: 'Initial',
-          material: { code: 'OFF-PEN', nameAr: 'أقلام حبر' },
+          material: createMaterial({ code: 'OFF-PEN', nameAr: 'أقلام حبر' }),
           quantity: 30,
         }),
         createWarehouseDocumentLine({
@@ -314,7 +314,7 @@ describe('DocumentDetailPage', () => {
         }),
         createWarehouseDocumentLine({
           lineId: fixtureUuid(254),
-          material: { code: 'OFF-PAPER', nameAr: 'ورق تصوير' },
+          material: createMaterial({ code: 'OFF-PAPER', nameAr: 'ورق تصوير' }),
           quantity: 5,
         }),
       ],
@@ -769,7 +769,7 @@ describe('DocumentDetailPage', () => {
         createWarehouseDocumentLine({
           availableBalance: 12,
           lineId: fixtureUuid(241),
-          material: { code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' },
+          material: createMaterial({ code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' }),
           quantity: 25,
           unit: { id: fixtureUuid(242), displayName: 'رزمة' },
         }),

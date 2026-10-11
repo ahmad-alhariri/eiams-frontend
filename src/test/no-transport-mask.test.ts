@@ -92,7 +92,9 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // 384 = 380 plus the four Organizations files added by slice S4
     // (`use-organization-mutations.ts`, `organization.schemas.ts`,
     // `organization-form-dialog.tsx`, `organizations-list-page.tsx`).
-    assertScannedFiles(PRODUCTION_FILES, 384)
+    // 385 = 384 plus `src/modules/catalog/components/material-status-badge.tsx`,
+    // the Arabic status badge the catalog screens render per record.
+    assertScannedFiles(PRODUCTION_FILES, 385)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

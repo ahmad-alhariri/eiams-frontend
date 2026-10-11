@@ -26,8 +26,8 @@ const NO_PARENT = '__none__'
 const EMPTY_VALUES: MaterialCategoryFormValues = {
   code: '',
   materialDomainId: '',
-  nameAr: '',
-  status: 'Active',
+  name: '',
+  parentCategoryId: null,
 }
 
 export interface MaterialCategoryFormDialogProps {
@@ -40,7 +40,17 @@ export interface MaterialCategoryFormDialogProps {
   onSubmit: (values: MaterialCategoryFormValues) => Promise<void>
 }
 
-/** Create/edit category dialog restricted to the contract's domain-aware hierarchy. */
+/**
+ * Create/edit category dialog.
+ *
+ * `materialDomainId` and `status` are create-only here: the update route binds
+ * `Name` and `Code` alone, re-domaining is not exposed at all, and status is a
+ * guarded command taking an INTEGER ordinal. `parentCategoryId` IS editable on
+ * an existing category — re-parenting has its own dedicated route
+ * (`PUT /catalog/categories/{id}/parent`), which the page fires through
+ * `toMoveMaterialCategoryRequest` after this form's update succeeds. The
+ * client-side cycle/self-parent guards in the schema still run unchanged.
+ */
 export function MaterialCategoryFormDialog({
   categories,
   category,
@@ -50,6 +60,7 @@ export function MaterialCategoryFormDialog({
   onOpenChange,
   onSubmit,
 }: MaterialCategoryFormDialogProps) {
+  const isEditing = category !== null
   const schema = useMemo(
     () => createMaterialCategorySchema(categories, category),
     [categories, category],
@@ -69,9 +80,8 @@ export function MaterialCategoryFormDialog({
     form.reset({
       code: category?.code ?? '',
       materialDomainId: category?.materialDomainId ?? '',
-      nameAr: category?.nameAr ?? '',
-      parentCategoryId: category?.parentCategoryId ?? undefined,
-      status: category?.status ?? 'Active',
+      name: category?.name ?? '',
+      parentCategoryId: category?.parentCategoryId ?? null,
     })
   }, [category, form, open])
 
@@ -82,7 +92,7 @@ export function MaterialCategoryFormDialog({
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['code', 'materialDomainId', 'nameAr', 'parentCategoryId', 'status'],
+        schemaKeys: ['code', 'materialDomainId', 'name', 'parentCategoryId'],
       })
     }
   }
@@ -105,7 +115,7 @@ export function MaterialCategoryFormDialog({
           >
             <FormField
               control={form.control}
-              name="nameAr"
+              name="name"
               rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
@@ -143,28 +153,6 @@ export function MaterialCategoryFormDialog({
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="status"
-                rules={{ required: true }}
-                render={({ field, fieldState }) => (
-                  <FormItem>
-                    <FormLabel>الحالة</FormLabel>
-                    <Select value={field.value} disabled={isPending} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                          <SelectValue>{field.value === 'Active' ? 'نشط' : 'غير نشط'}</SelectValue>
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Active">نشط</SelectItem>
-                        <SelectItem value="Inactive">غير نشط</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </div>
             <FormField
               control={form.control}
@@ -175,38 +163,42 @@ export function MaterialCategoryFormDialog({
                   <FormLabel>مجال التصنيف</FormLabel>
                   <Select
                     value={field.value}
-                    disabled={isPending}
+                    disabled={isPending || isEditing}
                     onValueChange={(value) => {
                       field.onChange(value)
                       const parent = form.getValues('parentCategoryId')
                       if (
-                        parent !== undefined &&
+                        parent !== null &&
                         !categories.some(
                           (candidate) =>
-                            candidate.materialCategoryId === parent &&
-                            candidate.materialDomainId === value,
+                            candidate.id === parent && candidate.materialDomainId === value,
                         )
                       ) {
-                        form.setValue('parentCategoryId', undefined, { shouldValidate: true })
+                        form.setValue('parentCategoryId', null, { shouldValidate: true })
                       }
                     }}
                   >
                     <FormControl>
                       <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
                         <SelectValue>
-                          {domains.find((domain) => domain.materialDomainId === field.value)
-                            ?.nameAr ?? 'اختر المجال'}
+                          {domains.find((domain) => domain.id === field.value)?.name ??
+                            'اختر المجال'}
                         </SelectValue>
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {domains.map((domain) => (
-                        <SelectItem key={domain.materialDomainId} value={domain.materialDomainId}>
-                          {domain.nameAr}
+                        <SelectItem key={domain.id} value={domain.id}>
+                          {domain.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {isEditing ? (
+                    <p className="text-sm text-muted-foreground">
+                      مجال التصنيف ثابت ولا يمكن نقله إلى مجال آخر.
+                    </p>
+                  ) : null}
                   <FormMessage />
                 </FormItem>
               )}
@@ -220,9 +212,7 @@ export function MaterialCategoryFormDialog({
                   <Select
                     value={field.value ?? NO_PARENT}
                     disabled={isPending || selectedDomainId === ''}
-                    onValueChange={(value) =>
-                      field.onChange(value === NO_PARENT ? undefined : value)
-                    }
+                    onValueChange={(value) => field.onChange(value === NO_PARENT ? null : value)}
                   >
                     <FormControl>
                       <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
@@ -232,15 +222,15 @@ export function MaterialCategoryFormDialog({
                     <SelectContent>
                       <SelectItem value={NO_PARENT}>بدون تصنيف أب</SelectItem>
                       {parentOptions.map((candidate) => (
-                        <SelectItem
-                          key={candidate.materialCategoryId}
-                          value={candidate.materialCategoryId}
-                        >
-                          {candidate.nameAr}
+                        <SelectItem key={candidate.id} value={candidate.id}>
+                          {candidate.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-sm text-muted-foreground">
+                    تغيير التصنيف الأب ينقل التصنيف داخل شجرة المجال نفسه.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

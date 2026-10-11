@@ -81,31 +81,33 @@ const activeSite: Site = createSite({
 })
 
 /**
- * Catalog has NOT been migrated onto the handwritten contracts, so this fixture
- * stays a literal against `catalog.api-types.Material` (nested
- * `materialFamily`/`materialCategory`/`materialDomain`/`unit`). The shared
- * `createMaterial()` factory mints the frozen generated `Material` — a
- * different type, with `baseUnit`/`category`/`domain`/`family` — so using it
- * here would test a record the adapter is not even typed against.
+ * Catalog is migrated onto the handwritten contract, so this fixture is a
+ * literal against `catalog.api-types.Material` — the record
+ * `GET /catalog/materials` actually serves. It cannot come from the shared
+ * `createMaterial()` factory: that one is typed against the frozen generated
+ * `Material` (the shape the DOCUMENT-engine fixtures embed) and mints
+ * `baseUnit`/`category`/`domain`/`family`, which no catalog projection carries.
+ * `wireMaterial` in `@/test/msw/catalog-wire-fixtures` is the shared builder for
+ * the real record; this literal stays inline because the adapter assertions
+ * need a hand-picked domain/unit pair.
  */
 const activeMaterial: Material = {
-  materialId: 'mat-1',
-  code: 'M-01',
+  id: 'mat-1',
+  familyId: 'fam-1',
   nameAr: 'ورق تصوير A4',
-  descriptionAr: null,
-  materialFamilyId: 'fam-1',
-  materialFamily: { id: 'fam-1', displayName: 'ورق' },
-  materialCategoryId: 'cat-1',
-  materialCategory: { id: 'cat-1', displayName: 'قرطاسية' },
-  materialDomainId: 'dom-1',
-  materialDomain: { id: 'dom-1', displayName: 'مستهلكات' },
-  unitId: 'uom-1',
-  unit: { id: 'uom-1', displayName: 'رزمة' },
-  nominalConversionFactor: 1,
+  nameEn: null,
+  code: 'M-01',
   materialKind: 'Consumable',
+  trackingType: 'Quantity',
+  hasExpiry: false,
   requiresAssetNumber: false,
+  catalogVersion: 1,
+  attributes: null,
   status: 'Active',
-  rowVersion: 1,
+  materialDomainId: 'dom-1',
+  materialDomainName: 'مستهلكات',
+  baseUnitId: 'uom-1',
+  baseUnitSymbol: 'رزمة',
 }
 
 describe('createEntitySelectorAdapter', () => {
@@ -429,7 +431,9 @@ describe('useMaterialSelector', () => {
     const { result } = renderHook(() => useMaterialSelector(vi.fn()))
 
     const option = result.current.options.toOption(activeMaterial)
-    expect(option.value).toBe(activeMaterial.materialId)
+    // The catalog identifier is `id` on every projection; `materialId` was the
+    // frozen generated snapshot's fiction.
+    expect(option.value).toBe(activeMaterial.id)
     expect(option.label).toBe('ورق تصوير A4')
     expect(option.disabled).toBe(false)
     expect(option.payload?.code).toBe('M-01')

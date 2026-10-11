@@ -26,11 +26,7 @@ import {
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 
-const EMPTY_VALUES: MaterialUnitConversionFormValues = {
-  unitId: '',
-  conversionFactor: 1,
-  status: 'Active',
-}
+const EMPTY_VALUES: MaterialUnitConversionFormValues = { fromUnitId: '', factor: 1 }
 
 type MaterialUnitConversionFormDialogProps = {
   material: Material
@@ -48,6 +44,11 @@ type MaterialUnitConversionFormDialogProps = {
 /**
  * Edits one material-specific alternative unit. The base unit is supplied by
  * the server and is never a selectable conversion target.
+ *
+ * There is NO status field: a conversion is not a suspendable master record,
+ * its lifecycle ends in DELETE, and the update route binds `factor` ONLY. So an
+ * existing conversion shows its unit read-only — re-pointing the units means
+ * remove-and-add rather than an edit.
  */
 export function MaterialUnitConversionFormDialog({
   material,
@@ -66,10 +67,10 @@ export function MaterialUnitConversionFormDialog({
       units.filter(
         (unit) =>
           unit.status === 'Active' &&
-          unit.unitId !== material.unit.id &&
-          !activeUnitIds.has(unit.unitId),
+          unit.id !== material.baseUnitId &&
+          !activeUnitIds.has(unit.id),
       ),
-    [activeUnitIds, material.unit.id, units],
+    [activeUnitIds, material.baseUnitId, units],
   )
   const form = useForm<MaterialUnitConversionFormValues>({
     resolver: zodResolver(materialUnitConversionSchema),
@@ -79,15 +80,14 @@ export function MaterialUnitConversionFormDialog({
   useEffect(() => {
     if (!open) return
     form.reset({
-      unitId: conversion?.unit.id ?? '',
-      conversionFactor: conversion?.conversionFactor ?? 1,
-      status: conversion?.status ?? 'Active',
+      fromUnitId: conversion?.fromUnitId ?? '',
+      factor: conversion?.factor ?? 1,
     })
   }, [conversion, form, open])
 
   const submit = async (values: MaterialUnitConversionFormValues) => {
-    if (conversion === null && !selectableUnits.some((unit) => unit.unitId === values.unitId)) {
-      form.setError('unitId', {
+    if (conversion === null && !selectableUnits.some((unit) => unit.id === values.fromUnitId)) {
+      form.setError('fromUnitId', {
         message: 'اختر وحدة بديلة نشطة وغير مكررة لهذه المادة.',
       })
       return
@@ -99,7 +99,7 @@ export function MaterialUnitConversionFormDialog({
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['unitId', 'conversionFactor', 'status'],
+        schemaKeys: ['fromUnitId', 'factor'],
       })
     }
   }
@@ -111,8 +111,8 @@ export function MaterialUnitConversionFormDialog({
           <DialogTitle>{conversion ? 'تعديل تحويل وحدة' : 'إضافة وحدة بديلة'}</DialogTitle>
           <DialogDescription>
             {conversion
-              ? 'يبقى التحويل مرتبطًا بالمادة ووحدة أساسها فقط.'
-              : `وحدة أساس المادة هي ${material.unit.displayName}. مثال: كرتونة واحدة = 12 ${material.unit.displayName}.`}
+              ? `يبقى التحويل مرتبطًا بالمادة ووحدة أساسها ${material.baseUnitSymbol} فقط.`
+              : `وحدة أساس المادة هي ${material.baseUnitSymbol}. مثال: كرتونة واحدة = 12 ${material.baseUnitSymbol}.`}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -122,15 +122,10 @@ export function MaterialUnitConversionFormDialog({
             className="grid gap-5"
             onSubmit={form.handleSubmit(submit)}
           >
-            {conversion ? (
-              <div className="grid gap-1 rounded-lg border border-border bg-muted/30 p-3">
-                <span className="text-sm font-medium text-muted-foreground">الوحدة البديلة</span>
-                <span className="font-semibold text-foreground">{conversion.unit.displayName}</span>
-              </div>
-            ) : (
+            {conversion === null ? (
               <FormField
                 control={form.control}
-                name="unitId"
+                name="fromUnitId"
                 render={({ field, fieldState }) => (
                   <FormItem>
                     <FormLabel>الوحدة البديلة</FormLabel>
@@ -142,15 +137,15 @@ export function MaterialUnitConversionFormDialog({
                       <FormControl>
                         <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
                           <SelectValue>
-                            {selectableUnits.find((unit) => unit.unitId === field.value)?.nameAr ??
+                            {selectableUnits.find((unit) => unit.id === field.value)?.name ??
                               'اختر الوحدة البديلة'}
                           </SelectValue>
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {selectableUnits.map((unit) => (
-                          <SelectItem key={unit.unitId} value={unit.unitId}>
-                            {unit.nameAr}
+                          <SelectItem key={unit.id} value={unit.id}>
+                            {unit.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -162,21 +157,29 @@ export function MaterialUnitConversionFormDialog({
                     ) : null}
                     {!isUnitsLoading && !isUnitsError && selectableUnits.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        لا توجد وحدة نشطة متاحة بعد استبعاد وحدة الأساس والتحويلات النشطة.
+                        لا توجد وحدة نشطة متاحة بعد استبعاد وحدة الأساس والوحدات المرتبطة.
                       </p>
                     ) : null}
                     <FormMessage />
                   </FormItem>
                 )}
               />
+            ) : (
+              <div className="grid gap-1 rounded-lg border border-border bg-muted/30 p-3">
+                <span className="text-sm font-medium text-muted-foreground">الوحدة البديلة</span>
+                <span className="font-semibold text-foreground">
+                  {units.find((unit) => unit.id === conversion.fromUnitId)?.name ??
+                    conversion.fromUnitId}
+                </span>
+              </div>
             )}
 
             <FormField
               control={form.control}
-              name="conversionFactor"
+              name="factor"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>عامل التحويل إلى {material.unit.displayName}</FormLabel>
+                  <FormLabel>عامل التحويل إلى {material.baseUnitSymbol}</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -190,38 +193,12 @@ export function MaterialUnitConversionFormDialog({
                     />
                   </FormControl>
                   <p id="conversion-factor-help" className="text-sm text-muted-foreground">
-                    وحدة بديلة واحدة = العامل × {material.unit.displayName}.
+                    وحدة بديلة واحدة = العامل × {material.baseUnitSymbol}.
                   </p>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
-            {conversion ? (
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field, fieldState }) => (
-                  <FormItem>
-                    <FormLabel>الحالة</FormLabel>
-                    <Select value={field.value} disabled={isPending} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                          <SelectValue>
-                            {field.value === 'Active' ? 'نشط' : 'مؤرشف (غير نشط)'}
-                          </SelectValue>
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Active">نشط</SelectItem>
-                        <SelectItem value="Inactive">مؤرشف (غير نشط)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : null}
 
             <DialogFooter>
               <Button type="submit" loading={isPending}>

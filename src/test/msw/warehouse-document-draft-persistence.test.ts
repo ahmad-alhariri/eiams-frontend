@@ -7,7 +7,13 @@ import type {
   WarehouseDocument,
   WarehouseDocumentDraftRequest,
 } from '@/shared/types/generated/eiams-v1'
-import { createMaterial, createSite, createWarehouse, fixtureUuid } from '@/test/msw/factories'
+import {
+  createMaterial,
+  createNamedReference,
+  createSite,
+  createWarehouse,
+  fixtureUuid,
+} from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import {
   applyDraftToDocument,
@@ -21,9 +27,9 @@ const WAREHOUSE_ID = fixtureUuid(300)
 const MATERIAL_ID = fixtureUuid(401)
 const ASSET_MATERIAL_ID = fixtureUuid(402)
 
-const material = createMaterial({ materialId: MATERIAL_ID })
+const material = createMaterial({ id: MATERIAL_ID })
 const assetMaterial = createMaterial({
-  materialId: ASSET_MATERIAL_ID,
+  id: ASSET_MATERIAL_ID,
   materialKind: 'Asset',
   requiresAssetNumber: true,
 })
@@ -37,7 +43,10 @@ const lookups = {
       : materialId === ASSET_MATERIAL_ID
         ? assetMaterial
         : undefined,
-  unitOf: (unitId: string | undefined) => (unitId === undefined ? undefined : material.baseUnit),
+  unitOf: (unitId: string | undefined) =>
+    unitId === undefined
+      ? undefined
+      : createNamedReference({ id: material.baseUnitId, displayName: material.baseUnitSymbol }),
   warehouseOf: (warehouseId: string) => (warehouseId === WAREHOUSE_ID ? warehouse : undefined),
   siteOf: (siteId: string) => (siteId === site.id ? site : undefined),
 }
@@ -86,7 +95,7 @@ describe('buildDraftDocument', () => {
     const input: DocumentLineInput = {
       materialId: MATERIAL_ID,
       quantity: 10,
-      unitId: material.baseUnit.id,
+      unitId: material.baseUnitId,
       unitPrice: 150,
       batchNumber: 'B-1',
       expiryDate: '2026-12-31',
@@ -110,7 +119,9 @@ describe('buildDraftDocument', () => {
       availableBalance: null,
     })
     expect(line.material.materialId).toBe(MATERIAL_ID)
-    expect(line.unit).toEqual(material.baseUnit)
+    expect(line.unit).toEqual(
+      createNamedReference({ id: material.baseUnitId, displayName: material.baseUnitSymbol }),
+    )
   })
 
   it('maps asset material lines with the Asset line type and passthrough asset inputs', () => {

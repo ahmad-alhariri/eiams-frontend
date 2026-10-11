@@ -1,69 +1,71 @@
 import { describe, expect, it } from 'vitest'
 
-import { createMaterialUnitConversion, fixtureUuid } from '@/test/msw/factories'
-import type { MaterialUnitConversion } from '@/modules/catalog/types/catalog.types'
-
+import { fixtureUuid } from '@/test/msw/factories'
 import {
   materialUnitConversionSchema,
-  toMaterialUnitConversionRequest,
+  toCreateMaterialUnitConversionRequest,
+  toUpdateMaterialUnitConversionRequest,
 } from './material-unit-conversion.schemas'
 
 describe('material unit-conversion schema', () => {
   const validValues = {
-    unitId: fixtureUuid(26),
-    conversionFactor: 12,
-    status: 'Active' as const,
+    fromUnitId: fixtureUuid(26),
+    factor: 12,
   }
 
   it('rejects zero, negative, and non-numeric conversion factors', () => {
+    expect(materialUnitConversionSchema.safeParse({ ...validValues, factor: 0 }).success).toBe(
+      false,
+    )
+    expect(materialUnitConversionSchema.safeParse({ ...validValues, factor: -1 }).success).toBe(
+      false,
+    )
     expect(
-      materialUnitConversionSchema.safeParse({ ...validValues, conversionFactor: 0 }).success,
-    ).toBe(false)
-    expect(
-      materialUnitConversionSchema.safeParse({ ...validValues, conversionFactor: -1 }).success,
+      materialUnitConversionSchema.safeParse({ ...validValues, factor: Number.NaN }).success,
     ).toBe(false)
   })
 
   it('accepts positive numeric conversion factors', () => {
-    expect(
-      materialUnitConversionSchema.safeParse({ ...validValues, conversionFactor: 0.5 }).success,
-    ).toBe(true)
+    expect(materialUnitConversionSchema.safeParse({ ...validValues, factor: 0.5 }).success).toBe(
+      true,
+    )
   })
 
-  it('maps a create request without an existing conversion', () => {
-    expect(toMaterialUnitConversionRequest(validValues, fixtureUuid(60), null)).toEqual({
-      materialId: fixtureUuid(60),
-      unitId: validValues.unitId,
-      conversionFactor: 12,
-      rowVersion: 0,
-      status: 'Active',
+  it('requires a unit and never emits a status the record does not carry', () => {
+    expect(materialUnitConversionSchema.safeParse({ ...validValues, fromUnitId: '' }).success).toBe(
+      false,
+    )
+    expect(
+      materialUnitConversionSchema.safeParse({ ...validValues, fromUnitId: 'x' }).success,
+    ).toBe(false)
+
+    // A conversion has no status: its lifecycle is DELETE, not status change.
+    // Zod strips an unknown key rather than rejecting it, so the assertion is on
+    // the parsed output — a silent `status: 'Active'` in a body is exactly the
+    // defect this keeps out.
+    const parsed = materialUnitConversionSchema.safeParse({ ...validValues, status: 'Active' })
+    expect(parsed.success).toBe(true)
+    expect(parsed.data).toEqual({ fromUnitId: validValues.fromUnitId, factor: 12 })
+  })
+
+  it('maps a create request with the material own base unit', () => {
+    expect(toCreateMaterialUnitConversionRequest(validValues, fixtureUuid(60))).toEqual({
+      fromUnitId: validValues.fromUnitId,
+      toBaseUnitId: fixtureUuid(60),
+      factor: 12,
     })
   })
 
-  it('preserves the row version from the existing conversion on update', () => {
-    const conversion: MaterialUnitConversion = {
-      ...createMaterialUnitConversion(),
-      materialUnitConversionId: fixtureUuid(33),
-      materialId: fixtureUuid(60),
-      material: { id: fixtureUuid(60), displayName: 'حاسوب' },
-      unitId: fixtureUuid(26),
-      unit: { id: fixtureUuid(26), displayName: 'كرتونة' },
-      conversionFactor: 12,
-      rowVersion: 7,
-    }
+  it('maps an update request to the factor alone', () => {
+    // Correcting a factor does not re-point the units: `fromUnitId` and
+    // `toBaseUnitId` mean remove-and-add, not update.
+    const request = toUpdateMaterialUnitConversionRequest({ ...validValues, factor: 10 })
 
-    expect(
-      toMaterialUnitConversionRequest(
-        { ...validValues, conversionFactor: 10, status: 'Inactive' },
-        fixtureUuid(60),
-        conversion,
-      ),
-    ).toEqual({
-      materialId: fixtureUuid(60),
-      unitId: fixtureUuid(26),
-      conversionFactor: 10,
-      rowVersion: 7,
-      status: 'Inactive',
-    })
+    expect(request).toEqual({ factor: 10 })
+    expect(request).not.toHaveProperty('fromUnitId')
+    expect(request).not.toHaveProperty('toBaseUnitId')
+    expect(request).not.toHaveProperty('materialId')
+    expect(request).not.toHaveProperty('status')
+    expect(request).not.toHaveProperty('rowVersion')
   })
 })

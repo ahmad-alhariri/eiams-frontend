@@ -10,6 +10,7 @@ import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { okJson } from '@/test/msw/envelope'
 import {
   createDocumentPolicy,
+  createMaterial,
   createOperationalAdvisory,
   createSessionRole,
   createSessionScope,
@@ -84,7 +85,7 @@ function issueDocument(
     lines: overrides.lines ?? [
       createWarehouseDocumentLine({
         lineId: fixtureUuid(201),
-        material: { code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' },
+        material: createMaterial({ code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' }),
         quantity: 25,
         availableBalance: 12,
       }),
@@ -142,7 +143,7 @@ describe('useDocumentPolicyGate', () => {
       lines: [
         createWarehouseDocumentLine({
           lineId: fixtureUuid(201),
-          material: { code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' },
+          material: createMaterial({ code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' }),
           quantity: 6,
           availableBalance: 12,
         }),

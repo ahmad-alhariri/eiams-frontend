@@ -39,7 +39,7 @@ describe('the ApiTransport seam is real, not a cast', () => {
     const { transport } = createHarness()
     const domain = createMaterialDomain()
 
-    server.use(http.get(`${API_BASE_URL}/catalog/material-domains`, () => okPageJson([domain])))
+    server.use(http.get(`${API_BASE_URL}/catalog/domains`, () => okPageJson([domain])))
 
     const service = createCatalogService(transport)
     const page = await service.listMaterialDomains({})
@@ -47,12 +47,12 @@ describe('the ApiTransport seam is real, not a cast', () => {
     // Under the old cast this line threw `transport.requestPage is not a
     // function` — which is why the suite had to cast to look green.
     expect(page.items).toHaveLength(1)
-    // Asserted on `nameAr`, not `materialDomainId`: `createMaterialDomain()`
-    // returns `domainId` while its declared type says `materialDomainId`, so
-    // the id comparison would be asserting a fixture bug. That mismatch is
-    // recorded against eiams-frontend-tgl3; naming it here keeps this test
-    // honest about what it actually proves.
-    expect(page.items[0]?.nameAr).toBe(domain.nameAr)
+    // `id`, not `domainId`/`materialDomainId`, and the label is `name`, not
+    // `nameAr`: the shared factory now mints the handwritten
+    // `catalog.api-types.MaterialDomain` the service is typed against, so the
+    // id comparison asserts the real join instead of a fixture bug.
+    expect(page.items[0]?.id).toBe(domain.id)
+    expect(page.items[0]?.name).toBe(domain.name)
   })
 
   it('serves a warehouse list through the shared transport (forward)', async () => {
@@ -136,7 +136,7 @@ describe('the ApiTransport seam is real, not a cast', () => {
     const domain = createMaterialDomain()
 
     server.use(
-      http.get(`${API_BASE_URL}/catalog/material-domains`, () =>
+      http.get(`${API_BASE_URL}/catalog/domains`, () =>
         okPageJson([domain], { page: 3, pageSize: 25, totalCount: 51, totalPages: 3 }),
       ),
     )
@@ -147,14 +147,25 @@ describe('the ApiTransport seam is real, not a cast', () => {
     // `page_size`/`total_items` on the wire, `pageSize`/`totalItems` in the
     // frontend page — the boundary the backend owns per ADR-0001.
     //
-    // `meta.page` is deliberately NOT asserted. The catalog service's local
-    // `toPage` emits `meta.page` while the declared `PageMeta` says
-    // `pageIndex`, reconciled by an `as unknown as` cast in the service. That
-    // contradiction is real and is filed against tgl3; asserting either side
-    // here would freeze one of them as correct.
-    expect(page.meta.pageSize).toBe(25)
-    expect(page.meta.totalItems).toBe(51)
-    expect(page.meta.totalPages).toBe(3)
+    // Every field is asserted, `page` included. The service used to answer the
+    // shared `ApiPage<T>` with a module-local `{ items, meta: PageMeta }` that
+    // emitted `meta.page` under a declared `pageIndex`, reconciled by an
+    // `as unknown as` cast, so asserting either side froze one of two
+    // contradictory shapes as correct. That wrapper is gone: the catalog list
+    // methods now return `ApiPage<T>` directly, so here is the whole contract.
+    expect(page.items).toEqual([domain])
+    expect(page.page).toBe(3)
+    expect(page.pageSize).toBe(25)
+    expect(page.totalItems).toBe(51)
+    expect(page.totalPages).toBe(3)
+    // Page 3 of 3: the first page is behind us and there is none ahead. The
+    // fixture asks for the last page deliberately, because `okPageJson` derives
+    // both flags from the numbers (`page > 1`, `page < totalPages`), so this
+    // pair exercises both booleans distinctly instead of only ever true.
+    expect(page.hasPreviousPage).toBe(true)
+    expect(page.hasNextPage).toBe(false)
+    expect('data' in page).toBe(false)
+    expect('pagination' in page).toBe(false)
   })
 
   it('recognises a well-formed success envelope', () => {

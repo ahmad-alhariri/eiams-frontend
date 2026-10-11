@@ -1,4 +1,4 @@
-import { IconEdit, IconPlus } from '@tabler/icons-react'
+import { IconCheck, IconEdit, IconPlus, IconUserOff } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
@@ -6,11 +6,13 @@ import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { MaterialDomainFormDialog } from '@/modules/catalog/components/material-domain-form-dialog'
 import {
   useCreateMaterialDomainMutation,
+  useSetMaterialDomainStatusMutation,
   useUpdateMaterialDomainMutation,
 } from '@/modules/catalog/hooks/use-catalog-mutations'
 import { useMaterialDomainsQuery } from '@/modules/catalog/hooks/use-catalog-queries'
 import {
-  toMaterialDomainRequest,
+  toCreateMaterialDomainRequest,
+  toUpdateMaterialDomainRequest,
   type MaterialDomainFormValues,
 } from '@/modules/catalog/schemas/material-domain.schemas'
 import { StatusBadge } from '@/shared/feedback/status-badge'
@@ -18,12 +20,12 @@ import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
+import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { dataTableFeatures, DataTable } from '@/shared/ui/data-table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { toast } from '@/shared/ui/toast-manager'
 import { listRows } from '@/shared/utils/table-data'
-import type { MaterialDomain } from '@/modules/catalog/types/catalog.types'
-import type { RecordStatus } from '@/shared/api/api-contracts'
+import type { MaterialDomain, RecordStatus } from '@/modules/catalog/types/catalog.types'
 
 const materialDomainColumnHelper = createColumnHelper<typeof dataTableFeatures, MaterialDomain>()
 
@@ -31,15 +33,17 @@ function isRecordStatus(value: string | null): value is RecordStatus {
   return value === 'Active' || value === 'Inactive'
 }
 
-/** Scoped, contract-backed material domain directory. The endpoint is intentionally unpaginated in v1. */
+/** Scoped, contract-backed material domain directory. */
 function MaterialDomainsPage() {
   const { has } = usePermission()
   const canManage = has('catalog.manage')
   const [status, setStatus] = useState<RecordStatus | undefined>()
   const [dialogDomain, setDialogDomain] = useState<MaterialDomain | null | undefined>(undefined)
+  const [statusTarget, setStatusTarget] = useState<MaterialDomain | null>(null)
   const domainsQuery = useMaterialDomainsQuery(status === undefined ? {} : { status })
   const createMutation = useCreateMaterialDomainMutation()
   const updateMutation = useUpdateMaterialDomainMutation()
+  const statusMutation = useSetMaterialDomainStatusMutation()
 
   const openCreate = useCallback(() => setDialogDomain(null), [])
   const openEdit = useCallback((domain: MaterialDomain) => setDialogDomain(domain), [])
@@ -47,16 +51,24 @@ function MaterialDomainsPage() {
     if (!open) setDialogDomain(undefined)
   }, [])
 
+  /**
+   * Create and update are two different bodies: the create binds `name` and
+   * `code`, the update binds `name` alone. A single "upsert" mapper is what
+   * used to send `code` (and a status, and a version token) into a route that
+   * binds none of them.
+   */
   const submitForm = useCallback(
     async (values: MaterialDomainFormValues) => {
       const domain = dialogDomain ?? null
       try {
-        const request = toMaterialDomainRequest(values, domain)
         if (domain === null) {
-          await createMutation.mutateAsync(request)
+          await createMutation.mutateAsync(toCreateMaterialDomainRequest(values))
           toast.success({ title: 'تمت إضافة مجال التصنيف.' })
         } else {
-          await updateMutation.mutateAsync({ domainId: domain.materialDomainId, request })
+          await updateMutation.mutateAsync({
+            domainId: domain.id,
+            request: toUpdateMaterialDomainRequest(values),
+          })
           toast.success({ title: 'تم حفظ تعديلات مجال التصنيف.' })
         }
         setDialogDomain(undefined)
@@ -72,15 +84,44 @@ function MaterialDomainsPage() {
     [createMutation, dialogDomain, updateMutation],
   )
 
+  /**
+   * One command, two directions: `PUT /catalog/domains/{id}/status` takes the
+   * enum ORDINAL, which the hook derives from the status the row actually
+   * carries. A 409/404 surfaces as an Arabic toast and nothing about the row is
+   * assumed to have changed.
+   */
+  const confirmStatusChange = useCallback(async () => {
+    if (statusTarget === null) return
+    const nextStatus: RecordStatus = statusTarget.status === 'Active' ? 'Inactive' : 'Active'
+
+    try {
+      await statusMutation.mutateAsync({ domainId: statusTarget.id, status: nextStatus })
+    } catch {
+      return
+    }
+
+    toast.success({
+      title:
+        nextStatus === 'Inactive'
+          ? 'تم تعطيل المجال مع الاحتفاظ بالمراجع السابقة.'
+          : 'تم تنشيط المجال من جديد.',
+    })
+    setStatusTarget(null)
+  }, [statusMutation, statusTarget])
+
   const columns = useMemo(
     () =>
       materialDomainColumnHelper.columns([
-        materialDomainColumnHelper.accessor('nameAr', {
-          id: 'nameAr',
+        materialDomainColumnHelper.accessor('name', {
+          id: 'name',
           header: 'اسم المجال',
           cell: (info) => <span className="font-semibold text-foreground">{info.getValue()}</span>,
         }),
-        materialDomainColumnHelper.accessor('code', { id: 'code', header: 'الرمز' }),
+        materialDomainColumnHelper.accessor('code', {
+          id: 'code',
+          header: 'الرمز',
+          cell: (info) => <span dir="ltr">{info.getValue()}</span>,
+        }),
         materialDomainColumnHelper.accessor('status', {
           id: 'status',
           header: 'الحالة',
@@ -91,23 +132,39 @@ function MaterialDomainsPage() {
               materialDomainColumnHelper.display({
                 id: 'actions',
                 header: 'إجراءات',
-                cell: ({ row }) => (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`تعديل ${row.original.nameAr}`}
-                    onClick={() => openEdit(row.original)}
-                  >
-                    <IconEdit aria-hidden />
-                  </Button>
-                ),
+                cell: ({ row }) => {
+                  const isActive = row.original.status === 'Active'
+                  return (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`تعديل ${row.original.name}`}
+                        onClick={() => openEdit(row.original)}
+                      >
+                        <IconEdit aria-hidden />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`${isActive ? 'تعطيل' : 'تنشيط'} ${row.original.name}`}
+                        onClick={() => setStatusTarget(row.original)}
+                      >
+                        {isActive ? <IconUserOff aria-hidden /> : <IconCheck aria-hidden />}
+                      </Button>
+                    </div>
+                  )
+                },
               }),
             ]
           : []),
       ]),
     [canManage, openEdit],
   )
+
+  const isStatusTargetActive = statusTarget?.status === 'Active'
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -166,6 +223,20 @@ function MaterialDomainsPage() {
         isPending={createMutation.isPending || updateMutation.isPending}
         onOpenChange={closeDialog}
         onSubmit={submitForm}
+      />
+      <ConfirmDialog
+        open={statusTarget !== null}
+        onOpenChange={(open) => !open && setStatusTarget(null)}
+        title={isStatusTargetActive ? 'تعطيل مجال تصنيف' : 'تنشيط مجال تصنيف'}
+        message={
+          isStatusTargetActive
+            ? 'سيبقى اسم المجال ظاهراً في التصنيفات والسجلات السابقة، لكنه لن يكون متاحاً للاختيار في العمليات الجديدة.'
+            : 'سيصبح اسم المجال متاحاً مرة أخرى للاختيار في العمليات الجديدة.'
+        }
+        confirmLabel={isStatusTargetActive ? 'تعطيل المجال' : 'تنشيط المجال'}
+        variant={isStatusTargetActive ? 'destructive' : 'confirm'}
+        busy={statusMutation.isPending}
+        onConfirm={() => void confirmStatusChange()}
       />
     </div>
   )

@@ -20,16 +20,8 @@ import {
   DialogTitle,
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 
-const EMPTY_VALUES: UnitOfMeasureFormValues = {
-  code: '',
-  nameAr: '',
-  descriptionAr: null,
-  nominalConversionFactor: 1,
-  baseUnitId: null,
-  status: 'Active',
-}
+const EMPTY_VALUES: UnitOfMeasureFormValues = { name: '', symbol: '', unitType: '' }
 
 export interface UnitOfMeasureFormDialogProps {
   unit: UnitOfMeasure | null
@@ -39,7 +31,16 @@ export interface UnitOfMeasureFormDialogProps {
   onSubmit: (values: UnitOfMeasureFormValues) => Promise<void>
 }
 
-/** Create and edit a unit without introducing unit-conversion behavior. */
+/**
+ * Create and edit a unit of measure.
+ *
+ * The projection is exactly `{ id, name, symbol, unitType, status }` — no
+ * `code`, no `descriptionAr`, no `nominalConversionFactor`, no `baseUnitId`.
+ * Conversion between units lives on the MATERIAL (`MaterialUnitConversion`), so
+ * this form carries the three fields the create and update routes bind and
+ * nothing else. `status` is a separate guarded command whose body is an
+ * INTEGER ordinal, so it is an action on the list row rather than a field here.
+ */
 export function UnitOfMeasureFormDialog({
   unit,
   open,
@@ -55,12 +56,9 @@ export function UnitOfMeasureFormDialog({
   useEffect(() => {
     if (!open) return
     form.reset({
-      code: unit?.code ?? '',
-      nameAr: unit?.nameAr ?? '',
-      descriptionAr: unit?.descriptionAr ?? null,
-      nominalConversionFactor: unit?.nominalConversionFactor ?? 1,
-      baseUnitId: unit?.baseUnitId ?? null,
-      status: unit?.status ?? 'Active',
+      name: unit?.name ?? '',
+      symbol: unit?.symbol ?? '',
+      unitType: unit?.unitType ?? '',
     })
   }, [form, open, unit])
 
@@ -71,14 +69,7 @@ export function UnitOfMeasureFormDialog({
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: [
-          'code',
-          'nameAr',
-          'descriptionAr',
-          'nominalConversionFactor',
-          'baseUnitId',
-          'status',
-        ],
+        schemaKeys: ['name', 'symbol', 'unitType'],
       })
     }
   }
@@ -89,7 +80,8 @@ export function UnitOfMeasureFormDialog({
         <DialogHeader>
           <DialogTitle>{unit ? 'تعديل وحدة القياس' : 'إضافة وحدة قياس'}</DialogTitle>
           <DialogDescription>
-            أدخل البيانات المرجعية للوحدة. تُدار تحويلات الوحدات من شاشة مستقلة.
+            أدخل البيانات المرجعية للوحدة. تُدار تحويلات الوحدات لكل مادة على حدة من شاشة المادة،
+            ولا يوجد عامل تحويل عام للوحدة.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -102,7 +94,7 @@ export function UnitOfMeasureFormDialog({
             <div className="grid gap-5 sm:grid-cols-2">
               <FormField
                 control={form.control}
-                name="nameAr"
+                name="name"
                 rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
@@ -116,11 +108,11 @@ export function UnitOfMeasureFormDialog({
               />
               <FormField
                 control={form.control}
-                name="code"
+                name="symbol"
                 rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>الرمز</FormLabel>
+                    <FormLabel>رمز الوحدة</FormLabel>
                     <FormControl>
                       <Input {...field} dir="ltr" disabled={isPending} placeholder="EA" />
                     </FormControl>
@@ -129,67 +121,19 @@ export function UnitOfMeasureFormDialog({
                 )}
               />
             </div>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="nominalConversionFactor"
-                rules={{ required: true }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>عامل التحويل</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="any"
-                        min="0"
-                        dir="ltr"
-                        disabled={isPending}
-                        value={field.value}
-                        onChange={(event) => field.onChange(event.currentTarget.valueAsNumber)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="status"
-                rules={{ required: true }}
-                render={({ field, fieldState }) => (
-                  <FormItem>
-                    <FormLabel>الحالة</FormLabel>
-                    <Select value={field.value} disabled={isPending} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                          <SelectValue>{field.value === 'Active' ? 'نشط' : 'غير نشط'}</SelectValue>
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Active">نشط</SelectItem>
-                        <SelectItem value="Inactive">غير نشط</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
             <FormField
               control={form.control}
-              name="descriptionAr"
+              name="unitType"
+              rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>الوصف (اختياري)</FormLabel>
+                  <FormLabel>نوع الوحدة</FormLabel>
                   <FormControl>
-                    <Input
-                      {...field}
-                      value={field.value ?? ''}
-                      onChange={(event) => field.onChange(event.currentTarget.value || null)}
-                      disabled={isPending}
-                      placeholder="وصف مختصر لوحدة القياس"
-                    />
+                    <Input {...field} dir="ltr" disabled={isPending} placeholder="Quantity" />
                   </FormControl>
+                  <p className="text-sm text-muted-foreground">
+                    نص حر يحدده النظام، مثل الكمية أو الوزن أو الطول.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

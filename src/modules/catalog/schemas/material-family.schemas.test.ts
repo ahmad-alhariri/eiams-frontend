@@ -1,36 +1,51 @@
 import { describe, expect, it } from 'vitest'
 
-import { toMaterialFamilyRequest, materialFamilySchema } from './material-family.schemas'
+import { fixtureUuid } from '@/test/msw/factories'
+import {
+  materialFamilySchema,
+  toCreateMaterialFamilyRequest,
+  toUpdateMaterialFamilyRequest,
+} from './material-family.schemas'
 
 describe('materialFamilySchema', () => {
   const values = {
-    materialCategoryId: '00000000-0000-4000-8000-000000000021',
+    categoryId: fixtureUuid(21),
     code: 'IT-HW-PC',
-    nameAr: 'الحواسيب',
-    status: 'Active' as const,
+    name: 'الحواسيب',
   }
 
-  it('enforces v1 category, code, and Arabic name constraints', () => {
+  it('enforces category, code, and name constraints', () => {
     expect(materialFamilySchema.safeParse(values).success).toBe(true)
-    expect(
-      materialFamilySchema.safeParse({ ...values, materialCategoryId: 'not-a-uuid' }).success,
-    ).toBe(false)
-    expect(materialFamilySchema.safeParse({ ...values, code: 'x'.repeat(51) }).success).toBe(false)
-    expect(materialFamilySchema.safeParse({ ...values, nameAr: 'x'.repeat(201) }).success).toBe(
+    expect(materialFamilySchema.safeParse({ ...values, categoryId: 'not-a-uuid' }).success).toBe(
       false,
     )
+    expect(materialFamilySchema.safeParse({ ...values, categoryId: '' }).success).toBe(false)
+    expect(materialFamilySchema.safeParse({ ...values, code: 'x'.repeat(51) }).success).toBe(false)
+    expect(materialFamilySchema.safeParse({ ...values, name: 'x'.repeat(201) }).success).toBe(false)
   })
 
-  it('trims user-entered text and initializes the concurrency version for creates', () => {
+  it('trims user-entered text and emits the create body the route binds', () => {
     expect(
-      toMaterialFamilyRequest({ ...values, code: ' IT-HW-PC ', nameAr: ' الحواسيب ' }, null),
+      toCreateMaterialFamilyRequest({ ...values, code: ' IT-HW-PC ', name: ' الحواسيب ' }),
     ).toEqual({
-      materialCategoryId: values.materialCategoryId,
-      parentFamilyId: null,
+      categoryId: values.categoryId,
       code: 'IT-HW-PC',
-      nameAr: 'الحواسيب',
-      rowVersion: 0,
-      status: 'Active',
+      name: 'الحواسيب',
     })
+  })
+
+  it('drops the category and any version token on update', () => {
+    // Re-categorising a family is not exposed by `PUT`; the record binds
+    // `Name, Code` and the aggregate is not versioned.
+    const request = toUpdateMaterialFamilyRequest({
+      ...values,
+      categoryId: fixtureUuid(99),
+      code: ' IT-HW-PC ',
+      name: ' الحواسيب ',
+    })
+
+    expect(request).toEqual({ code: 'IT-HW-PC', name: 'الحواسيب' })
+    expect(request).not.toHaveProperty('categoryId')
+    expect(request).not.toHaveProperty('rowVersion')
   })
 })

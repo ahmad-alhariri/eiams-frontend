@@ -5,14 +5,7 @@ import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import {
-  wireMaterial,
-  wireMaterialCategory,
-  wireMaterialDomain,
-  wireMaterialFamily,
-  wireNamedReference,
-  wireUnitOfMeasure,
-} from '@/test/msw/catalog-wire-fixtures'
+import { fixtureUuid } from '@/test/msw/factories'
 import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
@@ -39,6 +32,77 @@ import {
 } from './use-catalog-queries'
 
 const API_BASE_URL = '/api/v1'
+
+// Records in the REAL wire shape: `id` identifiers, `name` labels, no nested
+// reference objects, and no `rowVersion` anywhere. The shared wire fixtures were
+// still minting the generated snapshot's records, and a fixture the API could
+// never produce is what lets a suite pass against the wrong contract.
+const DOMAIN_ID = fixtureUuid(20)
+const CATEGORY_ID = fixtureUuid(21)
+const FAMILY_ID = fixtureUuid(22)
+const UNIT_ID = fixtureUuid(23)
+const MATERIAL_ID = fixtureUuid(24)
+
+function makeDomain() {
+  return {
+    id: DOMAIN_ID,
+    name: 'تقنية المعلومات',
+    code: 'IT',
+    status: 'Active' as const,
+  }
+}
+
+function makeCategory() {
+  return {
+    id: CATEGORY_ID,
+    materialDomainId: DOMAIN_ID,
+    parentCategoryId: null,
+    name: 'الأجهزة',
+    code: 'IT-HW',
+    status: 'Active' as const,
+  }
+}
+
+function makeFamily() {
+  return {
+    id: FAMILY_ID,
+    categoryId: CATEGORY_ID,
+    name: 'الحواسيب',
+    code: 'IT-HW-PC',
+    status: 'Active' as const,
+  }
+}
+
+function makeMaterial() {
+  return {
+    id: MATERIAL_ID,
+    familyId: FAMILY_ID,
+    nameAr: 'حاسوب مكتبي',
+    nameEn: null,
+    code: 'IT-HW-PC-001',
+    materialKind: 'Consumable' as const,
+    trackingType: 'Quantity' as const,
+    hasExpiry: false,
+    requiresAssetNumber: false,
+    catalogVersion: 1,
+    attributes: null,
+    status: 'Active' as const,
+    materialDomainId: DOMAIN_ID,
+    materialDomainName: 'تقنية المعلومات',
+    baseUnitId: UNIT_ID,
+    baseUnitSymbol: 'EA',
+  }
+}
+
+function makeUnit() {
+  return {
+    id: UNIT_ID,
+    name: 'قطعة',
+    symbol: 'EA',
+    unitType: 'Quantity',
+    status: 'Active' as const,
+  }
+}
 
 function createWrapper() {
   const client = createQueryClient()
@@ -80,65 +144,57 @@ describe('catalog query hooks', () => {
   })
 
   it('reads all catalog references and material resources through scoped master-data queries', async () => {
-    const domain = wireMaterialDomain()
-    const category = wireMaterialCategory({
-      materialDomain: wireNamedReference(domain.materialDomainId, domain.nameAr),
-    })
-    const family = wireMaterialFamily({
-      materialCategory: wireNamedReference(category.materialCategoryId, category.nameAr),
-    })
-    const material = wireMaterial({
-      materialFamily: wireNamedReference(family.materialFamilyId, family.nameAr),
-    })
-    const unit = wireUnitOfMeasure()
+    const domain = makeDomain()
+    const category = makeCategory()
+    const family = makeFamily()
+    const material = makeMaterial()
+    const unit = makeUnit()
 
     server.use(
-      http.get(`${API_BASE_URL}/catalog/material-domains`, () => okPageJson([domain])),
-      http.get(`${API_BASE_URL}/catalog/material-domains/${domain.materialDomainId}`, () =>
-        okJson(domain),
-      ),
-      http.get(`${API_BASE_URL}/catalog/material-categories`, () => okPageJson([category])),
-      http.get(`${API_BASE_URL}/catalog/material-categories/${category.materialCategoryId}`, () =>
-        okJson(category),
-      ),
-      http.get(`${API_BASE_URL}/catalog/material-families`, () => okPageJson([family])),
-      http.get(`${API_BASE_URL}/catalog/material-families/${family.materialFamilyId}`, () =>
-        okJson(family),
-      ),
+      // The REAL collections are `/catalog/domains`, `/catalog/categories` and
+      // `/catalog/families`. The retired `/catalog/material-domains`,
+      // `/catalog/material-categories` and `/catalog/material-families` spellings
+      // answer 404, so a handler registered under one of them would certify a
+      // route the backend does not serve.
+      http.get(`${API_BASE_URL}/catalog/domains`, () => okPageJson([domain])),
+      http.get(`${API_BASE_URL}/catalog/domains/${domain.id}`, () => okJson(domain)),
+      http.get(`${API_BASE_URL}/catalog/categories`, () => okPageJson([category])),
+      http.get(`${API_BASE_URL}/catalog/categories/${category.id}`, () => okJson(category)),
+      http.get(`${API_BASE_URL}/catalog/families`, () => okPageJson([family])),
+      http.get(`${API_BASE_URL}/catalog/families/${family.id}`, () => okJson(family)),
       http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material])),
-      http.get(`${API_BASE_URL}/catalog/materials/${material.materialId}`, () => okJson(material)),
+      http.get(`${API_BASE_URL}/catalog/materials/${material.id}`, () => okJson(material)),
       http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => okPageJson([unit])),
-      http.get(`${API_BASE_URL}/catalog/units-of-measure/${unit.unitId}`, () => okJson(unit)),
+      http.get(`${API_BASE_URL}/catalog/units-of-measure/${unit.id}`, () => okJson(unit)),
     )
 
     const domains = renderHook(() => useMaterialDomainsQuery({ status: 'Active' }), {
       wrapper: createWrapper(),
     })
-    const domainDetail = renderHook(() => useMaterialDomainQuery(domain.materialDomainId), {
+    const domainDetail = renderHook(() => useMaterialDomainQuery(domain.id), {
       wrapper: createWrapper(),
     })
     const categories = renderHook(
-      () => useMaterialCategoriesQuery({ domainId: domain.materialDomainId }),
+      () => useMaterialCategoriesQuery({ materialDomainId: domain.id }),
       { wrapper: createWrapper() },
     )
-    const categoryDetail = renderHook(() => useMaterialCategoryQuery(category.materialCategoryId), {
+    const categoryDetail = renderHook(() => useMaterialCategoryQuery(category.id), {
       wrapper: createWrapper(),
     })
-    const families = renderHook(
-      () => useMaterialFamiliesQuery({ categoryId: category.materialCategoryId }),
-      { wrapper: createWrapper() },
-    )
-    const familyDetail = renderHook(() => useMaterialFamilyQuery(family.materialFamilyId), {
+    const families = renderHook(() => useMaterialFamiliesQuery({ categoryId: category.id }), {
       wrapper: createWrapper(),
     })
-    const materials = renderHook(() => useMaterialsQuery({ familyId: family.materialFamilyId }), {
+    const familyDetail = renderHook(() => useMaterialFamilyQuery(family.id), {
       wrapper: createWrapper(),
     })
-    const materialDetail = renderHook(() => useMaterialQuery(material.materialId), {
+    const materials = renderHook(() => useMaterialsQuery({ familyId: family.id }), {
+      wrapper: createWrapper(),
+    })
+    const materialDetail = renderHook(() => useMaterialQuery(material.id), {
       wrapper: createWrapper(),
     })
     const units = renderHook(() => useUnitsOfMeasureQuery(), { wrapper: createWrapper() })
-    const unitDetail = renderHook(() => useUnitOfMeasureQuery(unit.unitId), {
+    const unitDetail = renderHook(() => useUnitOfMeasureQuery(unit.id), {
       wrapper: createWrapper(),
     })
 
@@ -155,9 +211,9 @@ describe('catalog query hooks', () => {
       expect(unitDetail.result.current.isSuccess).toBe(true)
     })
 
-    // Every list hook resolves the SERVICE's page (`{ items, meta }`), not a
-    // bare array: `requestPage` is the one transport method that answers a
-    // normalized page, so the rows live under `items` at every consumer.
+    // Every list hook resolves the SERVICE's `ApiPage<T>` — the shared
+    // one-based page, not a module-local `PageMeta` wrapper — so the rows live
+    // under `items` at every consumer and the totals live on the page.
     expect(domains.result.current.data?.items).toEqual([domain])
     expect(domainDetail.result.current.data).toEqual(domain)
     expect(categories.result.current.data?.items).toEqual([category])
@@ -168,6 +224,8 @@ describe('catalog query hooks', () => {
     expect(materialDetail.result.current.data).toEqual(material)
     expect(units.result.current.data?.items).toEqual([unit])
     expect(unitDetail.result.current.data).toEqual(unit)
+    expect(domains.result.current.data?.page).toBe(1)
+    expect(domains.result.current.data?.totalItems).toBe(1)
   })
 
   it('does not request protected catalog data before a server-selected scope exists', async () => {
@@ -176,16 +234,37 @@ describe('catalog query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/catalog/materials`, () => {
         requestCount += 1
-        return okPageJson([wireMaterial()])
+        return okPageJson([makeMaterial()])
       }),
     )
 
-    const { result } = renderHook(() => useMaterialsQuery({ search: 'حاسوب' }), {
+    // No `search`: no catalog list binds one, so the filter the old code sent
+    // was fiction the server silently ignored.
+    const { result } = renderHook(() => useMaterialsQuery({ page: 1, pageSize: 20 }), {
       wrapper: createWrapper(),
     })
 
     await waitFor(() => expect(result.current.fetchStatus).toBe('idle'))
     expect(result.current.data).toBeUndefined()
     expect(requestCount).toBe(0)
+  })
+
+  it('forwards a one-based page to the wire without subtracting one', async () => {
+    const requestedUrls: string[] = []
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/materials`, ({ request }) => {
+        requestedUrls.push(request.url)
+        return okPageJson([])
+      }),
+    )
+
+    const { result } = renderHook(() => useMaterialsQuery({ page: 1, pageSize: 20 }), {
+      wrapper: createWrapper(),
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(requestedUrls[0]).toContain('page=1')
+    expect(requestedUrls[0]).not.toContain('page=0')
   })
 })

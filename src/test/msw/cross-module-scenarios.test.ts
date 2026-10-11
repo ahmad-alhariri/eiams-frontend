@@ -58,8 +58,8 @@ describe('cross-module scenario data', () => {
   it('preserves document-to-line-to-stock ledger provenance and balance totals', () => {
     const scenario = createCrossModuleScenario()
     const sourceId = scenario.warehouses.source.id
-    const assetMaterialId = scenario.catalog.assetMaterial.materialId
-    const consumableMaterialId = scenario.catalog.consumableMaterial.materialId
+    const assetMaterialId = scenario.catalog.assetMaterial.id
+    const consumableMaterialId = scenario.catalog.consumableMaterial.id
     const sourceAssetDelta = scenario.ledgers.stockMovements
       .filter(
         (movement) =>

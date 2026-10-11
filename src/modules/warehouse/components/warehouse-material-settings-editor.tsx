@@ -124,19 +124,24 @@ export function WarehouseMaterialSettingsEditor({
     setMaterialLabel(setting.material.displayName)
   }
 
-  const materialSelector = useMaterialSelector(async (query) => {
+  const materialSelector = useMaterialSelector(async () => {
     const configuredIds = new Set(
       settings
         .filter((item) => item.materialId !== setting?.materialId)
         .map((item) => item.materialId),
     )
     const page = await catalogService.listMaterials({
-      page: 0,
+      // `page` is ONE-based on the wire and in every UI control in this repo;
+      // `page: 0` was answered with 400 REQUEST_VALIDATION_FAILED. No catalog
+      // list binds `search` either, so that parameter is dropped rather than
+      // sent as one the server silently ignored.
+      page: 1,
       pageSize: 10,
       status: 'Active',
-      ...(query.trim() === '' ? {} : { search: query.trim() }),
     })
-    return page.items.filter((material) => !configuredIds.has(material.materialId))
+    // The catalog entity id is `id` on every projection (`materialId` was the
+    // frozen snapshot's fiction), so the dedupe set is keyed by `id`.
+    return page.items.filter((material) => !configuredIds.has(material.id))
   })
 
   useEffect(() => {
