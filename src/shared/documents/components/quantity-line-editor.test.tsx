@@ -11,7 +11,11 @@ import { z } from 'zod'
 import { createQueryClient } from '@/shared/services/query.client'
 import { okJson, okPageJson } from '@/test/msw/envelope'
 import { createWarehouseCapability, fixtureUuid } from '@/test/msw/factories'
-import { wireMaterial, wireMaterialUnitConversion } from '@/test/msw/catalog-wire-fixtures'
+import {
+  wireMaterial,
+  wireMaterialUnitConversion,
+  wireUnitOfMeasure,
+} from '@/test/msw/catalog-wire-fixtures'
 import { server } from '@/test/msw/server'
 import {
   documentLinesSchema,
@@ -32,32 +36,37 @@ const API_BASE_URL = '/api/v1'
 
 /**
  * The materials this editor searches are served in the REAL catalog wire shape
- * (`catalog.api-types`): `materialDomain` / `unit`, not the frozen generated
- * snapshot's `domain` / `baseUnit`. `wireMaterial` is the shared builder for that
- * contract (see `catalog-wire-fixtures.ts`); the shared `createMaterial` cannot be
- * used here because `MaterialSelectorControl` derives
- * `materialDomain.id` / `unit.displayName` from the payload.
+ * (`catalog.api-types`): the flat `materialDomainId` / `baseUnitId` /
+ * `baseUnitSymbol` pairs, not the frozen generated snapshot's `domain` / `unit`
+ * nested references. `wireMaterial` is the shared builder for that contract
+ * (see `catalog-wire-fixtures.ts`); the shared `createMaterial` cannot be used
+ * here because it is deliberately still typed against the generated snapshot.
  */
 const DURABLE = wireMaterial({
-  materialId: fixtureUuid(24),
+  id: fixtureUuid(24),
   nameAr: 'قماش قطني',
   materialDomainId: fixtureUuid(20),
-  materialDomain: { id: fixtureUuid(20), displayName: 'المستلزمات المنزلية' },
-  unitId: fixtureUuid(23),
-  unit: { id: fixtureUuid(23), displayName: 'متر' },
+  baseUnitId: fixtureUuid(23),
+  baseUnitSymbol: 'متر',
 })
 const ASSET = wireMaterial({
-  materialId: fixtureUuid(26),
+  id: fixtureUuid(26),
   materialKind: 'Asset',
   requiresAssetNumber: true,
+  trackingType: 'Serial',
   nameAr: 'حاسوب مكتبي',
 })
+/**
+ * A conversion carries a flat `fromUnitId` whose label the editor resolves from
+ * the units-of-measure list — there is no nested `unit` reference, and
+ * `factor` is the JSON number the contract declares.
+ */
 const CARTON_CONVERSION = wireMaterialUnitConversion({
-  materialUnitConversionId: fixtureUuid(25),
-  conversionFactor: 10,
-  materialId: DURABLE.materialId,
-  unitId: fixtureUuid(27),
-  unit: { id: fixtureUuid(27), displayName: 'لفة' },
+  id: fixtureUuid(25),
+  materialId: DURABLE.id,
+  fromUnitId: fixtureUuid(27),
+  toBaseUnitId: fixtureUuid(23),
+  factor: 10,
 })
 
 function LinesOutput({ form }: { form: UseFormReturn<DocumentLinesContainer> }) {
@@ -118,8 +127,13 @@ async function selectMaterial(name: string, index = 0) {
 function useCatalogHandlers() {
   server.use(
     http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([DURABLE, ASSET])),
-    http.get(`${API_BASE_URL}/catalog/materials/${DURABLE.materialId}/unit-conversions`, () =>
+    http.get(`${API_BASE_URL}/catalog/materials/${DURABLE.id}/unit-conversions`, () =>
       okPageJson([CARTON_CONVERSION]),
+    ),
+    // The conversion's `fromUnitId` label is resolved from the real
+    // units-of-measure list; no `code`, no `nameAr`, no `symbolAr` on it.
+    http.get(`${API_BASE_URL}/catalog/units-of-measure`, () =>
+      okPageJson([wireUnitOfMeasure({ id: fixtureUuid(27), name: 'لفة', symbol: 'ROLL' })]),
     ),
   )
 }
@@ -208,7 +222,7 @@ describe('QuantityLineEditor', () => {
 
     await waitFor(() => {
       const line = linesValue()[0]
-      expect(line?.materialId).toBe(DURABLE.materialId)
+      expect(line?.materialId).toBe(DURABLE.id)
       expect(line?.materialNameAr).toBe('قماش قطني')
       expect(line?.materialDomainId).toBe(fixtureUuid(20))
       expect(line?.baseUnitNameAr).toBe('متر')
@@ -235,10 +249,15 @@ describe('QuantityLineEditor', () => {
     await waitFor(() => {
       const line = linesValue()[0]
       expect(line?.unitId).toBe(fixtureUuid(27))
-      expect(line?.conversionId).toBe(CARTON_CONVERSION.materialUnitConversionId)
+      expect(line?.conversionId).toBe(CARTON_CONVERSION.id)
       expect(line?.baseQuantity).toBe(50)
     })
-    expect(screen.getByText('لفة')).toBeInTheDocument()
+    // The trigger itself must show the chosen unit's Arabic label, not the raw
+    // conversion id: `getByText` alone would also match the popup option.
+    const unitTrigger = screen.getByLabelText('وحدة البند 1')
+    expect(unitTrigger).toHaveTextContent('لفة')
+    expect(unitTrigger).toHaveTextContent('× 10')
+    expect(unitTrigger).not.toHaveTextContent(CARTON_CONVERSION.id)
   })
 
   it('surfaces a blocked warehouse capability as an Arabic hint per row', async () => {

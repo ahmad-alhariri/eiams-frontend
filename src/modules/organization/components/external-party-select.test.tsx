@@ -26,9 +26,11 @@ describe('ExternalPartySelect', () => {
   it('uses active-only server search and never offers in-document creation', async () => {
     const party = createExternalParty({ nameAr: 'الجهة النشطة' })
     let requestedStatus: string | null = null
+    let requestedUrl: string | null = null
     server.use(
       http.get(`${API_BASE_URL}/external-parties`, ({ request }) => {
         requestedStatus = new URL(request.url).searchParams.get('status')
+        requestedUrl = new URL(request.url).search
         return okPageJson([party])
       }),
     )
@@ -40,6 +42,12 @@ describe('ExternalPartySelect', () => {
       expect(screen.getByRole('option')).toHaveTextContent('الجهة النشطة — EXT-001'),
     )
     expect(requestedStatus).toBe('Active')
+    // `page`, not `pageIndex`. `pageIndex` is not a key of
+    // `ListExternalPartiesQuery`, and ASP.NET silently discards unknown query
+    // keys, so every keystroke pinned the lookup to page 1 and the typed search
+    // appeared to do nothing. It only reached the wire through an `as` cast.
+    expect(requestedUrl).toContain('page=1')
+    expect(requestedUrl).not.toContain('pageIndex')
     expect(screen.queryByText(/إضافة جديد/)).not.toBeInTheDocument()
   })
 })

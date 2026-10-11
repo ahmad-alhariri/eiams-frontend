@@ -9,6 +9,7 @@ import { okJson, okPageJson } from '@/test/msw/envelope'
 import {
   createEmployee,
   createExternalParty,
+  createOrganization,
   createOrganizationalUnit,
   createSite,
 } from '@/test/msw/factories'
@@ -28,6 +29,8 @@ import {
   useEmployeesQuery,
   useExternalPartiesQuery,
   useExternalPartyQuery,
+  useOrganizationQuery,
+  useOrganizationsQuery,
   useOrganizationalUnitQuery,
   useOrganizationalUnitsQuery,
   useSiteQuery,
@@ -48,6 +51,64 @@ afterEach(() => {
 })
 
 describe('organization query hooks', () => {
+  it('reads a scoped, master-data organizations query on the one-based wire page', async () => {
+    const organization = createOrganization()
+    let receivedPage: string | null = null
+    let receivedPageSize: string | null = null
+    let receivedStatus: string | null = null
+    let receivedSearch: string | null = null
+
+    server.use(
+      http.get(`${API_BASE_URL}/organizations`, ({ request }) => {
+        const url = new URL(request.url)
+        receivedPage = url.searchParams.get('page')
+        receivedPageSize = url.searchParams.get('pageSize')
+        receivedStatus = url.searchParams.get('status')
+        receivedSearch = url.searchParams.get('search')
+        return okPageJson([organization], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
+      }),
+    )
+
+    const { result } = renderHook(
+      () => useOrganizationsQuery({ page: 1, pageSize: 10, status: 'Active' }),
+      { wrapper: createWrapper() },
+    )
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.items).toEqual([organization])
+    // The wire page IS the control page — no `- 1`, which is what used to put
+    // `page=0` on the wire and earn a 400 REQUEST_VALIDATION_FAILED.
+    expect(receivedPage).toBe('1')
+    expect(receivedPageSize).toBe('10')
+    expect(receivedStatus).toBe('Active')
+    // `ListOrganizationsQuery` declares no `search`: the endpoint binds no
+    // free-text filter and orders by name server-side, so the screen offers no
+    // search box rather than advertising a control the server ignores.
+    expect(receivedSearch).toBeNull()
+  })
+
+  it('keeps organization list and detail cache entries distinct inside the active scope', () => {
+    const scope = { kind: 'enterprise' as const }
+    const query = { page: 1, status: 'Active' as const }
+
+    expect(organizationQueryKeys.organizations(scope, query)).toEqual([
+      'scoped',
+      'enterprise',
+      null,
+      'organization',
+      'organizations',
+      query,
+    ])
+    expect(organizationQueryKeys.organization(scope, 'organization-1')).toEqual([
+      'scoped',
+      'enterprise',
+      null,
+      'organization',
+      'organizations',
+      'organization-1',
+    ])
+  })
+
   it('reads a scoped, master-data sites query and preserves server pagination filters', async () => {
     const site = createSite()
     let search: string | null = null
@@ -67,18 +128,23 @@ describe('organization query hooks', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.items).toEqual([site])
     expect(search).toBe('دمشق')
-    // The wire's snake_case pagination block is normalized into the module
-    // `PageMeta` the tables read.
-    expect(result.current.data?.meta).toEqual({
+    // The wire's `ApiPaginationResponse` (1-based snake_case) reaches the hook
+    // normalized into the shared `ApiPage<T>` envelope, which has exactly seven
+    // fields: `items` plus the pagination block. The hook returns that envelope
+    // as-is — the table control reads `data.page` and `data.pageSize` directly,
+    // with no module-local `PageMeta` in between. The previous `data.meta` was
+    // a per-aggregate shim whose `pageIndex` lied about its own value (held the
+    // one-based wire `page` under a zero-based name) and whose `totalItems` was
+    // a COUNT of the current slice, so a page of 1 row claimed a directory of 1;
+    // both are gone, and so is the phantom `totalCount` the shim advertised.
+    expect(result.current.data).toEqual({
+      items: [site],
       page: 3,
-      pageIndex: 3,
       pageSize: 10,
-      itemCount: 41,
       totalItems: 41,
-      totalCount: 41,
       totalPages: 5,
-      hasNextPage: true,
       hasPreviousPage: true,
+      hasNextPage: true,
     })
     expect(result.current.dataUpdatedAt).toBeGreaterThan(0)
   })
@@ -116,9 +182,7 @@ describe('organization query hooks', () => {
       http.get(`${API_BASE_URL}/employees`, () => okPageJson([employee])),
       http.get(`${API_BASE_URL}/employees/${employee.id}`, () => okJson(employee)),
       http.get(`${API_BASE_URL}/external-parties`, () => okPageJson([externalParty])),
-      http.get(`${API_BASE_URL}/external-parties/${externalParty.externalPartyId}`, () =>
-        okJson(externalParty),
-      ),
+      http.get(`${API_BASE_URL}/external-parties/${externalParty.id}`, () => okJson(externalParty)),
     )
 
     const unitsList = renderHook(() => useOrganizationalUnitsQuery({ siteId: unit.siteId }), {
@@ -136,10 +200,9 @@ describe('organization query hooks', () => {
     const externalPartiesList = renderHook(() => useExternalPartiesQuery({ search: 'خارجي' }), {
       wrapper: createWrapper(),
     })
-    const externalPartyDetail = renderHook(
-      () => useExternalPartyQuery(externalParty.externalPartyId),
-      { wrapper: createWrapper() },
-    )
+    const externalPartyDetail = renderHook(() => useExternalPartyQuery(externalParty.id), {
+      wrapper: createWrapper(),
+    })
 
     await waitFor(() => {
       expect(unitsList.result.current.isSuccess).toBe(true)
@@ -188,5 +251,20 @@ describe('organization query hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data).toEqual(site)
+  })
+
+  it('reads a scoped organization detail resource', async () => {
+    const organization = createOrganization()
+
+    server.use(
+      http.get(`${API_BASE_URL}/organizations/${organization.id}`, () => okJson(organization)),
+    )
+
+    const { result } = renderHook(() => useOrganizationQuery(organization.id), {
+      wrapper: createWrapper(),
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data).toEqual(organization)
   })
 })

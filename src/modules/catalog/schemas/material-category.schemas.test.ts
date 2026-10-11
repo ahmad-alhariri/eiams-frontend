@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
+import { fixtureUuid } from '@/test/msw/factories'
+import type { MaterialCategory } from '@/modules/catalog/types/catalog.types'
+
 import {
   createMaterialCategorySchema,
-  toMaterialCategoryRequest,
-} from '@/modules/catalog/schemas/material-category.schemas'
-import type { MaterialCategory } from '@/modules/catalog/types/catalog.types'
-import { fixtureUuid } from '@/test/msw/factories'
+  toCreateMaterialCategoryRequest,
+  toMoveMaterialCategoryRequest,
+  toUpdateMaterialCategoryRequest,
+} from './material-category.schemas'
 
 function makeCategory(overrides: Partial<MaterialCategory> = {}): MaterialCategory {
   return {
-    materialCategoryId: fixtureUuid(21),
-    code: 'CAT',
-    nameAr: 'تصنيف',
-    parentCategoryId: null,
-    parentCategory: null,
+    id: fixtureUuid(21),
     materialDomainId: fixtureUuid(20),
-    materialDomain: { id: fixtureUuid(20), displayName: 'تقنية المعلومات' },
+    parentCategoryId: null,
+    name: 'تصنيف',
+    code: 'CAT',
     status: 'Active',
-    rowVersion: 1,
     ...overrides,
   }
 }
@@ -28,52 +28,87 @@ describe('material category schema', () => {
     const schema = createMaterialCategorySchema([], null)
     const values = {
       materialDomainId: category.materialDomainId,
-      parentCategoryId: undefined,
-      status: 'Active' as const,
+      parentCategoryId: null,
     }
 
     expect(
-      schema.safeParse({ ...values, code: 'C'.repeat(50), nameAr: 'ا'.repeat(200) }).success,
+      schema.safeParse({ ...values, code: 'C'.repeat(50), name: 'ا'.repeat(200) }).success,
     ).toBe(true)
     expect(
-      schema.safeParse({ ...values, code: 'C'.repeat(51), nameAr: 'ا'.repeat(200) }).success,
+      schema.safeParse({ ...values, code: 'C'.repeat(51), name: 'ا'.repeat(200) }).success,
     ).toBe(false)
     expect(
-      schema.safeParse({ ...values, code: 'C'.repeat(50), nameAr: 'ا'.repeat(201) }).success,
+      schema.safeParse({ ...values, code: 'C'.repeat(50), name: 'ا'.repeat(201) }).success,
     ).toBe(false)
   })
 
-  it('maps the exact contract payload with the persisted row version', () => {
-    const category = makeCategory({ rowVersion: 9 })
+  it('emits the domain, the parent and the trimmed text on create', () => {
+    const category = makeCategory()
 
     expect(
-      toMaterialCategoryRequest(
-        {
-          code: ' IT-HW ',
-          materialDomainId: category.materialDomainId,
-          nameAr: ' الأجهزة ',
-          parentCategoryId: fixtureUuid(22),
-          status: 'Inactive',
-        },
-        category,
-      ),
+      toCreateMaterialCategoryRequest({
+        code: ' IT-HW ',
+        materialDomainId: category.materialDomainId,
+        name: ' الأجهزة ',
+        parentCategoryId: fixtureUuid(22),
+      }),
     ).toEqual({
       code: 'IT-HW',
       materialDomainId: category.materialDomainId,
-      nameAr: 'الأجهزة',
+      name: 'الأجهزة',
       parentCategoryId: fixtureUuid(22),
-      rowVersion: 9,
-      status: 'Inactive',
     })
+  })
+
+  it('keeps the domain and the parent off the update body', () => {
+    // The update record binds `Name, Code` and nothing else: re-domaining is not
+    // exposed by this route, and re-parenting is its own command.
+    const request = toUpdateMaterialCategoryRequest({
+      code: ' IT-HW ',
+      materialDomainId: fixtureUuid(31),
+      name: ' الأجهزة ',
+      parentCategoryId: fixtureUuid(40),
+    })
+
+    expect(request).toEqual({ code: 'IT-HW', name: 'الأجهزة' })
+    expect(request).not.toHaveProperty('materialDomainId')
+    expect(request).not.toHaveProperty('parentCategoryId')
+  })
+
+  it('sends a move command only when the parent actually moved', () => {
+    const parent = fixtureUuid(22)
+    const category = makeCategory({ parentCategoryId: parent })
+
+    expect(
+      toMoveMaterialCategoryRequest(
+        {
+          code: category.code,
+          materialDomainId: category.materialDomainId,
+          name: category.name,
+          parentCategoryId: parent,
+        },
+        category,
+      ),
+    ).toBeNull()
+    expect(
+      toMoveMaterialCategoryRequest(
+        {
+          code: category.code,
+          materialDomainId: category.materialDomainId,
+          name: category.name,
+          parentCategoryId: null,
+        },
+        category,
+      ),
+    ).toEqual({ parentCategoryId: null })
   })
 
   it('rejects unavailable and cross-domain parents', () => {
     const category = makeCategory()
     const otherDomainId = fixtureUuid(30)
     const parentInOtherDomain = makeCategory({
-      materialCategoryId: fixtureUuid(31),
+      id: fixtureUuid(31),
       materialDomainId: otherDomainId,
-      materialDomain: { id: otherDomainId, displayName: 'الخدمات' },
     })
     const schema = createMaterialCategorySchema([category, parentInOtherDomain], null)
 
@@ -81,41 +116,31 @@ describe('material category schema', () => {
       schema.safeParse({
         code: 'SERVICE',
         materialDomainId: category.materialDomainId,
-        nameAr: 'خدمة',
-        parentCategoryId: parentInOtherDomain.materialCategoryId,
-        status: 'Active',
+        name: 'خدمة',
+        parentCategoryId: parentInOtherDomain.id,
       }).success,
     ).toBe(false)
     expect(
       schema.safeParse({
         code: 'SERVICE',
         materialDomainId: category.materialDomainId,
-        nameAr: 'خدمة',
+        name: 'خدمة',
         parentCategoryId: fixtureUuid(40),
-        status: 'Active',
       }).success,
     ).toBe(false)
   })
 
   it('rejects self and descendant parent selections during edit', () => {
-    const category = makeCategory({ materialCategoryId: fixtureUuid(21) })
-    const child = makeCategory({
-      materialCategoryId: fixtureUuid(22),
-      parentCategoryId: category.materialCategoryId,
-    })
+    const category = makeCategory({ id: fixtureUuid(21) })
+    const child = makeCategory({ id: fixtureUuid(22), parentCategoryId: category.id })
     const schema = createMaterialCategorySchema([category, child], category)
     const values = {
       code: category.code,
       materialDomainId: category.materialDomainId,
-      nameAr: category.nameAr,
-      status: category.status,
+      name: category.name,
     }
 
-    expect(
-      schema.safeParse({ ...values, parentCategoryId: category.materialCategoryId }).success,
-    ).toBe(false)
-    expect(
-      schema.safeParse({ ...values, parentCategoryId: child.materialCategoryId }).success,
-    ).toBe(false)
+    expect(schema.safeParse({ ...values, parentCategoryId: category.id }).success).toBe(false)
+    expect(schema.safeParse({ ...values, parentCategoryId: child.id }).success).toBe(false)
   })
 })

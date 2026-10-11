@@ -77,14 +77,34 @@ function isEligibleUnauthorized(error: AxiosError): error is AxiosError & {
   )
 }
 
+/**
+ * The synthesized body for a non-JSON response.
+ *
+ * SHAPE CORRECTION. This constant used to be a flat `ProblemDetails` — `code`,
+ * `titleAr`, `detailAr`, `traceId` at the top level, which is the shape the
+ * provisional OpenAPI snapshot described and NOT the shape the API sends. The
+ * frontend's own parser disagrees: `readApiError` (`shared/api/envelope.ts`)
+ * only recognises `success: false` with an `error` object, so every one of
+ * those fields was read as absent. `normalizeApiError` therefore produced
+ * `code: null` and fell back to the generic `status >= 500` string, and
+ * `traceId: null` — the correlation id existed on the object and never reached
+ * the UI. The same class of bug as the removed `problemFromPayload`.
+ *
+ * It is now the real nested `ApiErrorResponse`. The code is
+ * `GATEWAY_UNEXPECTED_RESPONSE` because `normalizeWireErrorCode` replicates the
+ * backend's own upper-snake rule and would reduce the old dotted spelling to
+ * exactly that string — which is also how `error-copy-ar.ts` keys its table, so
+ * the approved Arabic is selectable. `request_id` carries the trace id, because
+ * that is the field `normalizeApiError` surfaces as `traceId`.
+ */
 const GATEWAY_PROBLEM = {
-  code: 'gateway.unexpected_response',
-  detailAr: 'لم تُرجع الخدمة البيانات المتوقعة. تحقق من إعدادات الخادم ثم أعد المحاولة.',
-  fieldErrors: [],
-  status: 502,
-  titleAr: 'استجابة الخدمة غير صالحة.',
-  traceId: `gateway-${Date.now()}`,
-  type: 'https://eiams.example/problems/gateway.unexpected_response',
+  success: false as const,
+  error: {
+    code: 'GATEWAY_UNEXPECTED_RESPONSE',
+    message: 'The server returned a response that is not a JSON envelope.',
+    details: {},
+    request_id: `gateway-${Date.now()}`,
+  },
 } as const
 
 /**
@@ -125,6 +145,19 @@ function nonJsonResponseError(config: InternalAxiosRequestConfig): AxiosError {
     response,
   )
 }
+
+/**
+ * The Arabic this failure presents, kept beside the code so the two cannot drift.
+ *
+ * Previously this string lived only on the flat constant as `detailAr`, where
+ * nothing could read it — `normalizeApiError` builds its presentation from
+ * `error-copy-ar.ts` by CODE, so a string attached to the synthesized body was
+ * unreachable. The code is now keyed in that table and this constant is only
+ * the assertion target.
+ */
+export const GATEWAY_PROBLEM_TITLE_AR = 'استجابة الخدمة غير صالحة.'
+export const GATEWAY_PROBLEM_DETAIL_AR =
+  'لم تُرجع الخدمة البيانات المتوقعة. تحقق من إعدادات الخادم ثم أعد المحاولة.'
 
 /**
  * Creates one credentialed Axios transport with an attached session boundary.

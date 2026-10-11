@@ -87,7 +87,14 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // Pinned, not `> 0`: a narrowed glob leaves a few files rather than none,
     // and every "no offenders" assertion below would then pass silently.
     // 359 = 358 plus this work's src/modules/admin/types/user.types.ts.
-    assertScannedFiles(PRODUCTION_FILES, 379)
+    // 380 = 379 plus `src/shared/feedback/reference-limit-note.tsx`, the Arabic
+    // directory-cap note added by `eiams-frontend-whhu.14` slice S3.
+    // 384 = 380 plus the four Organizations files added by slice S4
+    // (`use-organization-mutations.ts`, `organization.schemas.ts`,
+    // `organization-form-dialog.tsx`, `organizations-list-page.tsx`).
+    // 385 = 384 plus `src/modules/catalog/components/material-status-badge.tsx`,
+    // the Arabic status badge the catalog screens render per record.
+    assertScannedFiles(PRODUCTION_FILES, 385)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

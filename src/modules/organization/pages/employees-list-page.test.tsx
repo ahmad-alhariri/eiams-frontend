@@ -41,7 +41,7 @@ afterEach(() => {
 })
 
 describe('EmployeesListPage', () => {
-  it('renders contract-backed employee rows and sends zero-based server pagination', async () => {
+  it('renders contract-backed employee rows and sends one-based server pagination', async () => {
     const employee = createEmployee()
     const orgUnit = createOrganizationalUnit()
     let receivedPage: string | null = null
@@ -71,7 +71,11 @@ describe('EmployeesListPage', () => {
     // site name. The site names the directory knows about live in the filter.
     expect(screen.queryByRole('columnheader', { name: 'الموقع' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /إضافة موظف|تعديل/ })).not.toBeInTheDocument()
-    expect(receivedPage).toBe('0')
+    // The wire page is one-based (`PaginationQueryParameters.Page` is
+    // `[Range(1, 21474836)]`), and so is `useServerPagination`, so the page
+    // number crosses unchanged. Subtracting one sent `page=0` and the backend
+    // answered 400 REQUEST_VALIDATION_FAILED.
+    expect(receivedPage).toBe('1')
     expect(receivedPageSize).toBe('10')
   })
 

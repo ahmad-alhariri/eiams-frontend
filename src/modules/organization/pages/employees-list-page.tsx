@@ -1,4 +1,4 @@
-import { IconEdit, IconPlus } from '@tabler/icons-react'
+import { IconCheck, IconEdit, IconPlus, IconUserOff } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -8,6 +8,7 @@ import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { EmployeeFormDialog } from '@/modules/organization/components/employee-form-dialog'
 import {
   useCreateEmployeeMutation,
+  useSetEmployeeStatusMutation,
   useUpdateEmployeeMutation,
 } from '@/modules/organization/hooks/use-employee-mutations'
 import {
@@ -22,11 +23,14 @@ import {
   type EmployeeFormValues,
 } from '@/modules/organization/schemas/employee.schemas'
 import { StatusBadge } from '@/shared/feedback/status-badge'
+import { ReferenceLimitNote } from '@/shared/feedback/reference-limit-note'
+import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
+import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
@@ -36,7 +40,15 @@ import type { Employee, RecordStatus } from '@/modules/organization/types/organi
 
 const employeeColumnHelper = createColumnHelper<typeof dataTableFeatures, Employee>()
 
-const REFERENCE_PAGE = { page: 0, pageSize: 200 } as const
+/**
+ * The sites/org-units lookups below are JOINS, not lists: they exist so a flat
+ * `orgUnitId` can be shown as a name and so the site filter has names. The
+ * backend caps `pageSize` at 100 (`MAX_WIRE_PAGE_SIZE`), so these ask for the
+ * maximum one page can hold and the screen admits it with
+ * `ReferenceLimitNote` when the directory is longer than that — the unit
+ * column would otherwise fall back to `—` past row 100 without saying why.
+ */
+const REFERENCE_PAGE = { page: 1, pageSize: MAX_WIRE_PAGE_SIZE } as const
 
 function isRecordStatus(value: string | null): value is RecordStatus {
   return value === 'Active' || value === 'Inactive'
@@ -64,11 +76,16 @@ function EmployeesListPage() {
   const [siteId, setSiteId] = useState<string | undefined>()
   const [status, setStatus] = useState<RecordStatus | undefined>()
   const [dialogEmployee, setDialogEmployee] = useState<Employee | null | undefined>(undefined)
+  const [statusTarget, setStatusTarget] = useState<Employee | null>(null)
 
   const employeesQueryInput = useMemo<ListEmployeesQuery>(
     () => ({
-      // Table controls are intentionally 1-based for people; the v1 API is 0-based.
-      page: currentPage - 1,
+      // One-based controls, one-based wire: the page crosses unchanged. The
+      // comment that used to sit here claimed "the v1 API is 0-based"; it is
+      // not. `PaginationQueryParameters.Page` is `[Range(1, 21474836)]` with
+      // default 1, so subtracting one sent `page=0` and the backend answered
+      // 400 REQUEST_VALIDATION_FAILED.
+      page: currentPage,
       pageSize,
       ...(search === '' ? {} : { search }),
       ...(siteId === undefined ? {} : { siteId }),
@@ -81,6 +98,7 @@ function EmployeesListPage() {
   const unitsQuery = useOrganizationalUnitsQuery(REFERENCE_PAGE)
   const createMutation = useCreateEmployeeMutation()
   const updateMutation = useUpdateEmployeeMutation()
+  const statusMutation = useSetEmployeeStatusMutation()
   const submitFeedback = useSubmitFeedback()
 
   // `orgUnitId` is flat on the wire; the label is joined from the units list.
@@ -123,6 +141,42 @@ function EmployeesListPage() {
   const closeDialog = useCallback((open: boolean) => {
     if (!open) setDialogEmployee(undefined)
   }, [])
+
+  /**
+   * Activation is the SAME route as deactivation with the other ordinal, so the
+   * one command serves both directions and the copy is chosen from the status the
+   * row actually carries. There is no delete in this module: suspending an
+   * employee record is the only removal mechanism it has, and reactivating is
+   * the way back.
+   *
+   * `submitFeedback` is what turns a rejected write into one Arabic toast — the
+   * confirm dialog stays open, because nothing about the row is known to have
+   * changed.
+   */
+  const confirmStatusChange = useCallback(async () => {
+    if (statusTarget === null) return
+    const nextStatus: RecordStatus = statusTarget.status === 'Active' ? 'Inactive' : 'Active'
+
+    try {
+      await submitFeedback(async () => {
+        await statusMutation.mutateAsync({
+          employeeId: statusTarget.id,
+          status: nextStatus,
+        })
+      })
+    } catch {
+      return
+    }
+
+    toast.success({
+      title:
+        nextStatus === 'Inactive'
+          ? 'تم تعطيل الموظف مع الاحتفاظ بالمراجع السابقة.'
+          : 'تم تنشيط الموظف من جديد.',
+    })
+    setStatusTarget(null)
+  }, [statusMutation, statusTarget, submitFeedback])
+
   const submitForm = useCallback(
     async (values: EmployeeFormValues) => {
       const employee = dialogEmployee ?? null
@@ -185,17 +239,31 @@ function EmployeesListPage() {
               employeeColumnHelper.display({
                 id: 'actions',
                 header: 'إجراءات',
-                cell: ({ row }) => (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`تعديل ${row.original.fullName}`}
-                    onClick={() => openEdit(row.original)}
-                  >
-                    <IconEdit aria-hidden />
-                  </Button>
-                ),
+                cell: ({ row }) => {
+                  const isActive = row.original.status === 'Active'
+                  return (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`تعديل ${row.original.fullName}`}
+                        onClick={() => openEdit(row.original)}
+                      >
+                        <IconEdit aria-hidden />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`${isActive ? 'تعطيل' : 'تنشيط'} ${row.original.fullName}`}
+                        onClick={() => setStatusTarget(row.original)}
+                      >
+                        {isActive ? <IconUserOff aria-hidden /> : <IconCheck aria-hidden />}
+                      </Button>
+                    </div>
+                  )
+                },
               }),
             ]
           : []),
@@ -204,6 +272,7 @@ function EmployeesListPage() {
   )
 
   const page = employeesQuery.data
+  const isStatusTargetActive = statusTarget?.status === 'Active'
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -269,13 +338,18 @@ function EmployeesListPage() {
           emptyDescription="لم يتم العثور على موظفين يطابقون معايير البحث الحالية."
           page={currentPage}
           pageSize={pageSize}
-          totalCount={page?.meta.totalItems}
-          totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
+          totalCount={page?.totalItems}
+          totalPages={Math.max(page?.totalPages ?? 1, 1)}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           searchQuery={search}
           onSearchChange={handleSearchChange}
           searchPlaceholder="ابحث بالاسم أو الرقم الوظيفي..."
+        />
+        <ReferenceLimitNote
+          loadedCount={unitsQuery.data?.items.length}
+          totalCount={unitsQuery.data?.totalItems}
+          hint="وحدات إضافية قد لا تظهر في عمود الوحدة التنظيمية."
         />
       </ContentCard>
       <EmployeeFormDialog
@@ -284,6 +358,20 @@ function EmployeesListPage() {
         isPending={createMutation.isPending || updateMutation.isPending}
         onOpenChange={closeDialog}
         onSubmit={submitForm}
+      />
+      <ConfirmDialog
+        open={statusTarget !== null}
+        onOpenChange={(open) => !open && setStatusTarget(null)}
+        title={isStatusTargetActive ? 'تعطيل موظف' : 'تنشيط موظف'}
+        message={
+          isStatusTargetActive
+            ? 'سيبقى اسم الموظف ظاهراً في السندات والعهد السابقة، لكنه لن يكون متاحاً للاختيار في العمليات الجديدة.'
+            : 'سيصبح اسم الموظف متاحاً مرة أخرى للاختيار في العمليات الجديدة.'
+        }
+        confirmLabel={isStatusTargetActive ? 'تعطيل الموظف' : 'تنشيط الموظف'}
+        variant={isStatusTargetActive ? 'destructive' : 'confirm'}
+        busy={statusMutation.isPending}
+        onConfirm={() => void confirmStatusChange()}
       />
     </div>
   )

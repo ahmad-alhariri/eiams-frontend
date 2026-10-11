@@ -35,8 +35,16 @@ import {
 
 const HOOK_FILES = moduleHookFiles()
 
-/** Exact counts: if one of these moves, the scan set changed and must be re-examined. */
-const EXPECTED_HOOK_FILES = 43
+/**
+ * Exact counts: if one of these moves, the scan set changed and must be
+ * re-examined.
+ *
+ * 43 → 44 by `eiams-frontend-whhu.14` slice S4, which added
+ * `src/modules/organization/hooks/use-organization-mutations.ts`. Its keys are
+ * built through the same `queryKeys.scoped` factory as its siblings, so scan 1
+ * below is expected to stay green.
+ */
+const EXPECTED_HOOK_FILES = 44
 
 // ---------------------------------------------------------------------------
 // Scan 1 — query keys must come from a factory

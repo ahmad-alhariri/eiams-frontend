@@ -2,6 +2,7 @@ import type { GallerySection } from '@/app/gallery/gallery-sections'
 import {
   createDocumentAttachment,
   createDocumentPolicy,
+  createMaterial,
   createPolicyBlocker,
   createWarehouseDocument,
   createWarehouseDocumentLine,
@@ -19,10 +20,7 @@ function postedReceivingDocument() {
   const inkLine = createWarehouseDocumentLine({
     availableBalance: 40,
     lineId: fixtureUuid(232),
-    material: {
-      code: 'IT-CON-INK',
-      nameAr: 'حبر طابعة ليزر',
-    },
+    material: createMaterial({ code: 'IT-CON-INK', nameAr: 'حبر طابعة ليزر' }),
     quantity: 40,
     unit: { id: fixtureUuid(233), displayName: 'عبوة' },
     unitPrice: 95000,
@@ -31,10 +29,13 @@ function postedReceivingDocument() {
     availableBalance: 2,
     lineId: fixtureUuid(234),
     lineType: 'Asset',
-    material: {
+    material: createMaterial({
       code: 'IT-HW-PC-018',
+      materialKind: 'Asset',
       nameAr: 'حاسوب مكتبي محمول',
-    },
+      requiresAssetNumber: true,
+      trackingType: 'Serial',
+    }),
     quantity: 2,
     unitPrice: null,
     assetInputs: [
@@ -77,7 +78,7 @@ function submittedIssueDocument() {
       createWarehouseDocumentLine({
         availableBalance: 12,
         lineId: fixtureUuid(241),
-        material: { code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' },
+        material: createMaterial({ code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' }),
         quantity: 6,
         unit: { id: fixtureUuid(242), displayName: 'رزمة' },
       }),
@@ -142,7 +143,7 @@ function submittedIssueOverBalanceDocument() {
       createWarehouseDocumentLine({
         availableBalance: 12,
         lineId: fixtureUuid(251),
-        material: { code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' },
+        material: createMaterial({ code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' }),
         quantity: 25,
         unit: { id: fixtureUuid(252), displayName: 'رزمة' },
       }),

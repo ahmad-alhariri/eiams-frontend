@@ -10,7 +10,6 @@ import type {
   InventoryBalance,
   InventoryCount,
   InventoryCountLine,
-  Material,
   NamedReference,
   StockMovement,
   WarehouseDocument,
@@ -20,6 +19,11 @@ import type {
 // generated `Warehouse` (whose `warehouseId`/`nameAr`/nested `site` fields this
 // file used) describes nothing the backend ever returned.
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
+// Same argument for `Material`. The generated type nests `baseUnit`/`category`/
+// `domain`/`family` and names the identity `materialId`; the wire serves a flat
+// `id`, `baseUnitId`/`baseUnitSymbol` and `materialDomainId`/`materialDomainName`,
+// so only the handwritten contract describes a real material.
+import type { Material } from '@/modules/catalog/types/catalog.api-types'
 import {
   createAsset,
   createAssetCustody,
@@ -196,7 +200,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
   const recipientId = fixtureUuid(905)
 
   const assetMaterial = createMaterial({
-    materialId: fixtureUuid(906),
+    id: fixtureUuid(906),
     code: 'IT-AST-LPT-001',
     nameAr: 'حاسوب محمول إداري',
     materialKind: 'Asset',
@@ -204,7 +208,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     trackingType: 'Serial',
   })
   const consumableMaterial = createMaterial({
-    materialId: fixtureUuid(907),
+    id: fixtureUuid(907),
     code: 'ST-CNS-PPR-001',
     nameAr: 'ورق تصوير A4',
     materialKind: 'Consumable',
@@ -487,7 +491,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     assetNumber: 'AST-2026-1001',
     currentWarehouse: sourceRef,
     derivedStatus: 'InStock',
-    material: reference(assetMaterial.materialId, assetMaterial.nameAr, assetMaterial.code),
+    material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
     receiptLineId: receivingLineId,
     serialNumber: 'SN-LPT-1001',
   })
@@ -496,7 +500,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     assetNumber: 'AST-2026-1002',
     currentWarehouse: undefined,
     derivedStatus: 'Disposed',
-    material: reference(assetMaterial.materialId, assetMaterial.nameAr, assetMaterial.code),
+    material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
     receiptLineId: receivingLineId,
     serialNumber: 'SN-LPT-1002',
   })
@@ -505,7 +509,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     assetNumber: 'AST-2026-1003',
     currentWarehouse: sourceRef,
     derivedStatus: 'InStock',
-    material: reference(assetMaterial.materialId, assetMaterial.nameAr, assetMaterial.code),
+    material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
     receiptLineId: receivingLineId,
     serialNumber: 'SN-LPT-1003',
   })
@@ -514,7 +518,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     assetNumber: 'AST-2026-1004',
     currentWarehouse: undefined,
     derivedStatus: 'Issued',
-    material: reference(assetMaterial.materialId, assetMaterial.nameAr, assetMaterial.code),
+    material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
     receiptLineId: receivingLineId,
     serialNumber: 'SN-LPT-1004',
   })
@@ -553,11 +557,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
 
   const adjustmentLine: AdjustmentLine = {
     adjustmentLineId,
-    material: reference(
-      consumableMaterial.materialId,
-      consumableMaterial.nameAr,
-      consumableMaterial.code,
-    ),
+    material: reference(consumableMaterial.id, consumableMaterial.nameAr, consumableMaterial.code),
     quantityDelta: 2,
     reason: 'زيادة مؤكدة بعد الجرد الفعلي',
   }
@@ -583,7 +583,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       actualQuantity: 9,
       countLineId,
       difference: 2,
-      material: reference(consumableMaterial.materialId, consumableMaterial.nameAr),
+      material: reference(consumableMaterial.id, consumableMaterial.nameAr),
       reason: 'إدخال سابق لم يثبت في السجل الورقي',
       rowVersion: 1,
       snapshotQuantity: 7,
@@ -619,7 +619,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
         adjustmentLineId: disposalLineId,
         assetId: disposed.assetId,
         assetNumber: disposed.assetNumber,
-        material: reference(assetMaterial.materialId, assetMaterial.nameAr, assetMaterial.code),
+        material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
         quantityDelta: -1,
         reason: 'إعدام أصل تالف بموجب محضر اللجنة.',
       },
@@ -638,7 +638,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       documentId: receivingId,
       documentLineId: receivingLineId,
       documentReference: receiving.systemReferenceNumber,
-      material: reference(assetMaterial.materialId, assetMaterial.nameAr, assetMaterial.code),
+      material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
       movementId: fixtureUuid(940),
       movementType: 'Receipt',
       postedAt: receiving.postedAt ?? SCENARIO_TIMESTAMP,
@@ -651,7 +651,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       documentLineId: openingLineId,
       documentReference: opening.systemReferenceNumber,
       material: reference(
-        consumableMaterial.materialId,
+        consumableMaterial.id,
         consumableMaterial.nameAr,
         consumableMaterial.code,
       ),
@@ -666,7 +666,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       documentId: issueId,
       documentLineId: issueLineId,
       documentReference: issue.systemReferenceNumber,
-      material: reference(assetMaterial.materialId, assetMaterial.nameAr, assetMaterial.code),
+      material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
       movementId: fixtureUuid(942),
       movementType: 'Issue',
       postedAt: issue.postedAt ?? SCENARIO_TIMESTAMP,
@@ -679,7 +679,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       documentLineId: transferLineId,
       documentReference: transfer.systemReferenceNumber,
       material: reference(
-        consumableMaterial.materialId,
+        consumableMaterial.id,
         consumableMaterial.nameAr,
         consumableMaterial.code,
       ),
@@ -695,7 +695,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       documentLineId: transferLineId,
       documentReference: transfer.systemReferenceNumber,
       material: reference(
-        consumableMaterial.materialId,
+        consumableMaterial.id,
         consumableMaterial.nameAr,
         consumableMaterial.code,
       ),
@@ -710,7 +710,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       documentId: returnId,
       documentLineId: returnLineId,
       documentReference: returnDocument.systemReferenceNumber,
-      material: reference(assetMaterial.materialId, assetMaterial.nameAr, assetMaterial.code),
+      material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
       movementId: fixtureUuid(945),
       movementType: 'Receipt',
       postedAt: returnDocument.postedAt ?? SCENARIO_TIMESTAMP,
@@ -723,7 +723,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       documentLineId: adjustmentDocumentLineId,
       documentReference: countVariance.documentReference,
       material: reference(
-        consumableMaterial.materialId,
+        consumableMaterial.id,
         consumableMaterial.nameAr,
         consumableMaterial.code,
       ),
@@ -738,7 +738,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       documentId: disposalDocumentId,
       documentLineId: disposalDocumentLineId,
       documentReference: disposal.documentReference,
-      material: reference(assetMaterial.materialId, assetMaterial.nameAr, assetMaterial.code),
+      material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
       movementId: fixtureUuid(948),
       movementType: 'AdjustmentOut',
       postedAt: disposal.postedAt ?? SCENARIO_TIMESTAMP,
@@ -752,7 +752,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       balanceId: fixtureUuid(950),
       lastUpdated: '2026-08-25T10:00:00.000Z',
       lowStock: { state: 'Sufficient', thresholdQuantity: 1 },
-      material: reference(assetMaterial.materialId, assetMaterial.nameAr, assetMaterial.code),
+      material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
       quantity: 2,
       rowVersion: 4,
       warehouse: sourceRef,
@@ -762,7 +762,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       lastUpdated: countVariance.postedAt ?? SCENARIO_TIMESTAMP,
       lowStock: { state: 'Sufficient', thresholdQuantity: 5 },
       material: reference(
-        consumableMaterial.materialId,
+        consumableMaterial.id,
         consumableMaterial.nameAr,
         consumableMaterial.code,
       ),
@@ -775,7 +775,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       lastUpdated: transfer.postedAt ?? SCENARIO_TIMESTAMP,
       lowStock: { state: 'NotConfigured', thresholdQuantity: null },
       material: reference(
-        consumableMaterial.materialId,
+        consumableMaterial.id,
         consumableMaterial.nameAr,
         consumableMaterial.code,
       ),

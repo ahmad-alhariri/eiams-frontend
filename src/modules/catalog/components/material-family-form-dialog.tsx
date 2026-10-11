@@ -22,12 +22,7 @@ import {
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 
-const EMPTY_VALUES: MaterialFamilyFormValues = {
-  materialCategoryId: '',
-  code: '',
-  nameAr: '',
-  status: 'Active',
-}
+const EMPTY_VALUES: MaterialFamilyFormValues = { categoryId: '', code: '', name: '' }
 
 export interface MaterialFamilyFormDialogProps {
   categories: readonly MaterialCategory[]
@@ -51,10 +46,21 @@ export function MaterialFamilyFormDialog({
   onOpenChange,
   onSubmit,
 }: MaterialFamilyFormDialogProps) {
-  const activeCategories = useMemo(
-    () => categories.filter((category) => category.status === 'Active'),
-    [categories],
-  )
+  const isEditing = family !== null
+  /**
+   * Only ACTIVE categories are assignable, but the family's OWN category stays
+   * in the list even once deactivated: `categoryId` is flat on the record (there
+   * is no nested category reference any more), so hiding it would leave the
+   * trigger blank on a record that legitimately still points at it. It is
+   * rendered disabled — re-categorising a family is not exposed by the API.
+   */
+  const categoryOptions = useMemo(() => {
+    const active = categories.filter((category) => category.status === 'Active')
+    if (family === null) return active
+    if (active.some((category) => category.id === family.categoryId)) return active
+    const current = categories.find((category) => category.id === family.categoryId)
+    return current === undefined ? active : [...active, current]
+  }, [categories, family])
   const form = useForm<MaterialFamilyFormValues>({
     resolver: zodResolver(materialFamilySchema),
     defaultValues: EMPTY_VALUES,
@@ -63,20 +69,15 @@ export function MaterialFamilyFormDialog({
   useEffect(() => {
     if (!open) return
     form.reset({
-      materialCategoryId: family?.materialCategory.id ?? '',
+      categoryId: family?.categoryId ?? '',
       code: family?.code ?? '',
-      nameAr: family?.nameAr ?? '',
-      status: family?.status ?? 'Active',
+      name: family?.name ?? '',
     })
   }, [family, form, open])
 
   const submit = async (values: MaterialFamilyFormValues) => {
-    if (
-      !activeCategories.some(
-        (category) => category.materialCategoryId === values.materialCategoryId,
-      )
-    ) {
-      form.setError('materialCategoryId', { message: 'اختر تصنيفاً نشطاً للعائلة.' })
+    if (!categoryOptions.some((category) => category.id === values.categoryId)) {
+      form.setError('categoryId', { message: 'اختر تصنيفاً نشطاً للعائلة.' })
       return
     }
 
@@ -86,7 +87,7 @@ export function MaterialFamilyFormDialog({
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['materialCategoryId', 'code', 'nameAr', 'status'],
+        schemaKeys: ['categoryId', 'code', 'name'],
       })
     }
   }
@@ -97,7 +98,8 @@ export function MaterialFamilyFormDialog({
         <DialogHeader>
           <DialogTitle>{family ? 'تعديل عائلة مادة' : 'إضافة عائلة مادة'}</DialogTitle>
           <DialogDescription>
-            ترتبط العائلة بتصنيف نشط، ويُستمد مجالها تلقائياً من التصنيف المختار.
+            ترتبط العائلة بتصنيف نشط، ويُستمد مجالها تلقائياً من التصنيف المختار. التصنيف ثابت بعد
+            الإنشاء.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -109,7 +111,7 @@ export function MaterialFamilyFormDialog({
           >
             <FormField
               control={form.control}
-              name="nameAr"
+              name="name"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>اسم العائلة</FormLabel>
@@ -145,55 +147,30 @@ export function MaterialFamilyFormDialog({
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field, fieldState }) => (
-                  <FormItem>
-                    <FormLabel>الحالة</FormLabel>
-                    <Select value={field.value} disabled={isPending} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                          <SelectValue>{field.value === 'Active' ? 'نشط' : 'غير نشط'}</SelectValue>
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Active">نشط</SelectItem>
-                        <SelectItem value="Inactive">غير نشط</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </div>
             <FormField
               control={form.control}
-              name="materialCategoryId"
+              name="categoryId"
               render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>التصنيف</FormLabel>
                   <Select
                     value={field.value}
-                    disabled={isPending || isCategoriesLoading}
+                    disabled={isPending || isCategoriesLoading || isEditing}
                     onValueChange={field.onChange}
                   >
                     <FormControl>
                       <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
                         <SelectValue>
-                          {activeCategories.find(
-                            (category) => category.materialCategoryId === field.value,
-                          )?.nameAr ?? 'اختر التصنيف'}
+                          {categoryOptions.find((category) => category.id === field.value)?.name ??
+                            'اختر التصنيف'}
                         </SelectValue>
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {activeCategories.map((category) => (
-                        <SelectItem
-                          key={category.materialCategoryId}
-                          value={category.materialCategoryId}
-                        >
-                          {category.nameAr}
+                      {categoryOptions.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -203,7 +180,7 @@ export function MaterialFamilyFormDialog({
                       تعذّر تحميل التصنيفات النشطة. أغلق النافذة وحاول مرة أخرى.
                     </p>
                   ) : null}
-                  {!isCategoriesLoading && !isCategoriesError && activeCategories.length === 0 ? (
+                  {!isCategoriesLoading && !isCategoriesError && categoryOptions.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                       لا توجد تصنيفات نشطة متاحة لإسناد العائلة.
                     </p>

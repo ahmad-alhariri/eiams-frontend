@@ -1,4 +1,5 @@
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 import type {
   Warehouse,
@@ -61,11 +62,14 @@ function toMaterialSettingsPage(
 }
 
 export interface WarehouseService {
-  listWarehouses: (query: ListWarehousesQuery) => Promise<WarehousePage>
-  getWarehouse: (warehouseId: string) => Promise<Warehouse>
+  listWarehouses: (query: ListWarehousesQuery, context?: RequestContext) => Promise<WarehousePage>
+  getWarehouse: (warehouseId: string, context?: RequestContext) => Promise<Warehouse>
   createWarehouse: (request: WarehouseCreateRequest) => Promise<ResourceIdResponse>
   updateWarehouse: (warehouseId: string, request: WarehouseUpdateRequest) => Promise<void>
-  getWarehouseCapabilities: (warehouseId: string) => Promise<readonly WarehouseCapability[]>
+  getWarehouseCapabilities: (
+    warehouseId: string,
+    context?: RequestContext,
+  ) => Promise<readonly WarehouseCapability[]>
   replaceWarehouseCapabilities: (
     warehouseId: string,
     request: readonly WarehouseCapabilityUpsertRequest[],
@@ -73,6 +77,7 @@ export interface WarehouseService {
   listWarehouseMaterialSettings: (
     warehouseId: string,
     query: ListWarehouseMaterialSettingsQuery,
+    context?: RequestContext,
   ) => Promise<WarehouseMaterialSettingPage>
   upsertWarehouseMaterialSetting: (
     warehouseId: string,
@@ -82,20 +87,22 @@ export interface WarehouseService {
 
 export function createWarehouseService(transport: ApiTransport): WarehouseService {
   return {
-    async listWarehouses(query) {
+    async listWarehouses(query, context) {
       return toWarehousePage(
         await transport.requestPage<Warehouse>({
           path: WAREHOUSES_PATH,
           method: 'GET',
           query: query as Record<string, string | number | boolean | undefined>,
+          ...withSignal(context),
         }),
       )
     },
 
-    async getWarehouse(warehouseId) {
+    async getWarehouse(warehouseId, context) {
       const response = await transport.request<Warehouse>({
         path: pathWithId(WAREHOUSE_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
@@ -116,10 +123,11 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
       })
     },
 
-    async getWarehouseCapabilities(warehouseId) {
+    async getWarehouseCapabilities(warehouseId, context) {
       const response = await transport.request<readonly WarehouseCapability[]>({
         path: pathWithId(WAREHOUSE_CAPABILITIES_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
@@ -133,12 +141,13 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
       return response
     },
 
-    async listWarehouseMaterialSettings(warehouseId, query) {
+    async listWarehouseMaterialSettings(warehouseId, query, context) {
       return toMaterialSettingsPage(
         await transport.requestPage<WarehouseMaterialSetting>({
           path: pathWithId(WAREHOUSE_MATERIAL_SETTINGS_PATH, '{warehouseId}', warehouseId),
           method: 'GET',
           query: query as Record<string, string | number | boolean | undefined>,
+          ...withSignal(context),
         }),
       )
     },

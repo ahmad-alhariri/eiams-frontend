@@ -131,6 +131,15 @@ const REQUEST: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'تعذر إتمام العملية حالياً.',
     detailAr: 'حاول مجدداً بعد قليل، أو تواصل مع الدعم الفني إذا استمرت المشكلة.',
   },
+  // Frontend-SYNTHESIZED, not emitted by the API: `api.client.ts` turns a
+  // non-JSON response (a proxy answering `200 text/html`) into a 502 carrying
+  // this code, because there is no wire code to read. It needs its own Arabic
+  // or the failure degrades to the generic `status >= 500` string, which blames
+  // the server for what is more often a routing problem.
+  GATEWAY_UNEXPECTED_RESPONSE: {
+    titleAr: 'استجابة الخدمة غير صالحة.',
+    detailAr: 'لم تُرجع الخدمة البيانات المتوقعة. تحقق من إعدادات الخادم ثم أعد المحاولة.',
+  },
   SERVICE_UNAVAILABLE: {
     titleAr: 'الخدمة غير متاحة مؤقتاً. حاول مجدداً بعد قليل.',
     detailAr: null,
@@ -156,6 +165,14 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
   },
   SITES_CODE_NOT_UNIQUE: {
     titleAr: 'رمز الموقع مستخدم مسبقاً.',
+    detailAr: null,
+  },
+  ORGANIZATIONS_CODE_NOT_UNIQUE: {
+    titleAr: 'رمز الجهة مستخدم مسبقاً.',
+    detailAr: null,
+  },
+  ORGANIZATIONS_FORBIDDEN: {
+    titleAr: 'لا تملك صلاحية إدارة الجهات.',
     detailAr: null,
   },
   WAREHOUSES_CODE_NOT_UNIQUE: {
@@ -257,6 +274,22 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
   USER_ROLE_SCOPES_CANNOT_REMOVE_LAST_ENTERPRISE_ADMINISTRATOR: {
     titleAr: 'لا يمكن إزالة آخر إسناد لمدير المؤسسة.',
     detailAr: null,
+  },
+  // Raised by the SESSION PROJECTION, not by the grant form: `GetSessionController`
+  // and `RefreshTokenCommandHandler` build the caller's own assignment set and
+  // refuse when it is not exactly one row. Both are administrator-configuration
+  // faults, so the copy names the state of the caller's account and routes the
+  // user to an administrator instead of offering a retry.
+  // `GetUserSessionQueryHandler` only ever inspects `userContext.UserId`, so these
+  // two codes speak about the caller and cannot be steered at another account —
+  // no identifier, role name or assignment count is therefore put in the copy.
+  USER_ROLE_SCOPES_NO_ASSIGNMENT: {
+    titleAr: 'حسابك غير مرتبط بأي دور.',
+    detailAr: 'تواصل مع مسؤول النظام لإتمام إسناد دور لك.',
+  },
+  USER_ROLE_SCOPES_MULTIPLE_ASSIGNMENTS: {
+    titleAr: 'حسابك مرتبط بأكثر من دور.',
+    detailAr: 'تواصل مع مسؤول النظام لمراجعة إسنادات حسابك.',
   },
   USERS_EMPLOYEE_ALREADY_LINKED: {
     titleAr: 'هذا الموظف مرتبط بحساب مستخدم آخر.',
@@ -454,6 +487,7 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     detailAr: null,
   },
   MATERIAL_DOMAINS_NOT_FOUND: { titleAr: 'لم يتم العثور على مجال المادة.', detailAr: null },
+  ORGANIZATIONS_NOT_FOUND: { titleAr: 'لم يتم العثور على الجهة.', detailAr: null },
   SITES_NOT_FOUND: { titleAr: 'لم يتم العثور على الموقع.', detailAr: null },
   WAREHOUSES_NOT_FOUND: { titleAr: 'لم يتم العثور على المستودع.', detailAr: null },
   INVENTORY_ADJUSTMENTS_ALREADY_EXISTS_FOR_COUNT: {

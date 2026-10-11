@@ -6,7 +6,7 @@ import { organizationQueryKeys } from '@/modules/organization/hooks/use-organiza
 import { organizationService } from '@/modules/organization/services/organization.service'
 import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
-import type { ExternalParty } from '@/shared/types/generated/eiams-v1'
+import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
 
 export interface ExternalPartySelectProps {
   value?: string | null
@@ -15,8 +15,17 @@ export interface ExternalPartySelectProps {
   readOnly?: boolean
 }
 
-/** Active-only lookup page used by write selectors. */
-const LOOKUP_PAGE = { pageIndex: 0, pageSize: 10, status: 'Active' } as const
+/**
+ * Active-only lookup page used by write selectors.
+ *
+ * `page: 1`, NOT the `pageIndex: 0` that used to sit here: `pageIndex` is not a
+ * key of `ListExternalPartiesQuery`, and it reached the transport only through
+ * an `as` cast in the service. ASP.NET silently discards unknown query keys, so
+ * every keystroke asked the server for the default page and the typed search
+ * appeared to do nothing. `page` is one-based on both sides of this boundary,
+ * so it is sent exactly as the control counts it.
+ */
+const LOOKUP_PAGE = { page: 1, pageSize: 10, status: 'Active' } as const
 
 /**
  * Document-safe counterpart selector. It requests Active records only and
@@ -49,7 +58,7 @@ export function ExternalPartySelect({
       })
 
       return page.items.map((party) => ({
-        value: party.externalPartyId,
+        value: party.id,
         label: party.code ? `${party.nameAr} — ${party.code}` : party.nameAr,
         payload: party,
       }))

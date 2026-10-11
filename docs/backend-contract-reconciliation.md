@@ -175,10 +175,20 @@ Arabic copy: `REQUEST_INVALID`, `AUTHENTICATION_REQUIRED`,
 domain codes observed (`USERS_NOT_FOUND`, `USERS_INVALID_REFRESH_TOKEN`,
 `REFRESH_TOKEN_ORIGIN_REJECTED`).
 
-Auth codes must not reveal whether a username exists. The backend returns a
-distinct `404 USERS_NOT_FOUND` for an unknown username, distinguishable from a
-wrong-password response — a **username-enumeration oracle** that needs a
-backend change to a uniform `401`.
+Auth codes must not reveal whether a username exists. This oracle is **closed**,
+not pending: `LoginUserCommandHandler` resolves the credential check to a single
+`NotFoundByUsername` failure for both an unknown username and a wrong password,
+so the two cases are byte-identical apart from `error.request_id`. The status is
+`404 USERS_NOT_FOUND` rather than `401`, which is a code-semantics choice and not
+a disclosure channel. The timing channel is closed too — the handler runs PBKDF2
+against a dummy hash even when no account matched, so an unknown username does not
+answer faster than a known one.
+
+This matters to the frontend because `error-copy-ar.ts` maps `USERS_NOT_FOUND` to
+the same Arabic string as a generic miss, so the UI cannot re-open the oracle even
+if the server's uniformity were to regress. Verified against the running backend
+during `whhu.7` browser QA: six distinct usernames, all with a wrong password,
+returned identical `404 USERS_NOT_FOUND` bodies.
 
 ## 6. Confirmed correct, no action
 

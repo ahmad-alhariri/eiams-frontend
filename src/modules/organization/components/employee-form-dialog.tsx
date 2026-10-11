@@ -12,6 +12,7 @@ import {
 import type { Employee } from '@/modules/organization/types/organization.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
+import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import {
@@ -25,7 +26,13 @@ import {
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 
-const REFERENCE_PAGE = { page: 0, pageSize: 200, status: 'Active' } as const
+/**
+ * The unit options are a REFERENCE list, not a directory to page through: the
+ * backend caps `pageSize` at 100, so this asks for one full page and the dialog
+ * says so when more units exist — a silently truncated option list reads as
+ * "this unit does not exist".
+ */
+const REFERENCE_PAGE = { page: 1, pageSize: MAX_WIRE_PAGE_SIZE, status: 'Active' } as const
 const SERVER_ERROR_KEYS = ['orgUnitId', 'employeeNumber', 'fullName', 'jobTitle'] as const
 
 /** Arabic note shown in place of an editable control on the create-only fields. */
@@ -94,7 +101,9 @@ export function EmployeeFormDialog({
         <DialogHeader>
           <DialogTitle>{isCreate ? 'إضافة موظف' : 'تعديل الموظف'}</DialogTitle>
           <DialogDescription>
-            اختر الوحدة التنظيمية من الدليل المعتمد ضمن نطاق العمل الحالي.
+            {isCreate
+              ? 'اختر الوحدة التنظيمية من الدليل المعتمد ضمن نطاق العمل الحالي.'
+              : 'عدّل بيانات الموظف ضمن نطاق العمل الحالي. الرقم الوظيفي والوحدة التنظيمية غير قابلين للتعديل بعد الإنشاء.'}
           </DialogDescription>
         </DialogHeader>
         {unitsQuery.isError ? (

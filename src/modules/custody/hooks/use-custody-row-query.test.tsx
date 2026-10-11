@@ -81,9 +81,7 @@ describe('custody row cache key (e24-t10 review)', () => {
 
   it('evicts the detail row on logout so the next user cannot read it from memory', async () => {
     seedCustodyEndpoints()
-    server.use(
-      http.post(`${API_BASE_URL}/auth/logout`, () => new HttpResponse(null, { status: 204 })),
-    )
+    server.use(http.post(`${API_BASE_URL}/auth/logout`, () => okJson({})))
     const wrapper = createWrapper()
 
     act(() => {

@@ -6,15 +6,14 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import TransferDocumentFormPage from './transfer-document-form-page'
-import type { Material } from '@/modules/catalog/types/catalog.api-types'
 import {
-  createMaterial,
   createSessionRole,
   createSessionScope,
   createSessionUser,
   createWarehouse,
   createWarehouseCapability,
 } from '@/test/msw/factories'
+import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
 import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
@@ -32,6 +31,7 @@ const API_BASE_URL = '/api/v1'
 const SOURCE_WAREHOUSE_ID = '55555555-5555-4555-8555-555555555501'
 const DESTINATION_WAREHOUSE_ID = '66666666-6666-4666-8666-666666666602'
 const MATERIAL_ID = '77777777-7777-4777-8777-777777777703'
+const MATERIAL_DOMAIN_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa20'
 const RETURN_DOC_ID = '88888888-8888-4888-8888-888888888804'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
@@ -51,40 +51,28 @@ const destinationWarehouse = createWarehouse({
   id: DESTINATION_WAREHOUSE_ID,
   name: 'مستودع الفرع الشمالي',
 })
-const material = contractMaterial({ materialId: MATERIAL_ID })
+/**
+ * Material in the REAL catalog wire shape — `wireMaterial` mints
+ * `catalog.api-types.Material`, which is what `GET /catalog/materials` serves
+ * and what the line editor's payload derivation reads: the flat
+ * `materialDomainId` / `baseUnitId` / `baseUnitSymbol` pairs and the identifier
+ * `id`. The retired local projection off `createMaterial()` minted `materialId`
+ * plus nested `domain` / `unit` / `rowVersion` fields, so the picker's option
+ * value never matched the id the response carried and no material could be
+ * selected.
+ */
+const material = wireMaterial({
+  id: MATERIAL_ID,
+  materialDomainId: MATERIAL_DOMAIN_ID,
+})
 
 /**
- * Re-projects the shared `createMaterial()` fixture onto the HANDWRITTEN catalog
- * contract the production line editor parses.
- *
- * `createMaterial()` still mints the frozen generated shape (`domain` / `family` /
- * `baseUnit`); `catalog/api-types` `Material` carries `materialDomain` /
- * `materialFamily` / `unit`. Without the projection
- * `quantity-line-editor.tsx` dereferences `payload.materialDomain.id` on
- * `undefined` and every material pick throws.
+ * The shared quantity-line editor resolves an alternative unit's label from the
+ * units-of-measure list, so the handler must exist once a material is picked.
+ * The list is empty here because this suite carries no conversions.
  */
-function contractMaterial(overrides: Partial<Material> = {}): Material {
-  const base = createMaterial()
-  return {
-    code: base.code,
-    descriptionAr: base.descriptionAr ?? null,
-    materialCategory: base.category,
-    materialCategoryId: base.category.id,
-    materialDomain: base.domain,
-    materialDomainId: base.domain.id,
-    materialFamily: base.family,
-    materialFamilyId: base.family.id,
-    materialId: base.materialId,
-    materialKind: base.materialKind === 'Asset' ? 'Asset' : 'Consumable',
-    nameAr: base.nameAr,
-    nominalConversionFactor: 1,
-    requiresAssetNumber: base.requiresAssetNumber,
-    rowVersion: base.rowVersion,
-    status: 'Active',
-    unit: base.baseUnit,
-    unitId: base.baseUnit.id,
-    ...overrides,
-  }
+function unitsOfMeasureHandler() {
+  return http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => okPageJson([]))
 }
 
 let postedBody: Record<string, unknown> | undefined
@@ -100,11 +88,15 @@ function useHandlers() {
       okJson([
         createWarehouseCapability({
           warehouseId: SOURCE_WAREHOUSE_ID,
-          domain: material.materialDomain,
+          // The capability's domain reference must name the material's own
+          // `materialDomainId` — the flat pair the line editor reads.
+          domain: { id: MATERIAL_DOMAIN_ID, displayName: 'تقنية المعلومات' },
           operations: ['Transfer'],
         }),
       ]),
     ),
+    http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () => okJson([])),
+    unitsOfMeasureHandler(),
     http.get(`${API_BASE_URL}/inventory/balances`, ({ request }) => {
       const url = new URL(request.url)
       const materialId = url.searchParams.get('materialId')

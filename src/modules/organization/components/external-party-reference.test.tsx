@@ -25,11 +25,9 @@ function QueryWrapper({ children }: PropsWithChildren) {
 describe('ExternalPartyReference', () => {
   it('keeps an inactive party readable for historic IssueTo and Custody views', async () => {
     const party = createExternalParty({ nameAr: 'الجهة المؤرشفة', status: 'Inactive' })
-    server.use(
-      http.get(`${API_BASE_URL}/external-parties/${party.externalPartyId}`, () => okJson(party)),
-    )
+    server.use(http.get(`${API_BASE_URL}/external-parties/${party.id}`, () => okJson(party)))
 
-    render(<ExternalPartyReference externalPartyId={party.externalPartyId} />, {
+    render(<ExternalPartyReference externalPartyId={party.id} />, {
       wrapper: QueryWrapper,
     })
 

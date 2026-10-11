@@ -12,16 +12,10 @@ import type {
   DocumentLine,
   DocumentPolicy,
   DocumentStatus,
-  ExternalParty,
   FieldError,
   InventoryBalance,
   LifecycleActorSnapshot,
   LifecycleEventType,
-  Material,
-  MaterialCategory,
-  MaterialDomain,
-  MaterialFamily,
-  MaterialUnitConversion,
   NamedReference,
   OperationalAdvisory,
   PageMeta,
@@ -30,7 +24,6 @@ import type {
   Permission,
   Role,
   StockMovement,
-  UnitOfMeasure,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
 import type {
@@ -44,17 +37,36 @@ import type {
   WarehouseCapability,
   WarehouseMaterialSetting,
 } from '@/modules/warehouse/types/warehouse.api-types'
-// txq4: Site / OrganizationalUnit / Employee / Warehouse are typed against the
-// handwritten contracts, NOT the frozen generated snapshot. Importing them from
-// `@/shared/types/generated/eiams-v1` is what let these factories keep minting
-// `warehouseId` / `nameAr` / nested `site` fixtures while production code had
-// already moved to `id` / `name` — the suite validated fiction against itself.
+// txq4: Site / OrganizationalUnit / Employee / ExternalParty / Warehouse are
+// typed against the handwritten contracts, NOT the frozen generated snapshot.
+// Importing them from `@/shared/types/generated/eiams-v1` is what let these
+// factories keep minting `warehouseId` / `nameAr` / nested `site` fixtures while
+// production code had already moved to `id` / `name` — the suite validated
+// fiction against itself. For ExternalParty the generated snapshot was worse
+// than merely stale: it named the identifier `externalPartyId`, so a factory
+// typed against it kept minting an id field the backend never sends.
 import type {
   Site,
   OrganizationalUnit,
   Employee,
+  ExternalParty,
+  Organization,
 } from '@/modules/organization/types/organization.api-types'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
+// The catalog master-data records are minted against the HANDWRITTEN contracts,
+// not the frozen generated snapshot: the wire says `id` (never
+// `domainId`/`categoryId`/`familyId`/`unitId`), `name` (never `nameAr`), and
+// carries no `rowVersion` on any of them. `Material` is deliberately absent
+// from the generated import above — it used to be pulled from it, which made
+// every material fixture a fiction until the real DTO replaced it.
+import type {
+  Material,
+  MaterialCategory,
+  MaterialDomain,
+  MaterialFamily,
+  MaterialUnitConversion,
+  UnitOfMeasure,
+} from '@/modules/catalog/types/catalog.api-types'
 import type {
   PermissionCatalogEntry,
   RoleProjection,
@@ -401,104 +413,148 @@ export function createAuthTokenResponse(
   )
 }
 
+/**
+ * `GET /catalog/domains` — `{ id, name, code, status }`.
+ *
+ * `id`, not `domainId`; `name`, not `nameAr`; and NO `rowVersion`:
+ * MaterialDomain is not a versioned aggregate, and an update route that binds
+ * `Name` alone would refuse the field.
+ */
 export function createMaterialDomain(
   overrides: FixtureOverrides<MaterialDomain> = {},
 ): MaterialDomain {
   return withOverrides(
     {
-      domainId: fixtureUuid(20),
+      id: fixtureUuid(20),
+      name: 'تقنية المعلومات',
       code: 'IT',
-      nameAr: 'تقنية المعلومات',
-      rowVersion: 1,
       status: 'Active',
     },
     overrides,
   )
 }
 
+/**
+ * `GET /catalog/categories` — `{ id, materialDomainId, parentCategoryId, name,
+ * code, status }`, flat. There is no nested `materialDomain` reference, so a
+ * category's domain label is resolved from the domains list, never from the
+ * category itself.
+ */
 export function createMaterialCategory(
   overrides: FixtureOverrides<MaterialCategory> = {},
 ): MaterialCategory {
   return withOverrides(
     {
-      categoryId: fixtureUuid(21),
+      id: fixtureUuid(21),
+      materialDomainId: fixtureUuid(20),
+      parentCategoryId: null,
+      name: 'الأجهزة',
       code: 'IT-HW',
-      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
-      nameAr: 'الأجهزة',
-      rowVersion: 1,
       status: 'Active',
     },
     overrides,
   )
 }
 
+/**
+ * `GET /catalog/families` — `{ id, categoryId, name, code, status }`. The
+ * parent key is `categoryId`, NOT `materialCategoryId`, and there is no
+ * nested `category`/`domain` reference.
+ */
 export function createMaterialFamily(
   overrides: FixtureOverrides<MaterialFamily> = {},
 ): MaterialFamily {
   return withOverrides(
     {
-      familyId: fixtureUuid(22),
+      id: fixtureUuid(22),
+      categoryId: fixtureUuid(21),
+      name: 'الحواسيب',
       code: 'IT-HW-PC',
-      category: createNamedReference({ id: fixtureUuid(21), displayName: 'الأجهزة' }),
-      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
-      nameAr: 'الحواسيب',
-      rowVersion: 1,
       status: 'Active',
     },
     overrides,
   )
 }
 
+/**
+ * `GET /catalog/units-of-measure` — `{ id, name, symbol, unitType, status }`.
+ *
+ * `name`/`symbol`, not `nameAr`/`symbolAr`; no `code`, no `descriptionAr`, no
+ * `nominalConversionFactor`, no `baseUnitId`. `unitType` is a free-form string
+ * on the wire, deliberately not narrowed to a union.
+ */
 export function createUnitOfMeasure(
   overrides: FixtureOverrides<UnitOfMeasure> = {},
 ): UnitOfMeasure {
   return withOverrides(
     {
-      unitId: fixtureUuid(23),
-      code: 'EA',
-      nameAr: 'قطعة',
-      symbolAr: 'EA',
-      rowVersion: 1,
+      id: fixtureUuid(23),
+      name: 'قطعة',
+      symbol: 'EA',
+      unitType: 'Quantity',
       status: 'Active',
     },
     overrides,
   )
 }
 
+/**
+ * THE document-engine material, and deliberately still typed against the
+ * frozen generated `Material`.
+ *
+ * The document ledger types that embed it — `DocumentLine.material`,
+ * `InventoryBalance.material`, `StockMovement.material`, `Asset.material` — are
+ * all still generated-snapshot shapes, so re-pointing this factory would mint a
+ * record whose consumers are typed against fields it no longer carries.
+ * Migrating that engine is its own epic, and a half-migrated factory would
+ * just move the fiction.
+ *
+ * What that means in practice: NEVER serve this from a `/catalog/materials`
+ * handler. `wireMaterial` in `./catalog-wire-fixtures` mints the real
+ * `catalog.api-types.Material` for every catalog-list consumer.
+ */
 export function createMaterial(overrides: FixtureOverrides<Material> = {}): Material {
   return withOverrides(
     {
-      materialId: fixtureUuid(24),
+      id: fixtureUuid(24),
+      familyId: fixtureUuid(22),
+      nameAr: 'الأصل الثابت للاختبار',
+      nameEn: null,
       code: 'IT-HW-PC-001',
-      nameAr: 'حاسوب مكتبي',
-      descriptionAr: 'مادة تجريبية',
-      baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة', code: 'EA' }),
-      category: createNamedReference({ id: fixtureUuid(21), displayName: 'الأجهزة' }),
-      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
-      family: createNamedReference({ id: fixtureUuid(22), displayName: 'الحواسيب' }),
       materialKind: 'Consumable',
-      requiresAssetNumber: false,
       trackingType: 'Quantity',
-      rowVersion: 1,
+      hasExpiry: false,
+      requiresAssetNumber: false,
+      catalogVersion: 1,
+      attributes: null,
       status: 'Active',
+      materialDomainId: fixtureUuid(20),
+      materialDomainName: 'أجهزة الحاسوب',
+      baseUnitId: fixtureUuid(23),
+      baseUnitSymbol: 'حبة',
     },
     overrides,
   )
 }
 
+/**
+ * `GET /catalog/materials/{materialId}/unit-conversions` — `{ id, materialId,
+ * fromUnitId, toBaseUnitId, factor }`.
+ *
+ * `factor` is a JSON NUMBER on the wire even though the column is
+ * `DECIMAL(18,6)`; the old string `'12'` was the snapshot's fiction. No
+ * `status`, no `material`/`unit`/`baseUnit` references, no `rowVersion`.
+ */
 export function createMaterialUnitConversion(
   overrides: FixtureOverrides<MaterialUnitConversion> = {},
 ): MaterialUnitConversion {
   return withOverrides(
     {
-      conversionId: fixtureUuid(25),
-      material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
-      baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة', code: 'EA' }),
-      fromUnit: createNamedReference({ id: fixtureUuid(26), displayName: 'كرتونة', code: 'CTN' }),
-      factor: '12',
-      usedInPostedDocuments: false,
-      rowVersion: 1,
-      status: 'Active',
+      id: fixtureUuid(25),
+      materialId: fixtureUuid(24),
+      fromUnitId: fixtureUuid(26),
+      toBaseUnitId: fixtureUuid(23),
+      factor: 12,
     },
     overrides,
   )
@@ -547,6 +603,18 @@ export function createWarehouseMaterialSetting(
       minQuantity: 2,
       maxQuantity: 10,
       rowVersion: 1,
+      status: 'Active',
+    },
+    overrides,
+  )
+}
+
+export function createOrganization(overrides: FixtureOverrides<Organization> = {}): Organization {
+  return withOverrides(
+    {
+      id: fixtureUuid(51),
+      code: 'ORG-001',
+      name: 'الهيئة العامة للرقابة والتفتيش',
       status: 'Active',
     },
     overrides,
@@ -603,13 +671,15 @@ export function createExternalParty(
 ): ExternalParty {
   return withOverrides(
     {
-      externalPartyId: fixtureUuid(54),
+      id: fixtureUuid(54),
       code: 'EXT-001',
       contactInfo: '011-0000000',
       nameAr: 'جهة خارجية تجريبية',
       notes: null,
       rowVersion: 1,
       status: 'Active',
+      createdAtUtc: '2026-10-05T08:00:00Z',
+      updatedAtUtc: '2026-10-05T08:00:00Z',
     },
     overrides,
   )
@@ -1148,25 +1218,108 @@ export function createDocumentAttachment(
   )
 }
 
+/**
+ * Projects the REAL catalog record into the material the document engine still
+ * embeds in a line.
+ *
+ * `DocumentLine.material` is one of the shapes the frozen snapshot invented: it
+ * nests `baseUnit` / `category` / `domain` / `family` `NamedReference`s, calls
+ * the identity `materialId`, carries a `rowVersion`, and pins `materialKind` +
+ * `requiresAssetNumber` to a discriminator. The wire record (`Material`) is flat
+ * and carries none of that. Only `nameAr` and `code` are ever read off the
+ * embedding in production, so those two travel verbatim; every reference below
+ * is derived from an identifier the record DOES carry rather than being
+ * re-invented, and the enum fields are narrowed to the discriminator that
+ * matches the record's own kind.
+ *
+ * This is a boundary adapter, not a contract — it is deleted when the document
+ * engine gets a handwritten line type instead of the generated one. Until then
+ * it exists so a line's embedded material is derived from a real material
+ * rather than being a second, parallel fiction.
+ */
+export function toDocumentLineMaterial(material: Material): DocumentLine['material'] {
+  const domain = createNamedReference({
+    id: material.materialDomainId,
+    displayName: material.materialDomainName,
+  })
+  const family = createNamedReference({
+    id: material.familyId,
+    displayName: material.materialDomainName,
+  })
+  const shared = {
+    attributes: material.attributes,
+    baseUnit: createNamedReference({
+      id: material.baseUnitId,
+      displayName: material.baseUnitSymbol,
+    }),
+    baseUnitId: material.baseUnitId,
+    baseUnitSymbol: material.baseUnitSymbol,
+    catalogVersion: material.catalogVersion,
+    category: domain,
+    code: material.code,
+    descriptionAr: null,
+    domain,
+    family,
+    familyId: material.familyId,
+    hasExpiry: material.hasExpiry,
+    id: material.id,
+    materialDomainId: material.materialDomainId,
+    materialDomainName: material.materialDomainName,
+    materialId: material.id,
+    nameAr: material.nameAr,
+    nameEn: material.nameEn,
+    rowVersion: 1,
+    // The generated embedding has no `Archived` state, and an archived material
+    // is terminal — it is never the material of a live document line.
+    status: material.status === 'Archived' ? ('Inactive' as const) : material.status,
+    trackingType: material.trackingType,
+  }
+  if (material.materialKind === 'Asset') {
+    return {
+      ...shared,
+      materialKind: 'Asset' as const,
+      requiresAssetNumber: true,
+      trackingType: 'Serial' as const,
+    }
+  }
+  if (material.materialKind === 'Consumable') {
+    return {
+      ...shared,
+      materialKind: 'Consumable' as const,
+      requiresAssetNumber: false,
+      trackingType: 'Quantity' as const,
+    }
+  }
+  return { ...shared, materialKind: 'Durable' as const, requiresAssetNumber: false }
+}
+
+/** Line overrides whose `material` is the REAL catalog DTO, not the generated
+ *  material the document engine still embeds — see {@link toDocumentLineMaterial}. */
+type WarehouseDocumentLineOverrides = Omit<FixtureOverrides<DocumentLine>, 'material'> & {
+  readonly material?: Material
+}
+
 export function createWarehouseDocumentLine(
-  overrides: FixtureOverrides<DocumentLine> = {},
+  overrides: WarehouseDocumentLineOverrides = {},
 ): DocumentLine {
-  const material = createMaterial()
-  return mergeDeep(
-    {
-      availableBalance: null,
-      baseQuantity: overrides.quantity ?? 5,
-      conversionFactor: '1.000000',
-      conversionId: null,
-      lineId: fixtureUuid(201),
-      lineType: 'Normal',
-      material,
-      quantity: 5,
-      unit: material.baseUnit,
-      unitPrice: null,
-    },
-    overrides,
-  )
+  const { material: materialOverride, ...rest } = overrides
+  const material = materialOverride ?? createMaterial()
+  const defaults: DocumentLine = {
+    availableBalance: null,
+    baseQuantity: rest.quantity ?? 5,
+    conversionFactor: '1.000000',
+    conversionId: null,
+    lineId: fixtureUuid(201),
+    lineType: 'Normal',
+    material: toDocumentLineMaterial(material),
+    quantity: 5,
+    unit: createNamedReference({
+      id: material.baseUnitId,
+      displayName: material.baseUnitSymbol,
+    }),
+    unitPrice: null,
+  }
+  return mergeDeep(defaults, rest)
 }
 
 export function createLifecycleEvent(

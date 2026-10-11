@@ -20,7 +20,7 @@ import {
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 import { Textarea } from '@/shared/ui/textarea'
-import type { ExternalParty } from '@/shared/types/generated/eiams-v1'
+import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
 
 export interface ExternalPartyFormDialogProps {
   party: ExternalParty | null

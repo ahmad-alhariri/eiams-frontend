@@ -4,6 +4,38 @@ import type { ApiRequest } from './api-transport'
 import { propagateRequestId } from './request-id'
 import { normalizePagination } from './pagination'
 
+/**
+ * Projects an `ApiRequest` onto an Axios config.
+ *
+ * This was three near-identical inline literals, one per method. That is the
+ * shape a divergence takes form in: when `signal` was added to `ApiRequest` for
+ * `eiams-frontend-whhu.13`, the three blocks had to be edited in lockstep, and
+ * nothing but review would have caught a missed one. Each property is spread
+ * conditionally rather than assigned `undefined`, because Axios treats an
+ * explicit `params: undefined` differently from an absent key and
+ * `exactOptionalPropertyTypes` forbids the shorthand either way.
+ */
+/**
+ * `AxiosRequestConfig['headers']` is typed as `T | undefined`, so casting to
+ * it produced a value carrying an explicit `undefined`, which
+ * `exactOptionalPropertyTypes` rejects when the key is conditionally spread.
+ * These aliases name the NON-optional member types instead.
+ */
+type AxiosHeadersValue = NonNullable<AxiosRequestConfig['headers']>
+type AxiosParamsValue = NonNullable<AxiosRequestConfig['params']>
+type AxiosDataValue = NonNullable<AxiosRequestConfig['data']>
+
+function toAxiosConfig<TBody>(request: Readonly<ApiRequest<TBody>>): AxiosRequestConfig<TBody> {
+  return {
+    url: request.path,
+    method: request.method,
+    ...(request.query !== undefined ? { params: request.query as AxiosParamsValue } : {}),
+    ...(request.headers !== undefined ? { headers: request.headers as AxiosHeadersValue } : {}),
+    ...(request.body !== undefined ? { data: request.body as AxiosDataValue } : {}),
+    ...(request.signal !== undefined ? { signal: request.signal } : {}),
+  }
+}
+
 export function createAxiosTransport(client: AxiosInstance) {
   return {
     /**
@@ -24,35 +56,15 @@ export function createAxiosTransport(client: AxiosInstance) {
      * into the envelope here in a service.
      */
     async request<TResponse, TBody = unknown>(request: ApiRequest<TBody>): Promise<TResponse> {
-      const config = {
-        url: request.path,
-        method: request.method,
-        ...(request.query !== undefined
-          ? { params: request.query as AxiosRequestConfig['params'] }
-          : {}),
-        ...(request.headers !== undefined
-          ? { headers: request.headers as AxiosRequestConfig['headers'] }
-          : {}),
-        ...(request.body !== undefined ? { data: request.body as AxiosRequestConfig['data'] } : {}),
-      } as AxiosRequestConfig<TBody>
-      const response = await client.request<ApiSuccessResponse<TResponse>>(config)
+      const response = await client.request<ApiSuccessResponse<TResponse>>(toAxiosConfig(request))
       propagateRequestId()
       return response.data.data
     },
 
     async requestPage<TItem>(request: Readonly<ApiRequest>): Promise<ApiPage<TItem>> {
-      const config = {
-        url: request.path,
-        method: request.method,
-        ...(request.query !== undefined
-          ? { params: request.query as AxiosRequestConfig['params'] }
-          : {}),
-        ...(request.headers !== undefined
-          ? { headers: request.headers as AxiosRequestConfig['headers'] }
-          : {}),
-        ...(request.body !== undefined ? { data: request.body as AxiosRequestConfig['data'] } : {}),
-      } as AxiosRequestConfig
-      const response = await client.request<ApiSuccessResponse<ReadonlyArray<TItem>>>(config)
+      const response = await client.request<ApiSuccessResponse<ReadonlyArray<TItem>>>(
+        toAxiosConfig(request),
+      )
       propagateRequestId()
       const pagination = normalizePagination(response.data.pagination)
       return {
@@ -67,18 +79,7 @@ export function createAxiosTransport(client: AxiosInstance) {
     },
 
     async requestEmpty<TBody>(request: Readonly<ApiRequest<TBody>>): Promise<void> {
-      const config = {
-        url: request.path,
-        method: request.method,
-        ...(request.query !== undefined
-          ? { params: request.query as AxiosRequestConfig['params'] }
-          : {}),
-        ...(request.headers !== undefined
-          ? { headers: request.headers as AxiosRequestConfig['headers'] }
-          : {}),
-        ...(request.body !== undefined ? { data: request.body as AxiosRequestConfig['data'] } : {}),
-      } as AxiosRequestConfig<TBody>
-      await client.request<void>(config)
+      await client.request<void>(toAxiosConfig(request))
       propagateRequestId()
     },
   }

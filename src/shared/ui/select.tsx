@@ -1,10 +1,62 @@
 import { Select as SelectPrimitive } from '@base-ui/react/select'
 import { IconCheck, IconChevronDown, IconChevronUp } from '@tabler/icons-react'
-import type { ComponentProps } from 'react'
+import { Children, isValidElement } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 
 import { cn } from '@/shared/utils/class-names'
 
-const Select = SelectPrimitive.Root
+/** Value → label map handed to Base UI so a closed trigger can resolve labels. */
+type SelectLabels = Record<string, ReactNode>
+
+interface SelectElementProps {
+  children?: ReactNode
+  value?: unknown
+}
+
+function isSelectItemValue(value: unknown): value is string | number | boolean {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+}
+
+/**
+ * Collects the label of every `SelectItem` declared under this select.
+ *
+ * The popup is portalled and unmounted while the select is closed, so Base UI
+ * cannot read the label back off the rendered items — it falls back to
+ * serializing the raw value, which surfaces machine values such as `all` or a
+ * GUID in the trigger. Base UI's documented remedy is the `items` prop, so we
+ * derive it from the children instead of asking every call site to.
+ */
+function collectSelectLabels(node: ReactNode, into: SelectLabels): SelectLabels {
+  Children.forEach(node, (child) => {
+    if (!isValidElement<SelectElementProps>(child)) return
+    if (child.type === SelectItem) {
+      if (isSelectItemValue(child.props.value)) {
+        into[String(child.props.value)] = child.props.children
+      }
+      return
+    }
+    collectSelectLabels(child.props.children, into)
+  })
+  return into
+}
+
+/**
+ * `SelectPrimitive.Root` with item labels resolved automatically. An explicit
+ * `items` prop still wins, and `SelectValue` children still take precedence over
+ * both inside Base UI, so call sites that label their trigger directly are
+ * unaffected.
+ */
+function Select<Value, Multiple extends boolean | undefined = false>(
+  props: SelectPrimitive.Root.Props<Value, Multiple>,
+) {
+  const { children, items, ...rootProps } = props
+
+  return (
+    <SelectPrimitive.Root {...rootProps} items={items ?? collectSelectLabels(children, {})}>
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

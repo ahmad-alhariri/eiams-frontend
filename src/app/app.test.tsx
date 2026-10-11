@@ -1,8 +1,25 @@
 import { act, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { http } from 'msw'
+import { beforeEach, describe, expect, it } from 'vitest'
 import App from '@/app/app'
 import { appRouter } from '@/app/app-router'
 import { AppProviders } from '@/app/providers/app-providers'
+import { okJson } from '@/test/msw/envelope'
+import { createAuthTokenResponse } from '@/test/msw/factories'
+import { server } from '@/test/msw/server'
+
+const API_BASE_URL = '/api/v1'
+
+/**
+ * `App` owns `useSessionHydration`, so mounting it fires the real credentialed
+ * `POST /auth/refresh`. Without a handler MSW fails the request, the adapter
+ * publishes `session-expired`, and the mounted `AuthSessionExpiredBridge`
+ * correctly returns the user to `/login` — so these cases now need a session
+ * they actually have, rather than an unhandled request they silently relied on.
+ */
+beforeEach(() => {
+  server.use(http.post(`${API_BASE_URL}/auth/refresh`, () => okJson(createAuthTokenResponse())))
+})
 
 function renderApp() {
   return render(

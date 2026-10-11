@@ -1,5 +1,5 @@
-﻿import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
-import { HttpResponse, http } from 'msw'
+import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
+import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -10,6 +10,7 @@ import {
   withRowVersion,
 } from '@/shared/services/mutation-safety'
 import { createApiClient } from '@/shared/services/api.client'
+import { okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -57,7 +58,12 @@ describe('mutation safety helpers', () => {
     server.use(
       http.post(`${API_BASE_URL}/warehouse-documents/doc-1/post`, ({ request: httpRequest }) => {
         observedKeys.push(httpRequest.headers.get(IDEMPOTENCY_KEY_HEADER))
-        return HttpResponse.json({ accepted: true })
+        // `okJson`: this test drives `client.post` directly, below the transport,
+        // and asserts only on the header. The body was irrelevant to the
+        // assertion but still had to be a shape the application can parse, so
+        // that raising the assertion to cover the response does not immediately
+        // find it broken.
+        return okJson({ accepted: true })
       }),
     )
 
@@ -73,10 +79,10 @@ describe('mutation safety helpers', () => {
   })
 
   it('copies the returned row version into action payloads without changing the original data', () => {
-    const action = { reason: 'ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø³Ø¬Ù„', rowVersion: 2 }
+    const action = { reason: 'تحديث السجل', rowVersion: 2 }
 
-    expect(withRowVersion(action, 5)).toEqual({ reason: 'ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø³Ø¬Ù„', rowVersion: 5 })
-    expect(action).toEqual({ reason: 'ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø³Ø¬Ù„', rowVersion: 2 })
+    expect(withRowVersion(action, 5)).toEqual({ reason: 'تحديث السجل', rowVersion: 5 })
+    expect(action).toEqual({ reason: 'تحديث السجل', rowVersion: 2 })
   })
 
   it('recognizes only contract 409 conflicts and leaves their cause to the feature', () => {

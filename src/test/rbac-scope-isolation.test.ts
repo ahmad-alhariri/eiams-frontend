@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
-import { http, HttpResponse } from 'msw'
+import { http } from 'msw'
 
 import {
   clearScopedQueries,
@@ -10,6 +10,7 @@ import {
   type ScopeCacheKey,
 } from '@/shared/services/query-keys'
 import { apiClient } from '@/shared/services/api.client'
+import { errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 /**
@@ -150,7 +151,13 @@ describe('server authority over frontend scope filtering', () => {
   it('surfaces a 403 as a forbidden error rather than an empty result', async () => {
     server.use(
       http.get('/api/v1/inventory/balances', () =>
-        HttpResponse.json({ message: 'الوصول إلى هذا المستودع غير مسموح.' }, { status: 403 }),
+        // `errJson`, not a hand-written `{ message }` body. The API sends
+        // `{success:false,error:{code,message,details,request_id}}`, and the
+        // fixture that answered `{message}` had a body no reader can parse —
+        // `normalizeApiError` would find no `error.code` and fall back to the
+        // per-status string, so this test passed while proving nothing about
+        // which copy a scope refusal actually produces.
+        errJson(403, { code: 'AUTHORIZATION_FORBIDDEN' }),
       ),
     )
 
@@ -163,7 +170,9 @@ describe('server authority over frontend scope filtering', () => {
 
   it('does not convert a 403 into a successful empty page', async () => {
     server.use(
-      http.get('/api/v1/inventory/movements', () => HttpResponse.json({}, { status: 403 })),
+      http.get('/api/v1/inventory/movements', () =>
+        errJson(403, { code: 'AUTHORIZATION_FORBIDDEN' }),
+      ),
     )
 
     const outcome = await apiClient
@@ -179,7 +188,7 @@ describe('server authority over frontend scope filtering', () => {
     server.use(
       http.get('/api/v1/reports/warehouse-summary', () => {
         calls += 1
-        return HttpResponse.json({ message: 'forbidden' }, { status: 403 })
+        return errJson(403, { code: 'AUTHORIZATION_FORBIDDEN' })
       }),
     )
 

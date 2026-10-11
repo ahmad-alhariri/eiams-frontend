@@ -55,12 +55,12 @@ describe('contract-derived MSW factories', () => {
   it('returns contract-shaped operational entities and problem details', () => {
     const material = createMaterial({ materialKind: 'Asset', requiresAssetNumber: true })
     const balance = createInventoryBalance({
-      material: { id: material.materialId, displayName: material.nameAr },
+      material: { id: material.id, displayName: material.nameAr },
     })
     const movement = createStockMovement({ material: balance.material })
     const problem = createProblemDetails({ status: 409, code: 'conflict.version' })
 
-    expect(balance.material.id).toBe(material.materialId)
+    expect(balance.material.id).toBe(material.id)
     expect(balance.lowStock).toEqual({ state: 'Sufficient', thresholdQuantity: 5 })
     expect(movement).toMatchObject({
       documentReference: 'EIAMS-RCV-2026-0001',
@@ -84,8 +84,10 @@ describe('document-engine MSW factories', () => {
   })
 
   it('creates a warehouse document line shaped after the contract DocumentLine', () => {
+    // The override names the REAL catalog DTO: `id`, not `materialId` — only the
+    // generated embedding the document engine still serves calls it `materialId`.
     const line = createWarehouseDocumentLine({
-      material: { materialId: fixtureUuid(60), nameAr: 'حاسوب مكتبي' },
+      material: createMaterial({ id: fixtureUuid(60), nameAr: 'حاسوب مكتبي' }),
       quantity: 3,
       availableBalance: 15,
     })
@@ -102,7 +104,10 @@ describe('document-engine MSW factories', () => {
     expect(line.baseQuantity).toBe(3)
     expect(line.conversionFactor).toBe('1.000000')
     expect(line.conversionId).toBeNull()
-    expect(line.unit).toMatchObject({ id: fixtureUuid(23), code: 'EA' })
+    // `baseUnitId`/`baseUnitSymbol`, not the nested `baseUnit` reference with a
+    // `code`: `UnitOfMeasure` on the wire is `{ id, name, symbol, unitType,
+    // status }` and carries no code, so the snapshot names the unit by symbol.
+    expect(line.unit).toMatchObject({ id: fixtureUuid(23), displayName: 'حبة' })
     expect(line.availableBalance).toBe(15)
     expect(line.assetInputs).toBeUndefined()
 
@@ -244,7 +249,7 @@ describe('document-engine MSW factories', () => {
       lines: [
         createWarehouseDocumentLine({
           lineId: fixtureUuid(161),
-          material: { materialId: fixtureUuid(60), nameAr: 'حاسوب مكتبي' },
+          material: createMaterial({ id: fixtureUuid(60), nameAr: 'حاسوب مكتبي' }),
           quantity: 3,
         }),
       ],

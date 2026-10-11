@@ -387,14 +387,16 @@ describe('OrganizationService', () => {
     const service = setupService()
     const externalParty = createExternalParty({ code: 'EXT-UPDATED' })
     const externalPartyId = 'external / دمشق'
-    const request = {
+    // Create and update are NOT the same body any more: update additionally
+    // requires `expectedRowVersion`, create must not carry a version or a status.
+    // A single shared literal here is what let the retired upsert type pass.
+    const createRequest = {
       code: externalParty.code ?? null,
       contactInfo: externalParty.contactInfo ?? null,
       nameAr: externalParty.nameAr,
       notes: externalParty.notes ?? null,
-      rowVersion: externalParty.rowVersion,
-      status: externalParty.status,
     }
+    const updateRequest = { ...createRequest, expectedRowVersion: externalParty.rowVersion }
     const receivedBodies: unknown[] = []
 
     server.use(
@@ -403,49 +405,63 @@ describe('OrganizationService', () => {
       ),
       http.post(`${API_BASE_URL}/external-parties`, async ({ request: httpRequest }) => {
         receivedBodies.push(await httpRequest.json())
-        return apiJson(externalParty, { status: 201 })
+        // `Result<Guid>` answers `{ id }` — NOT the created record. A fixture
+        // that echoes the whole party here is what let the service type its
+        // creates as `Promise<ExternalParty>` and hand callers a record the
+        // server never sent.
+        return apiJson({ id: externalParty.id }, { status: 201 })
       }),
       http.put(
         `${API_BASE_URL}/external-parties/${encodeURIComponent(externalPartyId)}`,
         async ({ request: httpRequest }) => {
           receivedBodies.push(await httpRequest.json())
-          return okJson(externalParty)
+          // A plain `Result` handler answers with an EMPTY body.
+          return new HttpResponse(null, { status: 204 })
         },
       ),
     )
 
     await expect(service.getExternalParty(externalPartyId)).resolves.toEqual(externalParty)
-    await expect(service.createExternalParty(request)).resolves.toEqual(externalParty)
-    await expect(service.updateExternalParty(externalPartyId, request)).resolves.toEqual(
-      externalParty,
-    )
-    expect(receivedBodies).toEqual([request, request])
+    await expect(service.createExternalParty(createRequest)).resolves.toEqual({
+      id: externalParty.id,
+    })
+    await expect(
+      service.updateExternalParty(externalPartyId, updateRequest),
+    ).resolves.toBeUndefined()
+    expect(receivedBodies).toEqual([createRequest, updateRequest])
   })
 
-  it('deactivates an external party through its own route and returns the updated record', async () => {
+  it('deactivates an external party through the status route with the required body', async () => {
     const service = setupService()
     const externalParty = createExternalParty()
     let requestedMethod: string | null = null
     let requestedPath: string | null = null
+    const receivedBodies: unknown[] = []
 
     server.use(
-      http.post(
-        `${API_BASE_URL}/external-parties/${externalParty.externalPartyId}/deactivate`,
-        ({ request }) => {
+      http.put(
+        `${API_BASE_URL}/external-parties/${externalParty.id}/status`,
+        async ({ request }) => {
           requestedMethod = request.method
           requestedPath = new URL(request.url).pathname
-          return okJson({ ...externalParty, status: 'Inactive' })
+          receivedBodies.push(await request.json())
+          return new HttpResponse(null, { status: 204 })
         },
       ),
     )
 
     await expect(
-      service.deactivateExternalParty(externalParty.externalPartyId),
-    ).resolves.toMatchObject({ status: 'Inactive' })
-    expect(requestedMethod).toBe('POST')
-    expect(requestedPath).toBe(
-      `/api/v1/external-parties/${externalParty.externalPartyId}/deactivate`,
-    )
+      service.setExternalPartyStatus(externalParty.id, {
+        status: 1,
+        expectedRowVersion: externalParty.rowVersion,
+      }),
+    ).resolves.toBeUndefined()
+    expect(requestedMethod).toBe('PUT')
+    expect(requestedPath).toBe(`/api/v1/external-parties/${externalParty.id}/status`)
+    // Both members are REQUIRED by `RequestBody([JsonRequired] int Status, int ExpectedRowVersion)`,
+    // and the status is the enum ORDINAL — not the `"Inactive"` string the
+    // projection serves, which ASP.NET cannot convert to `int`.
+    expect(receivedBodies).toEqual([{ status: 1, expectedRowVersion: externalParty.rowVersion }])
   })
 
   it('leaves contract errors for the shared Arabic error normalizer', async () => {

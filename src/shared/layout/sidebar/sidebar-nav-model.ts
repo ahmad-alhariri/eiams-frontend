@@ -6,6 +6,7 @@ import {
   IconArrowLeftRight,
   IconBox,
   IconBuilding,
+  IconBuildingSkyscraper,
   IconBuildingWarehouse,
   IconCategory2,
   IconChartBar,
@@ -74,6 +75,7 @@ export const SIDEBAR_NAV_GROUPS: readonly SidebarNavGroup[] = [
     id: 'organization',
     labelAr: 'المؤسسة',
     items: [
+      { routeKey: 'organizationOrganizations', icon: IconBuildingSkyscraper },
       { routeKey: 'organizationSites', icon: IconMapPin },
       { routeKey: 'organizationOrgUnits', icon: IconBuilding },
       { routeKey: 'organizationEmployees', icon: IconUsers },

@@ -190,6 +190,67 @@ describe('normalizeApiError — real backend envelope', () => {
     expect(result.titleAr).toBe(arabicCopyForCode('REQUEST_VALIDATION_FAILED')?.titleAr)
   })
 
+  it('renders the invalid-assignment session faults as their own Arabic', () => {
+    // The wire `message` for both codes embeds the caller's user id. The rendered
+    // Arabic must not, so the assertion below checks the id is absent rather than
+    // trusting the copy to be identifier-free by inspection.
+    const userId = '9f3d2c11-7a48-4c0e-9b31-5d2f8a6e41c7'
+    const generic404 = normalizeApiError(
+      responseError(wireError('USER_ROLE_SCOPES_CODE_THAT_IS_NOT_MAPPED', 'x'), 404),
+    )
+    const generic409 = normalizeApiError(
+      responseError(wireError('USER_ROLE_SCOPES_CODE_THAT_IS_NOT_MAPPED', 'x'), 409),
+    )
+    const none = normalizeApiError(
+      responseError(
+        wireError(
+          'USER_ROLE_SCOPES_NO_ASSIGNMENT',
+          `The user with the Id = '${userId}' has no active role or scope assigned`,
+        ),
+        404,
+      ),
+    )
+    const many = normalizeApiError(
+      responseError(
+        wireError(
+          'USER_ROLE_SCOPES_MULTIPLE_ASSIGNMENTS',
+          'The user has multiple active role and scope assignments',
+        ),
+        409,
+      ),
+    )
+
+    // The generic wording these two used to degrade to, pinned so the assertions
+    // below cannot pass by both sides moving together.
+    expect(generic404.titleAr).toBe('لم يتم العثور على البيانات المطلوبة.')
+    expect(generic409.titleAr).toBe('تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.')
+
+    expect(none.code).toBe('USER_ROLE_SCOPES_NO_ASSIGNMENT')
+    expect(none.status).toBe(404)
+    expect(none.titleAr).toBe('حسابك غير مرتبط بأي دور.')
+    expect(none.detailAr).toBe('تواصل مع مسؤول النظام لإتمام إسناد دور لك.')
+    expect(none.titleAr).not.toBe(generic404.titleAr)
+    expect(none.fieldErrors).toEqual([])
+
+    expect(many.code).toBe('USER_ROLE_SCOPES_MULTIPLE_ASSIGNMENTS')
+    expect(many.status).toBe(409)
+    expect(many.titleAr).toBe('حسابك مرتبط بأكثر من دور.')
+    expect(many.detailAr).toBe('تواصل مع مسؤول النظام لمراجعة إسنادات حسابك.')
+    expect(many.titleAr).not.toBe(generic409.titleAr)
+    expect(many.titleAr).not.toBe(none.titleAr)
+    expect(many.fieldErrors).toEqual([])
+
+    // The two are told apart, neither leaks the identifier the wire put in
+    // `message`, and neither degrades to English.
+    for (const result of [none, many]) {
+      expect(result.titleAr).not.toContain(userId)
+      expect(result.titleAr).not.toContain('active')
+      expect(arabicLettersOnly(result.titleAr)).toBe(true)
+      expect(arabicLettersOnly(result.detailAr ?? '')).toBe(true)
+      expect(result.traceId).toBe(REQUEST_ID)
+    }
+  })
+
   it('handles a network failure and a non-axios error distinctly', () => {
     const network = new AxiosError('Network Error', 'ERR_NETWORK')
     expect(normalizeApiError(network).kind).toBe('network')

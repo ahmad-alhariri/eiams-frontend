@@ -1,8 +1,11 @@
 import { IconPlus, IconTrash } from '@tabler/icons-react'
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
 
-import { useMaterialUnitConversionsQuery } from '@/modules/catalog/hooks/use-catalog-queries'
+import {
+  useMaterialUnitConversionsQuery,
+  useUnitsOfMeasureQuery,
+} from '@/modules/catalog/hooks/use-catalog-queries'
 import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
 import {
   useWarehouseCapabilityValidation,
@@ -159,6 +162,7 @@ function UnitSelector({
   index,
   label,
   onValueChange,
+  unitLabel,
   value,
 }: {
   baseUnitNameAr: string
@@ -166,6 +170,8 @@ function UnitSelector({
   index: number
   label: ReactNode
   onValueChange: (value: string | null) => void
+  /** Label for a conversion's flat `fromUnitId`, resolved from the units list. */
+  unitLabel: (unitId: string) => string
   value: string
 }) {
   return (
@@ -178,14 +184,11 @@ function UnitSelector({
         <SelectContent>
           <SelectItem value={BASE_UNIT_VALUE}>{baseUnitNameAr}</SelectItem>
           {conversions.map((conversion) => (
-            <SelectItem
-              key={conversion.materialUnitConversionId}
-              value={conversion.materialUnitConversionId}
-            >
+            <SelectItem key={conversion.id} value={conversion.id}>
               <span className="flex items-center justify-between gap-2">
-                {conversion.unit.displayName}
+                {unitLabel(conversion.fromUnitId)}
                 <span className="text-muted-foreground" dir="ltr">
-                  × {conversion.conversionFactor}
+                  × {conversion.factor}
                 </span>
               </span>
             </SelectItem>
@@ -204,6 +207,7 @@ interface QuantityLineRowProps {
   onRemove: () => void
   operation: CapabilityOperation
   scopeReady: boolean
+  unitLabel: (unitId: string) => string
   validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation
   /** Known balance for this line's material; undefined while loading/unknown. */
   balance?: number | null | undefined
@@ -226,6 +230,7 @@ function QuantityLineRow({
   onRemove,
   operation,
   scopeReady,
+  unitLabel,
   validates,
   balance,
   assetSlot,
@@ -275,9 +280,14 @@ function QuantityLineRow({
                     return
                   }
                   setValue(`lines.${index}.materialNameAr`, payload.nameAr)
-                  setValue(`lines.${index}.materialDomainId`, payload.materialDomain.id)
+                  // Flat pairs on the material record: the derived
+                  // `materialDomainId`/`materialDomainName` and the material's
+                  // own `baseUnitId`/`baseUnitSymbol`. The retired nested
+                  // `materialDomain` / `unit` references are not on this
+                  // projection.
+                  setValue(`lines.${index}.materialDomainId`, payload.materialDomainId)
                   setValue(`lines.${index}.materialKind`, payload.materialKind)
-                  setValue(`lines.${index}.baseUnitNameAr`, payload.unit.displayName)
+                  setValue(`lines.${index}.baseUnitNameAr`, payload.baseUnitSymbol)
                   // D-IAR-01: a material change invalidates a previously
                   // selected asset set (they belong to the old material).
                   setValue(`lines.${index}.assetIds`, [])
@@ -324,6 +334,7 @@ function QuantityLineRow({
           baseUnitNameAr={line.baseUnitNameAr || 'الوحدة الأساسية'}
           conversions={conversionsQuery.data?.items ?? []}
           value={line.conversionId ?? BASE_UNIT_VALUE}
+          unitLabel={unitLabel}
           onValueChange={(nextValue) => {
             if (nextValue === null) {
               setValue(`lines.${index}.unitId`, undefined)
@@ -332,7 +343,7 @@ function QuantityLineRow({
               return
             }
             const conversion = (conversionsQuery.data?.items ?? []).find(
-              (item: MaterialUnitConversion) => item.materialUnitConversionId === nextValue,
+              (item: MaterialUnitConversion) => item.id === nextValue,
             )
             if (conversion === undefined) {
               setValue(`lines.${index}.unitId`, undefined)
@@ -341,12 +352,12 @@ function QuantityLineRow({
               return
             }
             const quantity = Number(getValues(`lines.${index}.quantity`))
-            setValue(`lines.${index}.unitId`, conversion.unit.id)
-            setValue(`lines.${index}.conversionId`, conversion.materialUnitConversionId)
+            setValue(`lines.${index}.unitId`, conversion.fromUnitId)
+            setValue(`lines.${index}.conversionId`, conversion.id)
             setValue(
               `lines.${index}.baseQuantity`,
               Number.isFinite(quantity) && quantity > 0
-                ? deriveBaseQuantity(quantity, conversion.conversionFactor)
+                ? deriveBaseQuantity(quantity, conversion.factor)
                 : undefined,
             )
           }}
@@ -517,6 +528,26 @@ export function QuantityLineEditor({
     [lines, operation, capabilityValidation.validates],
   )
 
+  /**
+   * A conversion carries a flat `fromUnitId` and no nested unit reference, so
+   * the alternative-unit label is resolved from the units-of-measure list — the
+   * same idiom `material-unit-conversions.tsx` uses. The query is gated on a
+   * material actually being picked: before that there is no conversion to label,
+   * and an unconditional request would fire on every document form that opens.
+   */
+  const hasSelectedMaterial = (lines ?? []).some((line) => (line?.materialId ?? '') !== '')
+  const unitsQuery = useUnitsOfMeasureQuery({}, { enabled: hasSelectedMaterial })
+  const unitsById = useMemo(
+    () => new Map((unitsQuery.data?.items ?? []).map((unit) => [unit.id, unit])),
+    [unitsQuery.data],
+  )
+  const unitLabel = useCallback(
+    // An unknown id falls back to the raw value rather than rendering a blank
+    // row (a conversion whose unit the list has not loaded yet).
+    (unitId: string) => unitsById.get(unitId)?.name ?? unitId,
+    [unitsById],
+  )
+
   useEffect(() => {
     onCapabilityGateChange?.(capabilityGate)
   }, [capabilityGate, onCapabilityGateChange])
@@ -538,6 +569,7 @@ export function QuantityLineEditor({
             onRemove={() => remove(index)}
             operation={operation}
             scopeReady={materialSelector.scopeReady}
+            unitLabel={unitLabel}
             validates={capabilityValidation.validates}
             {...(balanceForLine === undefined ? {} : { balance: balanceForLine(index) })}
             {...(assetSlotForLine === undefined ? {} : { assetSlot: assetSlotForLine(index) })}

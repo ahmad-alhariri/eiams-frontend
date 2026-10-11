@@ -88,8 +88,21 @@ import {
  * `src/modules/admin/hooks/use-assignment-scope-selector.ts` - the Arabic
  * scope picker loader for the single role-scope assignment (D-SRS-01), which
  * replaces the raw UUID field the collection editor used.
+ * Re-measured at 380 by `eiams-frontend-whhu.14` (slice S3), which added the
+ * application file `src/shared/feedback/reference-limit-note.tsx` - the Arabic
+ * "this directory is capped" note the organization screens render instead of
+ * silently showing a truncated reference list (`pageSize` is `[Range(1, 100)]`,
+ * so "load everything" is not available).
+ * Re-measured at 384 by `eiams-frontend-whhu.14` (slice S4), which added the
+ * four Organizations application files - `hooks/use-organization-mutations.ts`,
+ * `schemas/organization.schemas.ts`, `components/organization-form-dialog.tsx`
+ * and `pages/organizations-list-page.tsx` - because the enterprise root of the
+ * hierarchy had a service layer and no UI to drive it.
+ * Re-measured at 385 by `eiams-frontend-whhu.15`, which added the application
+ * file `src/modules/catalog/components/material-status-badge.tsx` - the Arabic
+ * status badge the catalog screens render per record.
  */
-const SCANNED_FILE_COUNT = 379
+const SCANNED_FILE_COUNT = 385
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

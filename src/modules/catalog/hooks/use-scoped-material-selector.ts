@@ -39,24 +39,25 @@ export function useScopedMaterialSelector(
   const { activeScopeCacheKey } = useActiveScopeContext()
   const scopeReady = activeScopeCacheKey !== undefined
 
-  const loadMaterials = useCallback<MaterialLoader>(
-    async (query) => {
-      if (!scopeReady) {
-        return []
-      }
-      const listQuery: ListMaterialsQuery = {
-        page: 0,
-        pageSize: Math.max(1, maxResults),
-        status: 'Active',
-        ...(query.trim() === '' ? {} : { search: query.trim() }),
-      }
-      const page = await catalogService.listMaterials(listQuery)
-      return includeAssetMaterials
-        ? [...page.items]
-        : page.items.filter((material) => material.materialKind !== 'Asset')
-    },
-    [includeAssetMaterials, maxResults, scopeReady],
-  )
+  // The loader ignores the selector's free text: no catalog list binds
+  // `search`, so the parameter never reached the server anyway.
+  const loadMaterials = useCallback<MaterialLoader>(async () => {
+    if (!scopeReady) {
+      return []
+    }
+    // The page is ONE-based like every UI control in this repo; `page: 0` here
+    // was answered with 400 REQUEST_VALIDATION_FAILED, and the clamp into the
+    // backend's `[1, 21474836]` happens once in the service.
+    const listQuery: ListMaterialsQuery = {
+      page: 1,
+      pageSize: Math.max(1, maxResults),
+      status: 'Active',
+    }
+    const page = await catalogService.listMaterials(listQuery)
+    return includeAssetMaterials
+      ? [...page.items]
+      : page.items.filter((material) => material.materialKind !== 'Asset')
+  }, [includeAssetMaterials, maxResults, scopeReady])
 
   const selector = useMaterialSelector(loadMaterials)
   return { ...selector, scopeReady }

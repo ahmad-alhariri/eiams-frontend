@@ -40,6 +40,9 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   catalogMaterials: lazy(() => import('@/modules/catalog/pages/materials-list-page')),
   catalogMaterialDetail: lazy(() => import('@/modules/catalog/pages/material-detail-page')),
   catalogUnits: lazy(() => import('@/modules/catalog/pages/units-of-measure-page')),
+  organizationOrganizations: lazy(
+    () => import('@/modules/organization/pages/organizations-list-page'),
+  ),
   organizationSites: lazy(() => import('@/modules/organization/pages/sites-list-page')),
   organizationSiteDetail: lazy(() => import('@/modules/organization/pages/site-detail-page')),
   organizationOrgUnits: lazy(

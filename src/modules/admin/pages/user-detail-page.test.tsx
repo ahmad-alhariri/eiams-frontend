@@ -157,6 +157,18 @@ describe('UserDetailPage', () => {
     expect(screen.getByRole('button', { name: 'حفظ التعيين' })).toBeEnabled()
   })
 
+  it('keeps the Arabic role label in the closed role trigger', async () => {
+    seedEnterpriseAssignment()
+    render(<UserDetailPage />, { wrapper: PageWrapper })
+
+    // Guards the shared `Select` label-resolution fix: the closed role trigger
+    // must keep rendering the resolved Arabic label, never the role's raw UUID.
+    const roleTrigger = await screen.findByRole('combobox', { name: /الدور/ })
+    await waitFor(() => expect(roleTrigger).toHaveTextContent(ROLE_A.nameAr))
+    expect(roleTrigger).toHaveTextContent('مدير النظام')
+    expect(roleTrigger).not.toHaveTextContent(ROLE_A.id)
+  })
+
   it('offers only the scope types the chosen role permits', async () => {
     const user = userEvent.setup()
     seedEnterpriseAssignment()

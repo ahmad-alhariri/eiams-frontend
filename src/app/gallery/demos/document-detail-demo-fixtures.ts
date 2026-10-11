@@ -5,11 +5,15 @@ import type {
   DocumentLine,
   DocumentPolicy,
   DocumentStatus,
-  Material,
   NamedReference,
   PolicyBlocker,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
+// `Material` is typed against the handwritten catalog contract, not the frozen
+// snapshot: the wire serves a flat `id`, `baseUnitId`/`baseUnitSymbol` and
+// `materialDomainId`/`materialDomainName`, where the generated type nests
+// `baseUnit`/`category`/`domain`/`family` and names the identity `materialId`.
+import type { Material } from '@/modules/catalog/types/catalog.api-types'
 
 /**
  * Fixture builders for the document-detail gallery demo, and nothing else.
@@ -95,22 +99,127 @@ function createNamedReference(overrides: FixtureOverrides<NamedReference> = {}):
 function createMaterial(overrides: FixtureOverrides<Material> = {}): Material {
   return withOverrides(
     {
-      materialId: fixtureUuid(24),
-      code: 'IT-HW-PC-001',
+      id: fixtureUuid(24),
+      familyId: fixtureUuid(22),
       nameAr: 'حاسوب مكتبي',
-      descriptionAr: 'مادة تجريبية',
-      baseUnit: createNamedReference({ id: fixtureUuid(23), displayName: 'قطعة', code: 'EA' }),
-      category: createNamedReference({ id: fixtureUuid(21), displayName: 'الأجهزة' }),
-      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
-      family: createNamedReference({ id: fixtureUuid(22), displayName: 'الحواسيب' }),
+      nameEn: null,
+      code: 'IT-HW-PC-001',
       materialKind: 'Consumable',
-      requiresAssetNumber: false,
       trackingType: 'Quantity',
-      rowVersion: 1,
+      hasExpiry: false,
+      requiresAssetNumber: false,
+      catalogVersion: 1,
+      attributes: null,
       status: 'Active',
+      materialDomainId: fixtureUuid(20),
+      materialDomainName: 'أجهزة الحاسوب',
+      baseUnitId: fixtureUuid(23),
+      baseUnitSymbol: 'حبة',
     },
     overrides,
   )
+}
+
+/**
+ * Projects the real catalog record into the material the document engine still
+ * embeds in a line.
+ *
+ * `DocumentLine.material` is one of the shapes the frozen snapshot invented: it
+ * nests `baseUnit` / `category` / `domain` / `family` `NamedReference`s, calls
+ * the identity `materialId`, carries a `rowVersion`, and pins `materialKind` +
+ * `requiresAssetNumber` to a discriminator. The wire record (`Material`) is flat
+ * and carries none of that. Only `nameAr` and `code` are ever read off the
+ * embedding in production, so those two travel verbatim; every reference below
+ * is derived from an identifier the record DOES carry rather than being
+ * re-invented.
+ *
+ * A boundary adapter, not a contract — it is deleted when the document engine
+ * gets a handwritten line type instead of the generated one. Copied verbatim
+ * from `@/test/msw/factories` for the same coupling reason as the builders.
+ */
+function toDocumentLineMaterial(material: Material): DocumentLine['material'] {
+  const domain = createNamedReference({
+    id: material.materialDomainId,
+    displayName: material.materialDomainName,
+  })
+  const family = createNamedReference({
+    id: material.familyId,
+    displayName: material.materialDomainName,
+  })
+  const shared = {
+    attributes: material.attributes,
+    baseUnit: createNamedReference({
+      id: material.baseUnitId,
+      displayName: material.baseUnitSymbol,
+    }),
+    baseUnitId: material.baseUnitId,
+    baseUnitSymbol: material.baseUnitSymbol,
+    catalogVersion: material.catalogVersion,
+    category: domain,
+    code: material.code,
+    descriptionAr: null,
+    domain,
+    family,
+    familyId: material.familyId,
+    hasExpiry: material.hasExpiry,
+    id: material.id,
+    materialDomainId: material.materialDomainId,
+    materialDomainName: material.materialDomainName,
+    materialId: material.id,
+    nameAr: material.nameAr,
+    nameEn: material.nameEn,
+    rowVersion: 1,
+    status: material.status === 'Archived' ? ('Inactive' as const) : material.status,
+    trackingType: material.trackingType,
+  }
+  if (material.materialKind === 'Asset') {
+    return {
+      ...shared,
+      materialKind: 'Asset' as const,
+      requiresAssetNumber: true,
+      trackingType: 'Serial' as const,
+    }
+  }
+  if (material.materialKind === 'Consumable') {
+    return {
+      ...shared,
+      materialKind: 'Consumable' as const,
+      requiresAssetNumber: false,
+      trackingType: 'Quantity' as const,
+    }
+  }
+  return { ...shared, materialKind: 'Durable' as const, requiresAssetNumber: false }
+}
+
+/** Line overrides whose `material` is the REAL catalog DTO, not the generated
+ *  material the document engine still embeds — see {@link toDocumentLineMaterial}. */
+type WarehouseDocumentLineOverrides = Omit<FixtureOverrides<DocumentLine>, 'material'> & {
+  readonly material?: Material
+}
+
+export { createMaterial }
+
+export function createWarehouseDocumentLine(
+  overrides: WarehouseDocumentLineOverrides = {},
+): DocumentLine {
+  const { material: materialOverride, ...rest } = overrides
+  const material = materialOverride ?? createMaterial()
+  const defaults: DocumentLine = {
+    availableBalance: null,
+    baseQuantity: rest.quantity ?? 5,
+    conversionFactor: '1.000000',
+    conversionId: null,
+    lineId: fixtureUuid(201),
+    lineType: 'Normal',
+    material: toDocumentLineMaterial(material),
+    quantity: 5,
+    unit: createNamedReference({
+      id: material.baseUnitId,
+      displayName: material.baseUnitSymbol,
+    }),
+    unitPrice: null,
+  }
+  return mergeDeep(defaults, rest)
 }
 
 function createActionAvailability(
@@ -425,27 +534,6 @@ export function createDocumentAttachment(
       originalFilename: 'document-original.pdf',
       uploadedAt: FIXTURE_TIMESTAMP,
       uploadedBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مستخدم تجريبي' }),
-    },
-    overrides,
-  )
-}
-
-export function createWarehouseDocumentLine(
-  overrides: FixtureOverrides<DocumentLine> = {},
-): DocumentLine {
-  const material = createMaterial()
-  return mergeDeep(
-    {
-      availableBalance: null,
-      baseQuantity: overrides.quantity ?? 5,
-      conversionFactor: '1.000000',
-      conversionId: null,
-      lineId: fixtureUuid(201),
-      lineType: 'Normal',
-      material,
-      quantity: 5,
-      unit: material.baseUnit,
-      unitPrice: null,
     },
     overrides,
   )

@@ -16,7 +16,9 @@ import {
 } from '@/modules/organization/schemas/employee.schemas'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
+import { ReferenceLimitNote } from '@/shared/feedback/reference-limit-note'
 import { StatusBadge } from '@/shared/feedback/status-badge'
+import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
@@ -24,7 +26,14 @@ import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { Button } from '@/shared/ui/button'
 import { toast } from '@/shared/ui/toast-manager'
 
-const REFERENCE_PAGE = { page: 0, pageSize: 200 } as const
+/**
+ * A JOIN, not a list: the employee's record carries a flat `orgUnitId`, so the
+ * unit name comes from the org-units directory. The backend caps `pageSize` at
+ * 100, so this asks for one full page and the screen admits it when the
+ * directory is longer — otherwise a unit past row 100 renders as `—` and reads
+ * as "this employee has no unit".
+ */
+const REFERENCE_PAGE = { page: 1, pageSize: MAX_WIRE_PAGE_SIZE } as const
 
 /**
  * Contract-backed employee profile.
@@ -150,6 +159,11 @@ function EmployeeDetailPage() {
           </DetailField>
           <DetailField label="الوحدة التنظيمية">{orgUnitName ?? '—'}</DetailField>
         </dl>
+        <ReferenceLimitNote
+          loadedCount={unitsQuery.data?.items.length}
+          totalCount={unitsQuery.data?.totalItems}
+          hint="وحدات إضافية قد لا تظهر في اسم الوحدة التنظيمية."
+        />
       </ContentCard>
       <EmployeeFormDialog
         employee={employee}

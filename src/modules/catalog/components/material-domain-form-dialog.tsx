@@ -6,6 +6,7 @@ import {
   materialDomainSchema,
   type MaterialDomainFormValues,
 } from '@/modules/catalog/schemas/material-domain.schemas'
+import type { MaterialDomain } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -19,10 +20,8 @@ import {
   DialogTitle,
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { MaterialDomain } from '@/modules/catalog/types/catalog.types'
 
-const EMPTY_VALUES: MaterialDomainFormValues = { code: '', nameAr: '', status: 'Active' }
+const EMPTY_VALUES: MaterialDomainFormValues = { code: '', name: '' }
 
 export interface MaterialDomainFormDialogProps {
   domain: MaterialDomain | null
@@ -32,7 +31,16 @@ export interface MaterialDomainFormDialogProps {
   onSubmit: (values: MaterialDomainFormValues) => Promise<void>
 }
 
-/** Contract-only create/edit dialog; deletion is deliberately absent from the v1 API. */
+/**
+ * Create/edit dialog for a material domain.
+ *
+ * `status` is deliberately NOT a form field: a new domain is Active by
+ * definition, and a status change afterwards is its own guarded command
+ * (`PUT /catalog/domains/{id}/status`) whose body is an INTEGER ordinal — see
+ * the row action on `MaterialDomainsPage`. `code` is create-only, so it is
+ * rendered read-only while editing rather than being dropped from a body the
+ * update route does not bind.
+ */
 export function MaterialDomainFormDialog({
   domain,
   open,
@@ -40,6 +48,7 @@ export function MaterialDomainFormDialog({
   onOpenChange,
   onSubmit,
 }: MaterialDomainFormDialogProps) {
+  const isEditing = domain !== null
   const form = useForm<MaterialDomainFormValues>({
     resolver: zodResolver(materialDomainSchema),
     defaultValues: EMPTY_VALUES,
@@ -49,8 +58,7 @@ export function MaterialDomainFormDialog({
     if (!open) return
     form.reset({
       code: domain?.code ?? '',
-      nameAr: domain?.nameAr ?? '',
-      status: domain?.status ?? 'Active',
+      name: domain?.name ?? '',
     })
   }, [domain, form, open])
 
@@ -61,7 +69,7 @@ export function MaterialDomainFormDialog({
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['code', 'nameAr', 'status'],
+        schemaKeys: ['code', 'name'],
       })
     }
   }
@@ -72,7 +80,8 @@ export function MaterialDomainFormDialog({
         <DialogHeader>
           <DialogTitle>{domain ? 'تعديل مجال التصنيف' : 'إضافة مجال تصنيف'}</DialogTitle>
           <DialogDescription>
-            تحدد المجالات المستوى الأعلى لتصنيف المواد. الحقول المطلوبة مطابقة لعقد الإصدار الأول.
+            تحدد المجالات المستوى الأعلى لتصنيف المواد. يُرسل التعديل اسم المجال فقط؛ رمز المجال
+            ثابت بعد الإنشاء، والحالة تُدار من إجراء الصف.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -84,7 +93,8 @@ export function MaterialDomainFormDialog({
           >
             <FormField
               control={form.control}
-              name="nameAr"
+              name="name"
+              rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>اسم المجال</FormLabel>
@@ -102,33 +112,18 @@ export function MaterialDomainFormDialog({
                 <FormItem>
                   <FormLabel>رمز المجال</FormLabel>
                   <FormControl>
-                    <Input {...field} dir="ltr" disabled={isPending} placeholder="IT" />
+                    <Input
+                      {...field}
+                      dir="ltr"
+                      disabled={isPending || isEditing}
+                      placeholder="IT"
+                    />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field, fieldState }) => (
-                <FormItem>
-                  <FormLabel>الحالة</FormLabel>
-                  <Select
-                    value={field.value}
-                    disabled={isPending}
-                    onValueChange={(value) => field.onChange(value)}
-                  >
-                    <FormControl>
-                      <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                        <SelectValue>{field.value === 'Active' ? 'نشط' : 'غير نشط'}</SelectValue>
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="Active">نشط</SelectItem>
-                      <SelectItem value="Inactive">غير نشط</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {isEditing ? (
+                    <p className="text-sm text-muted-foreground">
+                      رمز المجال ثابت ولا يُعدّل بعد الإنشاء.
+                    </p>
+                  ) : null}
                   <FormMessage />
                 </FormItem>
               )}

@@ -343,9 +343,13 @@ function AssetLineRow({
       return
     }
     setValue(`${linePath}.materialNameAr`, payload.nameAr)
-    setValue(`${linePath}.materialDomainId`, payload.materialDomain.id)
-    setValue(`${linePath}.baseUnitId`, payload.unit.id)
-    setValue(`${linePath}.baseUnitNameAr`, payload.unit.displayName)
+    // Flat pairs on the material record: `materialDomainId`/`materialDomainName`
+    // are the derived domain pair and `baseUnitId`/`baseUnitSymbol` the
+    // material's own base unit. The retired nested `materialDomain` / `unit`
+    // references are not on this projection.
+    setValue(`${linePath}.materialDomainId`, payload.materialDomainId)
+    setValue(`${linePath}.baseUnitId`, payload.baseUnitId)
+    setValue(`${linePath}.baseUnitNameAr`, payload.baseUnitSymbol)
     setValue(`${linePath}.assetInputs`, [createEmptyAssetInput()])
     setValue(`${linePath}.quantity`, 1)
   }
