@@ -11,7 +11,6 @@ import type {
   InventoryCount,
   InventoryCountLine,
   NamedReference,
-  StockMovement,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
 // `Warehouse` is typed against the handwritten contract, NOT the frozen generated
@@ -24,6 +23,9 @@ import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 // `id`, `baseUnitId`/`baseUnitSymbol` and `materialDomainId`/`materialDomainName`,
 // so only the handwritten contract describes a real material.
 import type { Material } from '@/modules/catalog/types/catalog.api-types'
+// StockMovement: handwritten wire shape — `postedBy: Uuid`, not the
+// generated `postedBy: NamedReference`. Mirrored in factories.ts.
+import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
 import {
   createAsset,
   createAssetCustody,
@@ -642,7 +644,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       movementId: fixtureUuid(940),
       movementType: 'Receipt',
       postedAt: receiving.postedAt ?? SCENARIO_TIMESTAMP,
-      postedBy: managerRef.id as unknown as StockMovement['postedBy'],
+      postedBy: managerRef.id,
       quantityDelta: 4,
       warehouse: sourceRef,
     }),
@@ -658,7 +660,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       movementId: fixtureUuid(941),
       movementType: 'Opening',
       postedAt: opening.postedAt ?? SCENARIO_TIMESTAMP,
-      postedBy: managerRef.id as unknown as StockMovement['postedBy'],
+      postedBy: managerRef.id,
       quantityDelta: 10,
       warehouse: sourceRef,
     }),
@@ -670,7 +672,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       movementId: fixtureUuid(942),
       movementType: 'Issue',
       postedAt: issue.postedAt ?? SCENARIO_TIMESTAMP,
-      postedBy: managerRef.id as unknown as StockMovement['postedBy'],
+      postedBy: managerRef.id,
       quantityDelta: -2,
       warehouse: sourceRef,
     }),
@@ -686,7 +688,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       movementId: fixtureUuid(943),
       movementType: 'TransferOut',
       postedAt: transfer.postedAt ?? SCENARIO_TIMESTAMP,
-      postedBy: managerRef.id as unknown as StockMovement['postedBy'],
+      postedBy: managerRef.id,
       quantityDelta: -3,
       warehouse: sourceRef,
     }),
@@ -702,7 +704,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       movementId: fixtureUuid(944),
       movementType: 'TransferIn',
       postedAt: transfer.postedAt ?? SCENARIO_TIMESTAMP,
-      postedBy: managerRef.id as unknown as StockMovement['postedBy'],
+      postedBy: managerRef.id,
       quantityDelta: 3,
       warehouse: destinationRef,
     }),
@@ -714,7 +716,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       movementId: fixtureUuid(945),
       movementType: 'Receipt',
       postedAt: returnDocument.postedAt ?? SCENARIO_TIMESTAMP,
-      postedBy: managerRef.id as unknown as StockMovement['postedBy'],
+      postedBy: managerRef.id,
       quantityDelta: 1,
       warehouse: sourceRef,
     }),
@@ -730,7 +732,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       movementId: fixtureUuid(946),
       movementType: 'AdjustmentIn',
       postedAt: countVariance.postedAt ?? SCENARIO_TIMESTAMP,
-      postedBy: managerRef.id as unknown as StockMovement['postedBy'],
+      postedBy: managerRef.id,
       quantityDelta: adjustmentLine.quantityDelta,
       warehouse: sourceRef,
     }),
@@ -742,7 +744,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       movementId: fixtureUuid(948),
       movementType: 'AdjustmentOut',
       postedAt: disposal.postedAt ?? SCENARIO_TIMESTAMP,
-      postedBy: managerRef.id as unknown as StockMovement['postedBy'],
+      postedBy: managerRef.id,
       quantityDelta: -1,
       warehouse: sourceRef,
     }),

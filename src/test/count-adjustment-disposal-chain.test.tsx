@@ -22,17 +22,31 @@ import {
   useStockMovementsQuery,
 } from '@/modules/inventory/hooks/use-inventory-queries'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
-import type {
-  AdjustmentPostResult,
-  Asset,
-  AssetCustody,
-  InventoryAdjustment,
-  StockMovement,
-} from '@/shared/types/generated/eiams-v1'
+import type { Asset, AssetCustody, InventoryAdjustment } from '@/shared/types/generated/eiams-v1'
+import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
 import { createDocumentPolicy, createSession } from '@/test/msw/factories'
 import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
+
+/**
+ * The adjustment service returns a typed envelope whose `stockMovements` is
+ * the inventory module's handwritten `StockMovement` (verified against
+ * `Application/StockMovements/GetList/StockMovementResponse.cs`: postedBy
+ * is a UUID string, not the generated snapshot's `NamedReference`). The
+ * generated snapshot's `AdjustmentPostResult` still carries the OLD shape,
+ * so this test re-declares the response locally to use the handwritten
+ * `StockMovement` — the only shape the page (`useAdjustmentActions`) actually
+ * unmarshals.
+ */
+type AdjustmentPostResult = {
+  readonly adjustment: InventoryAdjustment
+  readonly stockMovements: readonly StockMovement[]
+  readonly assetMovements: ReadonlyArray<unknown>
+  readonly affectedAsset?: unknown
+  readonly closedCustodyId?: string
+  readonly lifecycleEvent: unknown
+}
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: { kind: 'enterprise' } }),
