@@ -23,7 +23,6 @@ import type {
   ProblemDetails,
   Permission,
   Role,
-  StockMovement,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
 import type {
@@ -36,6 +35,7 @@ import type {
 import type {
   WarehouseCapability,
   WarehouseMaterialSetting,
+  Warehouse,
 } from '@/modules/warehouse/types/warehouse.api-types'
 // txq4: Site / OrganizationalUnit / Employee / ExternalParty / Warehouse are
 // typed against the handwritten contracts, NOT the frozen generated snapshot.
@@ -52,7 +52,15 @@ import type {
   ExternalParty,
   Organization,
 } from '@/modules/organization/types/organization.api-types'
-import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
+// StockMovement follows the same rule: the live wire is `postedBy: Uuid` per
+// `Application/StockMovements/GetList/StockMovementResponse.cs`, NOT the
+// generated `postedBy: NamedReference`. The handwritten type lives next to the
+// service that reads it; using it here makes the factory mint the same shape
+// the page renders, so the eight `as unknown as StockMovement['postedBy']`
+// casts in `cross-module-scenarios.ts` go away. `InventoryBalance` is left on
+// the generated snapshot because the document / custody / chain suites still
+// read it there; that drift is filed against `eiams-frontend-tgl3`.
+import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
 // The catalog master-data records are minted against the HANDWRITTEN contracts,
 // not the frozen generated snapshot: the wire says `id` (never
 // `domainId`/`categoryId`/`familyId`/`unitId`), `name` (never `nameAr`), and
@@ -818,22 +826,39 @@ export function createAssetMovement(
 /**
  * Immutable inventory-ledger read model. This is deliberately a standalone
  * projection: it does not derive a balance or mutate a warehouse document.
+ *
+ * `postedBy` is a UUID STRING on the wire (see the audit header in
+ * `src/test/msw/inventory-wire-fixtures.ts`), not the nested `NamedReference`
+ * the generated snapshot claims. This factory now mints the handwritten
+ * shape, so the eight `as unknown as StockMovement['postedBy']` casts in
+ * `cross-module-scenarios.ts` collapse to plain UUIDs.
  */
 export function createStockMovement(
   overrides: FixtureOverrides<StockMovement> = {},
 ): StockMovement {
+  const warehouseId = fixtureUuid(30)
+  const materialId = fixtureUuid(24)
   return withOverrides(
     {
       documentId: fixtureUuid(150),
       documentLineId: fixtureUuid(160),
       documentReference: 'EIAMS-RCV-2026-0001',
-      material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
+      documentReferenceNumber: 'EIAMS-RCV-2026-0001',
+      lineId: fixtureUuid(160),
+      material: createNamedReference({ id: materialId, displayName: 'حاسوب مكتبي' }),
+      materialId,
+      materialCode: 'IT-HW-PC-001',
+      materialNameAr: 'حاسوب مكتبي',
       movementId: fixtureUuid(70),
       movementType: 'Receipt',
       postedAt: FIXTURE_TIMESTAMP,
-      postedBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مدير المستودع' }),
+      postedAtUtc: FIXTURE_TIMESTAMP,
+      postedBy: fixtureUuid(10),
       quantityDelta: 5,
-      warehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
+      warehouse: createNamedReference({ id: warehouseId, displayName: 'المستودع المركزي' }),
+      warehouseId,
+      warehouseCode: 'WH-CENTRAL',
+      warehouseName: 'المستودع المركزي',
     },
     overrides,
   )

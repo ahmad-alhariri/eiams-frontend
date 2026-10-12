@@ -18,11 +18,8 @@ import { custodyQueryKeys, useCustodiesQuery } from '@/modules/custody/hooks/use
 import { documentQueryKeys, useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
-import type {
-  AssetCustody,
-  StockMovement,
-  WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
+import type { AssetCustody, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
