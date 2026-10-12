@@ -84,7 +84,7 @@ export function useWarehouseCapabilitiesQuery(warehouseId: string | undefined) {
         ? queryKeys.public(WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'capabilities')
         : warehouseQueryKeys.capabilities(scope, warehouseId),
     queryFn: ({ signal }) =>
-      warehouseService.getWarehouseCapabilities(warehouseId ?? '', { signal }),
+      warehouseService.listWarehouseCapabilities(warehouseId ?? '', { signal }),
     enabled: scope !== undefined && warehouseId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })

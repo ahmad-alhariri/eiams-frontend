@@ -120,7 +120,7 @@ describe('warehouse query hooks', () => {
 
     expect(warehouses.result.current.data?.items).toEqual([warehouse])
     expect(warehouseDetail.result.current.data).toEqual(warehouse)
-    expect(capabilities.result.current.data).toEqual([capability])
+    expect(capabilities.result.current.data?.items).toEqual([capability])
     expect(materialSettings.result.current.data?.items).toEqual([setting])
   })
 

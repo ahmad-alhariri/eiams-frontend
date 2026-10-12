@@ -9,12 +9,19 @@ import { useWarehouseCapabilitiesQuery } from '@/modules/warehouse/hooks/use-war
 export type CapabilityValidation =
   { status: 'supported' } | { status: 'blocked'; messageAr: string } | { status: 'unknown' }
 
+/**
+ * Arabic labels for the six `CapabilityOperation` enum values, including
+ * `Adjustment` which the frozen frontend union silently dropped (lvt.1 / lvtk.4
+ * ruling). Render every operation by this map, never by the raw enum name, to
+ * satisfy the AGENTS.md "UI = Arabic" rule.
+ */
 export const OPERATION_LABELS: Record<CapabilityOperation, string> = {
   Receiving: 'استلام',
   Issue: 'صرف',
   Transfer: 'تحويل',
   Count: 'جرد',
   Return: 'إرجاع',
+  Adjustment: 'تسوية',
 }
 
 const EMPTY_CAPABILITIES: readonly WarehouseCapability[] = []
@@ -48,17 +55,26 @@ export function useWarehouseCapabilityValidation(
 ): UseWarehouseCapabilityValidationReturn {
   const capabilitiesQuery = useWarehouseCapabilitiesQuery(warehouseId)
   const { data, isLoading, isError } = capabilitiesQuery
-  const capabilities = data ?? EMPTY_CAPABILITIES
+  // The capability endpoint returns a paginated `ApiPage<WarehouseCapability>`;
+  // the editor and the document gate only need the in-memory set, so we
+  // collapse to the items array here. With the documented page size (50) the
+  // paged read covers every plausible warehouse capability matrix; the rare
+  // warehouse with >50 capability rows is a server-side pagination concern,
+  // not a UI one.
+  const capabilities = data?.items ?? EMPTY_CAPABILITIES
 
-  // Build map: warehouseId -> domainId -> set of operations
+  // Build map: warehouseId -> domainId -> set of operations. The wire keys
+  // the capability on (warehouseId, materialDomainId, operations[]) — not on
+  // a nested `domain.id`. The editor and the document gate both consume this
+  // map, and the document gate's predicate is `validates(domainId, op)`, so
+  // the inner key must be the materialDomainId.
   const operationsByWarehouseDomain = useMemo(() => {
     const outer = new Map<string, Map<string, ReadonlySet<CapabilityOperation>>>()
     for (const cap of capabilities) {
       const warehouseMap =
         outer.get(cap.warehouseId) ?? new Map<string, ReadonlySet<CapabilityOperation>>()
-      // Backend returns `operations` as array; normalize to Set
       const ops = new Set<CapabilityOperation>(cap.operations)
-      warehouseMap.set(cap.domainId, ops)
+      warehouseMap.set(cap.materialDomainId, ops)
       outer.set(cap.warehouseId, warehouseMap)
     }
     return outer

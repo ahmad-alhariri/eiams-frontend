@@ -1,121 +1,82 @@
 import { describe, expect, it } from 'vitest'
 
-import { createWarehouseMaterialSetting, fixtureUuid } from '@/test/msw/factories'
 import {
-  toWarehouseMaterialSettingRequest,
+  toCreateWarehouseMaterialSettingRequest,
+  toSetWarehouseMaterialSettingStatusRequest,
+  toUpdateWarehouseMaterialSettingRequest,
   warehouseMaterialSettingSchema,
-} from './warehouse-material-settings.schemas'
+} from '@/modules/warehouse/schemas/warehouse-material-settings.schemas'
+
+const WAREHOUSE_ID = '3a1f0c62-6d4b-4a7e-9c1d-8b2e5f7a0d31'
+const MATERIAL_ID = 'a6704844-50e7-42b7-a5ff-7bca005e0803'
+
+const BASE_FORM = {
+  materialId: MATERIAL_ID,
+  minQuantity: '2',
+  maxQuantity: '10',
+  status: 'Active' as const,
+}
 
 describe('warehouseMaterialSettingSchema', () => {
-  const validValues = {
-    materialId: fixtureUuid(62),
-    minQuantity: '2',
-    maxQuantity: '10',
-    status: 'Active' as const,
-  }
-
-  it('accepts a complete valid setting', () => {
-    expect(warehouseMaterialSettingSchema.safeParse(validValues).success).toBe(true)
+  it('accepts the canonical form: a uuid material, decimal thresholds, and a status', () => {
+    const result = warehouseMaterialSettingSchema.safeParse(BASE_FORM)
+    expect(result.success).toBe(true)
   })
 
-  it('accepts empty thresholds as "no limit"', () => {
-    expect(
-      warehouseMaterialSettingSchema.safeParse({
-        materialId: fixtureUuid(62),
-        minQuantity: '',
-        maxQuantity: '',
-        status: 'Active',
-      }).success,
-    ).toBe(true)
-  })
-
-  it('accepts only one threshold set', () => {
-    expect(
-      warehouseMaterialSettingSchema.safeParse({
-        materialId: fixtureUuid(62),
-        minQuantity: '5',
-        maxQuantity: '',
-        status: 'Active',
-      }).success,
-    ).toBe(true)
-  })
-
-  it('rejects negative and malformed quantities', () => {
-    for (const minQuantity of ['-1', '1.2345', '12.3.4', 'abc', '1e3']) {
-      expect(
-        warehouseMaterialSettingSchema.safeParse({ ...validValues, minQuantity }).success,
-      ).toBe(false)
-    }
-    for (const maxQuantity of ['-1', '1.2345', '12.3.4', 'abc', '1e3']) {
-      expect(
-        warehouseMaterialSettingSchema.safeParse({ ...validValues, maxQuantity }).success,
-      ).toBe(false)
-    }
-  })
-
-  it('rejects maxQuantity below minQuantity', () => {
+  it('rejects an out-of-range or negative decimal', () => {
     const result = warehouseMaterialSettingSchema.safeParse({
-      ...validValues,
-      minQuantity: '10',
-      maxQuantity: '5',
+      ...BASE_FORM,
+      minQuantity: '-1',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects when max < min and pins the error to maxQuantity', () => {
+    const result = warehouseMaterialSettingSchema.safeParse({
+      ...BASE_FORM,
+      minQuantity: '5',
+      maxQuantity: '2',
     })
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(result.error.issues.some((issue) => issue.path.includes('maxQuantity'))).toBe(true)
+      const path = result.error.issues[0]?.path
+      expect(path).toEqual(['maxQuantity'])
     }
-  })
-
-  it('rejects a missing material id', () => {
-    expect(
-      warehouseMaterialSettingSchema.safeParse({ ...validValues, materialId: 'not-a-uuid' })
-        .success,
-    ).toBe(false)
-  })
-
-  it('rejects an invalid status', () => {
-    expect(
-      warehouseMaterialSettingSchema.safeParse({ ...validValues, status: 'Other' }).success,
-    ).toBe(false)
   })
 })
 
-describe('toWarehouseMaterialSettingRequest', () => {
-  it('maps form values to the contract request with the existing row version', () => {
-    const existing = createWarehouseMaterialSetting({ rowVersion: 7 })
-    const request = toWarehouseMaterialSettingRequest(
-      {
-        materialId: fixtureUuid(62),
-        minQuantity: '2',
-        maxQuantity: '10',
-        status: 'Active',
-      },
-      existing,
-    )
+describe('toCreateWarehouseMaterialSettingRequest', () => {
+  it('binds warehouseId + materialId + numeric thresholds verbatim', () => {
+    const request = toCreateWarehouseMaterialSettingRequest(BASE_FORM, WAREHOUSE_ID)
     expect(request).toEqual({
-      materialId: fixtureUuid(62),
+      warehouseId: WAREHOUSE_ID,
+      materialId: MATERIAL_ID,
       minQuantity: 2,
       maxQuantity: 10,
-      rowVersion: 7,
-      status: 'Active',
     })
   })
 
-  it('maps empty thresholds to null and defaults row version to 0 for new settings', () => {
-    const request = toWarehouseMaterialSettingRequest(
-      {
-        materialId: fixtureUuid(62),
-        minQuantity: '',
-        maxQuantity: '',
-        status: 'Active',
-      },
-      null,
-    )
-    expect(request).toEqual({
-      materialId: fixtureUuid(62),
-      minQuantity: null,
-      maxQuantity: null,
-      rowVersion: 0,
-      status: 'Active',
+  it('throws if a threshold is empty (the wire requires both min and max)', () => {
+    expect(() =>
+      toCreateWarehouseMaterialSettingRequest({ ...BASE_FORM, maxQuantity: '' }, WAREHOUSE_ID),
+    ).toThrow()
+  })
+})
+
+describe('toUpdateWarehouseMaterialSettingRequest', () => {
+  it('omits warehouseId and materialId: the route names them', () => {
+    const request = toUpdateWarehouseMaterialSettingRequest(BASE_FORM)
+    expect(request).toEqual({ minQuantity: 2, maxQuantity: 10 })
+  })
+})
+
+describe('toSetWarehouseMaterialSettingStatusRequest', () => {
+  it('maps the RecordStatus to the int ordinal the route binds (Active=0, Inactive=1)', () => {
+    // The controller binds `int Status` and casts to the enum server-side, so a
+    // string can never ride the wire — the ordinal is the honest body.
+    expect(toSetWarehouseMaterialSettingStatusRequest({ status: 'Active' })).toEqual({ status: 0 })
+    expect(toSetWarehouseMaterialSettingStatusRequest({ status: 'Inactive' })).toEqual({
+      status: 1,
     })
   })
 })

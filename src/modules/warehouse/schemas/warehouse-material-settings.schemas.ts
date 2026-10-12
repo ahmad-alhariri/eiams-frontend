@@ -1,9 +1,6 @@
 import { z } from 'zod'
 
-import type {
-  WarehouseMaterialSetting,
-  WarehouseMaterialSettingUpsertRequest,
-} from '@/modules/warehouse/types/warehouse.api-types'
+import { statusOrdinal } from '@/modules/warehouse/types/warehouse.types'
 
 /**
  * Non-negative DECIMAL(18,3) threshold kept as source text (like the
@@ -25,7 +22,12 @@ const optionalThreshold = (label: string) =>
       thresholdMessage(label),
     )
 
-/** Form mirror of WarehouseMaterialSettingUpsertRequest with text thresholds. */
+/**
+ * Form mirror of `CreateWarehouseMaterialSettingRequest` / `UpdateWarehouse
+ * MaterialSettingRequest` with text thresholds. The wire requires both
+ * `minQuantity` and `maxQuantity` to be present and non-negative; the
+ * `.refine` enforces `min <= max` in the form.
+ */
 export const warehouseMaterialSettingSchema = z
   .object({
     materialId: z.string().uuid('اختر مادة صالحة.'),
@@ -47,27 +49,66 @@ export const warehouseMaterialSettingSchema = z
 
 export type WarehouseMaterialSettingFormValues = z.infer<typeof warehouseMaterialSettingSchema>
 
-function toNullableQuantity(value: string | undefined): number | null {
-  if (value === undefined || value === '') return null
+function toRequiredQuantity(value: string | undefined, field: string): number {
+  if (value === undefined || value === '') {
+    throw new Error(`Material setting ${field} is required.`)
+  }
   return Number(value)
 }
 
-/** Maps form-owned values to the exact contract request, including concurrency.
+/**
+ * Maps form-owned values to the create request.
  *
- * `warehouseId` is NOT set here: it is the route parameter
- * (`PUT /warehouses/{warehouseId}/material-settings`) and the contract body
- * omits it. The previous `existing?.warehouseId ?? ''` sent an empty string for a
- * new setting, which the backend's `[JsonRequired] Guid WarehouseId` rejects.
+ * The create body carries `warehouseId` because the per-setting POST route
+ * (`/warehouse-material-settings`) does not encode the warehouse in the
+ * path. `existing` is null on create.
  */
-export function toWarehouseMaterialSettingRequest(
+export function toCreateWarehouseMaterialSettingRequest(
   values: WarehouseMaterialSettingFormValues,
-  existing: WarehouseMaterialSetting | null,
-): WarehouseMaterialSettingUpsertRequest {
+  warehouseId: string,
+): {
+  warehouseId: string
+  materialId: string
+  minQuantity: number
+  maxQuantity: number
+} {
   return {
+    warehouseId,
     materialId: values.materialId,
-    minQuantity: toNullableQuantity(values.minQuantity),
-    maxQuantity: toNullableQuantity(values.maxQuantity),
-    rowVersion: existing?.rowVersion ?? 0,
-    status: values.status,
+    minQuantity: toRequiredQuantity(values.minQuantity, 'minQuantity'),
+    maxQuantity: toRequiredQuantity(values.maxQuantity, 'maxQuantity'),
   }
+}
+
+/**
+ * Maps form-owned values to the per-setting update request. The route
+ * (`PUT /warehouse-material-settings/{settingId}`) already names the
+ * setting and the warehouse, so the body carries only the thresholds.
+ * There is no rowVersion on the wire.
+ */
+export function toUpdateWarehouseMaterialSettingRequest(
+  values: WarehouseMaterialSettingFormValues,
+): { minQuantity: number; maxQuantity: number } {
+  return {
+    minQuantity: toRequiredQuantity(values.minQuantity, 'minQuantity'),
+    maxQuantity: toRequiredQuantity(values.maxQuantity, 'maxQuantity'),
+  }
+}
+
+/**
+ * Status toggle body. The setter route is a separate PUT so a status
+ * change never rides the same call as a threshold edit. A no-op status
+ * flip is rejected by the backend with `ALREADY_ACTIVE` /
+ * `ALREADY_INACTIVE` — surfacing the optimistic toggle would be a
+ * silent failure, so the form re-reads the row and clears the form
+ * dirty state if the server returns 409.
+ *
+ * `status` is the INT ORDINAL the route binds (`0` = Active, `1` =
+ * Inactive), produced by `statusOrdinal`, because the controller casts an
+ * `int` to the enum server-side and a string cannot bind it.
+ */
+export function toSetWarehouseMaterialSettingStatusRequest(
+  values: Pick<WarehouseMaterialSettingFormValues, 'status'>,
+): { status: number } {
+  return { status: statusOrdinal(values.status) }
 }
