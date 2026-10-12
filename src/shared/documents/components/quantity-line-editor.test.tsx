@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import { okJson, okPageJson } from '@/test/msw/envelope'
+import { okPageJson } from '@/test/msw/envelope'
 import { createWarehouseCapability, fixtureUuid } from '@/test/msw/factories'
 import {
   wireMaterial,
@@ -266,16 +266,14 @@ describe('QuantityLineEditor', () => {
     const warehouseId = fixtureUuid(30)
     const capability = createWarehouseCapability({
       warehouseId,
-      domain: {
-        id: fixtureUuid(20),
-        displayName: 'المستلزمات المنزلية',
-        code: 'DOM-20',
-      },
+      materialDomainId: fixtureUuid(20),
+      materialDomainCode: 'DOM-20',
+      materialDomainName: 'المستلزمات المنزلية',
       operations: ['Issue'],
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${warehouseId}/capabilities`, () =>
-        okJson([capability]),
+        okPageJson([capability], { page: 1, pageSize: 50, totalCount: 1, totalPages: 1 }),
       ),
     )
     useCatalogHandlers()

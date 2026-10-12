@@ -89,7 +89,9 @@ const assetMaterial = wireMaterial({
 })
 const capability = createWarehouseCapability({
   warehouseId: WAREHOUSE_ID,
-  domain: { id: MATERIAL_DOMAIN_ID, displayName: 'تقنية المعلومات' },
+  materialDomainId: MATERIAL_DOMAIN_ID,
+  materialDomainName: 'تقنية المعلومات',
+  materialDomainCode: 'TEST',
   operations: ['Receiving', 'Issue'],
 })
 
@@ -322,7 +324,9 @@ describe('OpeningDocumentFormPage', () => {
     const store: WarehouseDocument[] = []
     const unsupportedCapability = createWarehouseCapability({
       warehouseId: WAREHOUSE_ID,
-      domain: { id: material.materialDomainId, displayName: material.materialDomainName },
+      materialDomainId: material.materialDomainId,
+      materialDomainName: material.materialDomainName,
+      materialDomainCode: 'TEST',
       operations: ['Issue'],
     })
     usePageHandlers(store, () => 'EIAMS-OPN-2024-0003', [unsupportedCapability])
@@ -350,10 +354,9 @@ describe('OpeningDocumentFormPage', () => {
     const store: WarehouseDocument[] = []
     const unsupportedCapability = createWarehouseCapability({
       warehouseId: WAREHOUSE_ID,
-      domain: {
-        id: assetMaterial.materialDomainId,
-        displayName: assetMaterial.materialDomainName,
-      },
+      materialDomainId: assetMaterial.materialDomainId,
+      materialDomainName: assetMaterial.materialDomainName,
+      materialDomainCode: 'TEST',
       operations: ['Issue'],
     })
     usePageHandlers(store, () => 'EIAMS-OPN-2024-0007', [unsupportedCapability])
