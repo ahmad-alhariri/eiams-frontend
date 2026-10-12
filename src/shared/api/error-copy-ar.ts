@@ -330,8 +330,14 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'القدرة غير ممنوحة.',
     detailAr: null,
   },
-  WAREHOUSE_CAPABILITIES_FORBIDDEN: {
-    titleAr: 'ليست لديك صلاحية إدارة قدرات المستودع.',
+  // NOTE: `WarehouseCapabilities.Forbidden` and
+  // `WarehouseCapabilityOperations.Forbidden` are deliberately ABSENT. The
+  // lvtk.2 owner ruling proved the [HasPermission] gate rejects an unauthorized
+  // caller BEFORE any handler runs, so the 403 on these routes is the generic
+  // `AUTHORIZATION_FORBIDDEN`; the capability-specific Forbidden codes are
+  // unreachable on the wire and need no copy (whhu.16 withdrawal).
+  WAREHOUSE_CAPABILITY_OPERATIONS_NOT_FOUND: {
+    titleAr: 'لم يتم العثور على العملية المطلوبة داخل القدرة.',
     detailAr: null,
   },
   WAREHOUSE_CAPABILITY_OPERATIONS_OPERATION_NOT_GRANTED: {
