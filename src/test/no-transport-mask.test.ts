@@ -94,7 +94,10 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // `organization-form-dialog.tsx`, `organizations-list-page.tsx`).
     // 385 = 384 plus `src/modules/catalog/components/material-status-badge.tsx`,
     // the Arabic status badge the catalog screens render per record.
-    assertScannedFiles(PRODUCTION_FILES, 385)
+    // 386 = 385 plus `src/modules/admin/utils/role-labels.ts`, the one resolver
+    // that turns a role id into its Arabic label for the users directory, the
+    // user detail page and the user form dialog alike (`whhu.17`).
+    assertScannedFiles(PRODUCTION_FILES, 386)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

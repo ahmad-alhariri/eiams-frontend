@@ -85,7 +85,9 @@ describe('UserFormDialog', () => {
     // The server stores the name as two fields and never composes one.
     expect(within(dialog).getByLabelText('الاسم الأول')).toHaveValue('')
     expect(within(dialog).getByLabelText('اسم العائلة')).toHaveValue('')
-    expect(within(dialog).getByLabelText('الحالة')).toHaveTextContent('نشط')
+    // No status control: NEITHER request body binds one, so the select this
+    // dialog used to render was accepted and discarded on every save.
+    expect(within(dialog).queryByLabelText('الحالة')).not.toBeInTheDocument()
   })
 
   it('requires the role and scope on create, because the backend rejects a bare account', async () => {
@@ -244,7 +246,14 @@ describe('UserFormDialog', () => {
     expect(within(dialog).getByLabelText('البريد الإلكتروني')).toHaveValue('ahmad@eiams.local')
     expect(within(dialog).getByLabelText('الاسم الأول')).toHaveValue('أحمد')
     expect(within(dialog).getByLabelText('اسم العائلة')).toHaveValue('محمد')
-    expect(within(dialog).getByLabelText('الحالة')).toHaveTextContent('موقوف')
+    // Status is not editable here, in either mode: creation stores Active and
+    // suspension is the separate lifecycle operation behind the row action.
+    expect(within(dialog).queryByLabelText('الحالة')).not.toBeInTheDocument()
+    // The dialog description names the row action instead of offering a control
+    // that cannot honour the choice.
+    expect(
+      within(dialog).getByText(/الحالة عبر زر الإيقاف أو التنشيط في القائمة/u),
+    ).toBeInTheDocument()
     // The backend serves the login on reads and no longer accepts it on update, so it
     // is shown but cannot be edited.
     expect(within(dialog).getByLabelText('اسم الدخول')).toHaveValue(existing.username)
@@ -287,7 +296,6 @@ describe('UserFormDialog', () => {
       username: 'sara.ali',
       firstName: 'سارة',
       lastName: 'علي',
-      status: 'Active',
       password: 'Password123!',
       roleId: ROLE_A.id,
       // Enterprise is expressed as the contract's null identifier, so the form

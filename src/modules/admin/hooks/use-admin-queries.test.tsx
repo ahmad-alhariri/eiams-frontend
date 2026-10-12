@@ -48,7 +48,9 @@ afterEach(() => {
 describe('admin query hooks', () => {
   it('uses scope-isolated keys for permission, role, user, and assignment resources', () => {
     const scope = { kind: 'enterprise' as const }
-    const query = { pageIndex: 1, search: 'مدير' }
+    // `page`, not `pageIndex`: `ListUsersQuery` binds the 1-based field the
+    // backend reads, and this object is also the cache key.
+    const query = { page: 2, search: 'مدير' }
 
     expect(adminQueryKeys.permissions(scope)).toEqual([
       'scoped',

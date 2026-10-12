@@ -6,7 +6,8 @@ import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createUserDirectoryRow } from '@/test/msw/factories'
+import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
+import { createRoleProjection, createSession, createUserDirectoryRow } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -21,10 +22,21 @@ import UsersListPage from './users-list-page'
 
 const API_BASE_URL = '/api/v1'
 
-function createWrapper(options: { retry?: false } = {}) {
+/** Pinned so the row's `roleId` and the catalogue's `id` are the same role. */
+const ROLE_ID = '00000000-0000-4000-8000-0000000000e5'
+
+function createWrapper(
+  options: { readonly retry?: false; readonly permissions?: readonly string[] } = {},
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: options.retry === false ? false : 1 } },
   })
+  if (options.permissions !== undefined) {
+    client.setQueryData(
+      authSessionQueryKey,
+      createSession({ permissionCodes: options.permissions }),
+    )
+  }
 
   return function QueryWrapper({ children }: PropsWithChildren) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -102,5 +114,69 @@ describe('UsersListPage', () => {
 
     await waitFor(() => expect(attempts).toBe(2))
     expect(await screen.findByText('مستخدم اختباري')).toBeInTheDocument()
+  })
+
+  it('renders the Arabic role label from the catalogue, not the served role code', async () => {
+    // The directory row joins to `Role.Name`, so what the server sends is the CODE.
+    // The Arabic label is served only by GET /admin/roles, which this page already
+    // fetches — the column used to ignore it and print `SYSTEM_ADMIN` in an Arabic
+    // table.
+    const row = createUserDirectoryRow({ roleId: ROLE_ID, roleName: 'SYSTEM_ADMIN' })
+    const role = createRoleProjection({ id: ROLE_ID, name: 'SYSTEM_ADMIN', nameAr: 'مدير النظام' })
+
+    server.use(
+      http.get(`${API_BASE_URL}/admin/users`, () => okPageJson([row])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => okPageJson([role])),
+    )
+
+    render(<UsersListPage />, {
+      wrapper: createWrapper({ permissions: ['admin.user.manage', 'admin.role.view'] }),
+    })
+
+    expect(await screen.findByText('مدير النظام')).toBeInTheDocument()
+    expect(screen.queryByText('SYSTEM_ADMIN')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the served role code when the catalogue is not readable', async () => {
+    // GET /admin/roles needs `admin.role.view`, which `admin.user.manage` does not
+    // imply. A viewer without it still reads the directory, so the row's own
+    // server-resolved code is shown rather than a label that was never fetched.
+    const row = createUserDirectoryRow({ roleId: ROLE_ID, roleName: 'SYSTEM_ADMIN' })
+
+    server.use(http.get(`${API_BASE_URL}/admin/users`, () => okPageJson([row])))
+
+    render(<UsersListPage />, {
+      wrapper: createWrapper({ permissions: ['admin.user.manage'] }),
+    })
+
+    expect(await screen.findByText('SYSTEM_ADMIN')).toBeInTheDocument()
+    expect(screen.queryByText('مدير النظام')).not.toBeInTheDocument()
+  })
+
+  it('shows an em dash for a user with no assignment, not an empty cell', async () => {
+    // An account can exist before its assignment does. The backend sends roleId,
+    // roleName and scopeType as three nulls together.
+    const row = createUserDirectoryRow({ roleId: null, roleName: null, scopeId: null })
+    const other = createUserDirectoryRow({
+      id: '00000000-0000-4000-8000-0000000000f6',
+      email: 'assigned.user@eiams.local',
+      firstName: 'أحمد',
+      lastName: 'محمد',
+      roleId: ROLE_ID,
+      roleName: 'SYSTEM_ADMIN',
+    })
+
+    server.use(http.get(`${API_BASE_URL}/admin/users`, () => okPageJson([row, other])))
+
+    const { container } = render(<UsersListPage />, {
+      wrapper: createWrapper({ permissions: ['admin.user.manage', 'admin.role.view'] }),
+    })
+
+    await screen.findByText('مستخدم اختباري')
+    // Queried off the DOM rather than by ARIA role: a native `<table>` carries no
+    // explicit `role="table"`, so its cells are not exposed as `rowcell`.
+    const cells = Array.from(container.querySelectorAll('tbody td')).map((cell) => cell.textContent)
+    expect(cells).toContain('—')
+    expect(cells).toContain('SYSTEM_ADMIN')
   })
 })

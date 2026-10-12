@@ -2,21 +2,24 @@ import { z } from 'zod'
 
 import { ROLE_SCOPE_TYPES } from '@/modules/admin/schemas/user-role-scopes.schemas'
 import { isUuidLike } from '@/shared/utils/uuid'
-import type {
-  CreateUserRequest,
-  UpdateUserRequest,
-  UserAccountStatus,
-} from '@/modules/admin/types/user.types'
+import type { CreateUserRequest, UpdateUserRequest } from '@/modules/admin/types/user.types'
 
 /**
  * One form shape for both account operations.
  *
- * Creation and metadata editing overlap on five fields and differ on four
+ * Creation and metadata editing overlap on four fields and differ on four
  * (`password`, `roleId`, `scopeType`, `scopeId`). A single superset shape keeps the
  * form typed without a union, and the differing fields are made REQUIRED only in
  * create mode by {@link userFormSchema} — which is what the backend enforces:
  * `CreateUserController-RequestBody` binds them all, while
  * `UpdateUserController-RequestBody` binds none of them.
+ *
+ * NO `status` FIELD, deliberately. Neither request body binds one: creation has no
+ * status member at all, and suspension is its own operation behind
+ * `SetUserStatusController` with its own guards and token revocation. The form used
+ * to carry a status select that both write paths silently dropped — an operator who
+ * changed it and saved was told the edit succeeded while nothing changed. The status
+ * is therefore owned by the list row action and shown nowhere in this dialog.
  *
  * The account's name is entered as the two fields the server actually stores. The
  * backend never composes a single display name, so the generated form's
@@ -38,9 +41,8 @@ export function userFormSchema(isCreate: boolean) {
     lastName: z
       .string()
       .trim()
-      .min(1, 'اسم العائلة مطلوب.')
+      .min(1, 'الاسم العائلة مطلوب.')
       .max(125, 'يجب ألّا يتجاوز اسم العائلة 125 محرفاً.'),
-    status: z.enum(['Active', 'Suspended']),
     password: z.string(),
     roleId: z.string().trim(),
     scopeType: z.enum(ROLE_SCOPE_TYPES),
@@ -78,8 +80,6 @@ export function userFormSchema(isCreate: boolean) {
 
 export type UserFormValues = z.infer<ReturnType<typeof userFormSchema>>
 
-const ACTIVE: UserAccountStatus = 'Active'
-
 /** Empty values for a fresh account. */
 export function emptyUserForm(): UserFormValues {
   return {
@@ -87,7 +87,6 @@ export function emptyUserForm(): UserFormValues {
     username: '',
     firstName: '',
     lastName: '',
-    status: ACTIVE,
     password: '',
     roleId: '',
     scopeType: 'Enterprise',
@@ -117,9 +116,10 @@ export function toCreateUserRequest(values: UserFormValues): CreateUserRequest {
  * Maps validated edit values to the exact request body.
  *
  * Carries no `username` (immutable after creation) and no `status` (its own
- * operation), and no `rowVersion`: no user projection exposes a concurrency token
- * yet, and the backend binds `additionalProperties:false`, so sending one is
- * rejected outright.
+ * operation), and `expectedRowVersion` is REQUIRED: `UpdateUserController-RequestBody`
+ * binds it with `JsonRequired`, and a stale value is answered with 409
+ * `USERS_ROW_VERSION_MISMATCH` so a concurrent save is a conflict to review rather
+ * than a silent overwrite.
  */
 export function toUpdateUserRequest(values: UserFormValues, rowVersion: number): UpdateUserRequest {
   return {

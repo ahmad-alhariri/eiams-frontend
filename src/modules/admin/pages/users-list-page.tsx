@@ -17,6 +17,7 @@ import {
 import { useRolesQuery, useUsersQuery } from '@/modules/admin/hooks/use-admin-queries'
 import type { ListUsersQuery } from '@/modules/admin/types/admin.types'
 import { userDisplayName, type UserDirectoryRow } from '@/modules/admin/types/user.types'
+import { buildRoleLabelMap, resolveRoleLabelAr } from '@/modules/admin/utils/role-labels'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
@@ -32,9 +33,14 @@ import { pageRows } from '@/shared/utils/table-data'
 const userColumnHelper = createColumnHelper<typeof dataTableFeatures, UserDirectoryRow>()
 
 /**
- * Scoped directory of application accounts. The v1 API owns the pagination and
- * text search. Account creation, editing, and status changes are available to
- * users holding `admin.user.manage`; everyone else sees a read-only directory.
+ * Enterprise-scoped directory of application accounts.
+ *
+ * The v1 API owns the pagination and the text search, and it authorizes this read
+ * against the Enterprise scope specifically: `UserAdministrationAuthorization`
+ * requires both `admin.user.manage` and an Enterprise assignment, so a Site or
+ * Warehouse administrator never reaches it. Account creation, editing, and status
+ * changes are available to `admin.user.manage` holders; everyone else sees a
+ * read-only directory.
  */
 function UsersListPage() {
   const { has } = usePermission()
@@ -56,8 +62,14 @@ function UsersListPage() {
     [currentPage, pageSize, search],
   )
   const usersQuery = useUsersQuery(usersQueryInput)
+  // The role catalogue is the ONLY source of the Arabic label, and reading it needs
+  // `admin.role.view` — which `admin.user.manage` does not imply. So the query stays
+  // gated on both codes, exactly as before, and the column falls back to the served
+  // role code when the catalogue was never fetched. Widening this gate would turn a
+  // 403 into an error state on a directory the viewer is allowed to read.
   const canSelectRoles = canManage && has('admin.role.view')
   const rolesQuery = useRolesQuery(canSelectRoles)
+  const roleLabels = useMemo(() => buildRoleLabelMap(rolesQuery.data), [rolesQuery.data])
   const createMutation = useCreateUserMutation()
   const updateMutation = useUpdateUserMutation()
   const statusMutation = useSetUserStatusMutation()
@@ -145,8 +157,19 @@ function UsersListPage() {
         userColumnHelper.accessor('roleName', {
           id: 'roleName',
           header: 'الدور',
-          // Carried on the directory row only; the single-user read omits it.
-          cell: ({ getValue }) => getValue() ?? <span className="text-muted-foreground">—</span>,
+          // The directory row carries the role CODE (`SYSTEM_ADMIN`), not a label:
+          // `GetUsersQueryHandler` projects `Role.Name`. The Arabic label lives
+          // only in the role catalogue, so it is resolved from there and the code
+          // is shown verbatim when the catalogue was never read. Rendering a
+          // placeholder instead would claim a fact the server never stated.
+          cell: ({ row }) => {
+            const label = resolveRoleLabelAr(roleLabels, row.original.roleId, row.original.roleName)
+            return label === null ? (
+              <span className="text-muted-foreground">—</span>
+            ) : (
+              <span>{label}</span>
+            )
+          },
         }),
         userColumnHelper.accessor('status', {
           id: 'status',
@@ -189,7 +212,7 @@ function UsersListPage() {
             ]
           : []),
       ]),
-    [canManage, openEdit, handleToggleStatus],
+    [canManage, openEdit, handleToggleStatus, roleLabels],
   )
 
   const page = usersQuery.data
@@ -198,7 +221,7 @@ function UsersListPage() {
     <div dir="rtl" className="min-w-0">
       <PageHeader
         title="المستخدمون"
-        subtitle="دليل حسابات المستخدمين ضمن نطاق العمل الحالي."
+        subtitle="إدارة حسابات المستخدمين على نطاق المؤسسة بالكامل."
         toolbar={
           canManage ? (
             <Button type="button" onClick={openCreate}>
@@ -211,7 +234,7 @@ function UsersListPage() {
 
       <ContentCard
         title="قائمة المستخدمين"
-        description="ابحث باسم المستخدم أو اسم الدخول، ثم تنقّل بين صفحات الخادم."
+        description="ابحث بالبريد الإلكتروني أو الاسم، ثم تنقّل بين صفحات الخادم."
       >
         <DataTableServer
           columns={columns}
@@ -231,7 +254,10 @@ function UsersListPage() {
           onPageSizeChange={setPageSize}
           searchQuery={search}
           onSearchChange={handleSearchChange}
-          searchPlaceholder="ابحث باسم المستخدم أو اسم الدخول..."
+          // The server searches `Email`, `FirstName` and `LastName` and nothing
+          // else — `GetUsersQueryHandler` builds the LIKE predicate from those
+          // three. Naming the login here promised a match the API cannot make.
+          searchPlaceholder="ابحث بالبريد الإلكتروني أو الاسم..."
         />
       </ContentCard>
 
