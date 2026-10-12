@@ -27,11 +27,22 @@ export type UserAccountStatus = 'Active' | 'Suspended'
  * Distinct from {@link UserDetailProjection} because the backend serves two
  * different records: the list additionally carries the user's sole role-and-scope
  * assignment, while the detail read does not.
+ *
+ * WHICH WRITE FIELDS THIS PROJECTION CAN PRESERVE — the question `whhu.17.1`
+ * asks of every admin read. Answer for this row: `email`, `firstName`, `lastName`
+ * and `rowVersion`. It CANNOT preserve `username`, which the single-user read
+ * serves but no write body binds, and it cannot preserve `status`, which is a
+ * separate lifecycle operation. So a form seeded from this row and written back
+ * through `toUpdateUserRequest` keeps exactly the four fields that are real.
  */
 export interface UserDirectoryRow {
   readonly id: string
   readonly email: string
-  /** The login identifier. Served on reads; the backend no longer makes it write-only. */
+  /**
+   * The login identifier. Served on reads so an administrator can SEE the value
+   * the API demands; never bound by `UpdateUserController-RequestBody`, so it is
+   * immutable after creation.
+   */
   readonly username: string
   /**
    * Concurrency token to submit as `expectedRowVersion` on the next write.
@@ -48,6 +59,12 @@ export interface UserDirectoryRow {
   readonly createdAtUtc: string
   /** The sole assignment. All three are null when the user has none yet. */
   readonly roleId?: string | null
+  /**
+   * The role's CODE (`SYSTEM_ADMIN`), not an Arabic label. The list handler joins
+   * to `Role.Name` for identity; `nameAr` is served only by `GET /admin/roles`,
+   * so every screen that displays a role resolves it against that catalogue and
+   * falls back to this code when the catalogue is unreadable.
+   */
   readonly roleName?: string | null
   readonly scopeType?: RoleScopeType | null
   readonly scopeId?: string | null
@@ -79,6 +96,9 @@ export interface UserDetailProjection {
  * The role and scope are REQUIRED and inline: D-SRS-01 makes the account and its
  * sole assignment one server-owned operation, and the backend rejects an omitted
  * assignment rather than creating a zero-assignment account.
+ *
+ * NO `status`: `CreateUserController-RequestBody` has no status member. A new
+ * account is stored Active, and suspension is its own operation.
  */
 export interface CreateUserRequest {
   readonly email: string
@@ -154,10 +174,13 @@ export interface ListUsersRequest {
 /**
  * Paging totals for the directory table.
  *
- * `pageIndex` is the 0-based value the shared table controls use; `page` is the
- * 1-based value the server echoes. Both are present because the UI reads one and
- * the transport the other, and conflating them is how `page=1` became `pageIndex=0`
- * across this codebase.
+ * `pageIndex` is the 0-based value the legacy shared table controls use; `page` is
+ * the 1-based value the server echoes. Both are present because the UI reads one
+ * and the transport the other, and conflating them is how `page=1` became
+ * `pageIndex=0` across this codebase.
+ *
+ * The service reads `page.page` / `page.totalItems` / `page.totalPages` straight
+ * off the transport's already-normalized `ApiPage`; it does not recompute them.
  */
 export interface UserDirectoryMeta {
   readonly pageIndex: number

@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useForm, useWatch, type UseFormReturn } from 'react-hook-form'
 
 import {
@@ -14,6 +14,7 @@ import {
 } from '@/modules/admin/schemas/user.schemas'
 import type { UserDirectoryRow } from '@/modules/admin/types/user.types'
 import { ROLE_SCOPE_TYPE_LABELS_AR } from '@/modules/admin/types/role.types'
+import { buildRoleLabelMap } from '@/modules/admin/utils/role-labels'
 import {
   Form,
   FormControl,
@@ -57,6 +58,12 @@ export interface UserFormDialogProps {
  * D-SRS-01 requires inline; editing has neither, and the role is reassigned through
  * the separate role-scope replacement.
  *
+ * NO status control, in either mode. Neither `CreateUserController-RequestBody` nor
+ * `UpdateUserController-RequestBody` binds one, so the select this dialog used to
+ * render was accepted and discarded on every save. Suspension is its own operation,
+ * reached from the list row action, and the description now says so instead of
+ * offering a control that cannot honour the choice.
+ *
  * The account's name is entered as the two fields the server actually stores
  * (`firstName`, `lastName`). The backend never composes a single display name.
  */
@@ -79,8 +86,10 @@ export function UserFormDialog({
 
   // Read back out of the role list rather than trusting the form to remember a label:
   // the form holds only the id, and the id is not a label.
+  const roleLabels = useMemo(() => buildRoleLabelMap(roles), [roles])
   const selectedRoleId = useWatch({ control: form.control, name: 'roleId' })
-  const selectedRoleNameAr = roles.find((role) => role.id === selectedRoleId)?.nameAr
+  const selectedRoleNameAr =
+    selectedRoleId === undefined ? undefined : roleLabels.get(selectedRoleId)
 
   useEffect(() => {
     if (!open) return
@@ -95,7 +104,6 @@ export function UserFormDialog({
       username: user.username,
       firstName: user.firstName,
       lastName: user.lastName,
-      status: user.status,
     })
   }, [form, open, user])
 
@@ -106,7 +114,7 @@ export function UserFormDialog({
     } catch (error: unknown) {
       const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['email', 'username', 'firstName', 'lastName', 'status'],
+        schemaKeys: ['email', 'username', 'firstName', 'lastName'],
       })
     }
   }
@@ -118,8 +126,8 @@ export function UserFormDialog({
           <DialogTitle>{isCreate ? 'إضافة مستخدم' : 'تعديل المستخدم'}</DialogTitle>
           <DialogDescription>
             {isCreate
-              ? 'أنشئ الحساب مع دوره ونطاقه في عملية واحدة؛ لا يمكن إنشاء حساب بلا إسناد.'
-              : 'عدّل بيانات الحساب. الدور والنطاق يُداران عبر شاشة تعيين الدور والنطاق.'}
+              ? 'أنشئ الحساب مع دوره ونطاقه في عملية واحدة؛ لا يمكن إنشاء حساب بلا إسناد. يُنشأ الحساب نشطاً، وتُدار حالته لاحقاً من إجراءات القائمة.'
+              : 'عدّل بيانات الحساب. الدور والنطاق يُداران عبر شاشة تعيين الدور والنطاق، والحالة عبر زر الإيقاف أو التنشيط في القائمة.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -252,31 +260,6 @@ export function UserFormDialog({
                 <CreateAssignmentFields form={form} isPending={isPending} />
               </>
             ) : null}
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field, fieldState }) => (
-                <FormItem>
-                  <FormLabel>الحالة</FormLabel>
-                  <Select
-                    value={field.value}
-                    disabled={isPending}
-                    onValueChange={(value) => field.onChange(value)}
-                  >
-                    <FormControl>
-                      <SelectTrigger aria-invalid={fieldState.invalid || undefined}>
-                        <SelectValue>{field.value === 'Active' ? 'نشط' : 'موقوف'}</SelectValue>
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="Active">نشط</SelectItem>
-                      <SelectItem value="Suspended">موقوف</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
             <DialogFooter>
               <Button type="submit" loading={isPending}>
                 {isCreate ? 'إضافة مستخدم' : 'حفظ التعديلات'}

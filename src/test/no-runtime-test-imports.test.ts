@@ -101,8 +101,13 @@ import {
  * Re-measured at 385 by `eiams-frontend-whhu.15`, which added the application
  * file `src/modules/catalog/components/material-status-badge.tsx` - the Arabic
  * status badge the catalog screens render per record.
+ * Re-measured at 386 by `eiams-frontend-whhu.17`, which added the application
+ * file `src/modules/admin/utils/role-labels.ts` - the single resolver that maps
+ * a role id to its Arabic label, replacing three separate lookups (and, in the
+ * users table, no lookup at all, which is how `SYSTEM_ADMIN` reached an Arabic
+ * column).
  */
-const SCANNED_FILE_COUNT = 385
+const SCANNED_FILE_COUNT = 386
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

@@ -4,6 +4,7 @@ import { http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createAdminService } from '@/modules/admin/services/admin.service'
+import type { CreateUserRequest } from '@/modules/admin/types/user.types'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import {
@@ -121,13 +122,13 @@ describe('AdminService', () => {
       expectedRowVersion: role.rowVersion,
     }
     // Creation carries the account AND its sole assignment: D-SRS-01 makes them one
-    // server-owned operation, and the backend rejects a bare account.
-    const createUserRequest = {
+    // server-owned operation, and the backend rejects a bare account. No `status`:
+    // the request body has no such member and a new account is stored Active.
+    const createUserRequest: CreateUserRequest = {
       email: user.email,
       username: 'auditor.user',
       firstName: user.firstName,
       lastName: user.lastName,
-      status: user.status,
       password: 'Initial-secret-123',
       roleId: assignment.roleId,
       scopeType: assignment.scopeType,
@@ -252,6 +253,50 @@ describe('AdminService', () => {
       status: 'Suspended',
       expectedRowVersion: user.rowVersion,
     })
+  })
+
+  it('clamps the directory page and page size through the shared wire helper', async () => {
+    const service = setupService()
+    const user = createUserDetail()
+    const receivedQueries: string[] = []
+
+    server.use(
+      http.get(`${API_BASE_URL}/admin/users`, ({ request }) => {
+        receivedQueries.push(new URL(request.url).search)
+        return okPageJson([user])
+      }),
+    )
+
+    // `PaginationQueryParameters` binds `page` with `[Range(1, 21474836)]` and
+    // `pageSize` with `[Range(1, 100)]`. The repository already measured both
+    // failure modes live: `page=0` is a 400 REQUEST_VALIDATION_FAILED, and a
+    // `pageSize` above 100 is silently truncated, so a name past row 100 renders
+    // as `—`. The service must not be able to express either.
+    await service.listUsers({ page: 0, pageSize: 500, search: 'keeper' })
+
+    expect(receivedQueries).toEqual(['?page=1&pageSize=100&search=keeper'])
+  })
+
+  it('omits an absent filter rather than sending the string "undefined"', async () => {
+    const service = setupService()
+    const user = createUserDetail()
+    const receivedQueries: string[] = []
+
+    server.use(
+      http.get(`${API_BASE_URL}/admin/users`, ({ request }) => {
+        receivedQueries.push(new URL(request.url).search)
+        return okPageJson([user])
+      }),
+    )
+
+    // `GetUsersQuery` binds `Search`, `Status` and `HasRoleScope` as nullable.
+    // Axios serializes an explicit `undefined` as the literal string
+    // "undefined", which fails to bind server-side, so an absent filter has to
+    // be omitted entirely. `URL.search` is the empty string when nothing is
+    // sent — `?` alone would mean a key with no value.
+    await service.listUsers({})
+
+    expect(receivedQueries).toEqual([''])
   })
 
   it('reports no assignment as null instead of an error', async () => {

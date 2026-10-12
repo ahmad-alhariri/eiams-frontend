@@ -22,7 +22,6 @@ const base = {
   username: 'keeper',
   firstName: 'خوري',
   lastName: 'وائل',
-  status: 'Active' as const,
   password: 'Password123!',
   scopeType: 'Enterprise' as const,
   scopeId: '',
@@ -32,6 +31,19 @@ describe('userFormSchema create mode', () => {
   it.each(SEEDED_ROLE_IDS)('accepts the seeded role id %s', (roleId) => {
     const result = userFormSchema(true).safeParse({ ...base, roleId })
     expect(result.success).toBe(true)
+  })
+
+  it('accepts no status field at all, because no write body binds one', () => {
+    // `CreateUserController-RequestBody` and `UpdateUserController-RequestBody`
+    // both omit status. The schema must not invent it, and a payload carrying it
+    // must not be rejected either — an absent field is simply not parsed.
+    const result = userFormSchema(true).safeParse({
+      ...base,
+      roleId: SEEDED_ROLE_IDS[0],
+      status: 'Suspended',
+    })
+    expect(result.success).toBe(true)
+    expect(result.data).not.toHaveProperty('status')
   })
 
   it('rejects a value that is not an identifier at all', () => {

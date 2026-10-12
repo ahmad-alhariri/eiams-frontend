@@ -1,7 +1,7 @@
 ﻿import { readTransportError } from '@/shared/api/envelope'
+import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import type { ApiTransport } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
-import type { paths } from '@/shared/types/generated/eiams-v1'
 import type { ListUsersQuery } from '@/modules/admin/types/admin.types'
 import type {
   CreatedUser,
@@ -22,10 +22,21 @@ import type {
   UserRoleScopeProjection,
 } from '@/modules/admin/types/role.types'
 
-const PERMISSIONS_PATH = '/admin/permissions' satisfies keyof paths
-const ROLES_PATH = '/admin/roles' satisfies keyof paths
-const USERS_PATH = '/admin/users' satisfies keyof paths
-const USER_PATH = '/admin/users/{userId}' satisfies keyof paths
+/**
+ * Route constants, declared locally rather than checked against
+ * `keyof paths` from `shared/types/generated/eiams-v1`.
+ *
+ * That artifact is frozen migration scaffolding which `whhu.5` deletes outright,
+ * so `satisfies keyof paths` guarded these constants against a document that is
+ * meant to disappear: the check's passing said nothing about the live contract.
+ * `auth.service.ts` removed the same clause for the same reason and records it
+ * in its own header. The real guard on a path is an integration test that
+ * exercises the endpoint, which is what `admin.service.test.ts` does.
+ */
+const PERMISSIONS_PATH = '/admin/permissions'
+const ROLES_PATH = '/admin/roles'
+const USERS_PATH = '/admin/users'
+const USER_PATH = '/admin/users/{userId}'
 
 /**
  * Suspending an account is its own operation: it carries the security guards and
@@ -173,7 +184,24 @@ export function createAdminService(transport: ApiTransport): AdminService {
         // `page` is 1-based on the wire. The generated operations map advertised
         // `pageIndex`, which the backend does not bind: it was ignored and every
         // "page 2" request silently returned page 1.
-        query: query as Record<string, string | number | boolean | undefined>,
+        //
+        // The page half goes through the shared helper so the backend's numeric
+        // bounds live in ONE place, matching `catalog.service.ts` and
+        // `organization.service.ts`. `toWirePaginationParams` is the ZERO-based
+        // variant and must not be used here: `useServerPagination` already emits
+        // a 1-based page, so subtracting one and adding it back is how `page=0`
+        // reached the wire in the first place.
+        //
+        // The filters are spread individually rather than passed through, because
+        // an absent key must be OMITTED, not set to `undefined`: axios serializes
+        // `{status: undefined}` as the literal string "undefined", which then
+        // fails to bind server-side.
+        query: {
+          ...toWireOneBasedPaginationParams(query),
+          ...(query.search === undefined ? {} : { search: query.search }),
+          ...(query.status === undefined ? {} : { status: query.status }),
+          ...(query.hasRoleScope === undefined ? {} : { hasRoleScope: query.hasRoleScope }),
+        },
       })
       return {
         items: page.items,
