@@ -582,11 +582,13 @@ export function createWarehouseCapability(
 ): WarehouseCapability {
   return withOverrides(
     {
+      id: fixtureUuid(70),
       warehouseId: fixtureUuid(30),
-      domainId: fixtureUuid(20),
-      domain: createNamedReference({ id: fixtureUuid(20), displayName: 'تقنية المعلومات' }),
+      materialDomainId: fixtureUuid(20),
+      materialDomainCode: 'IT',
+      materialDomainName: 'تقنية المعلومات',
+      status: 'Active',
       operations: ['Receiving', 'Issue'],
-      rowVersion: 1,
     },
     overrides,
   )
@@ -597,12 +599,13 @@ export function createWarehouseMaterialSetting(
 ): WarehouseMaterialSetting {
   return withOverrides(
     {
+      id: fixtureUuid(71),
       warehouseId: fixtureUuid(30),
       materialId: fixtureUuid(24),
-      material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
+      materialCode: 'MAT-PC-001',
+      materialNameAr: 'حاسوب مكتبي',
       minQuantity: 2,
       maxQuantity: 10,
-      rowVersion: 1,
       status: 'Active',
     },
     overrides,
