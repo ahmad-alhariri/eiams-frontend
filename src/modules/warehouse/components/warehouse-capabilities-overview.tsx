@@ -44,11 +44,14 @@ export function WarehouseCapabilitiesOverview({ warehouseId }: { warehouseId: st
     )
   }
 
-  const capabilities = capabilitiesQuery.data ?? []
+  const capabilities = capabilitiesQuery.data?.items ?? []
+  // The capability endpoint returns a `PagedResult`; in v1 a single warehouse
+  // holds a handful of capabilities, so a single page (the default 50 rows)
+  // is enough. We still keep the read shape explicit so a future "over 50
+  // capabilities" warehouse will fail loudly here rather than silently
+  // dropping rows.
   const canManage = has('warehouse.manage')
-  const editor = canManage ? (
-    <WarehouseCapabilitiesEditor warehouseId={warehouseId} capabilities={capabilities} />
-  ) : null
+  const editor = canManage ? <WarehouseCapabilitiesEditor warehouseId={warehouseId} /> : null
 
   if (capabilities.length === 0) {
     return (
@@ -67,7 +70,7 @@ export function WarehouseCapabilitiesOverview({ warehouseId }: { warehouseId: st
   return (
     <ContentCard
       title="قدرات المستودع"
-      description="المجالات والعمليات المسموح بها لهذا المستودع. تُطبَّق القدرة عند ترحيل المستندات."
+      description="المجالات والعمليات المسموح بها لهذا المستودع. تُطبَّق القدرة عند ترحيل المستندات."
       action={editor}
     >
       <div className="overflow-x-auto">
@@ -81,18 +84,21 @@ export function WarehouseCapabilitiesOverview({ warehouseId }: { warehouseId: st
               <th scope="col" className="px-3 py-3 text-start font-medium">
                 العمليات المسموحة
               </th>
+              <th scope="col" className="px-3 py-3 text-start font-medium">
+                الحالة
+              </th>
             </tr>
           </thead>
           <tbody>
             {capabilities.map((capability) => (
-              <tr key={capability.domainId} className="border-b border-border last:border-b-0">
+              <tr key={capability.id} className="border-b border-border last:border-b-0">
                 <td className="px-3 py-4 font-medium text-foreground">
-                  {capability.domain.displayName}
+                  {capability.materialDomainName}
                 </td>
                 <td className="px-3 py-4">
                   <ul
                     className="flex flex-wrap gap-2"
-                    aria-label={`عمليات ${capability.domain.displayName}`}
+                    aria-label={`عمليات ${capability.materialDomainName}`}
                   >
                     {capability.operations.map((operation) => (
                       <li key={operation}>
@@ -100,6 +106,9 @@ export function WarehouseCapabilitiesOverview({ warehouseId }: { warehouseId: st
                       </li>
                     ))}
                   </ul>
+                </td>
+                <td className="px-3 py-4 text-sm text-muted-foreground">
+                  {capability.status === 'Active' ? 'نشطة' : 'غير نشطة'}
                 </td>
               </tr>
             ))}

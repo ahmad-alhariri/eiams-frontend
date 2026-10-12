@@ -67,11 +67,11 @@ export function WarehouseMaterialSettingsOverview({
   const columns = useMemo(
     () =>
       settingColumnHelper.columns([
-        settingColumnHelper.accessor('material.displayName', {
+        settingColumnHelper.accessor('materialNameAr', {
           id: 'material',
           header: 'المادة',
         }),
-        settingColumnHelper.accessor((s) => s.material.code ?? '—', {
+        settingColumnHelper.accessor((s) => s.materialCode, {
           id: 'materialCode',
           header: 'الرمز',
           cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
@@ -79,12 +79,12 @@ export function WarehouseMaterialSettingsOverview({
         settingColumnHelper.accessor('minQuantity', {
           id: 'minQuantity',
           header: 'الحد الأدنى',
-          cell: ({ getValue }) => <span dir="ltr">{getValue() ?? '—'}</span>,
+          cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
         }),
         settingColumnHelper.accessor('maxQuantity', {
           id: 'maxQuantity',
           header: 'الحد الأعلى',
-          cell: ({ getValue }) => <span dir="ltr">{getValue() ?? '—'}</span>,
+          cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
         }),
         settingColumnHelper.accessor('status', {
           header: 'الحالة',
@@ -100,7 +100,7 @@ export function WarehouseMaterialSettingsOverview({
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`تعديل إعداد ${row.original.material.displayName}`}
+                    aria-label={`تعديل إعداد ${row.original.materialNameAr}`}
                     onClick={() => openEdit(row.original)}
                   >
                     <IconEdit aria-hidden />
@@ -113,11 +113,11 @@ export function WarehouseMaterialSettingsOverview({
     [canManage, openEdit],
   )
 
-  const meta = settingsQuery.data?.meta
-  const totalItems = meta?.totalItems ?? 0
+  const data = settingsQuery.data
+  const totalItems = data?.totalItems ?? 0
   const totalPages =
-    meta?.pageSize !== undefined && meta?.pageSize !== 0
-      ? Math.max(Math.ceil(totalItems / meta.pageSize), 1)
+    data?.pageSize !== undefined && data?.pageSize !== 0
+      ? Math.max(Math.ceil(totalItems / data.pageSize), 1)
       : 1
 
   return (

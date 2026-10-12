@@ -4,11 +4,17 @@ import { useForm, useWatch } from 'react-hook-form'
 
 import { useMaterialSelector } from '@/shared/selectors/adapters/material-selector'
 import {
-  toWarehouseMaterialSettingRequest,
+  toCreateWarehouseMaterialSettingRequest,
+  toSetWarehouseMaterialSettingStatusRequest,
+  toUpdateWarehouseMaterialSettingRequest,
   warehouseMaterialSettingSchema,
   type WarehouseMaterialSettingFormValues,
 } from '@/modules/warehouse/schemas/warehouse-material-settings.schemas'
-import { useUpsertWarehouseMaterialSettingMutation } from '@/modules/warehouse/hooks/use-warehouse-mutations'
+import {
+  useCreateWarehouseMaterialSettingMutation,
+  useSetWarehouseMaterialSettingStatusMutation,
+  useUpdateWarehouseMaterialSettingMutation,
+} from '@/modules/warehouse/hooks/use-warehouse-mutations'
 import {
   Form,
   FormControl,
@@ -109,19 +115,26 @@ export function WarehouseMaterialSettingsEditor({
   onOpenChange,
 }: WarehouseMaterialSettingsEditorProps) {
   const { confirm, element: confirmElement } = useConfirm()
-  const upsertMutation = useUpsertWarehouseMaterialSettingMutation()
+  const createMutation = useCreateWarehouseMaterialSettingMutation()
+  const updateMutation = useUpdateWarehouseMaterialSettingMutation()
+  const statusMutation = useSetWarehouseMaterialSettingStatusMutation()
+  // The wire's routes (create vs per-setting update vs per-setting status)
+  // drive which mutation is in flight; the editor unifies them as one
+  // "isPending" for the form's aria-busy state so the rest of the JSX reads as
+  // before.
+  const isPending = createMutation.isPending || updateMutation.isPending || statusMutation.isPending
   const submitFeedback = useSubmitFeedback()
   const form = useForm<WarehouseMaterialSettingFormValues>({
     resolver: zodResolver(warehouseMaterialSettingSchema),
     defaultValues: EMPTY_VALUES,
   })
   const watchedMaterialId = useWatch({ control: form.control, name: 'materialId' })
-  const [materialLabel, setMaterialLabel] = useState(setting?.material.displayName ?? '')
+  const [materialLabel, setMaterialLabel] = useState(setting?.materialNameAr ?? '')
   const [previousSetting, setPreviousSetting] = useState(setting)
 
-  if (setting !== null && setting.material.id !== previousSetting?.material.id) {
+  if (setting !== null && setting.materialId !== previousSetting?.materialId) {
     setPreviousSetting(setting)
-    setMaterialLabel(setting.material.displayName)
+    setMaterialLabel(setting.materialNameAr)
   }
 
   const materialSelector = useMaterialSelector(async () => {
@@ -150,7 +163,7 @@ export function WarehouseMaterialSettingsEditor({
       setting === null
         ? EMPTY_VALUES
         : {
-            materialId: setting.material.id,
+            materialId: setting.materialId,
             minQuantity: setting.minQuantity === null ? '' : String(setting.minQuantity),
             maxQuantity: setting.maxQuantity === null ? '' : String(setting.maxQuantity),
             status: setting.status,
@@ -171,10 +184,29 @@ export function WarehouseMaterialSettingsEditor({
 
     try {
       await submitFeedback(async () => {
-        await upsertMutation.mutateAsync({
-          warehouseId,
-          request: toWarehouseMaterialSettingRequest(values, setting),
-        })
+        if (setting === null) {
+          await createMutation.mutateAsync(
+            toCreateWarehouseMaterialSettingRequest(values, warehouseId),
+          )
+        } else {
+          await updateMutation.mutateAsync({
+            warehouseId,
+            settingId: setting.id,
+            request: toUpdateWarehouseMaterialSettingRequest(values),
+          })
+          // Status rides the dedicated per-setting status route, never the
+          // threshold body, and only when it actually changed. A same-value
+          // flip is a no-op the backend answers with ALREADY_ACTIVE /
+          // ALREADY_INACTIVE, so it is not sent. The status mutation emits no
+          // toast of its own, so this adds no duplicate toast.
+          if (values.status !== setting.status) {
+            await statusMutation.mutateAsync({
+              warehouseId,
+              settingId: setting.id,
+              request: toSetWarehouseMaterialSettingStatusRequest({ status: values.status }),
+            })
+          }
+        }
         onOpenChange(false)
         toast.success({
           title: setting === null ? 'تمت إضافة إعداد المادة.' : 'تم حفظ تعديل إعداد المادة.',
@@ -204,7 +236,7 @@ export function WarehouseMaterialSettingsEditor({
           <Form {...form}>
             <form
               noValidate
-              aria-busy={upsertMutation.isPending}
+              aria-busy={isPending}
               className="grid gap-4"
               onSubmit={form.handleSubmit(submit)}
             >
@@ -217,7 +249,7 @@ export function WarehouseMaterialSettingsEditor({
                     <MaterialPickerControl
                       value={field.value}
                       readOnly={setting !== null}
-                      disabled={upsertMutation.isPending}
+                      disabled={isPending}
                       setting={setting}
                       materialLabel={materialLabel}
                       onValueChange={(value, option) => {
@@ -250,7 +282,7 @@ export function WarehouseMaterialSettingsEditor({
                           dir="ltr"
                           inputMode="decimal"
                           placeholder="مثال: 2"
-                          disabled={upsertMutation.isPending}
+                          disabled={isPending}
                           value={field.value}
                           onChange={(event) => field.onChange(event.currentTarget.value)}
                         />
@@ -271,7 +303,7 @@ export function WarehouseMaterialSettingsEditor({
                           dir="ltr"
                           inputMode="decimal"
                           placeholder="مثال: 10"
-                          disabled={upsertMutation.isPending}
+                          disabled={isPending}
                           value={field.value}
                           onChange={(event) => field.onChange(event.currentTarget.value)}
                         />
@@ -289,7 +321,7 @@ export function WarehouseMaterialSettingsEditor({
                     <FormLabel>الحالة</FormLabel>
                     <Select
                       value={field.value}
-                      disabled={upsertMutation.isPending || setting === null}
+                      disabled={isPending || setting === null}
                       onValueChange={field.onChange}
                     >
                       <FormControl>
@@ -312,7 +344,7 @@ export function WarehouseMaterialSettingsEditor({
               <DialogFooter>
                 <Button
                   type="submit"
-                  loading={upsertMutation.isPending}
+                  loading={isPending}
                   disabled={watchedMaterialId === '' && setting === null}
                 >
                   حفظ الإعداد
@@ -320,7 +352,7 @@ export function WarehouseMaterialSettingsEditor({
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={upsertMutation.isPending}
+                  disabled={isPending}
                   onClick={() => onOpenChange(false)}
                 >
                   إلغاء
