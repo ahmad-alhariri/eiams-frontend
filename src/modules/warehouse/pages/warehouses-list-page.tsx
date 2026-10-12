@@ -53,8 +53,13 @@ function WarehousesListPage() {
 
   const warehousesQueryInput = useMemo<ListWarehousesQuery>(
     () => ({
-      // DataTable controls are 1-based; EIAMS v1 list endpoints are 0-based.
-      page: currentPage - 1,
+      // One-based on BOTH sides: `useServerPagination` and DataTableServer are
+      // 1-based, and so is the wire (`PaginationQueryParameters.Page` is
+      // `Range(1, …)`). `warehouse.service.listWarehouses` forwards `page`
+      // verbatim (it does not convert), so a `page: currentPage - 1` here sent
+      // `page=0`, which the backend rejects with 400 on every load. The sibling
+      // `warehouse-material-settings-overview.tsx` already passes one-based.
+      page: currentPage,
       pageSize,
       ...(search === '' ? {} : { search }),
       ...(siteId === undefined ? {} : { siteId }),

@@ -54,7 +54,7 @@ afterEach(() => {
 })
 
 describe('WarehousesListPage', () => {
-  it('renders contract-backed warehouse rows and sends zero-based server pagination', async () => {
+  it('renders contract-backed warehouse rows and sends one-based server pagination', async () => {
     const warehouse = createWarehouse()
     const site = createSite()
     let receivedPage: string | null = null
@@ -90,7 +90,13 @@ describe('WarehousesListPage', () => {
     expect(screen.getByRole('columnheader', { name: 'الحالة' })).toBeInTheDocument()
     expect(screen.getByText('نشط')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /إضافة|تعديل/ })).not.toBeInTheDocument()
-    expect(receivedPage).toBe('0')
+    // One-based on the wire: the backend's PaginationQueryParameters.Page is
+    // Range(1, …) and rejects page=0 with 400. This assertion used to pin '0'
+    // (`page: currentPage - 1`), which passed against MSW — MSW does not run the
+    // server's range validator — but 400'd against the real backend on every
+    // load. Found by live Browser (DevTools-MCP) QA on the running backend
+    // (eiams-frontend-kfh0); the `currentPage - 1` is gone.
+    expect(receivedPage).toBe('1')
     expect(receivedPageSize).toBe('10')
   })
 
