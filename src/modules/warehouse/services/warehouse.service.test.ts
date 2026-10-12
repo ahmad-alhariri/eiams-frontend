@@ -1,4 +1,4 @@
-﻿import { HttpResponse, http } from 'msw'
+import { HttpResponse, http } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { createWarehouseService } from '@/modules/warehouse/services/warehouse.service'
@@ -14,13 +14,14 @@ const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = '3a1f0c62-6d4b-4a7e-9c1d-8b2e5f7a0d31'
 const SITE_ID = '7c4e2b18-9f35-4c62-b0a8-5d1e3f6c8a94'
 const ORG_UNIT_ID = 'b58d1f70-2a64-4e93-8f07-1c6b9d3e5f20'
+const CAPABILITY_ID = '6c7f0a14-2b4d-4f08-9b9d-1d1c1d1d1d1d'
+const SETTING_ID = '5d6e7f80-1a2b-3c4d-5e6f-7a8b9c0d1e2f'
 
 /**
- * A warehouse in the REAL wire shape, built locally instead of through the
- * shared `createWarehouse` factory: that factory still returns the fiction
- * (`warehouseId` / `nameAr` / `locationAr` / nested `site`), and a fixture
- * that the production response could never produce is exactly what kept this
- * suite green against the wrong contract.
+ * A warehouse in the real wire shape: siteId, organizationalUnitId, name,
+ * code, warehouseType, canHoldStock, status, rowVersion. Built locally
+ * instead of via the shared `createWarehouse` factory only so this test
+ * can pin every field by name.
  */
 function wireWarehouse(overrides: Partial<Warehouse> = {}): Warehouse {
   return {
@@ -122,8 +123,6 @@ describe('WarehouseService', () => {
   it('sends the exact create body and the exact update body, and returns no payload on update', async () => {
     const service = setupService()
     const warehouse = wireWarehouse({ rowVersion: 7 })
-    const capability = createWarehouseCapability()
-    const setting = createWarehouseMaterialSetting()
     const warehouseId = 'warehouse / دمشق'
     const receivedBodies: unknown[] = []
 
@@ -146,24 +145,6 @@ describe('WarehouseService', () => {
       canHoldStock: false,
       expectedRowVersion: warehouse.rowVersion,
     }
-    const capabilitiesRequest = [
-      {
-        warehouseId: capability.warehouseId,
-        domainId: capability.domainId,
-        operations: capability.operations,
-        rowVersion: capability.rowVersion,
-      },
-    ]
-    // The material-setting body carries NO `warehouseId`: the route already names
-    // the warehouse (`PUT /warehouses/{warehouseId}/material-settings`) and the
-    // request contract omits it.
-    const settingRequest: Parameters<typeof service.upsertWarehouseMaterialSetting>[1] = {
-      materialId: setting.materialId,
-      rowVersion: setting.rowVersion,
-      status: setting.status,
-      ...(setting.minQuantity === undefined ? {} : { minQuantity: setting.minQuantity }),
-      ...(setting.maxQuantity === undefined ? {} : { maxQuantity: setting.maxQuantity }),
-    }
 
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${encodeURIComponent(warehouseId)}`, () =>
@@ -184,42 +165,13 @@ describe('WarehouseService', () => {
           return new HttpResponse(null, { status: 204 })
         },
       ),
-      http.get(`${API_BASE_URL}/warehouses/${encodeURIComponent(warehouseId)}/capabilities`, () =>
-        okJson([capability]),
-      ),
-      http.put(
-        `${API_BASE_URL}/warehouses/${encodeURIComponent(warehouseId)}/capabilities`,
-        async ({ request }) => {
-          receivedBodies.push(await request.json())
-          return okJson([capability])
-        },
-      ),
-      http.put(
-        `${API_BASE_URL}/warehouses/${encodeURIComponent(warehouseId)}/material-settings`,
-        async ({ request }) => {
-          receivedBodies.push(await request.json())
-          return okJson(setting)
-        },
-      ),
     )
 
     await expect(service.getWarehouse(warehouseId)).resolves.toEqual(warehouse)
     await expect(service.createWarehouse(createRequest)).resolves.toEqual({ id: WAREHOUSE_ID })
     await expect(service.updateWarehouse(warehouseId, updateRequest)).resolves.toBeUndefined()
-    await expect(service.getWarehouseCapabilities(warehouseId)).resolves.toEqual([capability])
-    await expect(
-      service.replaceWarehouseCapabilities(warehouseId, capabilitiesRequest),
-    ).resolves.toEqual([capability])
-    await expect(
-      service.upsertWarehouseMaterialSetting(warehouseId, settingRequest),
-    ).resolves.toEqual(setting)
 
-    expect(receivedBodies).toEqual([
-      createRequest,
-      updateRequest,
-      capabilitiesRequest,
-      settingRequest,
-    ])
+    expect(receivedBodies).toEqual([createRequest, updateRequest])
 
     const [sentCreate, sentUpdate] = receivedBodies as [
       Record<string, unknown>,
@@ -254,6 +206,160 @@ describe('WarehouseService', () => {
     // Create-only identifiers must not ride along on the update.
     expect(sentUpdate).not.toHaveProperty('siteId')
     expect(sentUpdate).not.toHaveProperty('code')
+  })
+
+  it('binds capability grants, revokes, and per-operation add/remove to the live wire', async () => {
+    const service = setupService()
+    const capability = createWarehouseCapability({ id: CAPABILITY_ID, warehouseId: WAREHOUSE_ID })
+    const receivedBodies: Array<{ url: string; method: string; body: unknown }> = []
+
+    server.use(
+      http.post(`${API_BASE_URL}/warehouse-capabilities`, async ({ request }) => {
+        receivedBodies.push({ url: request.url, method: 'POST', body: await request.json() })
+        return apiJson({ id: CAPABILITY_ID }, { status: 201 })
+      }),
+      http.delete(`${API_BASE_URL}/warehouse-capabilities/${CAPABILITY_ID}`, () => {
+        receivedBodies.push({ url: `${CAPABILITY_ID}`, method: 'DELETE', body: undefined })
+        return new HttpResponse(null, { status: 200 })
+      }),
+      http.post(
+        `${API_BASE_URL}/warehouse-capabilities/${CAPABILITY_ID}/operations`,
+        async ({ request }) => {
+          receivedBodies.push({ url: request.url, method: 'POST', body: await request.json() })
+          return apiJson({ id: `${CAPABILITY_ID}-op` }, { status: 201 })
+        },
+      ),
+      http.delete(
+        `${API_BASE_URL}/warehouse-capabilities/${CAPABILITY_ID}/operations/Adjustment`,
+        () => {
+          receivedBodies.push({
+            url: `${CAPABILITY_ID}/operations/Adjustment`,
+            method: 'DELETE',
+            body: undefined,
+          })
+          return new HttpResponse(null, { status: 200 })
+        },
+      ),
+    )
+
+    await expect(
+      service.grantWarehouseCapability({
+        warehouseId: WAREHOUSE_ID,
+        materialDomainId: capability.materialDomainId,
+      }),
+    ).resolves.toEqual({ id: CAPABILITY_ID })
+    await expect(service.revokeWarehouseCapability(CAPABILITY_ID)).resolves.toBeUndefined()
+    // addOperation sends the INT ordinal 0..5 (Adjustment=5) — encoded via
+    // operationOrdinal so the asymmetry is captured in one place.
+    await expect(
+      service.addWarehouseCapabilityOperation(CAPABILITY_ID, { operationType: 5 }),
+    ).resolves.toEqual({ id: `${CAPABILITY_ID}-op` })
+    // removeOperation sends the ENUM NAME STRING in the path — no body.
+    await expect(
+      service.removeWarehouseCapabilityOperation(CAPABILITY_ID, 'Adjustment'),
+    ).resolves.toBeUndefined()
+
+    expect(receivedBodies).toEqual([
+      {
+        url: expect.stringContaining(`${API_BASE_URL}/warehouse-capabilities`),
+        method: 'POST',
+        body: { warehouseId: WAREHOUSE_ID, materialDomainId: capability.materialDomainId },
+      },
+      { url: CAPABILITY_ID, method: 'DELETE', body: undefined },
+      {
+        url: expect.stringContaining(`/warehouse-capabilities/${CAPABILITY_ID}/operations`),
+        method: 'POST',
+        body: { operationType: 5 },
+      },
+      { url: `${CAPABILITY_ID}/operations/Adjustment`, method: 'DELETE', body: undefined },
+    ])
+
+    // The grant body must NOT include rowVersion, code, or warehouse
+    // housekeeping fields. The capability schema enforces this implicitly
+    // via the `unknown` cast — re-asserting here keeps the wire contract
+    // auditable from a single failing test.
+    const grantBody = receivedBodies[0]?.body as Record<string, unknown>
+    expect(Object.keys(grantBody).sort()).toEqual(['materialDomainId', 'warehouseId'])
+    expect(grantBody).not.toHaveProperty('operations')
+    expect(grantBody).not.toHaveProperty('rowVersion')
+  })
+
+  it('binds material-setting create, update, and status to the per-setting routes', async () => {
+    const service = setupService()
+    const receivedBodies: Array<{ method: string; path: string; body: unknown }> = []
+
+    server.use(
+      http.post(`${API_BASE_URL}/warehouse-material-settings`, async ({ request }) => {
+        receivedBodies.push({ method: 'POST', path: request.url, body: await request.json() })
+        return apiJson({ id: SETTING_ID }, { status: 201 })
+      }),
+      http.put(`${API_BASE_URL}/warehouse-material-settings/${SETTING_ID}`, async ({ request }) => {
+        receivedBodies.push({ method: 'PUT', path: request.url, body: await request.json() })
+        return new HttpResponse(null, { status: 200 })
+      }),
+      http.put(
+        `${API_BASE_URL}/warehouse-material-settings/${SETTING_ID}/status`,
+        async ({ request }) => {
+          receivedBodies.push({ method: 'PUT', path: request.url, body: await request.json() })
+          return new HttpResponse(null, { status: 200 })
+        },
+      ),
+    )
+
+    await expect(
+      service.createWarehouseMaterialSetting({
+        warehouseId: WAREHOUSE_ID,
+        materialId: 'c5b3f1a3-1f5a-4a4c-9a7b-2b6f6c0a4a01',
+        minQuantity: 2,
+        maxQuantity: 10,
+      }),
+    ).resolves.toEqual({ id: SETTING_ID })
+
+    await expect(
+      service.updateWarehouseMaterialSetting(SETTING_ID, { minQuantity: 3, maxQuantity: 12 }),
+    ).resolves.toBeUndefined()
+
+    await expect(
+      service.setWarehouseMaterialSettingStatus(SETTING_ID, { status: 1 }),
+    ).resolves.toBeUndefined()
+
+    expect(receivedBodies).toEqual([
+      {
+        method: 'POST',
+        path: expect.stringContaining(`${API_BASE_URL}/warehouse-material-settings`),
+        body: {
+          warehouseId: WAREHOUSE_ID,
+          materialId: 'c5b3f1a3-1f5a-4a4c-9a7b-2b6f6c0a4a01',
+          minQuantity: 2,
+          maxQuantity: 10,
+        },
+      },
+      {
+        method: 'PUT',
+        path: expect.stringContaining(`/warehouse-material-settings/${SETTING_ID}`),
+        body: { minQuantity: 3, maxQuantity: 12 },
+      },
+      {
+        method: 'PUT',
+        path: expect.stringContaining(`/warehouse-material-settings/${SETTING_ID}/status`),
+        // The route binds `int Status` (Active=0, Inactive=1) and casts to the
+        // enum server-side; the ordinal is the honest body, never the name.
+        body: { status: 1 },
+      },
+    ])
+
+    // No rowVersion, no nesting — the wire rejects unknown properties
+    // silently for the warehouse list, so a stray `rowVersion` would still
+    // pass but would never have been read by the server.
+    const createBody = receivedBodies[0]?.body as Record<string, unknown>
+    expect(Object.keys(createBody).sort()).toEqual([
+      'materialId',
+      'maxQuantity',
+      'minQuantity',
+      'warehouseId',
+    ])
+    const updateBody = receivedBodies[1]?.body as Record<string, unknown>
+    expect(Object.keys(updateBody).sort()).toEqual(['maxQuantity', 'minQuantity'])
   })
 
   it('leaves contract conflicts for the Arabic error normalizer', async () => {
