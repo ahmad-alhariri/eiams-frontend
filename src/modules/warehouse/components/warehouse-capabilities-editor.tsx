@@ -79,6 +79,11 @@ function pendingOpKey(capabilityId: string, operation: CapabilityOperation): str
   return `${capabilityId}:${operation}`
 }
 
+// A stable empty reference so `capabilities` does not change identity every
+// render while the read is in flight (a `?? []` literal would defeat the
+// `presentDomainIds` memo below and trip react-hooks/exhaustive-deps).
+const EMPTY_CAPABILITIES: readonly WarehouseCapability[] = []
+
 /**
  * The Arabic reason for a rejected capability action.
  *
@@ -108,7 +113,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
   const addOperationMutation = useAddWarehouseCapabilityOperationMutation()
   const removeOperationMutation = useRemoveWarehouseCapabilityOperationMutation()
 
-  const capabilities = capabilitiesQuery.data?.items ?? []
+  const capabilities = capabilitiesQuery.data?.items ?? EMPTY_CAPABILITIES
 
   // Optimistic overlay (defect 2). A `(capabilityId, operation)` key present in
   // `pendingAdds` renders as granted; in `pendingRemoves` renders as ungranted;
