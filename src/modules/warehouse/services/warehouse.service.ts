@@ -4,111 +4,130 @@ import { apiTransport } from '@/shared/api/transport'
 import type {
   Warehouse,
   WarehouseCapability,
-  WarehouseCapabilityUpsertRequest,
   WarehouseMaterialSetting,
-  WarehouseMaterialSettingPage,
-  WarehouseMaterialSettingUpsertRequest,
-  WarehousePage,
   WarehouseCreateRequest,
   WarehouseUpdateRequest,
+  GrantWarehouseCapabilityRequest,
+  AddWarehouseCapabilityOperationRequest,
+  CreateWarehouseMaterialSettingRequest,
+  UpdateWarehouseMaterialSettingRequest,
+  SetWarehouseMaterialSettingStatusRequest,
   ListWarehousesQuery,
   ListWarehouseMaterialSettingsQuery,
+  CapabilityOperation,
+  Uuid,
 } from '@/modules/warehouse/types/warehouse.api-types'
 import type { ApiPage, ResourceIdResponse } from '@/shared/api/api-contracts'
 
 const WAREHOUSES_PATH = '/warehouses'
 const WAREHOUSE_PATH = '/warehouses/{warehouseId}'
 const WAREHOUSE_CAPABILITIES_PATH = '/warehouses/{warehouseId}/capabilities'
-const WAREHOUSE_MATERIAL_SETTINGS_PATH = '/warehouses/{warehouseId}/material-settings'
+// Capability + operation commands live on the standalone resource, not under
+// the warehouse sub-resource. The capability id is the route parameter on
+// each, so the body never carries a `capabilityId` field.
+const WAREHOUSE_CAPABILITY_GRANT_PATH = '/warehouse-capabilities'
+const WAREHOUSE_CAPABILITY_PATH = '/warehouse-capabilities/{capabilityId}'
+const WAREHOUSE_CAPABILITY_OPERATIONS_PATH = '/warehouse-capabilities/{capabilityId}/operations'
+const WAREHOUSE_CAPABILITY_OPERATION_PATH =
+  '/warehouse-capabilities/{capabilityId}/operations/{operationType}'
+// Material settings are also a top-level resource, addressed by settingId.
+// The list endpoint is the only one that still lives under a warehouse.
+const WAREHOUSE_MATERIAL_SETTINGS_LIST_PATH = '/warehouses/{warehouseId}/material-settings'
+const WAREHOUSE_MATERIAL_SETTINGS_ROOT_PATH = '/warehouse-material-settings'
+const WAREHOUSE_MATERIAL_SETTING_PATH = '/warehouse-material-settings/{settingId}'
+const WAREHOUSE_MATERIAL_SETTING_STATUS_PATH = '/warehouse-material-settings/{settingId}/status'
+// The capability read serves the WHOLE matrix in one page. The endpoint pages
+// (`PaginationQueryParameters`, default page size 20); asking for the max in a
+// single read means a warehouse's granted-domain rows are never silently
+// truncated to page 1 — the epic's core honesty rule. A warehouse with more
+// than `MaximumPageSize` capabilities is a server-side paging concern, not one
+// this read may paper over.
+const CAPABILITY_READ_PAGE = 1
+const CAPABILITY_READ_PAGE_SIZE = 100
 
 function pathWithId(path: string, parameter: string, id: string): string {
   return path.replace(parameter, encodeURIComponent(id))
 }
 
-function toWarehousePage(apiPage: ApiPage<Warehouse>): WarehousePage {
-  return {
-    items: apiPage.items,
-    meta: {
-      pageIndex: apiPage.page,
-      page: apiPage.page,
-      pageSize: apiPage.pageSize,
-      itemCount: apiPage.totalItems,
-      totalItems: apiPage.totalItems,
-      totalCount: apiPage.totalItems,
-      totalPages: apiPage.totalPages,
-      hasNextPage: apiPage.hasNextPage,
-      hasPreviousPage: apiPage.hasPreviousPage,
-    },
+function toQueryString(
+  query: Record<string, string | number | boolean | undefined>,
+): Record<string, string | number | boolean> {
+  // Absent values are dropped rather than sent as `undefined`: axios
+  // serialises `undefined` to the literal string "undefined", which the
+  // server's `PaginationQueryParameters` validator rejects as a bad
+  // Page value. Removing the key entirely is the only honest answer.
+  const result: Record<string, string | number | boolean> = {}
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) {
+      result[key] = value
+    }
   }
-}
-
-function toMaterialSettingsPage(
-  apiPage: ApiPage<WarehouseMaterialSetting>,
-): WarehouseMaterialSettingPage {
-  return {
-    items: apiPage.items,
-    meta: {
-      pageIndex: apiPage.page,
-      page: apiPage.page,
-      pageSize: apiPage.pageSize,
-      itemCount: apiPage.totalItems,
-      totalItems: apiPage.totalItems,
-      totalCount: apiPage.totalItems,
-      totalPages: apiPage.totalPages,
-      hasNextPage: apiPage.hasNextPage,
-      hasPreviousPage: apiPage.hasPreviousPage,
-    },
-  }
+  return result
 }
 
 export interface WarehouseService {
-  listWarehouses: (query: ListWarehousesQuery, context?: RequestContext) => Promise<WarehousePage>
+  listWarehouses: (
+    query: ListWarehousesQuery,
+    context?: RequestContext,
+  ) => Promise<ApiPage<Warehouse>>
   getWarehouse: (warehouseId: string, context?: RequestContext) => Promise<Warehouse>
   createWarehouse: (request: WarehouseCreateRequest) => Promise<ResourceIdResponse>
   updateWarehouse: (warehouseId: string, request: WarehouseUpdateRequest) => Promise<void>
-  getWarehouseCapabilities: (
+  listWarehouseCapabilities: (
     warehouseId: string,
     context?: RequestContext,
-  ) => Promise<readonly WarehouseCapability[]>
-  replaceWarehouseCapabilities: (
-    warehouseId: string,
-    request: readonly WarehouseCapabilityUpsertRequest[],
-  ) => Promise<readonly WarehouseCapability[]>
+  ) => Promise<ApiPage<WarehouseCapability>>
+  grantWarehouseCapability: (
+    request: GrantWarehouseCapabilityRequest,
+  ) => Promise<ResourceIdResponse>
+  revokeWarehouseCapability: (capabilityId: Uuid) => Promise<void>
+  addWarehouseCapabilityOperation: (
+    capabilityId: Uuid,
+    request: AddWarehouseCapabilityOperationRequest,
+  ) => Promise<ResourceIdResponse>
+  removeWarehouseCapabilityOperation: (
+    capabilityId: Uuid,
+    operation: CapabilityOperation,
+  ) => Promise<void>
   listWarehouseMaterialSettings: (
     warehouseId: string,
     query: ListWarehouseMaterialSettingsQuery,
     context?: RequestContext,
-  ) => Promise<WarehouseMaterialSettingPage>
-  upsertWarehouseMaterialSetting: (
-    warehouseId: string,
-    request: WarehouseMaterialSettingUpsertRequest,
-  ) => Promise<WarehouseMaterialSetting>
+  ) => Promise<ApiPage<WarehouseMaterialSetting>>
+  createWarehouseMaterialSetting: (
+    request: CreateWarehouseMaterialSettingRequest,
+  ) => Promise<ResourceIdResponse>
+  updateWarehouseMaterialSetting: (
+    settingId: Uuid,
+    request: UpdateWarehouseMaterialSettingRequest,
+  ) => Promise<void>
+  setWarehouseMaterialSettingStatus: (
+    settingId: Uuid,
+    request: SetWarehouseMaterialSettingStatusRequest,
+  ) => Promise<void>
 }
 
 export function createWarehouseService(transport: ApiTransport): WarehouseService {
   return {
     async listWarehouses(query, context) {
-      return toWarehousePage(
-        await transport.requestPage<Warehouse>({
-          path: WAREHOUSES_PATH,
-          method: 'GET',
-          query: query as Record<string, string | number | boolean | undefined>,
-          ...withSignal(context),
-        }),
-      )
+      return transport.requestPage<Warehouse>({
+        path: WAREHOUSES_PATH,
+        method: 'GET',
+        query: toQueryString(query as Record<string, string | number | boolean | undefined>),
+        ...withSignal(context),
+      })
     },
 
     async getWarehouse(warehouseId, context) {
-      const response = await transport.request<Warehouse>({
+      return transport.request<Warehouse>({
         path: pathWithId(WAREHOUSE_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
         ...withSignal(context),
       })
-      return response
     },
 
     async createWarehouse(request) {
-      return await transport.request<ResourceIdResponse>({
+      return transport.request<ResourceIdResponse>({
         path: WAREHOUSES_PATH,
         method: 'POST',
         body: request,
@@ -123,42 +142,85 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
       })
     },
 
-    async getWarehouseCapabilities(warehouseId, context) {
-      const response = await transport.request<readonly WarehouseCapability[]>({
+    async listWarehouseCapabilities(warehouseId, context) {
+      return transport.requestPage<WarehouseCapability>({
         path: pathWithId(WAREHOUSE_CAPABILITIES_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
+        query: { page: CAPABILITY_READ_PAGE, pageSize: CAPABILITY_READ_PAGE_SIZE },
         ...withSignal(context),
       })
-      return response
     },
 
-    async replaceWarehouseCapabilities(warehouseId, request) {
-      const response = await transport.request<readonly WarehouseCapability[]>({
-        path: pathWithId(WAREHOUSE_CAPABILITIES_PATH, '{warehouseId}', warehouseId),
-        method: 'PUT',
+    async grantWarehouseCapability(request) {
+      return transport.request<ResourceIdResponse>({
+        path: WAREHOUSE_CAPABILITY_GRANT_PATH,
+        method: 'POST',
         body: request,
       })
-      return response
+    },
+
+    async revokeWarehouseCapability(capabilityId) {
+      await transport.requestEmpty({
+        path: pathWithId(WAREHOUSE_CAPABILITY_PATH, '{capabilityId}', capabilityId),
+        method: 'DELETE',
+      })
+    },
+
+    async addWarehouseCapabilityOperation(capabilityId, request) {
+      return transport.request<ResourceIdResponse>({
+        path: pathWithId(WAREHOUSE_CAPABILITY_OPERATIONS_PATH, '{capabilityId}', capabilityId),
+        method: 'POST',
+        body: request,
+      })
+    },
+
+    async removeWarehouseCapabilityOperation(capabilityId, operation) {
+      // The wire path carries the enum NAME STRING; the body for DELETE
+      // is intentionally empty. The endpoint is asymmetric by design
+      // (POST binds int, DELETE binds the enum name) and the inversion
+      // is captured in `operationOrdinal`/`operationFromOrdinal`.
+      const path = pathWithId(
+        WAREHOUSE_CAPABILITY_OPERATION_PATH,
+        '{capabilityId}',
+        capabilityId,
+      ).replace('{operationType}', encodeURIComponent(operation))
+      await transport.requestEmpty({
+        path,
+        method: 'DELETE',
+      })
     },
 
     async listWarehouseMaterialSettings(warehouseId, query, context) {
-      return toMaterialSettingsPage(
-        await transport.requestPage<WarehouseMaterialSetting>({
-          path: pathWithId(WAREHOUSE_MATERIAL_SETTINGS_PATH, '{warehouseId}', warehouseId),
-          method: 'GET',
-          query: query as Record<string, string | number | boolean | undefined>,
-          ...withSignal(context),
-        }),
-      )
+      return transport.requestPage<WarehouseMaterialSetting>({
+        path: pathWithId(WAREHOUSE_MATERIAL_SETTINGS_LIST_PATH, '{warehouseId}', warehouseId),
+        method: 'GET',
+        query: toQueryString(query as Record<string, string | number | boolean | undefined>),
+        ...withSignal(context),
+      })
     },
 
-    async upsertWarehouseMaterialSetting(warehouseId, request) {
-      const response = await transport.request<WarehouseMaterialSetting>({
-        path: pathWithId(WAREHOUSE_MATERIAL_SETTINGS_PATH, '{warehouseId}', warehouseId),
+    async createWarehouseMaterialSetting(request) {
+      return transport.request<ResourceIdResponse>({
+        path: WAREHOUSE_MATERIAL_SETTINGS_ROOT_PATH,
+        method: 'POST',
+        body: request,
+      })
+    },
+
+    async updateWarehouseMaterialSetting(settingId, request) {
+      await transport.requestEmpty({
+        path: pathWithId(WAREHOUSE_MATERIAL_SETTING_PATH, '{settingId}', settingId),
         method: 'PUT',
         body: request,
       })
-      return response
+    },
+
+    async setWarehouseMaterialSettingStatus(settingId, request) {
+      await transport.requestEmpty({
+        path: pathWithId(WAREHOUSE_MATERIAL_SETTING_STATUS_PATH, '{settingId}', settingId),
+        method: 'PUT',
+        body: request,
+      })
     },
   }
 }

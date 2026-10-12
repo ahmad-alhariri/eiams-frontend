@@ -299,6 +299,41 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'الموقع المحدّد غير نشط.',
     detailAr: null,
   },
+  // Warehouse capability grants (`WarehouseCapabilityErrors`). These are the
+  // per-capability write outcomes the capability editor surfaces; `addOperation`
+  // binds an int ordinal and `removeOperation` binds the enum name, but the READ
+  // paths are what produce these. Keyed off the normalized form of the dotted
+  // backend code. `ALREADY_GRANTED.detailAr`/`ALREADY_REVOKED` come back as 409,
+  // the domain ones as 404/400, so a caller must key on `code`, never the HTTP
+  // class (ErrorType.Problem maps to 400, not 422).
+  WAREHOUSE_CAPABILITIES_NOT_FOUND: {
+    titleAr: 'لم يتم العثور على القدرة المطلوبة.',
+    detailAr: null,
+  },
+  WAREHOUSE_CAPABILITIES_ALREADY_GRANTED: {
+    titleAr: 'هذه القدرة ممنوحة بالفعل.',
+    detailAr: 'هذه القدرة ممنوحة مسبقًا لهذا المستودع.',
+  },
+  WAREHOUSE_CAPABILITIES_ALREADY_REVOKED: {
+    titleAr: 'هذه القدرة مُبطلة بالفعل.',
+    detailAr: null,
+  },
+  WAREHOUSE_CAPABILITIES_MATERIAL_DOMAIN_NOT_FOUND: {
+    titleAr: 'لم يتم العثور على مجال المواد المحدّد.',
+    detailAr: null,
+  },
+  WAREHOUSE_CAPABILITIES_MATERIAL_DOMAIN_INACTIVE: {
+    titleAr: 'مجال المواد غير نشط.',
+    detailAr: 'لا يمكن منح مجال مواد غير نشط لهذا المستودع.',
+  },
+  WAREHOUSE_CAPABILITIES_NOT_GRANTED: {
+    titleAr: 'القدرة غير ممنوحة.',
+    detailAr: null,
+  },
+  WAREHOUSE_CAPABILITIES_FORBIDDEN: {
+    titleAr: 'ليست لديك صلاحية إدارة قدرات المستودع.',
+    detailAr: null,
+  },
   WAREHOUSE_CAPABILITY_OPERATIONS_OPERATION_NOT_GRANTED: {
     titleAr: 'إحدى العمليات غير مسموح بها في هذه القدرة.',
     detailAr: 'أزل العملية من التحديد، أو راجع قدرات المستودع.',

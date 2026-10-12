@@ -5,8 +5,8 @@ import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import { createNamedReference, createWarehouseCapability, fixtureUuid } from '@/test/msw/factories'
-import { okJson } from '@/test/msw/envelope'
+import { createWarehouseCapability, fixtureUuid } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -42,7 +42,7 @@ describe('useWarehouseCapabilityValidation', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        okJson([capability]),
+        okPageJson([capability], { page: 1, pageSize: 50, totalCount: 1, totalPages: 1 }),
       ),
     )
 
@@ -52,10 +52,10 @@ describe('useWarehouseCapabilityValidation', () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.validates(capability.domain.id, 'Issue')).toEqual({
+    expect(result.current.validates(capability.materialDomainId, 'Issue')).toEqual({
       status: 'supported',
     })
-    expect(result.current.validates(capability.domain.id, 'Transfer')).toEqual({
+    expect(result.current.validates(capability.materialDomainId, 'Transfer')).toEqual({
       status: 'supported',
     })
   })
@@ -67,7 +67,7 @@ describe('useWarehouseCapabilityValidation', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        okJson([capability]),
+        okPageJson([capability], { page: 1, pageSize: 50, totalCount: 1, totalPages: 1 }),
       ),
     )
 
@@ -80,7 +80,7 @@ describe('useWarehouseCapabilityValidation', () => {
     // The block copy is the single sentence the product renders — the line editors
     // and the Opening preflight all surface this exact string from this one
     // gate, so a per-domain variant here would be copy no user ever sees.
-    expect(result.current.validates(capability.domainId, 'Issue')).toEqual({
+    expect(result.current.validates(capability.materialDomainId, 'Issue')).toEqual({
       status: 'blocked',
       messageAr: 'العملية صرف غير مدعومة لهذا المستودع والمجال المطلوبين.',
     })
@@ -89,7 +89,12 @@ describe('useWarehouseCapabilityValidation', () => {
   it('blocks a domain with no capability row using the fallback material message', async () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        okJson([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })]),
+        okPageJson([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })], {
+          page: 1,
+          pageSize: 50,
+          totalCount: 1,
+          totalPages: 1,
+        }),
       ),
     )
 
@@ -112,7 +117,7 @@ describe('useWarehouseCapabilityValidation', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        okJson([capability]),
+        okPageJson([capability], { page: 1, pageSize: 50, totalCount: 1, totalPages: 1 }),
       ),
     )
 
@@ -126,7 +131,7 @@ describe('useWarehouseCapabilityValidation', () => {
     // hook's declared `ReadonlySet<CapabilityOperation>`), not the wire array.
     // A miss is the SAME shared empty Set, so a caller memoizing on the result is
     // not re-run on every render for a domain with no capability row.
-    expect(result.current.getOperationsForDomain(capability.domainId)).toStrictEqual(
+    expect(result.current.getOperationsForDomain(capability.materialDomainId)).toStrictEqual(
       new Set(['Receiving', 'Issue', 'Transfer']),
     )
     const emptyFirst = result.current.getOperationsForDomain(fixtureUuid(99))
@@ -140,7 +145,12 @@ describe('useWarehouseCapabilityValidation', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () => {
         requestCount += 1
-        return okJson([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })])
+        return okPageJson([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })], {
+          page: 1,
+          pageSize: 50,
+          totalCount: 1,
+          totalPages: 1,
+        })
       }),
     )
 
@@ -162,7 +172,12 @@ describe('useWarehouseCapabilityValidation', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, async () => {
         await deferred
-        return okJson([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })])
+        return okPageJson([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })], {
+          page: 1,
+          pageSize: 50,
+          totalCount: 1,
+          totalPages: 1,
+        })
       }),
     )
 
@@ -202,7 +217,7 @@ describe('useWarehouseCapabilityValidation', () => {
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        okJson([capability]),
+        okPageJson([capability], { page: 1, pageSize: 50, totalCount: 1, totalPages: 1 }),
       ),
     )
 
@@ -226,13 +241,19 @@ describe('useWarehouseCapabilityValidation', () => {
     // instead of yielding two independent domains.
     const financeCapability = createWarehouseCapability({
       warehouseId: WAREHOUSE_ID,
-      domainId: fixtureUuid(21),
-      domain: createNamedReference({ id: fixtureUuid(21), displayName: 'الشؤون المالية' }),
+      materialDomainId: fixtureUuid(21),
+      materialDomainName: 'الشؤون المالية',
+      materialDomainCode: 'TEST',
       operations: ['Count'],
     })
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
-        okJson([itCapability, financeCapability]),
+        okPageJson([itCapability, financeCapability], {
+          page: 1,
+          pageSize: 50,
+          totalCount: 2,
+          totalPages: 1,
+        }),
       ),
     )
 

@@ -57,10 +57,9 @@ function useDocumentHandlers() {
           warehouseId: WAREHOUSE_ID,
           // The capability names the material's own flat `materialDomainId`;
           // the retired nested `materialDomain` reference is not on the record.
-          domain: {
-            id: MATERIAL.materialDomainId,
-            displayName: MATERIAL.materialDomainName,
-          },
+          materialDomainId: MATERIAL.materialDomainId,
+          materialDomainName: MATERIAL.materialDomainName,
+          materialDomainCode: 'TEST',
           operations: ['Return', 'Issue', 'Receiving'],
         }),
       ]),

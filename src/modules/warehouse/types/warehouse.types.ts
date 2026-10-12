@@ -1,16 +1,26 @@
 export type {
   Warehouse,
   WarehouseCapability,
-  WarehouseCapabilityUpsertRequest,
   WarehouseMaterialSetting,
-  WarehouseMaterialSettingUpsertRequest,
-  WarehousePage,
   WarehouseCreateRequest,
   WarehouseUpdateRequest,
+  GrantWarehouseCapabilityRequest,
+  AddWarehouseCapabilityOperationRequest,
+  CreateWarehouseMaterialSettingRequest,
+  UpdateWarehouseMaterialSettingRequest,
+  SetWarehouseMaterialSettingStatusRequest,
   ListWarehousesQuery,
   ListWarehouseMaterialSettingsQuery,
-  PageMeta,
-  NamedReference,
   CapabilityOperation,
+  MaterialDomain,
+  RecordStatus,
   Uuid,
+} from './warehouse.api-types'
+
+export {
+  CAPABILITY_OPERATION_VALUES,
+  isCapabilityOperation,
+  operationFromOrdinal,
+  operationOrdinal,
+  statusOrdinal,
 } from './warehouse.api-types'

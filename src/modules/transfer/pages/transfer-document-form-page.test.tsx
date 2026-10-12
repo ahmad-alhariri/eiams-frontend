@@ -90,7 +90,9 @@ function useHandlers() {
           warehouseId: SOURCE_WAREHOUSE_ID,
           // The capability's domain reference must name the material's own
           // `materialDomainId` — the flat pair the line editor reads.
-          domain: { id: MATERIAL_DOMAIN_ID, displayName: 'تقنية المعلومات' },
+          materialDomainId: MATERIAL_DOMAIN_ID,
+          materialDomainName: 'تقنية المعلومات',
+          materialDomainCode: 'TEST',
           operations: ['Transfer'],
         }),
       ]),
