@@ -21,7 +21,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { pageRows } from '@/shared/utils/table-data'
 import { formatDateTime, formatIdentifier, formatNumber, formatUuid } from '@/shared/utils/format'
 import type { StockMovement } from '@/modules/inventory/types/inventory.types'
-import type { StockMovementSortField, StockMovementType } from '@/shared/types/generated/eiams-v1'
+import type {
+  MovementType,
+  SortDirection,
+  StockMovementSortField,
+} from '@/modules/inventory/types/inventory.api-types'
 
 // The ROW type is the handwritten wire contract the inventory service returns
 // (`inventory.api-types`), NOT the frozen generated snapshot: `postedBy` is a
@@ -40,7 +44,7 @@ const MOVEMENT_SORT_FIELDS = [
   'QuantityDelta',
 ] as const satisfies readonly StockMovementSortField[]
 
-const MOVEMENT_TYPE_OPTIONS: readonly StockMovementType[] = [
+const MOVEMENT_TYPE_OPTIONS: readonly MovementType[] = [
   'Receipt',
   'Issue',
   'TransferIn',
@@ -91,11 +95,11 @@ function StockMovementsPage() {
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [warehouseId, setWarehouseId] = useState<string | undefined>()
   const [materialId, setMaterialId] = useState<string | undefined>()
-  const [movementType, setMovementType] = useState<StockMovementType | undefined>()
+  const [movementType, setMovementType] = useState<MovementType | undefined>()
   const [dateFromInput, setDateFromInput] = useState('')
   const [dateToInput, setDateToInput] = useState('')
   const [sortBy, setSortBy] = useState<StockMovementSortField>('PostedAt')
-  const [sortDirection, setSortDirection] = useState<'Ascending' | 'Descending'>('Descending')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('Descending')
   const warehouseSelector = useScopedWarehouseSelector()
   const materialSelector = useScopedMaterialSelector(true)
   const dateFrom = toIsoDateTime(dateFromInput)
@@ -103,7 +107,10 @@ function StockMovementsPage() {
 
   const query = useMemo<ListStockMovementsQuery>(
     () => ({
-      pageIndex: currentPage - 1,
+      // D-INV-READ-01 keeps `page` one-based, the same value the DataTable control holds. A
+      // zero-based `pageIndex` would not bind to the wire parameter at all, leaving the server on
+      // its default page for every request.
+      page: currentPage,
       pageSize,
       sortBy,
       sortDirection,
@@ -160,8 +167,8 @@ function StockMovementsPage() {
   const handleMovementTypeChange = useCallback(
     (value: string | null) => {
       setMovementType(
-        value !== null && MOVEMENT_TYPE_OPTIONS.includes(value as StockMovementType)
-          ? (value as StockMovementType)
+        value !== null && MOVEMENT_TYPE_OPTIONS.includes(value as MovementType)
+          ? (value as MovementType)
           : undefined,
       )
       resetPage()

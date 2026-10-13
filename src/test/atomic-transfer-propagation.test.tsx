@@ -113,7 +113,7 @@ describe('atomic transfer propagation', () => {
       within(inboundRow as HTMLElement).getByText(transfer.systemReferenceNumber),
     ).toBeInTheDocument()
     expect(movementListQueries.at(-1)).toMatchObject({
-      pageIndex: '0',
+      page: '1',
       pageSize: '10',
       sortBy: 'PostedAt',
       sortDirection: 'Descending',
@@ -141,7 +141,7 @@ describe('atomic transfer propagation', () => {
     ).toBeInTheDocument()
     expect(within(destinationRow as HTMLElement).getByText('٣')).toBeInTheDocument()
     expect(balanceListQueries.at(-1)).toMatchObject({
-      pageIndex: '0',
+      page: '1',
       pageSize: '10',
       sortBy: 'WarehouseDisplayName',
       sortDirection: 'Ascending',

@@ -1,10 +1,11 @@
-import type { StockMovementType } from '@/shared/types/generated/eiams-v1'
+import type { MovementType } from '@/modules/inventory/types/inventory.api-types'
 
 /**
- * Canonical Arabic presentation labels for the generated StockMovementType
- * union. Keeping this registry in the Inventory module gives the ledger and
- * its later provenance page one typed source, without introducing legacy
- * event names or deriving a movement from its quantity.
+ * Canonical Arabic presentation labels for the `MovementType` union declared
+ * in the module's handwritten wire contract. Keeping this registry in the
+ * Inventory module gives the ledger and its later provenance page one typed
+ * source, without introducing legacy event names or deriving a movement from
+ * its quantity.
  */
 export const STOCK_MOVEMENT_TYPE_LABELS_AR = {
   Receipt: 'استلام',
@@ -14,8 +15,8 @@ export const STOCK_MOVEMENT_TYPE_LABELS_AR = {
   AdjustmentIn: 'تسوية بالزيادة',
   AdjustmentOut: 'تسوية بالنقص',
   Opening: 'رصيد افتتاحي',
-} as const satisfies Record<StockMovementType, string>
+} as const satisfies Record<MovementType, string>
 
-export function stockMovementTypeLabelAr(type: StockMovementType): string {
+export function stockMovementTypeLabelAr(type: MovementType): string {
   return STOCK_MOVEMENT_TYPE_LABELS_AR[type]
 }

@@ -22,7 +22,7 @@ import type {
   InventoryBalanceSortField,
   InventoryLowStockState,
   SortDirection,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/modules/inventory/types/inventory.api-types'
 
 const balanceColumnHelper = createColumnHelper<typeof dataTableFeatures, InventoryBalance>()
 
@@ -80,8 +80,10 @@ function InventoryBalancesPage() {
 
   const queryInput = useMemo<ListInventoryBalancesQuery>(
     () => ({
-      // DataTable controls are 1-based while EIAMS list operations are 0-based.
-      pageIndex: currentPage - 1,
+      // D-INV-READ-01 keeps `page` one-based, the same value the DataTable control holds. Sending a
+      // zero-based `pageIndex` would not bind to the wire parameter at all, and the server would
+      // silently fall back to its default page on every request.
+      page: currentPage,
       pageSize,
       sortBy,
       sortDirection,
