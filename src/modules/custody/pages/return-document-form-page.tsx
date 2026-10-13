@@ -7,7 +7,7 @@ import { returnInfoFormSchema } from '@/modules/custody/schemas/return-info.sche
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { QuantityLineEditor } from '@/shared/documents/components/quantity-line-editor'
 import {
-  buildDraftRequest,
+  buildCompleteDraftRequest,
   DocumentHeaderSection,
   documentHeaderSchema,
 } from '@/shared/documents/document-header-form'
@@ -15,11 +15,11 @@ import {
   createEmptyQuantityLine,
   linesHaveUniqueMaterials,
   quantityLineSchema,
-  toDocumentLineInputs,
+  toCompleteDraftLines,
 } from '@/shared/documents/schemas/document-lines.schemas'
 import {
   documentDraftMutationError,
-  useCreateDocumentMutation,
+  useCompleteDraftMutation,
 } from '@/shared/documents/use-document-draft-mutations'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
@@ -54,11 +54,11 @@ const DEFAULT_VALUES: DeepPartial<ReturnDocumentFormValues> = {
  * New Return draft page (e19-t06): mirrors the issue draft composition —
  * shared spine header, the ReturnInfo petal (original issue linkage +
  * reason), and the shared quantity-line editor. Submission flattens into a
- * `WarehouseDocumentDraftRequest` with `returnInfo` via `buildDraftRequest`.
+ * `CompleteDraftRequest` with `returnInfo` via `buildCompleteDraftRequest`.
  */
 export default function ReturnDocumentFormPage() {
   const navigate = useNavigate()
-  const createMutation = useCreateDocumentMutation()
+  const createMutation = useCompleteDraftMutation()
   const form = useForm<ReturnDocumentFormValues>({
     resolver: zodResolver(returnDocumentFormSchema) as Resolver<ReturnDocumentFormValues>,
     defaultValues: DEFAULT_VALUES,
@@ -73,27 +73,35 @@ export default function ReturnDocumentFormPage() {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     void form.handleSubmit((values) => {
-      const draft = buildDraftRequest<'Return'>({
+      const request = buildCompleteDraftRequest<'Return'>({
         documentType: 'Return',
         header: values.header,
-        lines: toDocumentLineInputs(values.lines),
+        lines: toCompleteDraftLines(values.lines),
         petals: {
+          // `ReturnDraftDetails` carries the original issue id and the reason
+          // only. The form's optional `originalIssueReference` has no slot on the
+          // live route, so it stays a display-only hint rather than a field that
+          // silently reaches no server state.
           returnInfo: {
             originalIssueDocumentId: values.petal.originalIssueDocumentId,
-            ...(values.petal.originalIssueReference !== undefined &&
-            values.petal.originalIssueReference !== ''
-              ? { originalIssueReference: values.petal.originalIssueReference }
-              : {}),
             returnReason: values.petal.returnReason,
           },
         },
-        rowVersion: 0,
       })
-      createMutation.mutate(draft, {
-        onSuccess: (document) => {
-          navigate(ROUTE_PATHS.documentReturnDetail.replace(':documentId', document.documentId))
+      createMutation.mutate(
+        {
+          request,
+          paperReference: {
+            paperDocumentNumber: values.header.paperDocumentNumber,
+            paperDocumentYear: values.header.paperDocumentYear,
+          },
         },
-      })
+        {
+          onSuccess: (document) => {
+            navigate(ROUTE_PATHS.documentReturnDetail.replace(':documentId', document.id))
+          },
+        },
+      )
     })(event)
   }
 

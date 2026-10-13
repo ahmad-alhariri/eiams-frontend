@@ -15,7 +15,7 @@ import {
 import { AssetLineEditor } from '@/shared/documents/components/asset-line-editor'
 import { QuantityLineEditor } from '@/shared/documents/components/quantity-line-editor'
 import {
-  buildDraftRequest,
+  buildCompleteDraftRequest,
   DocumentHeaderSection,
   documentHeaderSchema,
 } from '@/shared/documents/document-header-form'
@@ -24,12 +24,12 @@ import {
   createEmptyQuantityLine,
   linesHaveUniqueMaterials,
   quantityLineSchema,
-  toAssetLineInputs,
-  toDocumentLineInputs,
+  toCompleteDraftAssetLines,
+  toCompleteDraftLines,
 } from '@/shared/documents/schemas/document-lines.schemas'
 import {
   documentDraftMutationError,
-  useCreateDocumentMutation,
+  useCompleteDraftMutation,
 } from '@/shared/documents/use-document-draft-mutations'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
@@ -85,13 +85,13 @@ const DEFAULT_VALUES: DeepPartial<ReceivingDocumentFormValues> = {
  * only cross-container validation.
  *
  * Submission flattens header + merged lines + petal into a contract-typed
- * `WarehouseDocumentDraftRequest` via `buildDraftRequest`, persists it as a
- * draft through the shared create mutation, and navigates to the created
- * document's detail page.
+ * `CompleteDraftRequest` via `buildCompleteDraftRequest`, persists it through the
+ * shared `complete-draft` mutation, writes the paper reference through its own
+ * route, and navigates to the created document's detail page.
  */
 export default function ReceivingDocumentFormPage() {
   const navigate = useNavigate()
-  const createMutation = useCreateDocumentMutation()
+  const createMutation = useCompleteDraftMutation()
   const form = useForm<ReceivingDocumentFormValues>({
     resolver: zodResolver(receivingDocumentFormSchema) as Resolver<ReceivingDocumentFormValues>,
     defaultValues: DEFAULT_VALUES,
@@ -113,18 +113,26 @@ export default function ReceivingDocumentFormPage() {
     }
     form.clearErrors('lines')
     void form.handleSubmit((values) => {
-      const draft = buildDraftRequest<'Receiving'>({
+      const request = buildCompleteDraftRequest<'Receiving'>({
         documentType: 'Receiving',
         header: values.header,
-        lines: [...toDocumentLineInputs(values.lines), ...toAssetLineInputs(values.assetLines)],
+        lines: [...toCompleteDraftLines(values.lines), ...toCompleteDraftAssetLines(values.assetLines)],
         petals: { receivingInfo: toReceivingInfo(values.petal.receivingInfo) },
-        rowVersion: 0,
       })
-      createMutation.mutate(draft, {
-        onSuccess: (document) => {
-          navigate(ROUTE_PATHS.documentReceivingDetail.replace(':documentId', document.documentId))
+      createMutation.mutate(
+        {
+          request,
+          paperReference: {
+            paperDocumentNumber: values.header.paperDocumentNumber,
+            paperDocumentYear: values.header.paperDocumentYear,
+          },
         },
-      })
+        {
+          onSuccess: (document) => {
+            navigate(ROUTE_PATHS.documentReceivingDetail.replace(':documentId', document.id))
+          },
+        },
+      )
     })(event)
   }
 

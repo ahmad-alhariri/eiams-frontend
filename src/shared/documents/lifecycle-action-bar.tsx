@@ -1,11 +1,16 @@
 import { IconAlertCircle, IconInfoCircle } from '@tabler/icons-react'
 
+import {
+  actionAvailabilityReasonAr,
+  policyAdvisoryMessageAr,
+  policyBlockerMessageAr,
+} from '@/shared/documents/document-policy-gates'
+import {
+  toDocumentActionType,
+  type DocumentActionType,
+} from '@/shared/documents/types/document-action.types'
+import type { DocumentPolicy } from '@/shared/documents/types/document-wire.types'
 import { useConfirm } from '@/shared/hooks/use-confirm'
-import type {
-  ActionAvailability,
-  DocumentActionType,
-  DocumentPolicy,
-} from '@/shared/types/generated/eiams-v1'
 import { Button, type ButtonProps } from '@/shared/ui/button'
 import { cn } from '@/shared/utils/class-names'
 
@@ -85,6 +90,20 @@ function requiresDestructiveConfirmation(action: DocumentActionType): boolean {
   return DESTRUCTIVE_CONFIRM_ACTIONS.has(normalizeActionKey(action))
 }
 
+/**
+ * One actionable policy entry: the server's own action code, already narrowed to
+ * the vocabulary this bar can label, permission-gate and execute.
+ *
+ * `null` for an unrecognised code. The policy response types `action` as a bare
+ * string, so an action this build has never heard of arrives here; rendering it
+ * would put a button on screen with no label, no permission code and no route,
+ * which is worse than rendering nothing.
+ */
+interface ActionableAvailability {
+  readonly availability: DocumentPolicy['actions'][number]
+  readonly action: DocumentActionType
+}
+
 function LifecycleActionBar({
   busyAction,
   className,
@@ -99,24 +118,31 @@ function LifecycleActionBar({
     return null
   }
 
-  const visibleActions = policy.actions.filter(
-    (availability) =>
-      availability.presentation !== 'Hidden' &&
-      (isActionPermitted === undefined || isActionPermitted(availability.action)),
-  )
+  const presented: readonly ActionableAvailability[] = policy.actions
+    .filter((availability) => availability.presentation !== 'Hidden')
+    .flatMap((availability) => {
+      const action = toDocumentActionType(availability.action)
+      if (action === null) {
+        return []
+      }
+      if (isActionPermitted !== undefined && !isActionPermitted(action)) {
+        return []
+      }
+      return [{ availability, action }]
+    })
 
-  const handleClick = (availability: ActionAvailability) => {
-    if (!availability.confirmationRequired) {
-      void onExecute(availability.action, undefined)
+  const handleClick = (entry: ActionableAvailability) => {
+    if (!entry.availability.confirmationRequired) {
+      void onExecute(entry.action, undefined)
       return
     }
-    const label = getActionLabel(availability.action)
+    const label = getActionLabel(entry.action)
     void confirm({
       title: 'تأكيد الإجراء',
       message: `هل تريد تنفيذ «${label}»؟`,
-      variant: requiresDestructiveConfirmation(availability.action) ? 'destructive' : 'confirm',
+      variant: requiresDestructiveConfirmation(entry.action) ? 'destructive' : 'confirm',
       confirmLabel: label,
-      ...(availability.reasonRequired
+      ...(entry.availability.reasonRequired
         ? {
             requireReason: true,
             reasonLabel: 'سبب الإجراء',
@@ -124,7 +150,7 @@ function LifecycleActionBar({
           }
         : {}),
       execute: async (reason) => {
-        await onExecute(availability.action, reason)
+        await onExecute(entry.action, reason)
       },
     })
   }
@@ -133,65 +159,66 @@ function LifecycleActionBar({
     <div className={cn('flex flex-col gap-2', className)}>
       {policy.blockers.length > 0 ? (
         <div role="alert" className="flex flex-col gap-1.5 rounded-md bg-destructive/5 px-3 py-2">
-          {policy.blockers.map((blocker) => (
-            <p
-              key={blocker.code}
-              className="flex items-start gap-2 text-sm font-medium text-destructive"
-            >
-              <IconAlertCircle
-                data-slot="policy-blocker-icon"
-                className="mt-0.5 shrink-0"
-                aria-hidden
-              />
-              <span>{blocker.messageAr}</span>
-            </p>
-          ))}
+          {policy.blockers.map((blocker) => {
+            const messageAr = policyBlockerMessageAr(blocker)
+            return messageAr === null ? null : (
+              <p
+                key={`${blocker.action}-${blocker.code}`}
+                className="flex items-start gap-2 text-sm font-medium text-destructive"
+              >
+                <IconAlertCircle
+                  data-slot="policy-blocker-icon"
+                  className="mt-0.5 shrink-0"
+                  aria-hidden
+                />
+                <span>{messageAr}</span>
+              </p>
+            )
+          })}
         </div>
       ) : null}
-      {policy.advisories.length > 0 ? (
+      {policy.warnings.length > 0 ? (
         <div className="flex flex-col gap-1.5 rounded-md bg-muted/40 px-3 py-2">
-          {policy.advisories.map((advisory) => (
-            <p
-              key={advisory.code}
-              data-slot="policy-advisory-row"
-              className="flex items-start gap-2 text-sm text-muted-foreground"
-            >
-              <IconInfoCircle
-                data-slot="policy-advisory-icon"
-                className="mt-0.5 shrink-0"
-                aria-hidden
-              />
-              <span>
-                {advisory.messageAr}
-                {advisory.scopeSummaryAr ? ` — ${advisory.scopeSummaryAr}` : null}
-                {advisory.countReference ? ` (مرجع: ${advisory.countReference})` : null}
-              </span>
-            </p>
-          ))}
+          {policy.warnings.map((advisory) => {
+            const messageAr = policyAdvisoryMessageAr(advisory)
+            return messageAr === null ? null : (
+              <p
+                key={advisory.code}
+                data-slot="policy-advisory-row"
+                className="flex items-start gap-2 text-sm text-muted-foreground"
+              >
+                <IconInfoCircle
+                  data-slot="policy-advisory-icon"
+                  className="mt-0.5 shrink-0"
+                  aria-hidden
+                />
+                <span>{messageAr}</span>
+              </p>
+            )
+          })}
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        {visibleActions.map((availability) => {
+        {presented.map((entry) => {
           const isBusy =
             busyAction !== null &&
-            normalizeActionKey(busyAction) === normalizeActionKey(availability.action)
+            normalizeActionKey(busyAction) === normalizeActionKey(entry.action)
           const isDisabled =
-            availability.presentation === 'Disabled' || disabled || (busyAction !== null && !isBusy)
+            entry.availability.presentation === 'Disabled' ||
+            disabled ||
+            (busyAction !== null && !isBusy)
+          const reasonAr = actionAvailabilityReasonAr(entry.availability)
           return (
             <Button
-              key={availability.action}
+              key={entry.action}
               type="button"
-              variant={getButtonVariant(availability.action)}
+              variant={getButtonVariant(entry.action)}
               loading={isBusy}
               disabled={isDisabled}
-              title={
-                availability.presentation === 'Disabled'
-                  ? (availability.reasonAr ?? undefined)
-                  : undefined
-              }
-              onClick={() => handleClick(availability)}
+              title={reasonAr ?? undefined}
+              onClick={() => handleClick(entry)}
             >
-              {isBusy ? 'جارٍ التنفيذ...' : getActionLabel(availability.action)}
+              {isBusy ? 'جارٍ التنفيذ...' : getActionLabel(entry.action)}
             </Button>
           )
         })}

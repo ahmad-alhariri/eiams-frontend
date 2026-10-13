@@ -14,7 +14,7 @@ import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
-import type { DocumentAttachment } from '@/shared/types/generated/eiams-v1'
+import type { DocumentAttachmentResponse } from '@/shared/documents/types/document-wire.types'
 import { formatDateTime } from '@/shared/utils/format'
 
 /**
@@ -41,7 +41,23 @@ export default function AdjustmentDetailPage() {
     )
   }
 
-  const attachments: readonly DocumentAttachment[] = adjustment.attachments ?? []
+  // Temporary projection seam. The adjustment module's own read still answers the
+  // provisional snapshot's `DocumentAttachment` (eiams-frontend-whhu.24 owns the
+  // rewiring); the shared attachment panel is on the real
+  // `DocumentAttachmentResponse`. This maps the five members the panel renders
+  // and drops the snapshot-only ones (checksum, documentId, uploader, downloadUrl)
+  // rather than widening the panel's prop type to accept a projection the live API
+  // does not serve.
+  const attachments: readonly DocumentAttachmentResponse[] = (adjustment.attachments ?? []).map(
+    (attachment) => ({
+      id: attachment.attachmentId,
+      attachmentType: attachment.attachmentType,
+      originalFilename: attachment.originalFilename,
+      mimeType: attachment.mimeType,
+      fileSize: attachment.fileSize,
+      uploadedAtUtc: attachment.uploadedAt,
+    }),
+  )
 
   return (
     <div dir="rtl" className="min-w-0">

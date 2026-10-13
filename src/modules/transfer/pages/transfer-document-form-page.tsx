@@ -15,7 +15,7 @@ import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { QuantityLineEditor } from '@/shared/documents/components/quantity-line-editor'
 import { BalanceReadError } from '@/shared/documents/components/balance-read-error'
 import {
-  buildDraftRequest,
+  buildCompleteDraftRequest,
   DocumentHeaderSection,
   documentHeaderSchema,
 } from '@/shared/documents/document-header-form'
@@ -23,11 +23,11 @@ import {
   createEmptyQuantityLine,
   linesHaveUniqueMaterials,
   quantityLineSchema,
-  toDocumentLineInputs,
+  toCompleteDraftLines,
 } from '@/shared/documents/schemas/document-lines.schemas'
 import {
   documentDraftMutationError,
-  useCreateDocumentMutation,
+  useCompleteDraftMutation,
 } from '@/shared/documents/use-document-draft-mutations'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
@@ -81,11 +81,11 @@ const EMPTY_LINES: TransferDocumentFormValues['lines'] = []
  * destination section, and the shared quantity-line editor wired to live
  * source-warehouse balances and the Transfer capability gate. Submission
  * flattens everything into a `WarehouseDocumentDraftRequest` via
- * `buildDraftRequest`.
+ * `buildCompleteDraftRequest`.
  */
 export default function TransferDocumentFormPage() {
   const navigate = useNavigate()
-  const createMutation = useCreateDocumentMutation()
+  const createMutation = useCompleteDraftMutation()
   const form = useForm<TransferDocumentFormValues>({
     resolver: zodResolver(transferDocumentFormSchema) as Resolver<TransferDocumentFormValues>,
     defaultValues: DEFAULT_VALUES,
@@ -150,20 +150,28 @@ export default function TransferDocumentFormPage() {
     event.preventDefault()
     form.clearErrors('lines')
     void form.handleSubmit((values) => {
-      const draft = buildDraftRequest<'Transfer'>({
+      const request = buildCompleteDraftRequest<'Transfer'>({
         documentType: 'Transfer',
         header: values.header,
-        lines: toDocumentLineInputs(values.lines),
+        lines: toCompleteDraftLines(values.lines),
         petals: {
           transferInfo: buildTransferPetal(values.petal),
         },
-        rowVersion: 0,
       })
-      createMutation.mutate(draft, {
-        onSuccess: (document) => {
-          navigate(ROUTE_PATHS.documentTransferDetail.replace(':documentId', document.documentId))
+      createMutation.mutate(
+        {
+          request,
+          paperReference: {
+            paperDocumentNumber: values.header.paperDocumentNumber,
+            paperDocumentYear: values.header.paperDocumentYear,
+          },
         },
-      })
+        {
+          onSuccess: (document) => {
+            navigate(ROUTE_PATHS.documentTransferDetail.replace(':documentId', document.id))
+          },
+        },
+      )
     })(event)
   }
 

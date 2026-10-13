@@ -15,6 +15,7 @@ import { documentReadOnlyReasonAr, isDocumentMutable } from '@/shared/documents/
 import { OPENING_TYPE_LABELS } from '@/shared/documents/schemas/document-lines.schemas'
 import {
   evaluateDocumentPreflight,
+  policyBlockerMessageAr,
   toPreflightLineShapes,
   type CapabilityEvaluation,
   type DocumentPreflight,
@@ -47,14 +48,16 @@ import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
+import type { AttachmentType } from '@/shared/documents/document-attachment-service'
+import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
+import type { DocumentAttachmentResponse } from '@/shared/documents/types/document-wire.types'
 import type {
-  AttachmentType,
-  DocumentActionType,
-  DocumentAttachment,
-  DocumentLine,
+  DocumentLineResponse,
   DocumentPolicy,
-  WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
+  DocumentType,
+  OpeningType,
+  WarehouseDocumentDetails,
+} from '@/shared/documents/types/document-wire.types'
 import { cn } from '@/shared/utils/class-names'
 import { formatDate, formatDateTime, formatNumber, toArabicDigits } from '@/shared/utils/format'
 
@@ -119,7 +122,7 @@ type DocumentDetailRouteKey =
 
 type DocumentDetailRouteEntry = {
   detailRouteKey: DocumentDetailRouteKey
-  documentType: Exclude<WarehouseDocument['documentType'], 'Adjustment'>
+  documentType: Exclude<DocumentType, 'Adjustment'>
   listRouteKey: RouteKey
 }
 
@@ -167,10 +170,10 @@ function findDocumentDetailRoute(pathname: string): DocumentDetailRouteEntry | u
 }
 
 const NOOP_UPLOAD: (files: File[], attachmentType: AttachmentType) => void = () => undefined
-const NOOP_REMOVE: (attachment: DocumentAttachment) => void = () => undefined
+const NOOP_REMOVE: (attachment: DocumentAttachmentResponse) => void = () => undefined
 const NOOP_CANCEL_PENDING: (file: File) => void = () => undefined
 
-const BASE_LINES_TABLE_COLUMN_COUNT = 7
+const BASE_LINES_TABLE_COLUMN_COUNT = 6
 
 /**
  * Read-only documents never carry edit-form `materialDomainId` snapshots, so
@@ -196,7 +199,11 @@ function PreflightSummary({ preflight }: { preflight: DocumentPreflight | null }
     return null
   }
   const blockerCodes = new Set(preflight.blockers.map((blocker) => blocker.code))
-  const blockerMessages = new Set(preflight.blockers.map((blocker) => blocker.messageAr))
+  const blockerMessages = new Set(
+    preflight.blockers
+      .map((blocker) => policyBlockerMessageAr(blocker))
+      .filter((message): message is string => message !== null),
+  )
   const visibleGates = preflight.gates.filter((gate) => {
     if (gate.messageAr === null) {
       return false
@@ -253,8 +260,8 @@ function DocumentLinesTable({
   documentType,
   lines,
 }: {
-  documentType: WarehouseDocument['documentType']
-  lines: readonly DocumentLine[]
+  documentType: DocumentType
+  lines: readonly DocumentLineResponse[]
 }) {
   if (lines.length === 0) {
     return (
@@ -287,9 +294,6 @@ function DocumentLinesTable({
             <th scope="col" className="px-3 py-2 text-start font-medium">
               تاريخ الانتهاء
             </th>
-            <th scope="col" className="px-3 py-2 text-start font-medium">
-              الرصيد المتاح
-            </th>
             {documentType === 'Opening' ? (
               <th scope="col" className="px-3 py-2 text-start font-medium">
                 نوع الافتتاحية
@@ -300,7 +304,7 @@ function DocumentLinesTable({
         <tbody>
           {lines.map((line) => (
             <DocumentLineRow
-              key={line.lineId}
+              key={line.id}
               line={line}
               showOpeningType={documentType === 'Opening'}
             />
@@ -315,42 +319,43 @@ function DocumentLineRow({
   line,
   showOpeningType,
 }: {
-  line: DocumentLine
+  line: DocumentLineResponse
   showOpeningType: boolean
 }) {
-  const assetInputs = line.assetInputs ?? []
-  const issuedAssetIds = line.issuedAssetIds ?? []
-  const linkedAssetCount = assetInputs.length + issuedAssetIds.length
+  const linkedAssetCount = line.assets.length + line.selectedAssets.length
   return (
     <>
       <tr data-slot="document-line-row" className="border-b border-border last:border-b-0">
         <td className="px-3 py-2 font-medium text-foreground">
-          {line.material.nameAr}
-          <span className="ms-2 text-xs text-muted-foreground" dir="ltr">
-            {line.material.code}
+          {/* The detail read identifies a line's material by id only — it carries no
+              material code or Arabic name — so the id is shown rather than a label
+              the server did not send. */}
+          <span dir="ltr" className="break-all font-mono text-xs">
+            {line.materialId}
           </span>
         </td>
         <td className="px-3 py-2 text-foreground">{formatNumber(line.quantity)}</td>
-        <td className="px-3 py-2 text-foreground">{line.unit?.displayName ?? '—'}</td>
         <td className="px-3 py-2 text-foreground">
-          {line.unitPrice === null || line.unitPrice === undefined
-            ? '—'
-            : formatNumber(line.unitPrice)}
+          {line.unitId === null ? (
+            '—'
+          ) : (
+            <span dir="ltr" className="break-all font-mono text-xs">
+              {line.unitId}
+            </span>
+          )}
+        </td>
+        <td className="px-3 py-2 text-foreground">
+          {line.unitPrice === null ? '—' : formatNumber(line.unitPrice)}
         </td>
         <td className="px-3 py-2 text-foreground">{line.batchNumber ?? '—'}</td>
         <td className="px-3 py-2 text-foreground">
-          {line.expiryDate === null || line.expiryDate === undefined
-            ? '—'
-            : formatDate(line.expiryDate)}
-        </td>
-        <td className="px-3 py-2 text-foreground">
-          {line.availableBalance === null || line.availableBalance === undefined
-            ? '—'
-            : formatNumber(line.availableBalance)}
+          {line.expiryDate === null ? '—' : formatDate(line.expiryDate)}
         </td>
         {showOpeningType ? (
           <td className="px-3 py-2 text-foreground">
-            {line.openingType === undefined ? '—' : OPENING_TYPE_LABELS[line.openingType]}
+            {line.openingType === null || !(line.openingType in OPENING_TYPE_LABELS)
+              ? '—'
+              : OPENING_TYPE_LABELS[line.openingType as OpeningType]}
           </td>
         ) : null}
       </tr>
@@ -369,24 +374,25 @@ function DocumentLineRow({
               </p>
             ) : (
               <ul className="mt-1 flex flex-col gap-0.5">
-                {assetInputs.map((asset, index) => (
-                  <li key={index} className="text-xs text-muted-foreground">
+                {line.assets.map((asset) => (
+                  <li key={asset.id} className="text-xs text-muted-foreground">
                     <span dir="ltr" className="text-start">
-                      رقم الأصل: {asset.assetNumber ?? '—'}
-                      {asset.serialNumber !== null && asset.serialNumber !== undefined
-                        ? ` | الرقم التسلسلي: ${asset.serialNumber}`
-                        : ''}
+                      رقم الأصل: {asset.assetNumber}
+                      {asset.serialNumber === null ? '' : ` | الرقم التسلسلي: ${asset.serialNumber}`}
                     </span>
                   </li>
                 ))}
-                {issuedAssetIds.map((assetId) => (
-                  <li key={assetId} className="text-xs text-muted-foreground">
-                    <span>معرّف الأصل: </span>
+                {line.selectedAssets.map((selected) => (
+                  <li key={selected.selectionId} className="text-xs text-muted-foreground">
+                    <span dir="ltr" className="text-start">
+                      رقم الأصل: {selected.assetNumber}
+                      {selected.serialNumber === null ? '' : ` | الرقم التسلسلي: ${selected.serialNumber}`}
+                    </span>
                     <Link
                       className="break-all font-mono text-foreground underline-offset-4 hover:underline"
-                      to={ROUTE_PATHS.assetDetail.replace(':assetId', assetId)}
+                      to={ROUTE_PATHS.assetDetail.replace(':assetId', selected.assetId)}
                     >
-                      <span dir="ltr">{assetId}</span>
+                      <span>{toArabicDigits(selected.assetId)}</span>
                     </Link>
                   </li>
                 ))}
@@ -403,7 +409,7 @@ export interface DocumentDetailBodyProps extends DocumentDetailPageProps {
   attachmentMutationProps?: DocumentDetailAttachmentMutationProps | undefined
   className?: string | undefined
   detailRouteKey: DocumentDetailRouteKey
-  document: WarehouseDocument
+  document: WarehouseDocumentDetails
   isActionPermitted?: ((action: DocumentActionType) => boolean) | undefined
   linesSlot?: ReactNode
   listRouteKey: RouteKey
@@ -453,9 +459,12 @@ export function DocumentDetailBody({
   const form = useForm<DocumentHeaderContainer>({
     defaultValues: {
       header: {
-        warehouseId: document.warehouse.id,
-        paperDocumentNumber: document.paperDocumentNumber,
-        paperDocumentYear: document.paperDocumentYear,
+        warehouseId: document.warehouseId,
+        paperDocumentNumber: document.paperDocumentNumber ?? '',
+        // A Draft may legitimately carry no paper reference yet; the read-only
+        // header row renders '—' for an absent year, and an `undefined` key is
+        // what `exactOptionalPropertyTypes` requires rather than an explicit null.
+        ...(document.paperDocumentYear === null ? {} : { paperDocumentYear: document.paperDocumentYear }),
       },
     },
   })
@@ -502,10 +511,17 @@ export function DocumentDetailBody({
     [fallbackExecute, onExecuteAction],
   )
 
-  const attachmentPolicy = {
-    signedOriginalSatisfied: document.policy.signedOriginalSatisfied,
-    blockers: document.policy.blockers,
-  }
+  // The signed-original gate is server-authoritative and lives on the POLICY
+  // projection — `WarehouseDocumentDetails` carries no embedded policy member, so
+  // it is read from the `policy` prop this page already fetched. `null` while the
+  // policy read is pending, which the panel renders as its own pending badge.
+  const attachmentPolicy =
+    policy === null
+      ? null
+      : {
+          signedOriginalSatisfied: policy.signedOriginalSatisfied,
+          blockers: policy.blockers,
+        }
   // Defence-in-depth gate: the routed page wires the session predicate; the
   // body defaults to the bar's backwards-compatible "render every presented
   // action" contract when composed standalone (gallery/tests).
@@ -575,13 +591,17 @@ export function DocumentDetailBody({
           <DetailField label="نوع المستند">
             {DOCUMENT_TYPE_LABELS_AR[document.documentType]}
           </DetailField>
-          <DetailField label="أنشأها">{document.createdBy.displayName}</DetailField>
-          <DetailField label="تاريخ الإنشاء">{formatDateTime(document.createdAt)}</DetailField>
-          {document.postedBy !== undefined ? (
-            <DetailField label="رصدها">{document.postedBy.displayName}</DetailField>
+          {document.postedBy !== null ? (
+            // The detail read carries the poster as a user id, not a display
+            // reference; the id is shown rather than a name the server never sent.
+            <DetailField label="رصدها">
+              <span dir="ltr" className="break-all font-mono text-xs">
+                {document.postedBy}
+              </span>
+            </DetailField>
           ) : null}
-          {document.postedAt !== null && document.postedAt !== undefined ? (
-            <DetailField label="تاريخ الرصد">{formatDateTime(document.postedAt)}</DetailField>
+          {document.postedAtUtc !== null ? (
+            <DetailField label="تاريخ الرصد">{formatDateTime(document.postedAtUtc)}</DetailField>
           ) : null}
         </dl>
       </ContentCard>
@@ -595,9 +615,10 @@ export function DocumentDetailBody({
             documentType={document.documentType}
             readOnly
             initialValues={{
-              createdByDisplayName: document.createdBy.displayName,
               rowVersion: document.rowVersion,
-              warehouseDisplayName: document.warehouse.displayName,
+              // The detail read identifies the warehouse by id only; the header
+              // section falls back to the id when no display name is supplied.
+              warehouseDisplayName: document.warehouseId,
             }}
             petalSlot={petalSlot}
           />

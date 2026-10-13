@@ -1,4 +1,4 @@
-import type { DocumentStatus } from '@/shared/types/generated/eiams-v1'
+import type { DocumentStatus } from '@/shared/documents/types/document-wire.types'
 
 /**
  * Single source of truth for the document mutability window (D-ATT-01

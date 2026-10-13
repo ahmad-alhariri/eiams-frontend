@@ -9,25 +9,33 @@ import {
 } from '@tabler/icons-react'
 import { useId } from 'react'
 
-import { SIGNED_GATE_MOOT_STATUSES } from '@/shared/documents/document-policy-gates'
+import { policyBlockerMessageAr, SIGNED_GATE_MOOT_STATUSES } from '@/shared/documents/document-policy-gates'
+import type { AttachmentType } from '@/shared/documents/document-attachment-service'
+import type {
+  DocumentAttachmentResponse,
+  DocumentStatus,
+} from '@/shared/documents/types/document-wire.types'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { DROPZONE_MAX_SIZE_BYTES, FileDropzone } from '@/shared/feedback/file-dropzone'
 import { useConfirm } from '@/shared/hooks/use-confirm'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
-import type {
-  AttachmentType,
-  DocumentAttachment,
-  DocumentStatus,
-  PolicyBlocker,
-} from '@/shared/types/generated/eiams-v1'
 import { cn } from '@/shared/utils/class-names'
 import { formatDate, formatFileSize } from '@/shared/utils/format'
 
-/** Policy slice consumed by the panel; the server evaluation is authoritative (D-ATT-01). */
+/**
+ * Policy slice consumed by the panel; the server evaluation is authoritative
+ * (D-ATT-01).
+ *
+ * `blockers` is typed by the one field the panel actually reads. The signed-original
+ * row resolves its Arabic sentence from the blocker CODE through the governed
+ * copy table, never from a message field, so the panel has no reason to depend on
+ * the projection's message name — and a sibling module whose own read still
+ * spells that member `messageAr` stays compatible without either side faking it.
+ */
 export type AttachmentPanelPolicy = {
   signedOriginalSatisfied: boolean
-  blockers?: readonly PolicyBlocker[]
+  blockers?: readonly { readonly code: string }[]
 }
 
 /** A file chosen by the user whose upload mutation the parent still owns. */
@@ -40,13 +48,13 @@ export type PendingAttachmentUpload = {
 
 export type AttachmentPanelProps = {
   /** Server-bound attachments; the panel renders and removes, never mutates. */
-  attachments: readonly DocumentAttachment[]
+  attachments: readonly DocumentAttachmentResponse[]
   /** Files chosen but not yet confirmed by the server; the parent owns the state. */
   pendingUploads: readonly PendingAttachmentUpload[]
   /** Parent-owned upload mutation; called when the user selects files. */
   onUpload: (files: File[], attachmentType: AttachmentType) => void
   /** Parent-owned delete mutation; called after the destructive confirm. */
-  onRemove: (attachment: DocumentAttachment) => void
+  onRemove: (attachment: DocumentAttachmentResponse) => void
   /** Instant cancel of a pending (never uploaded) file; no confirm is shown. */
   onCancelPending: (file: File) => void
   /** True while any parent upload mutation is in flight; locks the pickers. */
@@ -98,6 +106,8 @@ function GateStatusRow({
   const signedBlocker = policy?.blockers?.find((blocker) =>
     blocker.code.startsWith('signed_original'),
   )
+  const signedBlockerMessageAr =
+    signedBlocker === undefined ? null : policyBlockerMessageAr({ code: signedBlocker.code })
 
   if (documentStatus !== undefined && SIGNED_GATE_MOOT_STATUSES.has(documentStatus)) {
     return (
@@ -137,9 +147,9 @@ function GateStatusRow({
       <IconAlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
       <div className="flex flex-col gap-0.5">
         <p className="text-sm font-medium text-foreground">النسخة الأصلية الموقعة مطلوبة للترحيل</p>
-        {signedBlocker?.messageAr ? (
-          <p className="text-xs text-muted-foreground">{signedBlocker.messageAr}</p>
-        ) : null}
+        {signedBlockerMessageAr === null ? null : (
+          <p className="text-xs text-muted-foreground">{signedBlockerMessageAr}</p>
+        )}
       </div>
     </div>
   )
@@ -151,10 +161,10 @@ function AttachmentRow({
   disabled,
   onRemove,
 }: {
-  attachment: DocumentAttachment
+  attachment: DocumentAttachmentResponse
   readOnly: boolean
   disabled: boolean
-  onRemove: (attachment: DocumentAttachment) => void
+  onRemove: (attachment: DocumentAttachmentResponse) => void
 }) {
   return (
     <li
@@ -173,8 +183,7 @@ function AttachmentRow({
           {attachment.originalFilename}
         </p>
         <p className="truncate text-xs text-muted-foreground" data-testid="attachment-meta">
-          {formatFileSize(attachment.fileSize)} — {formatDate(attachment.uploadedAt)} — بواسطة{' '}
-          {attachment.uploadedBy.displayName}
+          {formatFileSize(attachment.fileSize)} — {formatDate(attachment.uploadedAtUtc)}
         </p>
       </div>
       {readOnly ? null : (
@@ -295,14 +304,14 @@ function AttachmentSection({
   title: string
   description: string
   maxFiles: number
-  attachments: readonly DocumentAttachment[]
+  attachments: readonly DocumentAttachmentResponse[]
   pendingOfType: readonly PendingAttachmentUpload[]
   isUploading: boolean
   uploadError: string | null | undefined
   readOnly: boolean
   disabled: boolean
   onFilesChange: (files: File[]) => void
-  onRemove: (attachment: DocumentAttachment) => void
+  onRemove: (attachment: DocumentAttachmentResponse) => void
   onRetry: (pending: PendingAttachmentUpload) => void
   onCancel: (file: File) => void
 }) {
@@ -333,7 +342,7 @@ function AttachmentSection({
       <ul className="flex flex-col gap-2">
         {attachments.map((attachment) => (
           <AttachmentRow
-            key={attachment.attachmentId}
+            key={attachment.id}
             attachment={attachment}
             readOnly={readOnly}
             disabled={disabled}
@@ -391,7 +400,7 @@ function AttachmentPanel({
   )
   const hasSignedOriginal = signedAttachments.length > 0
 
-  const handleRemove = (attachment: DocumentAttachment) => {
+  const handleRemove = (attachment: DocumentAttachmentResponse) => {
     void (async () => {
       const outcome = await confirm({
         title: 'حذف المرفق',

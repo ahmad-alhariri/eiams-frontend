@@ -7,10 +7,11 @@ import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useDocumentLifecyclePermissions } from '@/shared/documents/use-document-permissions'
 import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
 import type {
-  ActionAvailability,
-  DocumentActionType,
+  DocumentActionAvailability,
   DocumentPolicy,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/shared/documents/types/document-wire.types'
+import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
+import { toDocumentActionType } from '@/shared/documents/types/document-action.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
@@ -107,14 +108,14 @@ function buildDemoSession(
 
 function availability(
   action: DocumentActionType,
-  overrides: Partial<ActionAvailability> = {},
-): ActionAvailability {
+  overrides: Partial<DocumentActionAvailability> = {},
+): DocumentActionAvailability {
   return {
     action,
     allowed: true,
     confirmationRequired: true,
     presentation: 'Enabled',
-    reasonAr: null,
+    reason: null,
     reasonCode: null,
     reasonRequired: false,
     ...overrides,
@@ -124,9 +125,8 @@ function availability(
 function buildDraftPolicy(): DocumentPolicy {
   return {
     documentId: 'demo-permissions-draft',
-    documentStatus: 'Draft',
-    evaluatedAt: new Date().toISOString(),
-    policyKind: 'Generic',
+    status: 'Draft',
+    evaluatedAtUtc: new Date().toISOString(),
     rowVersion: 1,
     signedOriginalSatisfied: true,
     actions: [
@@ -137,17 +137,15 @@ function buildDraftPolicy(): DocumentPolicy {
       availability('Post', {
         allowed: false,
         presentation: 'Disabled',
-        reasonAr: 'لا يمكن الترحيل قبل إرسال المستند للترحيل',
-        reasonCode: 'state_not_submitted',
+        reasonCode: 'STATE_OR_PERMISSION_NOT_ALLOWED',
       }),
       availability('Reverse', {
         allowed: false,
         presentation: 'Hidden',
-        reasonAr: 'لا يمكن عكس مستند غير مرحّل',
-        reasonCode: 'state_not_posted',
+        reasonCode: 'STATE_OR_PERMISSION_NOT_ALLOWED',
       }),
     ],
-    advisories: [],
+    warnings: [],
     blockers: [],
   }
 }
@@ -155,9 +153,8 @@ function buildDraftPolicy(): DocumentPolicy {
 function buildSubmittedPolicy(): DocumentPolicy {
   return {
     documentId: 'demo-permissions-submitted',
-    documentStatus: 'Submitted',
-    evaluatedAt: new Date().toISOString(),
-    policyKind: 'Generic',
+    status: 'Submitted',
+    evaluatedAtUtc: new Date().toISOString(),
     rowVersion: 1,
     signedOriginalSatisfied: true,
     actions: [
@@ -165,7 +162,7 @@ function buildSubmittedPolicy(): DocumentPolicy {
       availability('Reject', { reasonRequired: true }),
       availability('Cancel', { reasonRequired: true }),
     ],
-    advisories: [],
+    warnings: [],
     blockers: [],
   }
 }
@@ -173,23 +170,37 @@ function buildSubmittedPolicy(): DocumentPolicy {
 function PermissionPanels({ policy }: { policy: DocumentPolicy }) {
   const { isActionPermitted } = useDocumentLifecyclePermissions()
 
-  const policyHidden = useMemo(
-    () => policy.actions.filter((item) => item.presentation === 'Hidden'),
+  // The policy projection types `action` as a bare string, so it is narrowed here
+  // ONCE and every downstream read works on the typed pair. An action this build
+  // does not know is dropped rather than rendered with a fallback label.
+  const knownActions = useMemo(
+    () =>
+      policy.actions.flatMap((availability) => {
+        const action = toDocumentActionType(availability.action)
+        return action === null ? [] : [{ availability, action }]
+      }),
     [policy],
+  )
+
+  const policyHidden = useMemo(
+    () => knownActions.filter((item) => item.availability.presentation === 'Hidden'),
+    [knownActions],
   )
   const permissionHidden = useMemo(
     () =>
-      policy.actions.filter(
-        (item) => item.presentation !== 'Hidden' && !isActionPermitted(item.action),
+      knownActions.filter(
+        (item) =>
+          item.availability.presentation !== 'Hidden' && !isActionPermitted(item.action),
       ),
-    [isActionPermitted, policy],
+    [isActionPermitted, knownActions],
   )
   const shown = useMemo(
     () =>
-      policy.actions.filter(
-        (item) => item.presentation !== 'Hidden' && isActionPermitted(item.action),
+      knownActions.filter(
+        (item) =>
+          item.availability.presentation !== 'Hidden' && isActionPermitted(item.action),
       ),
-    [isActionPermitted, policy],
+    [isActionPermitted, knownActions],
   )
 
   return (

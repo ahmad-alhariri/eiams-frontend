@@ -37,7 +37,7 @@ import { cn } from '@/shared/utils/class-names'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import type { CapabilityOperation } from '@/modules/warehouse/types/warehouse.types'
-import type { DocumentType } from '@/shared/types/generated/eiams-v1'
+import type { DocumentType } from '@/shared/documents/types/document-wire.types'
 import type { Material, MaterialUnitConversion } from '@/modules/catalog/types/catalog.types'
 
 // The editor is a component file by contract; its schema and draft mapper live

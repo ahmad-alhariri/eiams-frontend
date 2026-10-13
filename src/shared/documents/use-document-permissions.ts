@@ -2,7 +2,10 @@ import { useCallback, useMemo } from 'react'
 
 import type { PermissionCode } from '@/config/permissions'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import type { DocumentActionType } from '@/shared/types/generated/eiams-v1'
+import {
+  DOCUMENT_ACTION_TYPES,
+  type DocumentActionType,
+} from '@/shared/documents/types/document-action.types'
 
 /**
  * Canonical action → permission enforcement mapping (D-RBAC-01). Mirrors the
@@ -55,7 +58,7 @@ export function useDocumentLifecyclePermissions(): DocumentLifecyclePermissions 
 
   const permittedActions = useMemo<ReadonlySet<DocumentActionType>>(() => {
     const permitted = new Set<DocumentActionType>()
-    for (const action of Object.keys(ACTION_PERMISSION_CODES) as DocumentActionType[]) {
+    for (const action of DOCUMENT_ACTION_TYPES) {
       if (isActionPermitted(action)) {
         permitted.add(action)
       }

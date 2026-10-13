@@ -2,7 +2,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
-import { receivingService } from '@/modules/receiving/services/receiving.service'
+import {
+  receivingService,
+  type SupplierSuggestion,
+} from '@/modules/receiving/services/receiving.service'
 import type { OptionLoader } from '@/shared/selectors/selector-adapter'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
@@ -24,17 +27,21 @@ export interface ReceivingSuppliersLoaderResult {
    * searches reuse the cached response within the operational stale window
    * and concurrent identical queries deduplicate into one request.
    */
-  loadOptions: OptionLoader<string>
+  loadOptions: OptionLoader<SupplierSuggestion>
   /** False until the session has an active scope; callers disable the control. */
   scopeReady: boolean
 }
 
 /**
- * Scope-bound supplier-reference suggestions for the receiving petal.
+ * Scope-bound supplier suggestions for the receiving petal.
  *
  * AsyncSelect owns debouncing (300ms) and the two-character trigger; this
  * loader guards both defensively and stays inert until a session scope is
  * active, so the petal never offers suppliers outside the active scope.
+ *
+ * Each suggestion carries the external-party id the draft write binds as
+ * `SupplierPartyId`, so the combobox commits an id rather than a label — there is
+ * no free-text create row, because a typed name would never bind server-side.
  *
  * Suppliers are operational (not master) data — an active count session may
  * hide them — so responses use the operational stale window.
@@ -44,7 +51,7 @@ export function useReceivingSuppliersLoader(): ReceivingSuppliersLoaderResult {
   const { activeScopeCacheKey } = useActiveScopeContext()
   const scopeReady = activeScopeCacheKey !== undefined
 
-  const loadOptions = useCallback<OptionLoader<string>>(
+  const loadOptions = useCallback<OptionLoader<SupplierSuggestion>>(
     async (query) => {
       const trimmed = query.trim()
       if (activeScopeCacheKey === undefined || trimmed.length < SUPPLIER_SEARCH_MIN_LENGTH) {
@@ -55,7 +62,7 @@ export function useReceivingSuppliersLoader(): ReceivingSuppliersLoaderResult {
         queryFn: () => receivingService.searchReceivingSuppliers(trimmed),
         staleTime: OPERATIONAL_STALE_TIME,
       })
-      return suppliers.map((supplier) => ({ value: supplier, label: supplier }))
+      return suppliers.map((supplier) => ({ value: supplier.id, label: supplier.nameAr }))
     },
     [activeScopeCacheKey, queryClient],
   )

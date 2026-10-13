@@ -16,11 +16,8 @@ import {
   useDocumentDetailQuery,
   useDocumentPolicyQuery,
 } from '@/shared/documents/use-document-queries'
-import type {
-  DocumentActionType,
-  DocumentPolicy,
-  WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
+import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
+import type { DocumentPolicy, WarehouseDocumentDetails } from '@/shared/documents/types/document-wire.types'
 
 const EMPTY_PREFLIGHT_LINES: readonly PreflightLineShape[] = []
 const EMPTY_CAPABILITY_EVALUATIONS: readonly CapabilityEvaluation[] = []
@@ -31,7 +28,7 @@ export interface DocumentPolicyGateOptions {
 }
 
 export interface DocumentPolicyGateResult {
-  document: WarehouseDocument | undefined
+  document: WarehouseDocumentDetails | undefined
   policy: DocumentPolicy | null
   isLoading: boolean
   isError: boolean
@@ -71,7 +68,7 @@ export function useDocumentPolicyGate(
     [effectiveLines],
   )
   const capabilityValidation = useWarehouseCapabilityValidation(
-    capabilityParticipates ? document?.warehouse.id : undefined,
+    capabilityParticipates ? document?.warehouseId : undefined,
   )
   const { validates } = capabilityValidation
 

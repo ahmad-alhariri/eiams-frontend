@@ -17,14 +17,15 @@ import { Badge } from '@/shared/ui/badge'
 import { Input } from '@/shared/ui/input'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import type {
-  DocumentLineInput,
+  AdjustmentDraftDetails,
+  CompleteDraftLine,
+  CompleteDraftRequest,
   DocumentType,
-  IssueTo,
-  ReceivingInfo,
-  ReturnInfo,
-  TransferInfo,
-  WarehouseDocumentDraftRequest,
-} from '@/shared/types/generated/eiams-v1'
+  IssueDraftDetails,
+  ReceivingDraftDetails,
+  ReturnDraftDetails,
+  TransferDraftDetails,
+} from '@/shared/documents/types/document-wire.types'
 
 // The section is a component file by contract; the schema, labels, and draft
 // mapper it ships are deliberately co-located so domain modules import one unit.
@@ -55,8 +56,13 @@ export const PAPER_DOCUMENT_NUMBER_PATTERN = /^\d{1,4}(?:\/\d{1,10})?$/
 const PAPER_DOCUMENT_NUMBER_MAX_LENGTH = 15
 
 /**
- * Spine fields every warehouse document carries. Values mirror the
- * `WarehouseDocumentDraftRequest` keys so the page can map them 1:1.
+ * Spine fields every warehouse document carries.
+ *
+ * The `complete-draft` route carries the paper reference in NEITHER the command
+ * nor its lines: `CompleteWarehouseDocumentDraftCommand` is `{ warehouseId,
+ * documentType, lines, petals }`. The paper number/year are written by a separate
+ * `PUT /{documentId}/paper-reference` call, which is why they remain editable on
+ * the form after the draft exists.
  */
 export const documentHeaderSchema = z.object({
   warehouseId: z.uuid('يجب اختيار مستودع صالح من القائمة.'),
@@ -123,23 +129,22 @@ const NO_PETAL_DOCUMENT_TYPES: ReadonlySet<DocumentType> = new Set<DocumentType>
 ])
 
 type DocumentPetalMap = {
-  Issue: { issueTo: IssueTo }
-  Receiving: { receivingInfo: ReceivingInfo }
-  Transfer: { transferInfo: TransferInfo }
-  Return: { returnInfo: ReturnInfo }
+  Issue: { issueTo: IssueDraftDetails }
+  Receiving: { receivingInfo: ReceivingDraftDetails }
+  Transfer: { transferInfo: TransferDraftDetails }
+  Return: { returnInfo: ReturnDraftDetails }
   Opening: Record<string, never>
-  Adjustment: Record<string, never>
+  Adjustment: { adjustmentInfo: AdjustmentDraftDetails }
 }
 
-/** Per-document-type petal inputs required to build a draft request. */
+/** Per-document-type petal inputs required to build a complete-draft request. */
 export type DocumentPetals<T extends DocumentType = DocumentType> = DocumentPetalMap[T]
 
 export interface BuildDraftRequestArgs<T extends DocumentType> {
   documentType: T
   header: DocumentHeaderValues
-  lines: readonly DocumentLineInput[]
+  lines: readonly CompleteDraftLine[]
   petals: DocumentPetals<T>
-  rowVersion: number
 }
 
 interface WarehouseSelectorControlProps {
@@ -261,16 +266,17 @@ function SpineInfoValues({
 
 /**
  * Shared spine section of the document engine: the source warehouse plus the
- * paper document number/year every `WarehouseDocumentDraftRequest` carries,
- * with a render slot for the type-specific petal (ReceivingInfo / IssueTo /
- * TransferInfo / ReturnInfo) owned by the domain modules.
+ * paper document number/year. Read by the `complete-draft` command for the
+ * warehouse and written by the separate `paper-reference` route for the number
+ * and year.
  *
  * RHF contract: the section reads and writes the page's form context through
  * the `header.` name prefix (`header.warehouseId`, `header.paperDocumentNumber`,
- * `header.paperDocumentYear`), mirroring the request's top-level keys. Pages
- * compose `documentHeaderSchema` into their resolver and keep their form
- * values structurally compatible with {@link DocumentHeaderContainer}, then
- * flatten header + lines + petals through `buildDraftRequest`.
+ * `header.paperDocumentYear`). Pages compose `documentHeaderSchema` into their
+ * resolver and keep their form values structurally compatible with
+ * {@link DocumentHeaderContainer}, then flatten header + lines + petals through
+ * {@link buildCompleteDraftRequest} and hand the paper pair to the follow-up
+ * reference write.
  *
  * The section performs no data fetching (beyond the scope-aware warehouse
  * selector), no mutations, and no navigation; the page owns loading,
@@ -390,13 +396,19 @@ export function DocumentHeaderSection({
 }
 
 type PetalRequestPatch = Partial<
-  Pick<WarehouseDocumentDraftRequest, 'issueTo' | 'receivingInfo' | 'transferInfo' | 'returnInfo'>
+  Pick<
+    CompleteDraftRequest,
+    | 'issueTo'
+    | 'receivingInfo'
+    | 'transferInfo'
+    | 'returnInfo'
+    | 'adjustmentInfo'
+  >
 >
 
 /**
- * Maps one document type to its petal request patch; types without a petal
- * (Opening / Adjustment) contribute nothing. Petals spread onto the spine in
- * `buildDraftRequest`.
+ * Maps one document type to its petal request patch. Petals spread onto the spine
+ * in `buildCompleteDraftRequest`.
  */
 const PETAL_REQUEST_BY_TYPE: {
   [T in DocumentType]: (petals: DocumentPetals<T>) => PetalRequestPatch
@@ -406,7 +418,7 @@ const PETAL_REQUEST_BY_TYPE: {
   Transfer: (petals) => ({ transferInfo: petals.transferInfo }),
   Return: (petals) => ({ returnInfo: petals.returnInfo }),
   Opening: () => ({}),
-  Adjustment: () => ({}),
+  Adjustment: (petals) => ({ adjustmentInfo: petals.adjustmentInfo }),
 }
 
 function documentPetalFor<T extends DocumentType>(
@@ -417,24 +429,24 @@ function documentPetalFor<T extends DocumentType>(
 }
 
 /**
- * Builds a contract-typed `WarehouseDocumentDraftRequest` from the spine
- * header values, the page's lines, and the type-matched petal. `lines` and
- * `rowVersion` pass through untouched.
+ * Builds the `complete-draft` command from the spine header values, the page's
+ * lines, and the type-matched petal. `lines` passes through untouched.
+ *
+ * The paper number/year are deliberately NOT part of the result: the live
+ * `complete-draft` command has no slot for them, and pretending otherwise is how
+ * a validated field silently reaches no server state. A saved draft gets its
+ * paper reference from the separate `updatePaperReference` route.
  */
-export function buildDraftRequest<T extends DocumentType>({
+export function buildCompleteDraftRequest<T extends DocumentType>({
   documentType,
   header,
   lines,
   petals,
-  rowVersion,
-}: BuildDraftRequestArgs<T>): WarehouseDocumentDraftRequest {
+}: BuildDraftRequestArgs<T>): CompleteDraftRequest {
   return {
     documentType,
     warehouseId: header.warehouseId,
-    paperDocumentNumber: header.paperDocumentNumber,
-    paperDocumentYear: header.paperDocumentYear,
     lines,
-    rowVersion,
     ...documentPetalFor(documentType, petals),
   }
 }

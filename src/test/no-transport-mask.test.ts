@@ -97,6 +97,17 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // 386 = 385 plus `src/modules/admin/utils/role-labels.ts`, the one resolver
     // that turns a role id into its Arabic label for the users directory, the
     // user detail page and the user form dialog alike (`whhu.17`).
+    // `eiams-frontend-whhu.19` rewired the document spine onto the handwritten
+    // wire contract and landed on the SAME total: +1 for
+    // `src/shared/documents/types/document-action.types.ts` (the closed action
+    // vocabulary the policy projection's bare `action: string` is narrowed
+    // through) and -2 for the two files it deleted —
+    // `src/shared/services/document-attachment-transport.ts` (a second
+    // attachment transport, consolidated into
+    // `src/shared/documents/document-attachment-service.ts` per
+    // `eiams-frontend-71fp`) and the unreferenced
+    // `src/shared/documents/types/document-transport.types.ts`. Re-measured, not
+    // assumed: an unchanged number here is a coincidence, not "no change".
     assertScannedFiles(PRODUCTION_FILES, 386)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))

@@ -1,10 +1,10 @@
 import { DetailField } from '@/shared/layout/detail-field'
-import type { ReceivingInfo } from '@/shared/types/generated/eiams-v1'
+import type { ReceivingInfoResponse } from '@/shared/documents/types/document-wire.types'
 
 import { receivingTypeLabelAr } from '@/modules/receiving/schemas/receiving-info.schema'
 
 export interface ReceivingPetalViewProps {
-  info: ReceivingInfo
+  info: ReceivingInfoResponse
 }
 
 /**

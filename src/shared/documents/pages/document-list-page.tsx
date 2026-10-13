@@ -21,7 +21,10 @@ import { Button } from '@/shared/ui/button'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type {
+  DocumentStatus,
+  WarehouseDocumentSummary,
+} from '@/shared/documents/types/document-wire.types'
 import { formatDateTime } from '@/shared/utils/format'
 import { pageRows } from '@/shared/utils/table-data'
 
@@ -34,7 +37,7 @@ export interface DocumentListPageProps {
   entry?: DocumentRouteEntry
 }
 
-const DOCUMENT_STATUS_LABELS_AR: Readonly<Record<WarehouseDocument['documentStatus'], string>> = {
+const DOCUMENT_STATUS_LABELS_AR: Readonly<Record<DocumentStatus, string>> = {
   Draft: 'مسودة',
   Submitted: 'بانتظار الترحيل',
   Posted: 'مرحّل',
@@ -75,7 +78,8 @@ const DOCUMENT_LIST_ROUTE_ENTRIES: Readonly<Record<string, DocumentRouteEntry>> 
   },
 }
 
-const documentColumnHelper = createColumnHelper<typeof dataTableFeatures, WarehouseDocument>()
+const documentColumnHelper =
+  createColumnHelper<typeof dataTableFeatures, WarehouseDocumentSummary>()
 
 /**
  * One file, many scoped pages: the route path picks the document type, the
@@ -91,7 +95,7 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
   const { page: currentPage, pageSize, setPage, setPageSize } = useServerPagination()
   const { has } = usePermission()
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<WarehouseDocument['documentStatus'] | undefined>()
+  const [status, setStatus] = useState<DocumentStatus | undefined>()
   const [warehouseId, setWarehouseId] = useState<string | undefined>()
 
   const warehouseSelector = useScopedWarehouseSelector()
@@ -106,11 +110,7 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
 
   const handleStatusChange = useCallback(
     (value: string | null) => {
-      setStatus(
-        value === null || value === 'all'
-          ? undefined
-          : (value as WarehouseDocument['documentStatus']),
-      )
+      setStatus(value === null || value === 'all' ? undefined : (value as DocumentStatus))
       setPage(1)
     },
     [setPage],
@@ -124,12 +124,18 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
     [setPage],
   )
 
+  // The list route has no free-text `search`: it exposes `systemReferenceNumber`
+  // and `paperDocumentNumber` as two independent `Contains` filters, so the box
+  // searches the system reference number and says so rather than claiming to
+  // search both. `page` is one-based on both sides of this boundary —
+  // `useServerPagination` and `toWireOneBasedPaginationParams` agree, so no ±1
+  // conversion happens here.
   const filters = useMemo<DocumentListFilters>(
     () => ({
-      pageIndex: currentPage - 1,
+      page: currentPage,
       pageSize,
       ...(documentType === undefined ? {} : { documentType }),
-      ...(search.trim() === '' ? {} : { search: search.trim() }),
+      ...(search.trim() === '' ? {} : { systemReferenceNumber: search.trim() }),
       ...(status === undefined ? {} : { documentStatus: status }),
       ...(warehouseId === undefined ? {} : { warehouseId }),
     }),
@@ -151,10 +157,7 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
               cell: ({ getValue, row }) => (
                 <Link
                   className="font-semibold text-foreground underline-offset-4 hover:underline"
-                  to={ROUTE_PATHS[routeEntry.detailRouteKey].replace(
-                    ':documentId',
-                    row.original.documentId,
-                  )}
+                  to={ROUTE_PATHS[routeEntry.detailRouteKey].replace(':documentId', row.original.id)}
                 >
                   <span dir="ltr">{getValue()}</span>
                 </Link>
@@ -163,25 +166,29 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
             documentColumnHelper.accessor('paperDocumentNumber', {
               id: 'paperDocumentNumber',
               header: 'رقم السند الورقي',
-              cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
+              cell: ({ getValue }) => <span dir="ltr">{getValue() ?? '—'}</span>,
             }),
-            documentColumnHelper.accessor((document) => document.warehouse.displayName, {
+            documentColumnHelper.accessor('warehouseId', {
               id: 'warehouse',
               header: 'المستودع',
+              // The list projection identifies a warehouse by id only; there is no
+              // display reference to render, so the id is shown rather than a label
+              // the server did not send.
+              cell: ({ getValue }) => (
+                <span dir="ltr" className="break-all font-mono text-xs">
+                  {getValue()}
+                </span>
+              ),
             }),
             documentColumnHelper.accessor('documentStatus', {
               id: 'documentStatus',
               header: 'الحالة',
               cell: ({ getValue }) => <StatusBadge entity="document" status={getValue()} />,
             }),
-            documentColumnHelper.accessor('createdAt', {
-              id: 'createdAt',
+            documentColumnHelper.accessor('createdAtUtc', {
+              id: 'createdAtUtc',
               header: 'تاريخ الإنشاء',
               cell: ({ getValue }) => formatDateTime(getValue()),
-            }),
-            documentColumnHelper.accessor((document) => document.createdBy.displayName, {
-              id: 'createdBy',
-              header: 'أنشأها',
             }),
           ]),
     [routeEntry],
@@ -221,7 +228,7 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
                 <SelectContent>
                   <SelectItem value="all">كل الحالات</SelectItem>
                   {(
-                    Object.keys(DOCUMENT_STATUS_LABELS_AR) as WarehouseDocument['documentStatus'][]
+                    Object.keys(DOCUMENT_STATUS_LABELS_AR) as DocumentStatus[]
                   ).map((documentStatus) => (
                     <SelectItem key={documentStatus} value={documentStatus}>
                       {DOCUMENT_STATUS_LABELS_AR[documentStatus]}
@@ -247,7 +254,7 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
 
       <ContentCard
         title="قائمة السندات"
-        description="ابحث برقم المرجع النظامي أو رقم السند الورقي، وصفِّ النتائج حسب الحالة أو المستودع. تُنفَّذ النتائج والترقيم في الخادم."
+        description="ابحث برقم المرجع النظامي، وصفِّ النتائج حسب الحالة أو المستودع. تُنفَّذ النتائج والترقيم في الخادم."
       >
         <DataTableServer
           columns={columns}
@@ -267,7 +274,7 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
           onPageSizeChange={setPageSize}
           searchQuery={search}
           onSearchChange={handleSearchChange}
-          searchPlaceholder="ابحث برقم المرجع أو رقم السند..."
+          searchPlaceholder="ابحث برقم المرجع النظامي..."
         />
       </ContentCard>
     </div>

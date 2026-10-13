@@ -1,13 +1,16 @@
+import type { CapabilityOperation } from '@/modules/warehouse/types/warehouse.types'
+import { normalizeWireErrorCode } from '@/shared/api/envelope'
+import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
+import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
 import type {
-  CapabilityOperation,
-  DocumentActionType,
-  DocumentLine,
+  DocumentActionAvailability,
+  DocumentLineResponse,
   DocumentPolicy,
+  DocumentPolicyAdvisory,
+  DocumentPolicyBlocker,
   DocumentStatus,
   DocumentType,
-  OperationalAdvisory,
-  PolicyBlocker,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/shared/documents/types/document-wire.types'
 import { formatNumber } from '@/shared/utils/format'
 import { isSignedOriginalBlockerCode } from '@/shared/documents/policy-blocker-codes'
 
@@ -57,8 +60,42 @@ export interface PreflightGate {
 export type DocumentPreflight = {
   status: 'blocked' | 'warn' | 'clear'
   gates: readonly PreflightGate[]
-  blockers: readonly PolicyBlocker[]
-  advisories: readonly OperationalAdvisory[]
+  blockers: readonly DocumentPolicyBlocker[]
+  advisories: readonly DocumentPolicyAdvisory[]
+}
+
+/**
+ * Arabic for one server policy sentence, resolved by CODE.
+ *
+ * The live policy projection carries English prose (`DocumentPolicyBlocker.Message`,
+ * `DocumentPolicyAdvisory.Message`, `DocumentActionAvailabilityResponse.Reason`) —
+ * there is no `messageAr` / `reasonAr` field, and the repository's governed
+ * decision (`docs/backend-contract-reconciliation.md` §5, `error-copy-ar.ts`) is
+ * that user-facing Arabic is owned by the frontend and keyed by code.
+ *
+ * When the code is unmapped this returns `null` rather than the server's English
+ * string: an Arabic-first UI must not silently switch language, and an absent
+ * reason renders exactly as it did before the wire correction (no text), while a
+ * mapped code renders the governed Arabic sentence.
+ */
+function policyMessageAr(code: string | null): string | null {
+  const copy = arabicCopyForCode(normalizeWireErrorCode(code))
+  return copy === null ? null : copy.titleAr
+}
+
+/** Arabic text for a policy blocker, or `null` when its code is unmapped. */
+export function policyBlockerMessageAr(blocker: { readonly code: string }): string | null {
+  return policyMessageAr(blocker.code)
+}
+
+/** Arabic text for a policy advisory, or `null` when its code is unmapped. */
+export function policyAdvisoryMessageAr(advisory: DocumentPolicyAdvisory): string | null {
+  return policyMessageAr(advisory.code)
+}
+
+/** Arabic text for a disabled action's reason, or `null` when its code is unmapped. */
+export function actionAvailabilityReasonAr(availability: DocumentActionAvailability): string | null {
+  return policyMessageAr(availability.reasonCode)
 }
 
 /**
@@ -215,7 +252,9 @@ export function signedOriginalGate(
   return {
     gate: 'signedOriginal',
     status: 'blocked',
-    messageAr: blocker?.messageAr ?? SIGNED_GATE_DEFAULT_BLOCKED,
+    messageAr:
+      (blocker === undefined ? null : policyBlockerMessageAr(blocker)) ??
+      SIGNED_GATE_DEFAULT_BLOCKED,
     // Exposed so a consumer can suppress this gate when the server already
     // renders the same blocker, matching on code instead of Arabic text.
     blockerCode: blocker?.code ?? null,
@@ -313,23 +352,31 @@ export function evaluateDocumentPreflight(input: DocumentPreflightInput): Docume
     status: hasBlocked ? 'blocked' : hasUnknown ? 'warn' : 'clear',
     gates,
     blockers: input.policy?.blockers ?? [],
-    advisories: input.policy?.advisories ?? [],
+    advisories: input.policy?.warnings ?? [],
   }
 }
 
 /**
- * Adapts server-loaded `DocumentLine` records to the preflight line shape.
- * Server lines never carry `materialDomainId` (capability preflight applies
- * only to edit-form draft lines), so the adaptor pins it to `null`.
+ * Adapts server-loaded `DocumentLineResponse` records to the preflight line
+ * shape.
+ *
+ * Two facts about the real detail read drive this adaptor:
+ * - lines never carry `materialDomainId`, so capability preflight applies only to
+ *   edit-form draft lines and is pinned to `null` here;
+ * - lines carry only `materialId`, never a material name, and no balance, so the
+ *   balance gate on a server-loaded Issue/Transfer document resolves to
+ *   `unknown` — a neutral note that never blocks. The authoritative balance
+ *   check is the server's own `InventoryBalances.InsufficientQuantity` policy
+ *   blocker at post time.
  */
 export function toPreflightLineShapes(
-  lines: readonly DocumentLine[],
+  lines: readonly DocumentLineResponse[],
 ): readonly PreflightLineShape[] {
   return lines.map((line) => ({
     quantity: line.quantity,
-    availableBalance: line.availableBalance ?? null,
+    availableBalance: null,
     materialDomainId: null,
-    materialNameAr: line.material.nameAr,
+    materialNameAr: null,
   }))
 }
 
@@ -358,7 +405,7 @@ export function evaluateActionDecision(
     return { presentation: 'Hidden', reasonAr: null }
   }
   if (availability.presentation === 'Disabled') {
-    return { presentation: 'Disabled', reasonAr: availability.reasonAr ?? null }
+    return { presentation: 'Disabled', reasonAr: actionAvailabilityReasonAr(availability) }
   }
   return { presentation: 'Enabled', reasonAr: null }
 }

@@ -1,29 +1,36 @@
 import type { ApiTransport } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
-import type { paths } from '@/shared/types/generated/eiams-v1'
 
-const RECEIVING_SUPPLIERS_PATH = '/receiving/suppliers' satisfies keyof paths
+const RECEIVING_SUPPLIERS_PATH = '/receiving-infos/suppliers'
+
+/**
+ * `Application.ReceivingInfos.SupplierSuggestionResponse` — the live supplier
+ * picker row. `id` is the external-party id the draft write binds as
+ * `SupplierPartyId`; the snapshot's `string[]` suggestion shape was invented.
+ */
+export interface SupplierSuggestion {
+  readonly id: string
+  readonly nameAr: string
+  readonly code: string | null
+}
 
 export interface ReceivingService {
   /**
-   * Distinct supplier-reference suggestions (contract: `string[]`).
-   * `search` is the contract-required query parameter; the caller owns
-   * debouncing and minimum query length.
+   * Supplier suggestions for the receiving petal. `search` is the route's query
+   * parameter; the caller owns debouncing and the minimum query length.
    */
-  searchReceivingSuppliers: (search: string) => Promise<readonly string[]>
+  searchReceivingSuppliers: (search: string) => Promise<readonly SupplierSuggestion[]>
 }
 
 /**
- * Contract-only receiving transport. Draft persistence (create/update of a
- * `WarehouseDocumentDraftRequest`) is deliberately NOT duplicated here — the
- * shared document engine already owns those spine operations
- * (`documentService.createDocument` / `updateDocument`); this service adds
- * only the receiving-owned supplier-suggestion operation.
+ * Contract-only receiving transport. Draft persistence is deliberately NOT
+ * duplicated here — the shared document engine owns the `complete-draft` write;
+ * this service adds only the receiving-owned supplier-suggestion read.
  */
 export function createReceivingService(transport: ApiTransport): ReceivingService {
   return {
     async searchReceivingSuppliers(search) {
-      const response = await transport.request<readonly string[]>({
+      const response = await transport.request<readonly SupplierSuggestion[]>({
         path: RECEIVING_SUPPLIERS_PATH,
         method: 'GET',
         query: { search },
