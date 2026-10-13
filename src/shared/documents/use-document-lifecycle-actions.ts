@@ -2,9 +2,7 @@ import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/r
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { documentService } from '@/shared/documents/document-transport'
-import {
-  policyAdvisoryMessageAr,
-} from '@/shared/documents/document-policy-gates'
+import { policyAdvisoryMessageAr } from '@/shared/documents/document-policy-gates'
 import {
   documentQueryKeys,
   useInvalidateDocumentDetail,

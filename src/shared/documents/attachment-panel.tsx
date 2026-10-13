@@ -9,7 +9,10 @@ import {
 } from '@tabler/icons-react'
 import { useId } from 'react'
 
-import { policyBlockerMessageAr, SIGNED_GATE_MOOT_STATUSES } from '@/shared/documents/document-policy-gates'
+import {
+  policyBlockerMessageAr,
+  SIGNED_GATE_MOOT_STATUSES,
+} from '@/shared/documents/document-policy-gates'
 import type { AttachmentType } from '@/shared/documents/document-attachment-service'
 import type {
   DocumentAttachmentResponse,

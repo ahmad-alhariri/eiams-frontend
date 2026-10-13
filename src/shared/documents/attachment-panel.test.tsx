@@ -7,23 +7,24 @@ import {
   type AttachmentPanelProps,
   type PendingAttachmentUpload,
 } from '@/shared/documents/attachment-panel'
-import type { DocumentAttachment } from '@/shared/types/generated/eiams-v1'
+import type { DocumentAttachmentResponse } from '@/shared/documents/types/document-wire.types'
 import { formatDate, formatFileSize } from '@/shared/utils/format'
 
-const UPLOADED_BY = { id: 'user-1', displayName: 'أحمد العطار' }
-
-function makeAttachment(overrides: Partial<DocumentAttachment> = {}): DocumentAttachment {
+/**
+ * The wire attachment record: `{ id, attachmentType, originalFilename, mimeType,
+ * fileSize, uploadedAtUtc }`. The API serves no checksum, no uploader reference
+ * and no download URL, so the row can only state name, size and upload instant.
+ */
+function makeAttachment(
+  overrides: Partial<DocumentAttachmentResponse> = {},
+): DocumentAttachmentResponse {
   return {
-    attachmentId: 'att-1',
+    id: 'att-1',
     attachmentType: 'SignedOriginal',
-    checksum: 'abc',
-    documentId: 'doc-1',
-    downloadUrl: null,
     fileSize: 2048,
     mimeType: 'application/pdf',
     originalFilename: 'signed.pdf',
-    uploadedAt: '2026-08-10T09:30:00.000Z',
-    uploadedBy: UPLOADED_BY,
+    uploadedAtUtc: '2026-08-10T09:30:00.000Z',
     ...overrides,
   }
 }
@@ -83,10 +84,10 @@ describe('AttachmentPanel — copy and existing attachments', () => {
     expect(sectionSupporting(container).getByText(/ملفات إضافية/)).toBeInTheDocument()
   })
 
-  it('renders existing attachments with name, size, date and uploader in Arabic', () => {
+  it('renders existing attachments with name, size and upload date in Arabic', () => {
     const signed = makeAttachment()
     const supporting = makeAttachment({
-      attachmentId: 'att-2',
+      id: 'att-2',
       attachmentType: 'Supporting',
       originalFilename: 'فاتورة.pdf',
       fileSize: 4096,
@@ -100,11 +101,11 @@ describe('AttachmentPanel — copy and existing attachments', () => {
       formatFileSize(2048),
     )
     expect(within(signedRow).getByTestId('attachment-meta').textContent).toContain(
-      formatDate(signed.uploadedAt),
+      formatDate(signed.uploadedAtUtc),
     )
-    expect(within(signedRow).getByTestId('attachment-meta').textContent).toContain(
-      'بواسطة أحمد العطار',
-    )
+    // The wire attachment record carries no uploader, so the row states none
+    // rather than inventing one.
+    expect(within(signedRow).getByTestId('attachment-meta').textContent).not.toContain('بواسطة')
 
     const supportingSection = sectionSupporting(container)
     expect(supportingSection.getByText('فاتورة.pdf')).toBeInTheDocument()
@@ -273,15 +274,22 @@ describe('AttachmentPanel — signed-original gate status row', () => {
     expect(screen.queryByTestId('attachment-gate-satisfied')).not.toBeInTheDocument()
   })
 
-  it('renders the Arabic blocker reason from policy when the gate is missing', () => {
+  it('states the requirement and echoes no reason for a bare signed-original blocker code', () => {
+    // The row matches blockers by CODE and resolves the Arabic through the
+    // governed `error-copy-ar.ts` table; `SIGNED_ORIGINAL_MISSING` is not in it,
+    // so the requirement badge renders alone. The server's English `message` is
+    // never rendered either — Arabic-first, code-owned copy.
     renderPanel({
       policy: {
         signedOriginalSatisfied: false,
-        blockers: [{ code: 'signed_original_missing', messageAr: 'لا توجد نسخة أصلية موقعة بعد' }],
+        blockers: [{ code: 'signed_original_missing' }],
       },
     })
 
-    expect(screen.getByText('لا توجد نسخة أصلية موقعة بعد')).toBeInTheDocument()
+    expect(screen.getByTestId('attachment-gate-missing')).toHaveTextContent(
+      'النسخة الأصلية الموقعة مطلوبة للترحيل',
+    )
+    expect(screen.queryByText('The signed copy is required.')).toBeNull()
   })
 
   it('falls back to attachment presence when no policy is provided', () => {

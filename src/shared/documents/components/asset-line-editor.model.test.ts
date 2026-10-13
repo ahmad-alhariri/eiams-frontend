@@ -10,7 +10,7 @@ import {
   createEmptyAssetInput,
   createEmptyAssetLine,
   isAssetMaterial,
-  toAssetLineInputs,
+  toCompleteDraftAssetLines,
   type AssetLineValues,
 } from '@/shared/documents/schemas/document-lines.schemas'
 
@@ -153,7 +153,13 @@ describe('asset-line capture schema (e12-t05)', () => {
     expect(assetInputSchema.safeParse({ acquisitionDate: '2024-01-31' }).success).toBe(true)
   })
 
-  it('maps asset lines to the request contract: snapshots dropped, empty optionals omitted, one input per unit kept', () => {
+  it('maps asset lines to what the request contract can actually carry', () => {
+    // KNOWN CONTRACT GAP (documented in `toCompleteDraftAssetLines`): the live
+    // `CompleteWarehouseDocumentDraftLine` has no per-unit identity collection —
+    // only `assetIds`, used to SELECT assets that already exist. So the captured
+    // `assetNumber` / `serialNumber` / dates are NOT sent, and the mapper emits
+    // the material and its unit count only. Nothing here invents a payload the
+    // server would reject.
     const lines: AssetLineValues[] = [
       validLine({
         lineId: '00000000-0000-4000-8000-000000000201',
@@ -173,23 +179,24 @@ describe('asset-line capture schema (e12-t05)', () => {
         assetInputs: [createEmptyAssetInput()],
       }),
     ]
-    expect(toAssetLineInputs(lines)).toEqual([
-      {
-        lineId: '00000000-0000-4000-8000-000000000201',
-        materialId: MATERIAL_ID,
-        quantity: 2,
-        assetInputs: [
-          { assetNumber: 'A-1001' },
-          {
-            assetNumber: 'A-1002',
-            serialNumber: 'SN-9002',
-            acquisitionDate: '2024-03-01',
-            warrantyExpiry: '2027-03-01',
-          },
-        ],
-      },
-      { materialId: MATERIAL_ID, quantity: 1, assetInputs: [{}] },
+
+    expect(toCompleteDraftAssetLines(lines)).toEqual([
+      { materialId: MATERIAL_ID, quantity: 2 },
+      { materialId: MATERIAL_ID, quantity: 1 },
     ])
+  })
+
+  it('keeps a blank asset number as a recorded "allocate one at post" decision', () => {
+    // `assetNumber` is optional for BOTH tracking types: blank means the server
+    // generates `AST-{assetId}`, supplied means a user-entered unique number.
+    const parsed = assetInputSchema.safeParse({ assetNumber: '', serialNumber: '' })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      // Trimmed to an empty string, which the wire treats as "no number supplied";
+      // the mapper that would have to drop it is the one that cannot run today.
+      expect(parsed.data.assetNumber).toBe('')
+      expect(parsed.data.serialNumber).toBe('')
+    }
   })
 
   it('validates the asset-line container: at least one line and no repeated materials', () => {
@@ -211,11 +218,11 @@ describe('asset-line capture schema (e12-t05)', () => {
   })
 
   it('discriminates Asset-kind materials for row partitioning', () => {
-    const asset = createMaterial({
+    const asset: Material = createMaterial({
       materialKind: 'Asset',
       requiresAssetNumber: true,
-    }) as unknown as Material
-    const consumable = createMaterial({ materialKind: 'Consumable' }) as unknown as Material
+    })
+    const consumable: Material = createMaterial({ materialKind: 'Consumable' })
     expect(isAssetMaterial(asset)).toBe(true)
     expect(isAssetMaterial(consumable)).toBe(false)
     if (asset.materialKind === 'Asset') {

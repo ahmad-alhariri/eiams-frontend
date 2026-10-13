@@ -378,7 +378,9 @@ function DocumentLineRow({
                   <li key={asset.id} className="text-xs text-muted-foreground">
                     <span dir="ltr" className="text-start">
                       رقم الأصل: {asset.assetNumber}
-                      {asset.serialNumber === null ? '' : ` | الرقم التسلسلي: ${asset.serialNumber}`}
+                      {asset.serialNumber === null
+                        ? ''
+                        : ` | الرقم التسلسلي: ${asset.serialNumber}`}
                     </span>
                   </li>
                 ))}
@@ -386,7 +388,9 @@ function DocumentLineRow({
                   <li key={selected.selectionId} className="text-xs text-muted-foreground">
                     <span dir="ltr" className="text-start">
                       رقم الأصل: {selected.assetNumber}
-                      {selected.serialNumber === null ? '' : ` | الرقم التسلسلي: ${selected.serialNumber}`}
+                      {selected.serialNumber === null
+                        ? ''
+                        : ` | الرقم التسلسلي: ${selected.serialNumber}`}
                     </span>
                     <Link
                       className="break-all font-mono text-foreground underline-offset-4 hover:underline"
@@ -464,7 +468,9 @@ export function DocumentDetailBody({
         // A Draft may legitimately carry no paper reference yet; the read-only
         // header row renders '—' for an absent year, and an `undefined` key is
         // what `exactOptionalPropertyTypes` requires rather than an explicit null.
-        ...(document.paperDocumentYear === null ? {} : { paperDocumentYear: document.paperDocumentYear }),
+        ...(document.paperDocumentYear === null
+          ? {}
+          : { paperDocumentYear: document.paperDocumentYear }),
       },
     },
   })

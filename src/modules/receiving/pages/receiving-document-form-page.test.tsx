@@ -17,7 +17,7 @@ import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
 import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { createReceivingSuppliersHandler } from '@/test/msw/receiving-handlers'
-import { createWarehouseDocumentCreateHandler } from '@/test/msw/warehouse-document-handlers'
+import { createCompleteDraftHandler } from '@/test/msw/warehouse-document-handlers'
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -32,6 +32,7 @@ import ReceivingDocumentFormPage from './receiving-document-form-page'
 const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = fixtureUuid(300)
 const MATERIAL_ID = fixtureUuid(401)
+const SUPPLIER_PARTY_ID = fixtureUuid(600)
 const ASSET_MATERIAL_ID = fixtureUuid(402)
 const MATERIAL_DOMAIN_ID = fixtureUuid(20)
 const MATERIAL_BASE_UNIT_ID = fixtureUuid(23)
@@ -180,11 +181,40 @@ function usePageHandlers(store: WarehouseDocument[], nextSystemReference: () => 
     http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () => okJson([])),
     unitsOfMeasureHandler(),
     ...createReceivingSuppliersHandler(['Sham Co']),
-    ...createWarehouseDocumentCreateHandler({
+    ...createCompleteDraftHandler({
       documentStore: () => store,
       lookups: useLookups(),
       nextSystemReference,
     }),
+    // The paper pair is NOT part of `complete-draft`: it is written immediately
+    // afterwards through its own guarded route.
+    paperReferenceHandler(store),
+  )
+}
+
+/** Applies the `paper-reference` write to the store, mirroring the live route. */
+function paperReferenceHandler(store: WarehouseDocument[]) {
+  return http.put(
+    `${API_BASE_URL}/warehouse-documents/:documentId/paper-reference`,
+    async ({ params, request }) => {
+      const body = (await request.json()) as {
+        expectedRowVersion: number
+        paperDocumentNumber: string
+        paperDocumentYear: number
+      }
+      const index = store.findIndex((item) => item.documentId === String(params['documentId']))
+      if (index === -1) {
+        return errJson(404, { code: 'WAREHOUSE_DOCUMENTS_NOT_FOUND' })
+      }
+      const current = store[index]!
+      store[index] = {
+        ...current,
+        paperDocumentNumber: body.paperDocumentNumber,
+        paperDocumentYear: body.paperDocumentYear,
+        rowVersion: current.rowVersion + 1,
+      }
+      return okJson({})
+    },
   )
 }
 
@@ -212,7 +242,7 @@ describe('ReceivingDocumentFormPage', () => {
 
     expect(await screen.findByText('يجب اختيار مستودع صالح من القائمة.')).toBeInTheDocument()
     expect(screen.getByText('رقم المستند الورقي مطلوب.')).toBeInTheDocument()
-    expect(screen.getByText('يجب إدخال اسم أو مرجع المورد.')).toBeInTheDocument()
+    expect(screen.getByText('يجب اختيار مورد صالح من القائمة.')).toBeInTheDocument()
     expect(screen.getAllByText('يجب اختيار مادة صالحة.')).not.toHaveLength(0)
   })
 
@@ -246,10 +276,11 @@ describe('ReceivingDocumentFormPage', () => {
     expect(created.paperDocumentNumber).toBe('2024/101')
     expect(created.paperDocumentYear).toBe(2024)
     expect(created.warehouse.id).toBe(WAREHOUSE_ID)
-    expect(created.receivingInfo).toEqual({
-      receivingType: 'Supplier',
-      supplierRef: 'Sham Co',
-    })
+    // The write carries the supplier's EXTERNAL-PARTY ID, never its display
+    // name: the route binds `Guid SupplierPartyId`, and the server fixes the
+    // receiving type to `Supplier` for every receiving draft.
+    expect(created.receivingInfo).toMatchObject({ receivingType: 'Supplier' })
+    expect(created.receivingInfo?.supplierRef).toBe(SUPPLIER_PARTY_ID)
     expect(created.lines).toHaveLength(1)
     expect(created.lines[0]).toMatchObject({
       lineType: 'Normal',

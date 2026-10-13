@@ -4,7 +4,8 @@ import type { DocumentAttachmentResponse, Uuid } from '@/shared/documents/types/
 
 const ATTACHMENTS_PATH = '/warehouse-documents/{documentId}/attachments'
 const ATTACHMENT_PATH = '/warehouse-documents/{documentId}/attachments/{attachmentId}'
-const ATTACHMENT_CONTENT_PATH = '/warehouse-documents/{documentId}/attachments/{attachmentId}/content'
+const ATTACHMENT_CONTENT_PATH =
+  '/warehouse-documents/{documentId}/attachments/{attachmentId}/content'
 
 function pathWithSegments(path: string, documentId: Uuid, attachmentId?: Uuid): string {
   return path
@@ -33,7 +34,11 @@ export interface DocumentAttachmentService {
     request: Readonly<UploadDocumentAttachmentRequest>,
   ) => Promise<DocumentAttachmentResponse>
   /** Deletes a draft attachment guarded by the document version QUERY parameter. */
-  deleteAttachment: (documentId: Uuid, attachmentId: Uuid, expectedRowVersion: number) => Promise<void>
+  deleteAttachment: (
+    documentId: Uuid,
+    attachmentId: Uuid,
+    expectedRowVersion: number,
+  ) => Promise<void>
   /**
    * The absolute content path for an attachment. The route answers the raw file
    * bytes OUTSIDE the JSON envelope, so it is deliberately not a transport read —

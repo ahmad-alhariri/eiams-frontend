@@ -26,9 +26,7 @@ export default function TransferDocumentDetailPage() {
   return (
     <DocumentDetailPage
       petalSlot={
-        document?.transferInfo == null ? null : (
-          <TransferPetalView info={document.transferInfo} />
-        )
+        document?.transferInfo == null ? null : <TransferPetalView info={document.transferInfo} />
       }
     />
   )

@@ -128,6 +128,11 @@ export function createWarehouseDocumentLine(
     id: fixtureUuid(201),
     sourceLineId: null,
     materialId: material.id,
+    // The line projection denormalises the identity and label it renders, so the
+    // detail table names a material without a second catalog read.
+    materialCode: material.code,
+    materialNameAr: material.nameAr,
+    unitSymbol: material.baseUnitSymbol,
     lineType: 'Normal',
     quantity: 5,
     unitId: material.baseUnitId,
@@ -442,12 +447,18 @@ export function createWarehouseDocument(
   const defaults: WarehouseDocumentDetails = {
     id,
     warehouseId: fixtureUuid(30),
+    // The detail read denormalises the warehouse label and the creating user;
+    // the header renders both without joining another resource.
+    warehouseCode: 'WH-CENTRAL',
+    warehouseName: 'المستودع المركزي',
     documentType: 'Receiving',
     paperDocumentNumber: '2024/123',
     paperDocumentYear: 2024,
     systemReferenceNumber: 'EIAMS-DOC-2024-0001',
     signedCopyAttachmentId: null,
     documentStatus,
+    createdAtUtc: FIXTURE_TIMESTAMP,
+    createdBy: fixtureUuid(10),
     postedBy: null,
     postedAtUtc: null,
     reversalOfDocumentId: null,

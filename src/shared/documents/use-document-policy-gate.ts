@@ -17,7 +17,10 @@ import {
   useDocumentPolicyQuery,
 } from '@/shared/documents/use-document-queries'
 import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
-import type { DocumentPolicy, WarehouseDocumentDetails } from '@/shared/documents/types/document-wire.types'
+import type {
+  DocumentPolicy,
+  WarehouseDocumentDetails,
+} from '@/shared/documents/types/document-wire.types'
 
 const EMPTY_PREFLIGHT_LINES: readonly PreflightLineShape[] = []
 const EMPTY_CAPABILITY_EVALUATIONS: readonly CapabilityEvaluation[] = []

@@ -15,13 +15,7 @@ import { formatDateTime } from '@/shared/utils/format'
  * imported so the timeline cannot drift onto a policy action name.
  */
 type LifecycleEventType =
-  | 'Created'
-  | 'Submitted'
-  | 'Posted'
-  | 'Rejected'
-  | 'RevisionStarted'
-  | 'Cancelled'
-  | 'Reversed'
+  'Created' | 'Submitted' | 'Posted' | 'Rejected' | 'RevisionStarted' | 'Cancelled' | 'Reversed'
 
 const EVENT_TITLE: Record<LifecycleEventType, string> = {
   Created: 'إنشاء الوثيقة',
@@ -118,9 +112,7 @@ function DocumentTimeline({
   return (
     <section data-slot="document-timeline" className={cn('flex flex-col gap-3', className)}>
       <header className="flex flex-wrap items-center gap-2">
-        <h3 className="text-lg font-semibold text-foreground">
-          {titleAr}
-        </h3>
+        <h3 className="text-lg font-semibold text-foreground">{titleAr}</h3>
         {status ? <StatusBadge entity="document" status={status} /> : null}
       </header>
       {orderedEvents.length === 0 ? (

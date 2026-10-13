@@ -78,8 +78,10 @@ const DOCUMENT_LIST_ROUTE_ENTRIES: Readonly<Record<string, DocumentRouteEntry>> 
   },
 }
 
-const documentColumnHelper =
-  createColumnHelper<typeof dataTableFeatures, WarehouseDocumentSummary>()
+const documentColumnHelper = createColumnHelper<
+  typeof dataTableFeatures,
+  WarehouseDocumentSummary
+>()
 
 /**
  * One file, many scoped pages: the route path picks the document type, the
@@ -157,7 +159,10 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
               cell: ({ getValue, row }) => (
                 <Link
                   className="font-semibold text-foreground underline-offset-4 hover:underline"
-                  to={ROUTE_PATHS[routeEntry.detailRouteKey].replace(':documentId', row.original.id)}
+                  to={ROUTE_PATHS[routeEntry.detailRouteKey].replace(
+                    ':documentId',
+                    row.original.id,
+                  )}
                 >
                   <span dir="ltr">{getValue()}</span>
                 </Link>
@@ -227,13 +232,13 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">كل الحالات</SelectItem>
-                  {(
-                    Object.keys(DOCUMENT_STATUS_LABELS_AR) as DocumentStatus[]
-                  ).map((documentStatus) => (
-                    <SelectItem key={documentStatus} value={documentStatus}>
-                      {DOCUMENT_STATUS_LABELS_AR[documentStatus]}
-                    </SelectItem>
-                  ))}
+                  {(Object.keys(DOCUMENT_STATUS_LABELS_AR) as DocumentStatus[]).map(
+                    (documentStatus) => (
+                      <SelectItem key={documentStatus} value={documentStatus}>
+                        {DOCUMENT_STATUS_LABELS_AR[documentStatus]}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>

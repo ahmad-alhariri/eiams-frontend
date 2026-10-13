@@ -1,4 +1,4 @@
-﻿import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { ApiSuccessResponse } from '@/shared/api/api-contracts'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
@@ -74,7 +74,7 @@ describe('document-engine scenario handlers', () => {
     server.resetHandlers()
   })
 
-  it('lists documents with contract meta and filters by status, type, warehouse, and search', async () => {
+  it('lists documents with contract meta and filters by status, type, warehouse, and reference numbers', async () => {
     const central = { id: fixtureUuid(30), displayName: 'المستودع المركزي' }
     const branch = { id: fixtureUuid(31), displayName: 'مستودع الفرع' }
     const documents = [
@@ -106,8 +106,8 @@ describe('document-engine scenario handlers', () => {
     // The harness now serves the real envelope: `data` is the item ARRAY and
     // `pagination` is the snake_case block. Asserting `{items, meta:{pageIndex}}`
     // would pin the UI shape the backend never sends.
-    const first =
-      await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>('/warehouse-documents')
+    type Summary = { id: string }
+    const first = await apiClient.get<ApiSuccessResponse<Summary[]>>('/warehouse-documents')
     expect(first.data.data).toHaveLength(3)
     expect(first.data.pagination).toMatchObject({
       page: 1,
@@ -120,25 +120,36 @@ describe('document-engine scenario handlers', () => {
       has_next_page: false,
     })
 
-    const submitted = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
+    const submitted = await apiClient.get<ApiSuccessResponse<Summary[]>>(
       '/warehouse-documents?documentStatus=Submitted',
     )
-    expect(submitted.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(151)])
+    expect(submitted.data.data.map((item) => item.id)).toEqual([fixtureUuid(151)])
 
-    const transfers = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
+    const transfers = await apiClient.get<ApiSuccessResponse<Summary[]>>(
       '/warehouse-documents?documentType=Transfer',
     )
-    expect(transfers.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(152)])
+    expect(transfers.data.data.map((item) => item.id)).toEqual([fixtureUuid(152)])
 
-    const byWarehouse = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
+    const byWarehouse = await apiClient.get<ApiSuccessResponse<Summary[]>>(
       `/warehouse-documents?warehouseId=${fixtureUuid(31)}`,
     )
-    expect(byWarehouse.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(152)])
+    expect(byWarehouse.data.data.map((item) => item.id)).toEqual([fixtureUuid(152)])
 
-    const bySearch = await apiClient.get<ApiSuccessResponse<Array<{ documentId: string }>>>(
-      '/warehouse-documents?search=2024/102',
+    // There is no free-text `search` filter on the list route: the contract
+    // narrows by `systemReferenceNumber` and `paperDocumentNumber`.
+    const byPaperNumber = await apiClient.get<ApiSuccessResponse<Summary[]>>(
+      '/warehouse-documents?paperDocumentNumber=2024/102',
     )
-    expect(bySearch.data.data.map((item) => item.documentId)).toEqual([fixtureUuid(151)])
+    expect(byPaperNumber.data.data.map((item) => item.id)).toEqual([fixtureUuid(151)])
+
+    const bySystemReference = await apiClient.get<ApiSuccessResponse<Summary[]>>(
+      `/warehouse-documents?systemReferenceNumber=${encodeURIComponent('EIAMS-DOC-2024-0001')}`,
+    )
+    expect(bySystemReference.data.data.map((item) => item.id)).toEqual([
+      fixtureUuid(150),
+      fixtureUuid(151),
+      fixtureUuid(152),
+    ])
 
     // One-based `page`, matching `PaginationQueryParameters.Page`. The old
     // `pageIndex=1` meant the SECOND slice; `page=2` means the same thing in the
@@ -184,7 +195,7 @@ describe('document-engine scenario handlers', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
       ...createWarehouseDocumentHistoryHandler(events),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     const {
@@ -194,27 +205,29 @@ describe('document-engine scenario handlers', () => {
     )
     expect(detail.documentStatus).toBe('Submitted')
 
+    // The history read answers `action` / `actorDisplayName` / `occurredAtUtc`,
+    // not the snapshot's `eventType` / `occurredBy` / `occurredAt`.
     const {
       data: { data: history },
     } = await apiClient.get<
       ApiSuccessResponse<{
         currentStatus: DocumentStatus
         currentRowVersion: number
-        events: Array<{ eventType: string }>
+        events: Array<{ action: string }>
       }>
     >(`/warehouse-documents/${document.documentId}/history`)
     expect(history).toMatchObject({
       currentStatus: 'Submitted',
       currentRowVersion: 2,
     })
-    expect(history.events.map((event) => event.eventType)).toEqual(['Created', 'Submitted'])
+    expect(history.events.map((event) => event.action)).toEqual(['Created', 'Submitted'])
 
     const {
       data: { data: policy },
-    } = await apiClient.get<ApiSuccessResponse<{ documentStatus: DocumentStatus }>>(
+    } = await apiClient.get<ApiSuccessResponse<{ status: DocumentStatus }>>(
       `/warehouse-documents/${document.documentId}/policy`,
     )
-    expect(policy.documentStatus).toBe('Submitted')
+    expect(policy.status).toBe('Submitted')
 
     const missing = await apiClient
       .get(`/warehouse-documents/${UNKNOWN_ID}`)
@@ -320,45 +333,29 @@ describe('document-engine scenario handlers', () => {
       }),
     )
 
-    const {
-      data: { data: result },
-    } = await apiClient.post<
-      ApiSuccessResponse<{
-        document: { documentStatus: DocumentStatus; rowVersion: number }
-        lifecycleEvent: { eventType: string; fromStatus: DocumentStatus }
-      }>
-    >(
+    // `submit` answers `EmptyResponse`: the route carries no post-action state,
+    // so the store is the only place the transition is observable.
+    const submitted = await apiClient.post<ApiSuccessResponse<Record<string, never>>>(
       `/warehouse-documents/${fixtureUuid(150)}/submit`,
-      { rowVersion: 1 },
+      { expectedRowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
     )
-    expect(result.document.documentStatus).toBe('Submitted')
-    expect(result.document.rowVersion).toBe(2)
-    expect(result.lifecycleEvent.eventType).toBe('Submitted')
-    expect(result.lifecycleEvent.fromStatus).toBe('Draft')
+    expect(submitted.data.data).toEqual({})
     expect(documents[0]).toMatchObject({ documentStatus: 'Submitted', rowVersion: 2 })
 
-    const cancelled = await apiClient.post<
-      ApiSuccessResponse<{
-        document: { documentStatus: DocumentStatus; rowVersion: number }
-        lifecycleEvent: { eventType: string; fromStatus: DocumentStatus }
-      }>
-    >(
+    const cancelled = await apiClient.post<ApiSuccessResponse<Record<string, never>>>(
       `/warehouse-documents/${fixtureUuid(150)}/cancel`,
-      { rowVersion: 2, reason: 'إلغاء' },
+      { expectedRowVersion: 2, reason: 'إلغاء' },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
     )
-    expect(cancelled.data.data.document.documentStatus).toBe('Cancelled')
-    expect(cancelled.data.data.document.rowVersion).toBe(3)
-    expect(cancelled.data.data.lifecycleEvent.eventType).toBe('Cancelled')
-    expect(cancelled.data.data.lifecycleEvent.fromStatus).toBe('Submitted')
+    expect(cancelled.data.data).toEqual({})
     expect(documents[0]).toMatchObject({ documentStatus: 'Cancelled', rowVersion: 3 })
     expect(documents[0]?.policy.documentStatus).toBe('Cancelled')
 
     const replayCancel = await apiClient
       .post(
         `/warehouse-documents/${fixtureUuid(150)}/cancel`,
-        { rowVersion: 3, reason: 'إلغاء مجدد' },
+        { expectedRowVersion: 3, reason: 'إلغاء مجدد' },
         { headers: { 'Idempotency-Key': SECOND_IDEMPOTENCY_KEY } },
       )
       .catch((caught: unknown) => caught)
@@ -387,7 +384,7 @@ describe('document-engine scenario handlers', () => {
     const stale = await apiClient
       .post(
         `/warehouse-documents/${fixtureUuid(150)}/submit`,
-        { rowVersion: 2 },
+        { expectedRowVersion: 2 },
         { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
       )
       .catch((caught: unknown) => caught)
@@ -413,7 +410,7 @@ describe('document-engine scenario handlers', () => {
     const missingReason = await apiClient
       .post(
         `/warehouse-documents/${fixtureUuid(151)}/reject`,
-        { rowVersion: 1 },
+        { expectedRowVersion: 1 },
         { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
       )
       .catch((caught: unknown) => caught)
@@ -433,7 +430,7 @@ describe('document-engine scenario handlers', () => {
     const premature = await apiClient
       .post(
         `/warehouse-documents/${fixtureUuid(150)}/post`,
-        { rowVersion: 1 },
+        { expectedRowVersion: 1 },
         { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
       )
       .catch((caught: unknown) => caught)
@@ -445,23 +442,19 @@ describe('document-engine scenario handlers', () => {
 
     await apiClient.post(
       `/warehouse-documents/${fixtureUuid(150)}/submit`,
-      { rowVersion: 1 },
+      { expectedRowVersion: 1 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
     )
+    // `post` is the one lifecycle route that answers anything: `PostDocumentResponse`.
     const {
       data: { data: posted },
-    } = await apiClient.post<
-      ApiSuccessResponse<{
-        document: { rowVersion: number }
-        lifecycleEvent: { eventType: string }
-      }>
-    >(
+    } = await apiClient.post<ApiSuccessResponse<{ documentId: string; warnings: unknown[] }>>(
       `/warehouse-documents/${fixtureUuid(150)}/post`,
-      { rowVersion: 2 },
+      { expectedRowVersion: 2 },
       { headers: { 'Idempotency-Key': IDEMPOTENCY_KEY } },
     )
-    expect(posted.document.rowVersion).toBe(3)
-    expect(posted.lifecycleEvent.eventType).toBe('Posted')
+    expect(posted.documentId).toBe(fixtureUuid(150))
+    expect(posted.warnings).toEqual([])
     expect(documents[0]).toMatchObject({ documentStatus: 'Posted', rowVersion: 3 })
     expect(documents[0]?.policy.documentStatus).toBe('Posted')
     expect(documents[0]?.postedAt).toBeDefined()

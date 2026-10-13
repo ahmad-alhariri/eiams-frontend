@@ -4,7 +4,10 @@ import { useRef } from 'react'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { documentService } from '@/shared/documents/document-transport'
 import type { CompleteDraftRequest } from '@/shared/documents/types/document-wire.types'
-import { DOCUMENT_RESOURCE, useInvalidateDocumentDetail } from '@/shared/documents/use-document-queries'
+import {
+  DOCUMENT_RESOURCE,
+  useInvalidateDocumentDetail,
+} from '@/shared/documents/use-document-queries'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { createIdempotencyKey, withIdempotencyKey } from '@/shared/services/mutation-safety'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'

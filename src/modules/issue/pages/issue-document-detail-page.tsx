@@ -27,9 +27,7 @@ export default function IssueDocumentDetailPage() {
 
   return (
     <DocumentDetailPage
-      petalSlot={
-        document?.issueTo == null ? null : <IssuePetalView info={document.issueTo} />
-      }
+      petalSlot={document?.issueTo == null ? null : <IssuePetalView info={document.issueTo} />}
     />
   )
 }

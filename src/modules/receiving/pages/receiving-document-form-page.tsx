@@ -116,7 +116,10 @@ export default function ReceivingDocumentFormPage() {
       const request = buildCompleteDraftRequest<'Receiving'>({
         documentType: 'Receiving',
         header: values.header,
-        lines: [...toCompleteDraftLines(values.lines), ...toCompleteDraftAssetLines(values.assetLines)],
+        lines: [
+          ...toCompleteDraftLines(values.lines),
+          ...toCompleteDraftAssetLines(values.assetLines),
+        ],
         petals: { receivingInfo: toReceivingInfo(values.petal.receivingInfo) },
       })
       createMutation.mutate(

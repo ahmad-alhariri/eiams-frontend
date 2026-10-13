@@ -18,7 +18,8 @@ import {
   fixtureUuid,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
-import { createWarehouseDocumentCreateHandler } from '@/test/msw/warehouse-document-handlers'
+import { wireDocumentDetails } from '@/test/msw/document-wire-fixtures'
+import { createCompleteDraftHandler } from '@/test/msw/warehouse-document-handlers'
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -139,15 +140,45 @@ function usePageHandlers(
     ),
     http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () => okJson([])),
     unitsOfMeasureHandler(),
-    ...createWarehouseDocumentCreateHandler({
+    ...createCompleteDraftHandler({
       documentStore: () => store,
       lookups: {
         materialOf: generatedMaterialOf,
         unitOf: () => undefined,
-        warehouseOf: (warehouseId) => (warehouseId === WAREHOUSE_ID ? warehouse : undefined),
+        warehouseOf: (warehouseId: string) =>
+          warehouseId === WAREHOUSE_ID ? warehouse : undefined,
       },
       nextSystemReference,
     }),
+    // The paper pair is NOT part of `complete-draft`: it is written immediately
+    // afterwards through its own guarded route.
+    paperReferenceHandler(store),
+  )
+}
+
+/** Captures the `paper-reference` write so a test can assert what reached it. */
+const paperReferenceWrites: unknown[] = []
+
+function paperReferenceHandler(store: WarehouseDocument[]) {
+  return http.put(
+    `${API_BASE_URL}/warehouse-documents/:documentId/paper-reference`,
+    async ({ params, request }) => {
+      const body = await request.json()
+      paperReferenceWrites.push(body)
+      const index = store.findIndex((item) => item.documentId === String(params['documentId']))
+      if (index === -1) {
+        return errJson(404, { code: 'WAREHOUSE_DOCUMENTS_NOT_FOUND' })
+      }
+      const current = store[index]!
+      const next = {
+        ...current,
+        paperDocumentNumber: (body as { paperDocumentNumber: string }).paperDocumentNumber,
+        paperDocumentYear: (body as { paperDocumentYear: number }).paperDocumentYear,
+        rowVersion: current.rowVersion + 1,
+      }
+      store[index] = next
+      return okJson({})
+    },
   )
 }
 
@@ -242,8 +273,6 @@ describe('OpeningDocumentFormPage', () => {
     expect(store[0]).toMatchObject({
       documentType: 'Opening',
       documentStatus: 'Draft',
-      paperDocumentNumber: '2024/151',
-      paperDocumentYear: 2024,
       systemReferenceNumber: 'EIAMS-OPN-2024-0001',
       warehouse: { id: WAREHOUSE_ID },
       lines: [
@@ -254,9 +283,17 @@ describe('OpeningDocumentFormPage', () => {
         }),
       ],
     })
+    // The paper pair never travels on the `complete-draft` command; it is written
+    // through `PUT /{id}/paper-reference`, guarded on the version it issued.
+    expect(paperReferenceWrites.at(-1)).toEqual({
+      expectedRowVersion: 1,
+      paperDocumentNumber: '2024/151',
+      paperDocumentYear: 2024,
+    })
+    expect(store[0]).toMatchObject({ paperDocumentNumber: '2024/151', paperDocumentYear: 2024 })
   }, 10_000)
 
-  it('saves an asset-only Opening draft with one AssetInput per unit', async () => {
+  it('saves an asset-only Opening draft, sending only what the contract can carry', async () => {
     const store: WarehouseDocument[] = []
     usePageHandlers(store, () => 'EIAMS-OPN-2024-0005')
 
@@ -273,18 +310,13 @@ describe('OpeningDocumentFormPage', () => {
     await waitFor(() => expect(screen.getByTestId('detail-stub')).toBeInTheDocument())
     expect(store).toHaveLength(1)
     expect(store[0]?.lines).toHaveLength(1)
+    // KNOWN CONTRACT GAP: `CompleteWarehouseDocumentDraftLine` has no per-unit
+    // identity collection, so the captured asset numbers have nowhere to travel
+    // and the draft carries the material and its unit count only.
     expect(store[0]?.lines[0]).toMatchObject({
       lineType: 'Asset',
       material: expect.objectContaining({ materialId: ASSET_MATERIAL_ID }),
       quantity: 2,
-      assetInputs: [
-        {
-          assetNumber: 'AST-2024-001',
-          serialNumber: 'SN-77',
-          acquisitionDate: '2024-01-15',
-        },
-        { serialNumber: 'SN-78' },
-      ],
     })
   }, 10_000)
 
@@ -310,13 +342,6 @@ describe('OpeningDocumentFormPage', () => {
       lineType: 'Asset',
       material: expect.objectContaining({ materialId: ASSET_MATERIAL_ID }),
       quantity: 1,
-      assetInputs: [
-        {
-          assetNumber: 'AST-2024-001',
-          serialNumber: 'SN-77',
-          acquisitionDate: '2024-01-15',
-        },
-      ],
     })
   }, 10_000)
 
@@ -452,7 +477,7 @@ describe('OpeningDocumentFormPage', () => {
 
   it('shows a server-authoritative one-time policy rejection and remains on the draft page', async () => {
     server.use(
-      http.post(`${API_BASE_URL}/warehouse-documents`, () =>
+      http.post(`${API_BASE_URL}/warehouse-documents/complete-draft`, () =>
         // "Already initialized" is a real, specific backend policy rejection:
         // OPENING_DOCUMENTS_ALREADY_INITIALIZED, 409 (OpeningDocumentsErrors.cs).
         // The invented `validation.failed` matched no code in the API, and the
@@ -490,18 +515,19 @@ describe('OpeningDocumentFormPage', () => {
       releaseRequest = resolve
     })
     server.use(
-      http.post(`${API_BASE_URL}/warehouse-documents`, async () => {
+      http.post(`${API_BASE_URL}/warehouse-documents/complete-draft`, async () => {
         requestCount += 1
         await pendingResponse
-        return apiJson(
-          createWarehouseDocument({
-            documentId: fixtureUuid(502),
-            documentStatus: 'Draft',
-            documentType: 'Opening',
-          }),
-          { status: 201 },
-        )
+        const created = createWarehouseDocument({
+          documentId: fixtureUuid(502),
+          documentStatus: 'Draft',
+          documentType: 'Opening',
+        })
+        store.push(created)
+        // `complete-draft` answers the whole detail read.
+        return apiJson(wireDocumentDetails(created), { status: 201 })
       }),
+      paperReferenceHandler(store),
     )
 
     const user = userEvent.setup()

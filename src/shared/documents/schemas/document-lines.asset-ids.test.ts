@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createEmptyQuantityLine,
-  toDocumentLineInputs,
+  toCompleteDraftLines,
   type QuantityLineValues,
 } from './document-lines.schemas'
 
@@ -23,7 +23,7 @@ function assetLine(overrides: Partial<QuantityLineValues> = {}): QuantityLineVal
 
 describe('D-IAR-01 line mapping', () => {
   it('emits assetIds for an Asset-kind line that has selections', () => {
-    const inputs = toDocumentLineInputs([assetLine()])
+    const inputs = toCompleteDraftLines([assetLine()])
     expect(inputs[0]).toMatchObject({
       materialId: ASSET_ID_A,
       quantity: 2,
@@ -32,17 +32,19 @@ describe('D-IAR-01 line mapping', () => {
   })
 
   it('drops assetIds when the material kind is not Asset (snapshot drift guard)', () => {
-    const inputs = toDocumentLineInputs([assetLine({ materialKind: 'Consumable' })])
+    const inputs = toCompleteDraftLines([assetLine({ materialKind: 'Consumable' })])
     expect(inputs[0]?.assetIds).toBeUndefined()
   })
 
   it('omits assetIds when the selection is empty', () => {
-    const inputs = toDocumentLineInputs([assetLine({ assetIds: [] })])
+    const inputs = toCompleteDraftLines([assetLine({ assetIds: [] })])
     expect(inputs[0]?.assetIds).toBeUndefined()
   })
 
-  it('never leaks assetIds from Normal lines even if state carried them', () => {
-    const normal = { ...assetLine(), materialKind: undefined as string | undefined }
-    expect(toDocumentLineInputs([normal])[0]?.assetIds).toBeUndefined()
+  it('never leaks assetIds from a line that carries no material kind at all', () => {
+    // A server-loaded line never has the display snapshot the form captures, so
+    // state can reach the mapper with `assetIds` set and no `materialKind`.
+    const withoutKind = { ...assetLine(), materialKind: undefined }
+    expect(toCompleteDraftLines([withoutKind])[0]?.assetIds).toBeUndefined()
   })
 })

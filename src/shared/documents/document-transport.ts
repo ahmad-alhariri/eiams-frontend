@@ -125,10 +125,7 @@ export interface DocumentService {
    * `201 { id }` for the NEW document; the caller must re-read the original to
    * observe it becoming Reversed.
    */
-  reverseDocument: (
-    documentId: Uuid,
-    idempotentRequest: IdempotentRequest,
-  ) => Promise<Uuid>
+  reverseDocument: (documentId: Uuid, idempotentRequest: IdempotentRequest) => Promise<Uuid>
 }
 
 /**

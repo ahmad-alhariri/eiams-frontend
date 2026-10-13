@@ -189,16 +189,14 @@ function PermissionPanels({ policy }: { policy: DocumentPolicy }) {
   const permissionHidden = useMemo(
     () =>
       knownActions.filter(
-        (item) =>
-          item.availability.presentation !== 'Hidden' && !isActionPermitted(item.action),
+        (item) => item.availability.presentation !== 'Hidden' && !isActionPermitted(item.action),
       ),
     [isActionPermitted, knownActions],
   )
   const shown = useMemo(
     () =>
       knownActions.filter(
-        (item) =>
-          item.availability.presentation !== 'Hidden' && isActionPermitted(item.action),
+        (item) => item.availability.presentation !== 'Hidden' && isActionPermitted(item.action),
       ),
     [isActionPermitted, knownActions],
   )

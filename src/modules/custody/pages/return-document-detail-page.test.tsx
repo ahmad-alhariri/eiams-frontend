@@ -62,7 +62,7 @@ describe('ReturnDocumentDetailPage (e19-t07)', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(returnDocument),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(returnDocument)),
-      ...createWarehouseDocumentPolicyHandler(returnDocument.policy),
+      ...createWarehouseDocumentPolicyHandler(returnDocument),
     )
 
     renderPage()
@@ -70,15 +70,16 @@ describe('ReturnDocumentDetailPage (e19-t07)', () => {
     await waitFor(() =>
       expect(screen.getByText('عودة المواد بعد انتهاء الحاجة')).toBeInTheDocument(),
     )
-    // Petal rows: original issue linkage + paper reference + reason.
-    expect(screen.getByText('ISSUE-2026-0001')).toBeInTheDocument()
+    // The live `ReturnInfoResponse` carries the original issue id and the
+    // reason. `originalIssueReference` and `assetIds` are NOT on the projection:
+    // the returned assets live on the document's own `lines[].selectedAssets`,
+    // which the shared lines card renders.
     expect(screen.getByText('سند الصرف الأصلي')).toBeInTheDocument()
     expect(screen.getByText('سبب الإرجاع')).toBeInTheDocument()
+    expect(screen.queryByText('ISSUE-2026-0001')).not.toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '66666666-6666-4666-8666-666666666666' }),
     ).toHaveAttribute('href', '/documents/issue/66666666-6666-4666-8666-666666666666')
-    expect(
-      screen.getByRole('link', { name: '77777777-7777-4777-8777-777777777777' }),
-    ).toHaveAttribute('href', '/assets/77777777-7777-4777-8777-777777777777')
+    expect(screen.queryByRole('link', { name: '77777777-7777-4777-8777-777777777777' })).toBeNull()
   })
 })

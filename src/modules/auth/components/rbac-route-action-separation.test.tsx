@@ -13,7 +13,7 @@ import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
 import { type ApiClientBundle } from '@/shared/services/api.client'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { DocumentPolicy } from '@/shared/types/generated/eiams-v1'
+import type { DocumentPolicy } from '@/shared/documents/types/document-wire.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createSessionUser, createSessionRole } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
@@ -38,9 +38,8 @@ function selectedSession(permissionCodes: readonly string[]): SessionResponse {
 
 const postPolicy: DocumentPolicy = {
   documentId: 'document-1',
-  documentStatus: 'Submitted',
-  evaluatedAt: '2026-08-11T08:00:00Z',
-  policyKind: 'Generic',
+  status: 'Submitted',
+  evaluatedAtUtc: '2026-08-11T08:00:00Z',
   rowVersion: 1,
   signedOriginalSatisfied: true,
   actions: [
@@ -49,12 +48,12 @@ const postPolicy: DocumentPolicy = {
       allowed: true,
       confirmationRequired: false,
       presentation: 'Enabled',
-      reasonAr: null,
+      reason: null,
       reasonCode: null,
       reasonRequired: false,
     },
   ],
-  advisories: [],
+  warnings: [],
   blockers: [],
 }
 

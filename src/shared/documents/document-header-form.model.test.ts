@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import type { DocumentLineInput } from '@/shared/types/generated/eiams-v1'
+import type { CompleteDraftLine } from '@/shared/documents/types/document-wire.types'
 
 import {
   PAPER_DOCUMENT_NUMBER_PATTERN,
   PAPER_DOCUMENT_YEAR_MAX,
   PAPER_DOCUMENT_YEAR_MIN,
-  buildDraftRequest,
+  buildCompleteDraftRequest,
   documentHeaderSchema,
   type DocumentHeaderValues,
 } from './document-header-form'
@@ -25,7 +25,7 @@ function validHeader(overrides: Partial<DocumentHeaderValues> = {}): DocumentHea
   }
 }
 
-function lines(): DocumentLineInput[] {
+function lines(): CompleteDraftLine[] {
   return [
     {
       materialId: '22222222-2222-4222-8222-222222222222',
@@ -162,26 +162,23 @@ describe('documentHeaderSchema', () => {
   })
 })
 
-describe('buildDraftRequest', () => {
+describe('buildCompleteDraftRequest', () => {
   it('maps an Issue document to issueTo and nothing else', () => {
     const issueTo = {
       issueReason: 'صرف داخلي',
-      recipientDisplayName: 'وحدة السكرتارية',
       recipientId: '44444444-4444-4444-8444-444444444444',
       recipientType: 'OrganizationalUnit' as const,
     }
-    const request = buildDraftRequest({
+    const request = buildCompleteDraftRequest({
       documentType: 'Issue',
       header: validHeader(),
       lines: lines(),
       petals: { issueTo },
-      rowVersion: 3,
     })
 
     expect(request.documentType).toBe('Issue')
     expect(request.issueTo).toEqual(issueTo)
     expect(request.lines).toEqual(lines())
-    expect(request.rowVersion).toBe(3)
     expect('receivingInfo' in request).toBe(false)
     expect('transferInfo' in request).toBe(false)
     expect('returnInfo' in request).toBe(false)
@@ -189,16 +186,14 @@ describe('buildDraftRequest', () => {
 
   it('maps a Receiving document to receivingInfo', () => {
     const receivingInfo = {
-      receivingType: 'شراء',
       supplierInvoiceRef: 'INV-2024-01',
-      supplierRef: 'مورد-001',
+      supplierPartyId: '77777777-7777-4777-8777-777777777777',
     }
-    const request = buildDraftRequest({
+    const request = buildCompleteDraftRequest({
       documentType: 'Receiving',
       header: validHeader(),
       lines: lines(),
       petals: { receivingInfo },
-      rowVersion: 0,
     })
 
     expect(request.receivingInfo).toEqual(receivingInfo)
@@ -208,15 +203,13 @@ describe('buildDraftRequest', () => {
   it('maps a Transfer document to transferInfo', () => {
     const transferInfo = {
       destinationWarehouseId: '55555555-5555-4555-8555-555555555555',
-      destinationWarehouseName: 'مستودع حلب',
       transferReason: 'إعادة توزيع',
     }
-    const request = buildDraftRequest({
+    const request = buildCompleteDraftRequest({
       documentType: 'Transfer',
       header: validHeader(),
       lines: lines(),
       petals: { transferInfo },
-      rowVersion: 2,
     })
 
     expect(request.transferInfo).toEqual(transferInfo)
@@ -227,15 +220,13 @@ describe('buildDraftRequest', () => {
   it('maps a Return document to returnInfo', () => {
     const returnInfo = {
       originalIssueDocumentId: '66666666-6666-4666-8666-666666666666',
-      originalIssueReference: 'ISSUE-2026-0001',
       returnReason: 'زيادة عن الحاجة',
     }
-    const request = buildDraftRequest({
+    const request = buildCompleteDraftRequest({
       documentType: 'Return',
       header: validHeader(),
       lines: lines(),
       petals: { returnInfo },
-      rowVersion: 1,
     })
 
     expect(request.returnInfo).toEqual(returnInfo)
@@ -243,36 +234,69 @@ describe('buildDraftRequest', () => {
     expect('transferInfo' in request).toBe(false)
   })
 
-  it.each(['Opening', 'Adjustment'] as const)(
-    'maps a %s document to no petal field',
-    (documentType) => {
-      const request = buildDraftRequest({
-        documentType,
-        header: validHeader(),
-        lines: lines(),
-        petals: {},
-        rowVersion: 0,
-      })
+  it('maps an Adjustment document to adjustmentInfo', () => {
+    const adjustmentInfo = {
+      adjustmentKind: 'DirectCorrection',
+      reason: 'تصحيح فرق جرد',
+    }
+    const request = buildCompleteDraftRequest({
+      documentType: 'Adjustment',
+      header: validHeader(),
+      lines: lines(),
+      petals: { adjustmentInfo },
+    })
 
-      expect(request.documentType).toBe(documentType)
-      expect('issueTo' in request).toBe(false)
-      expect('receivingInfo' in request).toBe(false)
-      expect('transferInfo' in request).toBe(false)
-      expect('returnInfo' in request).toBe(false)
-    },
-  )
+    expect(request.adjustmentInfo).toEqual(adjustmentInfo)
+    expect('issueTo' in request).toBe(false)
+  })
 
-  it('carries the spine header values through to the request', () => {
-    const request = buildDraftRequest({
+  it('maps an Opening document to no petal field', () => {
+    const request = buildCompleteDraftRequest({
+      documentType: 'Opening',
+      header: validHeader(),
+      lines: lines(),
+      petals: {},
+    })
+
+    expect(request.documentType).toBe('Opening')
+    expect('issueTo' in request).toBe(false)
+    expect('receivingInfo' in request).toBe(false)
+    expect('transferInfo' in request).toBe(false)
+    expect('returnInfo' in request).toBe(false)
+    expect('adjustmentInfo' in request).toBe(false)
+  })
+
+  it('carries the warehouse through and deliberately leaves the paper reference out', () => {
+    // The live `complete-draft` command has no slot for the paper number/year:
+    // a validated header field that reaches no server state would be a lie, so
+    // it is written afterwards through `PUT /{id}/paper-reference`.
+    const request = buildCompleteDraftRequest({
       documentType: 'Opening',
       header: validHeader(),
       lines: [],
       petals: {},
-      rowVersion: 0,
     })
 
     expect(request.warehouseId).toBe(WAREHOUSE_ID)
-    expect(request.paperDocumentNumber).toBe(PAPER_DOCUMENT_NUMBER)
-    expect(request.paperDocumentYear).toBe(CURRENT_YEAR)
+    expect('paperDocumentNumber' in request).toBe(false)
+    expect('paperDocumentYear' in request).toBe(false)
+  })
+
+  it('passes asset-capture lines through untouched', () => {
+    const assetLines: CompleteDraftLine[] = [
+      {
+        materialId: '88888888-8888-4888-8888-888888888888',
+        quantity: 2,
+        assetInputs: [{ assetNumber: 'A-1001' }, { serialNumber: 'SN-9002' }],
+      },
+    ]
+    const request = buildCompleteDraftRequest({
+      documentType: 'Receiving',
+      header: validHeader(),
+      lines: assetLines,
+      petals: { receivingInfo: { supplierPartyId: WAREHOUSE_ID } },
+    })
+
+    expect(request.lines).toEqual(assetLines)
   })
 })

@@ -10,14 +10,23 @@ import {
   type DocumentPreflightInput,
   type PreflightLineShape,
 } from '@/shared/documents/document-policy-gates'
-import {
-  createDocumentPolicy,
-  createOperationalAdvisory,
-  createPolicyBlocker,
-} from '@/test/msw/factories'
-import type { DocumentPolicy } from '@/shared/types/generated/eiams-v1'
+import { wirePolicy } from '@/test/msw/document-wire-fixtures'
+import type {
+  DocumentPolicy,
+  DocumentPolicyBlocker,
+} from '@/shared/documents/types/document-wire.types'
 
 const POLICY_DOCUMENT_ID = '00000000-0000-4000-8000-0000000000c8'
+
+/**
+ * The canonical Arabic the signed-original gate falls back to when the matched
+ * blocker code has no governed entry in `error-copy-ar.ts`. The live
+ * `PolicyBlocker` carries an English `message` and no `messageAr`, and the
+ * repository's decision is that Arabic is frontend-owned and keyed by code — so
+ * a code the copy table has never heard of renders this sentence rather than
+ * switching the UI into English.
+ */
+const SIGNED_GATE_DEFAULT_BLOCKED = 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.'
 
 function line(overrides: Partial<PreflightLineShape> = {}): PreflightLineShape {
   return {
@@ -29,8 +38,16 @@ function line(overrides: Partial<PreflightLineShape> = {}): PreflightLineShape {
   }
 }
 
+/** A policy blocker in the wire spelling: `{ action, code, message }`. */
+function blocker(
+  code: string,
+  message = 'The signed copy of the document is required.',
+): DocumentPolicyBlocker {
+  return { action: 'Post', code, message }
+}
+
 function policy(overrides: Partial<DocumentPolicy> = {}): DocumentPolicy {
-  return createDocumentPolicy({ documentId: POLICY_DOCUMENT_ID, ...overrides })
+  return wirePolicy({ documentId: POLICY_DOCUMENT_ID, ...overrides })
 }
 
 describe('evaluateBalanceGate', () => {
@@ -103,17 +120,21 @@ describe('signedOriginalGate', () => {
     })
   })
 
-  it('surfaces the server Arabic message when a signed_original_missing blocker exists', () => {
-    const blocker = createPolicyBlocker({
-      code: 'document.signed_original_missing',
-      messageAr: 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
-    })
+  it('blocks on a namespaced signed_original_missing blocker and exposes its code', () => {
+    // The gate matches the blocker by CODE and never renders the server's own
+    // message: the live `PolicyBlocker.message` is English, and this code has no
+    // governed Arabic entry, so the canonical sentence renders instead.
     expect(
-      signedOriginalGate(policy({ signedOriginalSatisfied: false, blockers: [blocker] })),
+      signedOriginalGate(
+        policy({
+          signedOriginalSatisfied: false,
+          blockers: [blocker('document.signed_original_missing')],
+        }),
+      ),
     ).toEqual({
       gate: 'signedOriginal',
       status: 'blocked',
-      messageAr: 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
+      messageAr: SIGNED_GATE_DEFAULT_BLOCKED,
       // e24-t07: the matched server code is surfaced so a consumer can dedupe
       // by code rather than by Arabic text.
       blockerCode: 'document.signed_original_missing',
@@ -121,16 +142,17 @@ describe('signedOriginalGate', () => {
   })
 
   it('accepts the canonical machine blocker codes without the document prefix', () => {
-    const blocker = createPolicyBlocker({
-      code: 'signed_original_invalid',
-      messageAr: 'النسخة الموقعة الحالية غير صالحة.',
-    })
     expect(
-      signedOriginalGate(policy({ signedOriginalSatisfied: false, blockers: [blocker] })),
+      signedOriginalGate(
+        policy({
+          signedOriginalSatisfied: false,
+          blockers: [blocker('signed_original_invalid')],
+        }),
+      ),
     ).toEqual({
       gate: 'signedOriginal',
       status: 'blocked',
-      messageAr: 'النسخة الموقعة الحالية غير صالحة.',
+      messageAr: SIGNED_GATE_DEFAULT_BLOCKED,
       blockerCode: 'signed_original_invalid',
     })
   })
@@ -139,7 +161,7 @@ describe('signedOriginalGate', () => {
     expect(signedOriginalGate(policy({ signedOriginalSatisfied: false }))).toEqual({
       gate: 'signedOriginal',
       status: 'blocked',
-      messageAr: 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.',
+      messageAr: SIGNED_GATE_DEFAULT_BLOCKED,
       blockerCode: null,
     })
   })
@@ -160,7 +182,7 @@ describe('signedOriginalGate', () => {
       expect(signedOriginalGate(policy({ signedOriginalSatisfied: false }), status)).toEqual({
         gate: 'signedOriginal',
         status: 'blocked',
-        messageAr: 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.',
+        messageAr: SIGNED_GATE_DEFAULT_BLOCKED,
         blockerCode: null,
       })
     }
@@ -274,11 +296,11 @@ describe('evaluateDocumentPreflight', () => {
   })
 
   it('passes server blockers through untouched', () => {
-    const blocker = createPolicyBlocker()
+    const serverBlocker = blocker('WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED')
     const preflight = evaluateDocumentPreflight(
-      input({ policy: policy({ signedOriginalSatisfied: true, blockers: [blocker] }) }),
+      input({ policy: policy({ signedOriginalSatisfied: true, blockers: [serverBlocker] }) }),
     )
-    expect(preflight.blockers).toEqual([blocker])
+    expect(preflight.blockers).toEqual([serverBlocker])
   })
 
   it('does not block a posted document on a stale unsatisfied signed-original policy', () => {
@@ -293,13 +315,15 @@ describe('evaluateDocumentPreflight', () => {
   })
 
   it('passes SoftFreeze advisories through untouched without ever blocking', () => {
-    const advisory = createOperationalAdvisory({
-      countReference: 'JRY-2026-014',
-      messageAr: 'هناك جرد نشط يغطي نطاق هذا المستودع.',
-    })
+    const advisory = {
+      code: 'ActiveSoftFreeze',
+      countId: '00000000-0000-4000-8000-0000000000ad',
+      message: 'An inventory count covers this warehouse.',
+      warehouseId: '00000000-0000-4000-8000-0000000000ad',
+    }
     const preflight = evaluateDocumentPreflight(
       input({
-        policy: policy({ signedOriginalSatisfied: true, advisories: [advisory] }),
+        policy: policy({ signedOriginalSatisfied: true, warnings: [advisory] }),
       }),
     )
     expect(preflight.advisories).toEqual([advisory])
@@ -313,24 +337,27 @@ describe('evaluateActionDecision', () => {
   const denied = () => false
 
   it('hides an action the session permission gate denies', () => {
-    const evaluated = policy({ documentStatus: 'Submitted' })
+    const evaluated = policy({ status: 'Submitted' })
     expect(evaluateActionDecision(evaluated, 'Post', denied)).toEqual({
       presentation: 'Hidden',
       reasonAr: null,
     })
   })
 
-  it('disables a policy-disabled action with the server Arabic reason', () => {
-    const evaluated = policy({ documentStatus: 'Submitted' })
+  it('disables a policy-disabled action with the reason its code resolves to', () => {
+    // `document.submitted` is the harness's own spelling of the evaluation; the
+    // wire reason code is `WAREHOUSE_DOCUMENTS_NOT_EDITABLE`, and the Arabic
+    // sentence is resolved from that code — never from a server message field.
+    const evaluated = policy({ status: 'Submitted' })
     expect(evaluateActionDecision(evaluated, 'Submit', permitted)).toEqual({
       presentation: 'Disabled',
-      reasonAr: 'المستند مُرسل بالفعل.',
+      reasonAr: 'لا يمكن تعديل المستند إلا في حالة المسودة.',
     })
   })
 
   it('enables an enabled action under a permitted session', () => {
     const evaluated = policy({
-      documentStatus: 'Submitted',
+      status: 'Submitted',
       signedOriginalSatisfied: true,
     })
     expect(evaluateActionDecision(evaluated, 'Post', permitted)).toEqual({
@@ -347,9 +374,32 @@ describe('evaluateActionDecision', () => {
   })
 
   it('hides an action the policy does not present', () => {
-    const evaluated = policy({ documentStatus: 'Posted', actions: [] })
+    const evaluated = policy({ status: 'Posted', actions: [] })
     expect(evaluateActionDecision(evaluated, 'Post', permitted)).toEqual({
       presentation: 'Hidden',
+      reasonAr: null,
+    })
+  })
+
+  it('renders no reason at all for a code the governed copy table has never heard of', () => {
+    // An unmapped code degrades to no text rather than to the server's English
+    // prose: an Arabic-first UI must not switch language on an unknown code.
+    const evaluated: DocumentPolicy = {
+      ...policy({ status: 'Submitted' }),
+      actions: [
+        {
+          action: 'Submit',
+          allowed: false,
+          confirmationRequired: false,
+          presentation: 'Disabled',
+          reasonCode: 'SOME_CODE_NOBODY_HAS_TRANSLATED',
+          reason: 'Submit is not available in this state.',
+          reasonRequired: false,
+        },
+      ],
+    }
+    expect(evaluateActionDecision(evaluated, 'Submit', permitted)).toEqual({
+      presentation: 'Disabled',
       reasonAr: null,
     })
   })

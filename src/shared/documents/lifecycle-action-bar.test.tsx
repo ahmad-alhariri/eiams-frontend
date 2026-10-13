@@ -6,19 +6,34 @@ import {
   LifecycleActionBar,
   type LifecycleActionBarProps,
 } from '@/shared/documents/lifecycle-action-bar'
+import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
 import type {
-  ActionAvailability,
-  DocumentActionType,
+  DocumentActionAvailability,
   DocumentPolicy,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/shared/documents/types/document-wire.types'
 
-function availability(overrides: Partial<ActionAvailability>): ActionAvailability {
+/**
+ * What changed with the wire contract
+ * ----------------------------------
+ * - `DocumentActionAvailability` answers `reason`, not `reasonAr`, and carries a
+ *   `reasonCode`. The bar resolves its tooltip from the CODE through the governed
+ *   `error-copy-ar.ts` table; the English `reason` is never rendered.
+ * - `DocumentPolicy` answers `status` / `evaluatedAtUtc` / `warnings` and has no
+ *   `policyKind`; the same rule applies to blocker and advisory copy.
+ * - `DocumentActionType` is the closed nine-value vocabulary in
+ *   `document-action.types.ts`, so an action code outside it is DROPPED rather
+ *   than rendered under a generic label.
+ */
+
+function availability(
+  overrides: Partial<DocumentActionAvailability> = {},
+): DocumentActionAvailability {
   return {
     action: 'Submit',
     allowed: true,
     confirmationRequired: false,
     presentation: 'Enabled',
-    reasonAr: null,
+    reason: null,
     reasonCode: null,
     reasonRequired: false,
     ...overrides,
@@ -26,22 +41,26 @@ function availability(overrides: Partial<ActionAvailability>): ActionAvailabilit
 }
 
 function makePolicy(
-  actions: ActionAvailability[],
+  actions: DocumentActionAvailability[],
   overrides: Partial<DocumentPolicy> = {},
 ): DocumentPolicy {
   return {
     documentId: 'doc-1',
-    documentStatus: 'Draft',
-    evaluatedAt: '2026-08-11T08:00:00Z',
-    policyKind: 'Generic',
+    status: 'Draft',
+    evaluatedAtUtc: '2026-08-11T08:00:00Z',
     rowVersion: 1,
     signedOriginalSatisfied: true,
     actions,
-    advisories: [],
+    warnings: [],
     blockers: [],
     ...overrides,
   }
 }
+
+/** The backend's own code for "the signed copy must be attached before posting". */
+const SIGNED_COPY_REQUIRED_CODE = 'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED'
+/** What that code resolves to in the governed copy table. */
+const SIGNED_COPY_REQUIRED_AR = 'يجب إرفاق النسخة الموقعة قبل الترحيل.'
 
 function renderBar(overrides: Partial<LifecycleActionBarProps> = {}) {
   const onExecute = overrides.onExecute ?? vi.fn()
@@ -80,22 +99,42 @@ describe('LifecycleActionBar', () => {
     expect(screen.getByRole('button', { name: 'إرسال للترحيل' })).toBeInTheDocument()
   })
 
-  it('renders Disabled actions disabled with the Arabic reason as tooltip', () => {
+  it('renders Disabled actions disabled with the Arabic their reason CODE resolves to', () => {
     renderBar({
       policy: makePolicy([
         availability({
           action: 'Post',
           allowed: false,
           presentation: 'Disabled',
-          reasonAr: 'الرصيد غير كافٍ لتغطية بنود الصرف',
-          reasonCode: 'insufficient_balance',
+          reason: 'Insufficient quantity to cover the issue lines.',
+          reasonCode: SIGNED_COPY_REQUIRED_CODE,
         }),
       ]),
     })
 
     const postButton = screen.getByRole('button', { name: 'ترحيل' })
     expect(postButton).toBeDisabled()
-    expect(postButton).toHaveAttribute('title', 'الرصيد غير كافٍ لتغطية بنود الصرف')
+    expect(postButton).toHaveAttribute('title', SIGNED_COPY_REQUIRED_AR)
+  })
+
+  it('leaves the tooltip off entirely when the reason code has no governed Arabic entry', () => {
+    renderBar({
+      policy: makePolicy([
+        availability({
+          action: 'Post',
+          allowed: false,
+          presentation: 'Disabled',
+          reason: 'Insufficient quantity to cover the issue lines.',
+          reasonCode: 'A_CODE_NOBODY_TRANSLATED',
+        }),
+      ]),
+    })
+
+    const postButton = screen.getByRole('button', { name: 'ترحيل' })
+    expect(postButton).toBeDisabled()
+    // Never the server's English prose: an Arabic-first UI must not switch
+    // language just because a code is unfamiliar.
+    expect(postButton).not.toHaveAttribute('title')
   })
 
   it('opens the confirmation dialog on click and executes on confirm', async () => {
@@ -170,24 +209,33 @@ describe('LifecycleActionBar', () => {
     expect(screen.getByRole('button', { name: 'إرسال للترحيل' })).toBeDisabled()
   })
 
-  it('renders blockers as an Arabic alert row and advisories as a muted info row', () => {
+  it('renders blockers as an Arabic alert row', () => {
     renderBar({
       policy: makePolicy([availability({ action: 'Submit', confirmationRequired: true })], {
         blockers: [
           {
-            code: 'signed_original_missing',
-            messageAr: 'يجب إرفاق النسخة الموقعة من المستند قبل الترحيل',
-            field: null,
+            action: 'Post',
+            code: SIGNED_COPY_REQUIRED_CODE,
+            message: 'The signed copy of the document is required before posting.',
           },
         ],
-        advisories: [
+      }),
+    })
+
+    const alertRow = screen.getByRole('alert')
+    expect(alertRow).toHaveTextContent(SIGNED_COPY_REQUIRED_AR)
+    expect(alertRow.querySelector('[data-slot="policy-blocker-icon"]')).not.toBeNull()
+    // The server's English prose is never surfaced.
+    expect(alertRow).not.toHaveTextContent('The signed copy of the document is required')
+  })
+
+  it('renders an advisory as a muted info row when its code resolves to Arabic', () => {
+    renderBar({
+      policy: makePolicy([availability({ action: 'Submit', confirmationRequired: true })], {
+        warnings: [
           {
-            code: 'ActiveSoftFreeze',
-            severity: 'Warning',
-            messageAr: 'يوجد جرد نشط على هذا المستودع وقد تتجمد الحركة مؤقتاً',
-            scopeSummaryAr: 'مستودع دمشق المركزي',
-            countReference: 'JC-2026-0114',
-            overlapState: 'Provisional',
+            code: SIGNED_COPY_REQUIRED_CODE,
+            message: 'An inventory count covers the scope of this warehouse.',
             countId: 'count-1',
             warehouseId: 'wh-1',
           },
@@ -195,36 +243,62 @@ describe('LifecycleActionBar', () => {
       }),
     })
 
-    const alertRow = screen.getByRole('alert')
-    expect(alertRow).toHaveTextContent('يجب إرفاق النسخة الموقعة من المستند قبل الترحيل')
-    expect(alertRow.querySelector('[data-slot="policy-blocker-icon"]')).not.toBeNull()
-
+    const advisoryRow = screen.getByText(SIGNED_COPY_REQUIRED_AR)
+    expect(advisoryRow).toBeInTheDocument()
     expect(
-      screen.getByText(/يوجد جرد نشط على هذا المستودع وقد تتجمد الحركة مؤقتاً/),
-    ).toBeInTheDocument()
-    expect(screen.getByText(/مستودع دمشق المركزي/)).toBeInTheDocument()
-    expect(screen.getByText(/JC-2026-0114/)).toBeInTheDocument()
+      advisoryRow.parentElement?.querySelector('[data-slot="policy-advisory-icon"]'),
+    ).not.toBeNull()
   })
 
-  it('falls back to a generic Arabic label for unknown action keys', () => {
+  it('renders no advisory row for a code the governed copy table has never heard of', () => {
+    // `ActiveSoftFreeze` normalizes to `ACTIVESOFTFREEZE`, which carries no
+    // Arabic entry, so the muted info row is dropped rather than rendered in
+    // English.
     renderBar({
-      policy: makePolicy([availability({ action: 'document.publish' as DocumentActionType })]),
+      policy: makePolicy([availability({ action: 'Submit', confirmationRequired: true })], {
+        warnings: [
+          {
+            code: 'ActiveSoftFreeze',
+            message: 'An inventory count covers the scope of this warehouse.',
+            countId: 'count-1',
+            warehouseId: 'wh-1',
+          },
+        ],
+      }),
     })
 
-    expect(screen.getByRole('button', { name: 'تنفيذ الإجراء' })).toBeInTheDocument()
+    expect(document.querySelectorAll('[data-slot="policy-advisory-row"]')).toHaveLength(0)
+    expect(screen.queryByText('An inventory count covers the scope of this warehouse.')).toBeNull()
   })
 
-  it('resolves permission-style prefixed codes to the same Arabic label', () => {
+  it('renders nothing at all for an action code outside the canonical vocabulary', () => {
+    // The policy response types `action` as a bare string, so an action this
+    // build has never heard of arrives here. Rendering it would put a button on
+    // screen with no label, no permission code and no route; dropping it is the
+    // documented behaviour (`toDocumentActionType`).
     renderBar({
       policy: makePolicy([
-        availability({
-          action: 'document.submit' as DocumentActionType,
-          confirmationRequired: true,
-        }),
+        availability({ action: 'document.publish' }),
+        availability({ action: 'Submit', confirmationRequired: true }),
       ]),
     })
 
+    expect(screen.queryByRole('button', { name: 'تنفيذ الإجراء' })).toBeNull()
     expect(screen.getByRole('button', { name: 'إرسال للترحيل' })).toBeInTheDocument()
+  })
+
+  it('does not resolve a permission-style prefixed code into an action either', () => {
+    // `document.submit` was a frontend permission spelling; the policy serves the
+    // bare contract codes, and the narrowing happens before any label lookup, so
+    // the prefixed form is dropped rather than re-mapped.
+    renderBar({
+      policy: makePolicy([
+        availability({ action: 'document.submit', confirmationRequired: true }),
+        availability({ action: 'Submit', confirmationRequired: true }),
+      ]),
+    })
+
+    expect(screen.getAllByRole('button', { name: 'إرسال للترحيل' })).toHaveLength(1)
   })
 
   it('renders nothing when the policy is null', () => {
@@ -239,7 +313,7 @@ describe('LifecycleActionBar', () => {
         availability({ action: 'Submit', confirmationRequired: true }),
         availability({ action: 'Post', confirmationRequired: true }),
       ]),
-      isActionPermitted: (action) => action !== 'Submit',
+      isActionPermitted: (action: DocumentActionType) => action !== 'Submit',
     })
 
     expect(screen.queryByRole('button', { name: 'إرسال للترحيل' })).not.toBeInTheDocument()
@@ -253,8 +327,8 @@ describe('LifecycleActionBar', () => {
           action: 'Post',
           allowed: false,
           presentation: 'Disabled',
-          reasonAr: 'الرصيد غير كافٍ لتغطية بنود الصرف',
-          reasonCode: 'insufficient_balance',
+          reason: 'Insufficient quantity to cover the issue lines.',
+          reasonCode: SIGNED_COPY_REQUIRED_CODE,
         }),
       ]),
       isActionPermitted: () => true,
@@ -262,7 +336,7 @@ describe('LifecycleActionBar', () => {
 
     const postButton = screen.getByRole('button', { name: 'ترحيل' })
     expect(postButton).toBeDisabled()
-    expect(postButton).toHaveAttribute('title', 'الرصيد غير كافٍ لتغطية بنود الصرف')
+    expect(postButton).toHaveAttribute('title', SIGNED_COPY_REQUIRED_AR)
   })
 
   it('removes Hidden actions before applying the permission filter without crashing', () => {

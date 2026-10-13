@@ -28,6 +28,7 @@ import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 import type {
   DocumentActionType,
   DocumentActionResult,
+  DocumentAttachment,
   DocumentLifecycleEvent,
   DocumentLine,
   DocumentStatus,
@@ -45,6 +46,7 @@ import type {
   CompleteDraftLine,
   CompleteDraftRequest,
   DocumentActionPresentation,
+  DocumentAttachmentResponse,
   DocumentLineResponse,
   DocumentPolicy as WireDocumentPolicy,
   DocumentLifecycleHistory,
@@ -129,7 +131,24 @@ const DOCUMENT_ACTION_ROUTES: ReadonlyArray<readonly [DocumentActionType, string
 // response below it is the handwritten wire contract the live API serves.
 // ---------------------------------------------------------------------------
 
-function toWireLine(line: DocumentLine): DocumentLineResponse {
+/**
+ * Warehouse code for the denormalised detail header.
+ *
+ * `WarehouseDocument.warehouse` is only a `NamedReference` (id + label), and the
+ * snapshot carried no code, so the projection reads the code off the canonical
+ * warehouse record that id names and falls back to a stable derived code for an
+ * id no warehouse fixture defines. Deriving is better than dropping: the live
+ * `WarehouseDocumentDetails` always serves `warehouseCode`.
+ */
+const CANONICAL_WAREHOUSE: Warehouse = createWarehouse()
+
+function wireWarehouseCode(warehouseId: string): string {
+  return warehouseId === CANONICAL_WAREHOUSE.id
+    ? CANONICAL_WAREHOUSE.code
+    : `WH-${warehouseId.slice(0, 8).toUpperCase()}`
+}
+
+export function toWireLine(line: DocumentLine): DocumentLineResponse {
   // The snapshot spelled the issued-asset projection `issuedAssetIds`; the real
   // `DocumentLineResponse` calls the same set `selectedAssets` and carries a
   // selection id per entry.
@@ -144,6 +163,13 @@ function toWireLine(line: DocumentLine): DocumentLineResponse {
     id: line.lineId,
     sourceLineId: null,
     materialId: line.material.materialId,
+    // The wire line denormalises the material identity and label the detail
+    // table renders, so a read never joins the catalog. The harness's in-memory
+    // line still embeds the generated material snapshot, so the projection is
+    // what carries those three fields across.
+    materialCode: line.material.code,
+    materialNameAr: line.material.nameAr,
+    unitSymbol: line.unit?.displayName ?? null,
     lineType: line.lineType,
     quantity: line.quantity,
     unitId: line.unit?.id ?? null,
@@ -165,10 +191,35 @@ function toWireLine(line: DocumentLine): DocumentLineResponse {
   }
 }
 
-function toWireDetails(document: WarehouseDocument): WarehouseDocumentDetails {
+/**
+ * One attachment record in the wire spelling.
+ *
+ * The live `DocumentAttachmentResponse` is a flat `{ id, attachmentType,
+ * originalFilename, mimeType, fileSize, uploadedAtUtc }`. The snapshot's record
+ * carried the document it belonged to, a checksum, the uploader and an optional
+ * download URL; none of that crosses HTTP, so none of it is projected.
+ */
+export function toWireAttachment(attachment: DocumentAttachment): DocumentAttachmentResponse {
+  return {
+    id: attachment.attachmentId,
+    attachmentType: attachment.attachmentType,
+    originalFilename: attachment.originalFilename,
+    mimeType: attachment.mimeType,
+    fileSize: attachment.fileSize,
+    uploadedAtUtc: attachment.uploadedAt,
+  }
+}
+
+export function toWireDetails(document: WarehouseDocument): WarehouseDocumentDetails {
   return {
     id: document.documentId,
     warehouseId: document.warehouse.id,
+    // The detail read names its warehouse inline (code + label) and stamps the
+    // creating user and instant. The harness keeps only a `NamedReference` for
+    // the warehouse, so the label travels on that reference and the code comes
+    // from the canonical warehouse record the reference points at.
+    warehouseCode: wireWarehouseCode(document.warehouse.id),
+    warehouseName: document.warehouse.displayName,
     documentType: document.documentType,
     paperDocumentNumber: document.paperDocumentNumber,
     paperDocumentYear: document.paperDocumentYear,
@@ -177,6 +228,8 @@ function toWireDetails(document: WarehouseDocument): WarehouseDocumentDetails {
       ? (document.attachments[0]?.attachmentId ?? null)
       : null,
     documentStatus: document.documentStatus,
+    createdAtUtc: document.createdAt,
+    createdBy: document.createdBy.id,
     postedBy: document.postedBy?.id ?? null,
     postedAtUtc: document.postedAt ?? null,
     reversalOfDocumentId: null,
@@ -220,18 +273,11 @@ function toWireDetails(document: WarehouseDocument): WarehouseDocumentDetails {
           },
     inventoryAdjustment: null,
     lines: document.lines.map(toWireLine),
-    attachments: document.attachments.map((attachment) => ({
-      id: attachment.attachmentId,
-      attachmentType: attachment.attachmentType,
-      originalFilename: attachment.originalFilename,
-      mimeType: attachment.mimeType,
-      fileSize: attachment.fileSize,
-      uploadedAtUtc: attachment.uploadedAt,
-    })),
+    attachments: document.attachments.map(toWireAttachment),
   }
 }
 
-function toWireSummary(document: WarehouseDocument): WarehouseDocumentSummary {
+export function toWireSummary(document: WarehouseDocument): WarehouseDocumentSummary {
   return {
     id: document.documentId,
     warehouseId: document.warehouse.id,
@@ -247,7 +293,42 @@ function toWireSummary(document: WarehouseDocument): WarehouseDocumentSummary {
   }
 }
 
-function toWirePolicy(document: WarehouseDocument): WireDocumentPolicy {
+/**
+ * Action reason codes: the harness vocabulary → the codes the live API serves.
+ *
+ * The in-memory policy evaluates a reason per action in the frontend's own
+ * `document.<state>` spelling, but the wire contract carries the backend's error
+ * codes, and the UI resolves every user-facing sentence from that code through
+ * the governed `error-copy-ar.ts` table. A harness that projected its own codes
+ * would answer with codes the copy table has never heard of, and every disabled
+ * action would render with no Arabic reason — a failure the tests could not
+ * distinguish from a real defect. Translating here keeps the in-memory
+ * evaluation readable and the response honest.
+ *
+ * Blocker codes are NOT translated: `policy-blocker-codes.ts` names the
+ * `signed_original_*` / `document.signed_original_*` vocabulary as the contract's
+ * own machine gate reasons, and both the preflight gate and the attachment gate
+ * row match on it.
+ */
+const WIRE_REASON_CODES: Readonly<Record<string, string>> = {
+  'document.not_posted': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.not_submitted': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.submitted': 'WAREHOUSE_DOCUMENTS_NOT_EDITABLE',
+  'document.posted': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.rejected': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.reversed': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.cancelled': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.signed_original_missing': 'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED',
+}
+
+function toWireReasonCode(code: string | null): string | null {
+  if (code === null) {
+    return null
+  }
+  return WIRE_REASON_CODES[code] ?? code
+}
+
+export function toWirePolicy(document: WarehouseDocument): WireDocumentPolicy {
   const policy = document.policy
   return {
     documentId: document.documentId,
@@ -261,7 +342,9 @@ function toWirePolicy(document: WarehouseDocument): WireDocumentPolicy {
       confirmationRequired: availability.confirmationRequired,
       reasonRequired: availability.reasonRequired,
       presentation: availability.presentation as DocumentActionPresentation,
-      reasonCode: availability.reasonCode ?? null,
+      reasonCode: toWireReasonCode(availability.reasonCode ?? null),
+      // The live projection carries English prose here. The UI never renders it;
+      // `document-policy-gates.ts` resolves the sentence by code.
       reason: availability.reasonAr ?? null,
     })),
     blockers: policy.blockers.map((blocker) => ({
@@ -272,13 +355,13 @@ function toWirePolicy(document: WarehouseDocument): WireDocumentPolicy {
     warnings: policy.advisories.map((advisory) => ({
       code: advisory.code,
       message: advisory.messageAr,
-      countId: null,
-      warehouseId: null,
+      countId: advisory.countId ?? null,
+      warehouseId: advisory.warehouseId ?? null,
     })),
   }
 }
 
-function toWireLifecycleEvent(event: DocumentLifecycleEvent): WireDocumentLifecycleEvent {
+export function toWireLifecycleEvent(event: DocumentLifecycleEvent): WireDocumentLifecycleEvent {
   return {
     eventId: event.eventId,
     fromStatus: event.fromStatus ?? null,
@@ -294,7 +377,7 @@ function toWireLifecycleEvent(event: DocumentLifecycleEvent): WireDocumentLifecy
   }
 }
 
-function toWireHistory(
+export function toWireHistory(
   documentId: string,
   events: readonly DocumentLifecycleEvent[],
   currentStatus: DocumentStatus,
@@ -587,8 +670,23 @@ export interface IdempotentDocumentActionInput {
   rowVersion: number
   reason?: string | null
   occurredBy?: LifecycleActorSnapshot | undefined
+  /**
+   * True when the ROUTE has no reason slot at all — `POST /{documentId}/reversals`
+   * takes no body — so the reason-required guard cannot apply to it. The UI still
+   * asks the keeper for a reversal reason; the live contract has nowhere to put
+   * it, which is recorded rather than faked here.
+   */
+  reasonNotApplicable?: boolean | undefined
   /** Raw `Idempotency-Key` header value; `null` leaves this attempt unmemoized. */
   idempotencyKey: string | null
+  /**
+   * The version the memo identifies this INTENT by. Defaults to `rowVersion`,
+   * which is the body the client was shown. A bodyless route (`reversals`) has no
+   * such version, so it identifies by document + action + key alone — otherwise
+   * the retry of a bodyless route could never match, because the record it
+   * targets has necessarily moved on by the time the retry arrives.
+   */
+  idempotencyRowVersion?: number | undefined
   /** Memo to consult and record into; defaults to the module-scoped instance. */
   idempotency?: IdempotencyMemo
 }
@@ -631,11 +729,12 @@ export function applyIdempotentDocumentAction(
 ): IdempotentDocumentActionOutcome {
   const memo = input.idempotency ?? documentActionIdempotency
   const documentId = input.document.documentId
+  const memoRowVersion = input.idempotencyRowVersion ?? input.rowVersion
   const memoCheck = memo.check({
     idempotencyKey: input.idempotencyKey,
     action: input.action,
     documentId,
-    rowVersion: input.rowVersion,
+    rowVersion: memoRowVersion,
     reason: input.reason ?? null,
   })
   if (memoCheck.kind === 'replay') {
@@ -649,6 +748,7 @@ export function applyIdempotentDocumentAction(
     document: input.document,
     rowVersion: input.rowVersion,
     reason: input.reason ?? null,
+    reasonNotApplicable: input.reasonNotApplicable ?? false,
     occurredBy: input.occurredBy,
   })
   if (outcome.kind === 'conflict') {
@@ -662,7 +762,7 @@ export function applyIdempotentDocumentAction(
       input.idempotencyKey,
       input.action,
       documentId,
-      input.rowVersion,
+      memoRowVersion,
       input.reason ?? null,
       outcome.result,
     )
@@ -810,6 +910,11 @@ export interface DocumentActionInput {
   document: WarehouseDocument
   rowVersion: number
   reason?: string | null
+  /**
+   * True when the calling ROUTE cannot carry a reason — `reversals` takes no body
+   * — so the reason-required guard is skipped for it.
+   */
+  reasonNotApplicable?: boolean
   occurredAt?: string
   occurredBy?: LifecycleActorSnapshot | undefined
 }
@@ -853,7 +958,7 @@ export function applyDocumentAction(input: DocumentActionInput): DocumentActionO
       ),
     }
   }
-  if (actionRequiresReason(action) && !isPresent(input.reason)) {
+  if (!input.reasonNotApplicable && actionRequiresReason(action) && !isPresent(input.reason)) {
     return {
       kind: 'validation',
       problem: problemBase('REQUEST_VALIDATION_FAILED', 'يرجى إدخال سبب الإجراء.', 422, 'reason'),
@@ -1000,7 +1105,9 @@ export function createWarehouseDocumentDetailHandler(
   return [
     http.get(`${DOCUMENT_PREFIX}/:documentId`, async ({ params }) => {
       await delay(options.delayMs ?? 0)
-      return params['documentId'] === document.documentId ? okJson(toWireDetails(document)) : notFound()
+      return params['documentId'] === document.documentId
+        ? okJson(toWireDetails(document))
+        : notFound()
     }),
   ]
 }
@@ -1067,6 +1174,14 @@ export interface DocumentActionHandlerOptions {
   documentStore?: () => WarehouseDocument[]
   /** Called after a successful transition, before the 200 response is sent. */
   onDocumentUpdated?: (document: WarehouseDocument, action: DocumentActionType) => void
+  /**
+   * Called with the lifecycle event one transition appended, before the
+   * acknowledgement. The live routes answer `EmptyResponse` /
+   * `PostDocumentResponse` / `201 { id }` and carry no event, so a test that
+   * needs to assert "exactly one event per accepted action" has no other way to
+   * observe the chain the route wrote.
+   */
+  onLifecycleEvent?: (event: DocumentLifecycleEvent, action: DocumentActionType) => void
   /** Called after a successful Reverse, before the 200 response, with the compensating document. */
   onCompensatingDocumentCreated?: (document: WarehouseDocument) => void
   occurredBy?: LifecycleActorSnapshot
@@ -1074,10 +1189,10 @@ export interface DocumentActionHandlerOptions {
 }
 
 /**
- * The six lifecycle action POSTs (submit/post/reject/revise/cancel/reverse)
- * wired to one mutable in-memory document record. Replays the same transition
- * engine the dev mock API uses, so engine tests and `pnpm dev` agree on
- * rowVersion (409), reason (422), transition guards, and `Idempotency-Key`
+ * The six lifecycle action POSTs (submit / post / reject / return-to-draft /
+ * cancel / reversals) wired to one mutable in-memory document record. Replays the
+ * same transition engine the dev mock API uses, so engine tests and `pnpm dev`
+ * agree on rowVersion (409), reason (422), transition guards, and `Idempotency-Key`
  * replay/mismatch.
  *
  * The memo handed to `applyIdempotentDocumentAction` is PER HANDLER SET, not the
@@ -1087,6 +1202,34 @@ export interface DocumentActionHandlerOptions {
  * long-lived process — where one key spans route re-registrations — use
  * `applyIdempotentDocumentAction` directly with the module-scoped memo.
  */
+/**
+ * One lifecycle route's wire answer.
+ *
+ * The live routes are deliberately asymmetric, and a harness that answered one
+ * envelope for all six would hide the very distinction the transport was
+ * rewritten for:
+ *  - `reversals` creates the compensating document and answers `201 { id }` for
+ *    the NEW document;
+ *  - `post` answers `PostDocumentResponse` (warnings included);
+ *  - submit / return-to-draft / reject / cancel answer `EmptyResponse`.
+ *
+ * A replay under the same `Idempotency-Key` answers what the original attempt
+ * answered, so it routes through here too rather than through a second spelling.
+ */
+function lifecycleRouteAnswer(
+  action: DocumentActionType,
+  document: WarehouseDocument,
+  reversalDocumentId: string | null,
+) {
+  if (action === 'Reverse' && reversalDocumentId !== null) {
+    return apiJson({ id: reversalDocumentId }, { status: 201 })
+  }
+  if (action === 'Post') {
+    return okJson(toWirePostResult(document))
+  }
+  return okJson({})
+}
+
 export function createWarehouseDocumentActionHandler(
   options: DocumentActionHandlerOptions,
 ): readonly HttpHandler[] {
@@ -1105,22 +1248,42 @@ export function createWarehouseDocumentActionHandler(
       // The live body field is `expectedRowVersion` on every action, and the
       // reasoned three additionally carry `reason`. The snapshot's `VersionOnly…`
       // / `Reasoned…` pair is only the reason split; the version key differs.
-      const body = (await request.json()) as {
-        expectedRowVersion?: number
-        reason?: string | null
-      }
+      // `reversals` reads no body at all.
+      const body =
+        action === 'Reverse'
+          ? ({} as { expectedRowVersion?: number; reason?: string | null })
+          : ((await request.json()) as {
+              expectedRowVersion?: number
+              reason?: string | null
+            })
+
       const outcome = applyIdempotentDocumentAction({
         action,
         document,
-        rowVersion: body.expectedRowVersion ?? 0,
+        rowVersion:
+          // `reversals` carries no version in a body, so the route evaluates the
+          // record it just read; every other action guards on the version the
+          // client was shown and a missing field is a client bug, not a fallback.
+          action === 'Reverse' ? document.rowVersion : (body.expectedRowVersion ?? 0),
         reason: body.reason ?? null,
+        // `reversals` has no body slot at all, so the reversal reason the UI
+        // collects has nowhere to travel and the route cannot enforce one it
+        // never receives. Every other action carries its reason in the body and
+        // is guarded on it (422 when absent).
+        reasonNotApplicable: action === 'Reverse',
+        // A bodyless route identifies its intent by document + action + key only.
+        ...(action === 'Reverse' ? { idempotencyRowVersion: 0 } : {}),
         occurredBy: options.occurredBy,
         idempotencyKey: readIdempotencyKey(request),
         idempotency,
       })
       if (outcome.kind !== 'ok') {
         if (outcome.kind === 'replay') {
-          return okJson(outcome.result)
+          return lifecycleRouteAnswer(
+            action,
+            outcome.result.document,
+            outcome.result.relatedDocument?.documentId ?? null,
+          )
         }
         return toWireErrorResponse(outcome.problem, outcome.status)
       }
@@ -1132,27 +1295,18 @@ export function createWarehouseDocumentActionHandler(
         }
       }
       options.onDocumentUpdated?.(outcome.document, action)
+      options.onLifecycleEvent?.(outcome.result.lifecycleEvent, action)
       if (outcome.compensatingDocument !== undefined) {
         options.onCompensatingDocumentCreated?.(outcome.compensatingDocument)
       }
-      // The live routes are deliberately asymmetric, and a harness that answered
-      // one envelope for all six would hide the very distinction the transport
-      // was rewritten for:
-      //  - `reversals` creates the compensating document and answers `201 { id }`
-      //    for the NEW document;
-      //  - `post` answers `PostDocumentResponse` (warnings included);
-      //  - submit / return-to-draft / reject / cancel answer `EmptyResponse`.
-      if (outcome.compensatingDocument !== undefined) {
-        return apiJson({ id: outcome.compensatingDocument.documentId }, { status: 201 })
-      }
-      if (action === 'Post') {
-        return okJson(toWirePostResult(outcome.document))
-      }
-      return okJson({})
+      return lifecycleRouteAnswer(
+        action,
+        outcome.document,
+        outcome.compensatingDocument?.documentId ?? null,
+      )
     }),
   )
 }
-
 // ---------------------------------------------------------------------------
 // Draft persistence
 //
@@ -1207,7 +1361,11 @@ function resolveLookups(lookups: Partial<DraftLookups> | undefined): DraftLookup
   return { ...FALLBACK_LOOKUPS, ...lookups }
 }
 
-function mapDraftLine(input: CompleteDraftLine, index: number, lookups: DraftLookups): DocumentLine {
+function mapDraftLine(
+  input: CompleteDraftLine,
+  index: number,
+  lookups: DraftLookups,
+): DocumentLine {
   const material = lookups.materialOf(input.materialId) ?? createMaterial({ id: input.materialId })
   // `materialOf` resolves the REAL catalog record; the line still embeds the
   // generated shape, so the identity/labels are carried across the boundary by
@@ -1285,7 +1443,7 @@ export function buildCompleteDraftDocument(
   const actor = options.occurredBy ?? DEFAULT_DRAFT_ACTOR
   const warehouse =
     lookups.warehouseOf(request.warehouseId) ?? createWarehouse({ id: request.warehouseId })
-const references = draftWarehouseReferences(warehouse, lookups)
+  const references = draftWarehouseReferences(warehouse, lookups)
   // `Warehouse` carries optional members under `exactOptionalPropertyTypes`, and
   // the harness's generated `NamedReference` wants the ones it reads. Narrow the
   // three the document spine actually embeds rather than asserting the shape.
@@ -1328,7 +1486,7 @@ const references = draftWarehouseReferences(warehouse, lookups)
             supplierInvoiceRef: request.receivingInfo.supplierInvoiceRef ?? null,
           },
         }),
-...(request.returnInfo === undefined || request.returnInfo === null
+    ...(request.returnInfo === undefined || request.returnInfo === null
       ? {}
       : {
           returnInfo: {
@@ -1336,7 +1494,7 @@ const references = draftWarehouseReferences(warehouse, lookups)
             returnReason: request.returnInfo.returnReason,
           },
         }),
-rowVersion: 1,
+    rowVersion: 1,
     site: { id: references.site.id, displayName: references.site.displayName },
     systemReferenceNumber: options.systemReferenceNumber,
     ...(request.transferInfo === undefined || request.transferInfo === null

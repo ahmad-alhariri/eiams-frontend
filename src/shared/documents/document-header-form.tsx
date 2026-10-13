@@ -398,11 +398,7 @@ export function DocumentHeaderSection({
 type PetalRequestPatch = Partial<
   Pick<
     CompleteDraftRequest,
-    | 'issueTo'
-    | 'receivingInfo'
-    | 'transferInfo'
-    | 'returnInfo'
-    | 'adjustmentInfo'
+    'issueTo' | 'receivingInfo' | 'transferInfo' | 'returnInfo' | 'adjustmentInfo'
   >
 >
 

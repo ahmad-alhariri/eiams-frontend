@@ -41,8 +41,7 @@ const INITIAL_ATTACHMENTS: DocumentAttachmentResponse[] = [
 ]
 
 function AttachmentPanelDemo() {
-  const [attachments, setAttachments] =
-    useState<DocumentAttachmentResponse[]>(INITIAL_ATTACHMENTS)
+  const [attachments, setAttachments] = useState<DocumentAttachmentResponse[]>(INITIAL_ATTACHMENTS)
   const [pendingUploads, setPendingUploads] = useState<PendingAttachmentUpload[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)

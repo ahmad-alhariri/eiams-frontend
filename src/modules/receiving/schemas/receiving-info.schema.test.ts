@@ -8,105 +8,91 @@ import {
   toReceivingInfo,
 } from '@/modules/receiving/schemas/receiving-info.schema'
 
+/**
+ * The live write is `ReceivingDraftDetails(SupplierPartyId, SupplierInvoiceRef)`:
+ * the supplier is an EXTERNAL PARTY ID, not a free-text reference, and the
+ * receiving type is not part of the write at all — the backend passes
+ * `ReceivingType.Supplier` for every receiving draft it creates. Only the READ
+ * projection carries `receivingType`, and only the detail view reads it.
+ */
+
+const SUPPLIER_PARTY_ID = '77777777-7777-4777-8777-777777777777'
+
 describe('receivingInfoSchema', () => {
-  it('accepts the PRD receiving-type trio with a supplier reference', () => {
-    for (const receivingType of RECEIVING_TYPES) {
-      const result = receivingInfoSchema.safeParse({
-        receivingType,
-        supplierRef: 'مورد الشام',
-        supplierInvoiceRef: 'INV-2024-001',
-      })
-      expect(result.success).toBe(true)
-    }
+  it('accepts a supplier party id with an optional invoice reference', () => {
+    const result = receivingInfoSchema.safeParse({
+      supplierPartyId: SUPPLIER_PARTY_ID,
+      supplierInvoiceRef: 'INV-2024-001',
+    })
+    expect(result.success).toBe(true)
   })
 
-  it('rejects an empty receiving type with an Arabic message', () => {
-    const result = receivingInfoSchema.safeParse({
-      receivingType: '',
-      supplierRef: 'مورد الشام',
-    })
+  it('rejects an empty supplier party id with an Arabic message', () => {
+    const result = receivingInfoSchema.safeParse({ supplierPartyId: '' })
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe('يجب اختيار نوع الاستلام.')
+      expect(result.error.issues[0]?.message).toBe('يجب اختيار مورد صالح من القائمة.')
     }
   })
 
-  it('rejects a blank supplier reference with an Arabic message', () => {
-    const result = receivingInfoSchema.safeParse({
-      receivingType: 'Supplier',
-      supplierRef: '   ',
-    })
+  it('rejects a free-text supplier name, because the route binds a UUID', () => {
+    const result = receivingInfoSchema.safeParse({ supplierPartyId: '   ' })
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe('يجب إدخال اسم أو مرجع المورد.')
-    }
   })
 
-  it('enforces the contract string lengths', () => {
+  it('enforces the contract invoice-reference length', () => {
     const result = receivingInfoSchema.safeParse({
-      receivingType: 'Supplier',
-      supplierRef: 'م'.repeat(201),
+      supplierPartyId: SUPPLIER_PARTY_ID,
       supplierInvoiceRef: 'ف'.repeat(101),
     })
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(result.error.issues.map((issue) => issue.path.join('.'))).toEqual(
-        expect.arrayContaining(['supplierRef', 'supplierInvoiceRef']),
-      )
+      expect(result.error.issues.map((issue) => issue.path.join('.'))).toEqual([
+        'supplierInvoiceRef',
+      ])
     }
   })
 
   it('treats an empty invoice reference as omitted', () => {
     const result = receivingInfoSchema.safeParse({
-      receivingType: 'Transfer',
-      supplierRef: '  مورد الشام  ',
+      supplierPartyId: SUPPLIER_PARTY_ID,
       supplierInvoiceRef: '   ',
     })
     expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.supplierInvoiceRef).toBe('')
+    }
   })
 })
 
 describe('toReceivingInfo / fromReceivingInfo', () => {
-  it('maps form values to the contract shape, trimming and dropping the empty invoice reference', () => {
+  it('maps form values to the contract shape, dropping the empty invoice reference', () => {
+    expect(toReceivingInfo({ supplierPartyId: SUPPLIER_PARTY_ID, supplierInvoiceRef: '' })).toEqual(
+      { supplierPartyId: SUPPLIER_PARTY_ID },
+    )
     expect(
       toReceivingInfo({
-        receivingType: 'Supplier',
-        supplierRef: '  مورد الشام  ',
-        supplierInvoiceRef: '',
-      }),
-    ).toEqual({ receivingType: 'Supplier', supplierRef: 'مورد الشام' })
-    expect(
-      toReceivingInfo({
-        receivingType: 'Return',
-        supplierRef: 'مورد النور',
+        supplierPartyId: SUPPLIER_PARTY_ID,
         supplierInvoiceRef: 'INV-7',
       }),
     ).toEqual({
-      receivingType: 'Return',
-      supplierRef: 'مورد النور',
+      supplierPartyId: SUPPLIER_PARTY_ID,
       supplierInvoiceRef: 'INV-7',
     })
   })
 
-  it('round-trips a server record through the form values', () => {
-    const server = {
-      receivingType: 'Purchase',
+  it('starts the supplier empty from a server record: the read projection carries no party id', () => {
+    const values = fromReceivingInfo({
       supplierRef: 'EXT-SUP-001',
       supplierInvoiceRef: 'INV-20',
-    }
-    const values = fromReceivingInfo(server)
-    expect(values).toEqual({
-      receivingType: 'Purchase',
-      supplierRef: 'EXT-SUP-001',
-      supplierInvoiceRef: 'INV-20',
+      receivingType: 'Supplier',
     })
-    expect(toReceivingInfo(values)).toEqual(server)
+    expect(values).toEqual({ supplierPartyId: '', supplierInvoiceRef: 'INV-20' })
   })
 
-  it('defaults a missing petal to a fresh Supplier draft', () => {
+  it('defaults a missing petal to an empty supplier with no invoice reference', () => {
     expect(fromReceivingInfo(undefined)).toEqual({
-      receivingType: 'Supplier',
-      supplierRef: '',
+      supplierPartyId: '',
       supplierInvoiceRef: undefined,
     })
   })
@@ -114,14 +100,15 @@ describe('toReceivingInfo / fromReceivingInfo', () => {
   it('treats a null invoice reference as absent', () => {
     expect(
       fromReceivingInfo({
-        receivingType: 'Transfer',
         supplierRef: 'مورد',
         supplierInvoiceRef: null,
+        receivingType: 'Transfer',
       }),
-    ).toEqual({ receivingType: 'Transfer', supplierRef: 'مورد', supplierInvoiceRef: undefined })
+    ).toEqual({ supplierPartyId: '', supplierInvoiceRef: undefined })
   })
 
-  it('labels every receiving type in Arabic', () => {
+  it('labels every read-side receiving type in Arabic', () => {
+    expect(RECEIVING_TYPES).toEqual(['Supplier', 'Transfer', 'Return'])
     expect(RECEIVING_TYPE_LABELS_AR).toMatchObject({
       Supplier: 'توريد من مورد',
       Transfer: 'تحويل من مستودع',

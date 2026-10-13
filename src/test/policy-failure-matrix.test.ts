@@ -18,16 +18,27 @@ import {
   SIGNED_ORIGINAL_BLOCKER_CODES,
   signedOriginalBlockerCodeVariants,
 } from '@/shared/documents/policy-blocker-codes'
-import { createDocumentPolicy, createPolicyBlocker } from '@/test/msw/factories'
-import type { CapabilityOperation, DocumentType } from '@/shared/types/generated/eiams-v1'
+import { wirePolicy } from '@/test/msw/document-wire-fixtures'
+import type {
+  DocumentPolicyBlocker,
+  DocumentType,
+} from '@/shared/documents/types/document-wire.types'
+import type { CapabilityOperation } from '@/modules/warehouse/types/warehouse.types'
 
 /**
  * Critical policy failure matrix (e24-t07).
  *
- * "Policy failure" in EIAMS means a server-emitted `PolicyBlocker` (a hard stop)
- * or `OperationalAdvisory` (a warning). The OpenAPI contract types
- * `PolicyBlocker.code` as an unconstrained `string`, so nothing pinned the legal
- * vocabulary and no test enumerated it. This file is that enumeration.
+ * "Policy failure" in EIAMS means a server-emitted `PolicyPolicyBlocker` (a hard
+ * stop) or an advisory (a warning). The live policy types `PolicyBlocker.code`
+ * as an unconstrained `string`, so nothing pins the legal vocabulary and no test
+ * enumerated it. This file is that enumeration.
+ *
+ * Every payload here is a WIRE record — `{ action, code, message }` for a
+ * blocker, `{ code, message, countId, warehouseId }` for an advisory, `status`
+ * for the policy's own status — because that is what the API serves and what the
+ * application reads. Arabic is resolved from the CODE through the governed
+ * `error-copy-ar.ts` table, never from a message field, so an expectation here
+ * is an expectation about a code the copy table has an entry for.
  *
  * ## Scope of what is asserted
  *
@@ -35,13 +46,23 @@ import type { CapabilityOperation, DocumentType } from '@/shared/types/generated
  * action-level presentation decision, across **all six** document types, plus
  * the rule that an advisory never blocks. The action-bar and attachment-panel
  * *rendering* of the same payloads is covered by their own suites
- * (`lifecycle-action-bar.test.tsx`, `adjustment-action-bar.test.tsx`,
- * `attachment-panel.test.tsx`); the cross-surface consistency checks live in
- * `policy-failure-surfaces.test.tsx`.
+ * (`lifecycle-action-bar.test.tsx`, `attachment-panel.test.tsx`); the
+ * cross-surface consistency checks live in `policy-failure-surfaces.test.tsx`.
  *
  * Every expectation is evaluated through the production predicates, so this
  * suite cannot pass by restating the rules it exists to check.
  */
+
+/** The canonical Arabic the signed-original gate renders for an unmapped code. */
+const SIGNED_GATE_DEFAULT_BLOCKED = 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.'
+
+/** A blocker in the live wire spelling. */
+function blocker(
+  code: string,
+  message = 'The server explains the failure in English.',
+): DocumentPolicyBlocker {
+  return { action: 'Post', code, message }
+}
 
 const ALL_DOCUMENT_TYPES: readonly DocumentType[] = [
   'Receiving',
@@ -64,6 +85,7 @@ const CAPABILITY_OPERATION: Partial<Record<DocumentType, CapabilityOperation>> =
 }
 
 const DOMAIN_ID = '10000000-0000-4000-8000-0000000000d0'
+const POLICY_DOCUMENT_ID = '00000000-0000-4000-8000-0000000000c8'
 
 function line(overrides: Partial<PreflightLineShape> = {}): PreflightLineShape {
   return {
@@ -76,18 +98,14 @@ function line(overrides: Partial<PreflightLineShape> = {}): PreflightLineShape {
 }
 
 const satisfiedPolicy = () =>
-  createDocumentPolicy({
-    documentId: '00000000-0000-4000-8000-0000000000c8',
-    documentStatus: 'Submitted',
-    signedOriginalSatisfied: true,
-    blockers: [],
-  })
+  wirePolicy({ documentId: POLICY_DOCUMENT_ID, status: 'Submitted', signedOriginalSatisfied: true })
 
 const missingOriginalPolicy = () =>
-  createDocumentPolicy({
-    documentId: '00000000-0000-4000-8000-0000000000c8',
-    documentStatus: 'Submitted',
+  wirePolicy({
+    documentId: POLICY_DOCUMENT_ID,
+    status: 'Submitted',
     signedOriginalSatisfied: false,
+    blockers: [blocker('document.signed_original_missing')],
   })
 
 // ---------------------------------------------------------------------------
@@ -142,32 +160,35 @@ describe('signed-original gate resolves every blocker code to blocked', () => {
   for (const canonical of SIGNED_ORIGINAL_BLOCKER_CODES) {
     for (const variant of signedOriginalBlockerCodeVariants(canonical)) {
       it(`blocks on ${variant}`, () => {
-        const blocker = createPolicyBlocker({ code: variant, messageAr: 'سبب محدد من الخادم.' })
         const gate = signedOriginalGate(
-          createDocumentPolicy({
-            documentId: '00000000-0000-4000-8000-0000000000c8',
-            documentStatus: 'Submitted',
+          wirePolicy({
+            documentId: POLICY_DOCUMENT_ID,
+            status: 'Submitted',
             signedOriginalSatisfied: false,
-            blockers: [blocker],
+            blockers: [blocker(variant)],
           }),
         )
         expect(gate.status).toBe('blocked')
-        expect(gate.messageAr).toBe('سبب محدد من الخادم.')
+        // None of the gate codes has a governed Arabic entry, so the canonical
+        // sentence renders rather than the server's English message.
+        expect(gate.messageAr).toBe(SIGNED_GATE_DEFAULT_BLOCKED)
+        expect(gate.blockerCode).toBe(variant)
       })
     }
   }
 
   it('ignores a non-signed-original blocker and falls back to the default message', () => {
     const gate = signedOriginalGate(
-      createDocumentPolicy({
-        documentId: '00000000-0000-4000-8000-0000000000c8',
-        documentStatus: 'Submitted',
+      wirePolicy({
+        documentId: POLICY_DOCUMENT_ID,
+        status: 'Submitted',
         signedOriginalSatisfied: false,
-        blockers: [createPolicyBlocker({ code: 'insufficient_balance' })],
+        blockers: [blocker('insufficient_balance')],
       }),
     )
     expect(gate.status).toBe('blocked')
-    expect(gate.messageAr).toBe('النسخة الموقعة من المستند مطلوبة قبل الترحيل.')
+    expect(gate.messageAr).toBe(SIGNED_GATE_DEFAULT_BLOCKED)
+    expect(gate.blockerCode).toBeNull()
   })
 
   it('exposes the matched code so a consumer can dedupe by code, not by text', () => {
@@ -177,9 +198,9 @@ describe('signed-original gate resolves every blocker code to blocked', () => {
 
   it('reports no code when it fell back to the default message', () => {
     const gate = signedOriginalGate(
-      createDocumentPolicy({
-        documentId: '00000000-0000-4000-8000-0000000000c8',
-        documentStatus: 'Submitted',
+      wirePolicy({
+        documentId: POLICY_DOCUMENT_ID,
+        status: 'Submitted',
         signedOriginalSatisfied: false,
         blockers: [],
       }),
@@ -362,24 +383,20 @@ describe('an advisory is a warning and never a gate input', () => {
   it('passes ActiveSoftFreeze through without ever blocking', () => {
     const advisory = {
       code: ACTIVE_SOFT_FREEZE_ADVISORY_CODE,
-      severity: 'Warning' as const,
-      messageAr: 'هناك جرد نشط يغطي نطاق هذا المستودع.',
+      message: 'An inventory count covers the scope of this warehouse.',
       countId: '00000000-0000-4000-8000-0000000000ad',
-      countReference: 'JRY-2026-014',
-      overlapState: 'Provisional' as const,
-      scopeSummaryAr: 'مستودع دمشق المركزي',
-      warehouseId: '00000000-0000-4000-8000-0000000000w1',
+      warehouseId: '00000000-0000-4000-8000-0000000000ad',
     }
     for (const type of ALL_DOCUMENT_TYPES) {
       const preflight = evaluateDocumentPreflight({
         lines: [line()],
         documentType: type,
-        policy: createDocumentPolicy({
-          documentId: '00000000-0000-4000-8000-0000000000c8',
-          documentStatus: 'Submitted',
+        policy: wirePolicy({
+          documentId: POLICY_DOCUMENT_ID,
+          status: 'Submitted',
           signedOriginalSatisfied: true,
           blockers: [],
-          advisories: [advisory],
+          warnings: [advisory],
         }),
         capability: [{ domainId: DOMAIN_ID, status: 'supported' }],
       })
@@ -394,11 +411,11 @@ describe('an advisory is a warning and never a gate input', () => {
     const preflight = evaluateDocumentPreflight({
       lines: [line()],
       documentType: 'Issue',
-      policy: createDocumentPolicy({
-        documentId: '00000000-0000-4000-8000-0000000000c8',
-        documentStatus: 'Submitted',
+      policy: wirePolicy({
+        documentId: POLICY_DOCUMENT_ID,
+        status: 'Submitted',
         signedOriginalSatisfied: true,
-        blockers: [createPolicyBlocker()],
+        blockers: [blocker('WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED')],
       }),
       capability: [{ domainId: DOMAIN_ID, status: 'supported' }],
     })
@@ -417,18 +434,14 @@ describe('action presentation follows the contract decision table', () => {
 
   it('hides an action the session may not perform', () => {
     for (const status of ['Draft', 'Submitted', 'Posted', 'Reversed', 'Cancelled'] as const) {
-      const decision = evaluateActionDecision(
-        createDocumentPolicy({ documentId: 'd', documentStatus: status }),
-        'Post',
-        deny,
-      )
+      const decision = evaluateActionDecision(wirePolicy({ documentId: 'd', status }), 'Post', deny)
       expect(decision.presentation, status).toBe('Hidden')
       expect(decision.reasonAr).toBeNull()
     }
   })
 
   it('hides an action the server marked Hidden', () => {
-    const policy = createDocumentPolicy({ documentId: 'd', documentStatus: 'Draft' })
+    const policy = wirePolicy({ documentId: 'd', status: 'Draft' })
     const decision = evaluateActionDecision(
       {
         ...policy,
@@ -438,8 +451,8 @@ describe('action presentation follows the contract decision table', () => {
             allowed: false,
             confirmationRequired: false,
             presentation: 'Hidden',
-            reasonAr: 'غير متاح.',
-            reasonCode: 'state_not_draft',
+            reason: 'Not available in this state.',
+            reasonCode: 'STATE_OR_PERMISSION_NOT_ALLOWED',
             reasonRequired: false,
           },
         ],
@@ -450,8 +463,8 @@ describe('action presentation follows the contract decision table', () => {
     expect(decision.presentation).toBe('Hidden')
   })
 
-  it('disables with the server Arabic reason, never with an invented one', () => {
-    const policy = createDocumentPolicy({ documentId: 'd', documentStatus: 'Submitted' })
+  it('disables with the reason its code resolves to, never with an invented one', () => {
+    const policy = wirePolicy({ documentId: 'd', status: 'Submitted' })
     const decision = evaluateActionDecision(
       {
         ...policy,
@@ -461,8 +474,8 @@ describe('action presentation follows the contract decision table', () => {
             allowed: false,
             confirmationRequired: false,
             presentation: 'Disabled',
-            reasonAr: 'سبب من الخادم.',
-            reasonCode: 'document.signed_original_missing',
+            reason: 'The signed copy is required before posting.',
+            reasonCode: 'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED',
             reasonRequired: false,
           },
         ],
@@ -471,7 +484,10 @@ describe('action presentation follows the contract decision table', () => {
       allow,
     )
     expect(decision.presentation).toBe('Disabled')
-    expect(decision.reasonAr).toBe('سبب من الخادم.')
+    // Resolved from `reasonCode` through the governed copy table — the English
+    // `reason` the server sent is never rendered.
+    expect(decision.reasonAr).toBe('يجب إرفاق النسخة الموقعة قبل الترحيل.')
+    expect(decision.reasonAr).not.toBe('The signed copy is required before posting.')
   })
 
   it('never enables an action while the policy is undetermined', () => {
@@ -481,7 +497,7 @@ describe('action presentation follows the contract decision table', () => {
   })
 
   it('hides an action the policy does not describe at all', () => {
-    const policy = createDocumentPolicy({ documentId: 'd', documentStatus: 'Draft' })
+    const policy = wirePolicy({ documentId: 'd', status: 'Draft' })
     const decision = evaluateActionDecision({ ...policy, actions: [] }, 'Post', allow)
     expect(decision.presentation).toBe('Hidden')
   })
@@ -489,9 +505,9 @@ describe('action presentation follows the contract decision table', () => {
   it('enables only when permission and policy both agree', () => {
     // A Submitted document with the signed original already satisfied is the one
     // case where the server presents Post as Enabled.
-    const policy = createDocumentPolicy({
+    const policy = wirePolicy({
       documentId: 'd',
-      documentStatus: 'Submitted',
+      status: 'Submitted',
       signedOriginalSatisfied: true,
     })
     const decision = evaluateActionDecision(policy, 'Post', allow)
@@ -499,16 +515,30 @@ describe('action presentation follows the contract decision table', () => {
   })
 
   it('disables Post on a Submitted document whose signed original is unmet', () => {
-    const decision = evaluateActionDecision(
-      createDocumentPolicy({
-        documentId: 'd',
-        documentStatus: 'Submitted',
-        signedOriginalSatisfied: false,
-      }),
-      'Post',
-      allow,
-    )
+    const decision = evaluateActionDecision(missingOriginalPolicy(), 'Post', allow)
     expect(decision.presentation).toBe('Disabled')
-    expect(decision.reasonAr).toBeTruthy()
+    expect(decision.reasonAr).toBe('يجب إرفاق النسخة الموقعة قبل الترحيل.')
+  })
+
+  it('renders no reason at all when the server reason code has no governed copy', () => {
+    const policy = wirePolicy({
+      documentId: 'd',
+      status: 'Submitted',
+      signedOriginalSatisfied: false,
+      actions: [
+        {
+          action: 'Post',
+          allowed: false,
+          confirmationRequired: false,
+          presentation: 'Disabled',
+          reason: 'Posting is blocked.',
+          reasonCode: 'A_CODE_NOBODY_TRANSLATED',
+          reasonRequired: false,
+        },
+      ],
+    })
+    const decision = evaluateActionDecision(policy, 'Post', allow)
+    expect(decision.presentation).toBe('Disabled')
+    expect(decision.reasonAr).toBeNull()
   })
 })

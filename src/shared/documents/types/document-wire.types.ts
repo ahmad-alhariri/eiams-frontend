@@ -26,21 +26,10 @@
 
 export type Uuid = string
 
-export type DocumentType =
-  | 'Receiving'
-  | 'Issue'
-  | 'Transfer'
-  | 'Adjustment'
-  | 'Opening'
-  | 'Return'
+export type DocumentType = 'Receiving' | 'Issue' | 'Transfer' | 'Adjustment' | 'Opening' | 'Return'
 
 export type DocumentStatus =
-  | 'Draft'
-  | 'Submitted'
-  | 'Posted'
-  | 'Reversed'
-  | 'Cancelled'
-  | 'Rejected'
+  'Draft' | 'Submitted' | 'Posted' | 'Reversed' | 'Cancelled' | 'Rejected'
 
 /** `Domain.Common.MovementType` vocabulary reused by document lines. */
 export type PartyType = 'Employee' | 'OrganizationalUnit' | 'Site' | 'External'
@@ -120,6 +109,9 @@ export interface DocumentLineResponse {
   readonly id: Uuid
   readonly sourceLineId: Uuid | null
   readonly materialId: Uuid
+  readonly materialCode: string
+  readonly materialNameAr: string
+  readonly unitSymbol: string | null
   readonly lineType: string
   readonly quantity: number
   readonly unitId: Uuid | null
@@ -187,12 +179,16 @@ export interface InventoryAdjustmentResponse {
 export interface WarehouseDocumentDetails {
   readonly id: Uuid
   readonly warehouseId: Uuid
+  readonly warehouseCode: string
+  readonly warehouseName: string
   readonly documentType: DocumentType
   readonly paperDocumentNumber: string | null
   readonly paperDocumentYear: number | null
   readonly systemReferenceNumber: string
   readonly signedCopyAttachmentId: Uuid | null
   readonly documentStatus: DocumentStatus
+  readonly createdAtUtc: string
+  readonly createdBy: Uuid | null
   readonly postedBy: Uuid | null
   readonly postedAtUtc: string | null
   readonly reversalOfDocumentId: Uuid | null
@@ -302,6 +298,19 @@ export interface PostDocumentResponse {
   readonly warnings: readonly DocumentPolicyAdvisory[]
 }
 
+/**
+ * Per-unit identity captured while an asset line is still a draft.
+ *
+ * `assetNumber` is optional for BOTH tracking types: leaving it blank is a recorded decision meaning
+ * "generate one at post" (the server produces `AST-{assetId}`), while supplying it means the user
+ * entered an institutional number that must be unique. `serialNumber` is required when the material
+ * is Serial-tracked and must be absent when it is Quantity-tracked.
+ */
+export interface AssetInput {
+  readonly assetNumber?: string | null
+  readonly serialNumber?: string | null
+}
+
 /** `Application.WarehouseDocuments.CompleteDraft.CompleteWarehouseDocumentDraftLine` */
 export interface CompleteDraftLine {
   readonly materialId: Uuid
@@ -312,7 +321,10 @@ export interface CompleteDraftLine {
   readonly batchNumber?: string | null
   readonly expiryDate?: string | null
   readonly openingType?: OpeningType | null
+  /** Issue/Return: select assets that already exist. */
   readonly assetIds?: readonly Uuid[] | null
+  /** Receiving/Opening: capture the identity of units this draft will register at post. */
+  readonly assetInputs?: readonly AssetInput[] | null
   readonly adjustmentReason?: string | null
 }
 

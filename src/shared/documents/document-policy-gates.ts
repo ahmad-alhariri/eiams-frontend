@@ -94,7 +94,9 @@ export function policyAdvisoryMessageAr(advisory: DocumentPolicyAdvisory): strin
 }
 
 /** Arabic text for a disabled action's reason, or `null` when its code is unmapped. */
-export function actionAvailabilityReasonAr(availability: DocumentActionAvailability): string | null {
+export function actionAvailabilityReasonAr(
+  availability: DocumentActionAvailability,
+): string | null {
   return policyMessageAr(availability.reasonCode)
 }
 

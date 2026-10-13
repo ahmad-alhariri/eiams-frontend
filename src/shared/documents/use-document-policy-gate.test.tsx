@@ -23,6 +23,7 @@ import {
 import {
   createWarehouseDocumentDetailHandler,
   createWarehouseDocumentPolicyHandler,
+  toWirePolicy,
 } from '@/test/msw/warehouse-document-handlers'
 import { server } from '@/test/msw/server'
 
@@ -106,14 +107,14 @@ afterEach(() => {
 })
 
 describe('useDocumentPolicyGate', () => {
-  it('composes detail and policy into a balance-blocked preflight and supports the composed refetch', async () => {
+  it('composes detail and policy, and supports the composed refetch', async () => {
     const document = issueDocument()
     let policyRequests = 0
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => {
         policyRequests += 1
-        return okJson(document.policy)
+        return okJson(toWirePolicy(document))
       }),
     )
 
@@ -123,8 +124,51 @@ describe('useDocumentPolicyGate', () => {
 
     await waitFor(() => expect(result.current.preflight).not.toBeNull())
 
-    expect(result.current.document?.documentId).toBe(DOCUMENT_ID)
-    expect(result.current.policy?.documentStatus).toBe('Submitted')
+    expect(result.current.document?.id).toBe(DOCUMENT_ID)
+    expect(result.current.policy?.status).toBe('Submitted')
+    // The real detail read carries no balance on a line, so the balance gate is
+    // INDETERMINATE for a server-loaded document — a neutral note, never a block.
+    // The authoritative ceiling is the server's own `InsufficientQuantity`
+    // policy blocker at post time.
+    expect(result.current.preflight?.status).toBe('warn')
+    expect(result.current.preflight?.gates.find((gate) => gate.gate === 'balance')).toEqual({
+      gate: 'balance',
+      status: 'unknown',
+      messageAr: 'لا يتوفر رصيد حي لهذه المادة حالياً.',
+      blockerCode: null,
+    })
+
+    const before = policyRequests
+    await result.current.refetch()
+    await waitFor(() => expect(policyRequests).toBeGreaterThan(before))
+  })
+
+  it('blocks on a draft line whose quantity exceeds the balance the form carries', async () => {
+    const document = issueDocument()
+    server.use(
+      ...createWarehouseDocumentDetailHandler(document),
+      ...createWarehouseDocumentPolicyHandler(document),
+      http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
+        okJson([createWarehouseCapability({ warehouseId: WAREHOUSE_ID })]),
+      ),
+    )
+
+    // Edit-form draft lines DO carry a balance and a domain id, which is the
+    // only way the client-side ceiling can resolve to anything but `unknown`.
+    const draftLines = [
+      {
+        quantity: 25,
+        availableBalance: 12,
+        materialDomainId: DOMAIN_ID,
+        materialNameAr: 'ورق تصوير A4',
+      },
+    ]
+    const { result } = renderHook(() => useDocumentPolicyGate(DOCUMENT_ID, { lines: draftLines }), {
+      wrapper: createWrapper(),
+    })
+
+    await waitFor(() => expect(result.current.preflight).not.toBeNull())
+
     expect(result.current.preflight?.status).toBe('blocked')
     expect(result.current.preflight?.gates.find((gate) => gate.gate === 'balance')).toEqual({
       gate: 'balance',
@@ -132,10 +176,6 @@ describe('useDocumentPolicyGate', () => {
       messageAr: 'الكمية المطلوبة (٢٥) تتجاوز الرصيد المتاح (١٢) للمادة «ورق تصوير A4».',
       blockerCode: null,
     })
-
-    const before = policyRequests
-    await result.current.refetch()
-    await waitFor(() => expect(policyRequests).toBeGreaterThan(before))
   })
 
   it('passes ActiveSoftFreeze advisories through without ever blocking the preflight', async () => {
@@ -164,7 +204,7 @@ describe('useDocumentPolicyGate', () => {
     })
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     const { result } = renderHook(() => useDocumentPolicyGate(DOCUMENT_ID), {
@@ -176,7 +216,9 @@ describe('useDocumentPolicyGate', () => {
     expect(result.current.preflight?.status).not.toBe('blocked')
     expect(result.current.preflight?.advisories).toHaveLength(1)
     expect(result.current.preflight?.advisories[0]?.code).toBe('ActiveSoftFreeze')
-    expect(result.current.preflight?.advisories[0]?.messageAr).toBe(
+    // The wire advisory is `{ code, message, countId, warehouseId }` — English
+    // prose, no `messageAr`. The UI resolves Arabic from the code.
+    expect(result.current.preflight?.advisories[0]?.message).toBe(
       'هناك جرد نشط يغطي نطاق هذا المستودع.',
     )
     expect(result.current.preflight?.gates).not.toContainEqual(
@@ -200,7 +242,7 @@ describe('useDocumentPolicyGate', () => {
     })
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
       http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () =>
         okJson([capability]),
       ),
@@ -242,7 +284,7 @@ describe('useDocumentPolicyGate', () => {
     const document = issueDocument()
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     const { result } = renderHook(() => useDocumentPolicyGate(DOCUMENT_ID), {
@@ -253,7 +295,11 @@ describe('useDocumentPolicyGate', () => {
 
     // Submitted policy: Submit is Disabled by the server, Post is Enabled.
     expect(result.current.decision('Submit').presentation).toBe('Disabled')
-    expect(result.current.decision('Submit').reasonAr).toBe('المستند مُرسل بالفعل.')
+    // The disabled reason is resolved from the wire reason CODE
+    // (`WAREHOUSE_DOCUMENTS_NOT_EDITABLE`), never from a server message field.
+    expect(result.current.decision('Submit').reasonAr).toBe(
+      'لا يمكن تعديل المستند إلا في حالة المسودة.',
+    )
     expect(result.current.decision('Post').presentation).toBe('Enabled')
     expect(result.current.canSubmit).toBe(false)
     expect(result.current.canPost).toBe(true)
@@ -263,7 +309,7 @@ describe('useDocumentPolicyGate', () => {
     const document = issueDocument()
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     const { result } = renderHook(() => useDocumentPolicyGate(DOCUMENT_ID), {

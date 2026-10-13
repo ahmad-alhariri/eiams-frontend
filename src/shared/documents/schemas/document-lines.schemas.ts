@@ -182,9 +182,7 @@ export function deriveBaseQuantity(quantity: number, factor: number): number {
  * material and the chosen unit and never trusts a client override, so they are
  * display-only and are not sent.
  */
-export function toCompleteDraftLines(
-  lines: readonly QuantityLineValues[],
-): CompleteDraftLine[] {
+export function toCompleteDraftLines(lines: readonly QuantityLineValues[]): CompleteDraftLine[] {
   return lines.map((line) => ({
     materialId: line.materialId,
     quantity: line.quantity,
@@ -352,9 +350,7 @@ export type AssetLinesValues = z.infer<typeof assetLinesSchema>
  * a types fix; the missing backend write is filed as the blocker. Nothing here
  * invents a payload the server would reject with a 400.
  */
-export function toCompleteDraftAssetLines(
-  lines: readonly AssetLineValues[],
-): CompleteDraftLine[] {
+export function toCompleteDraftAssetLines(lines: readonly AssetLineValues[]): CompleteDraftLine[] {
   return lines.map((line) => ({
     materialId: line.materialId,
     quantity: line.quantity,
