@@ -170,7 +170,7 @@ describe('issue custody and return chain', () => {
     expect(within(returnedStockRow as HTMLElement).getByText('استلام')).toBeInTheDocument()
     expect(within(returnedStockRow as HTMLElement).getByText('+١')).toBeInTheDocument()
     expect(stockMovementQueries.at(-1)).toMatchObject({
-      pageIndex: '0',
+      page: '1',
       pageSize: '10',
       sortBy: 'PostedAt',
       sortDirection: 'Descending',

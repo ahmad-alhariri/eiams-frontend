@@ -18,6 +18,27 @@ export interface NamedReference {
 export type MovementType =
   'Issue' | 'Opening' | 'Receipt' | 'TransferIn' | 'TransferOut' | 'AdjustmentIn' | 'AdjustmentOut'
 
+/**
+ * D-INV-READ-01 sorting vocabulary. Values are the contract members served by
+ * `Application.Abstractions.Sorting.SortDirection` and the two
+ * `*SortField` enums; the backend binds them case-sensitively and rejects an
+ * unknown member with 400 rather than substituting the default, so these
+ * unions are the exact set of strings the wire accepts.
+ */
+export type SortDirection = 'Ascending' | 'Descending'
+
+export type InventoryBalanceSortField =
+  'WarehouseDisplayName' | 'MaterialDisplayName' | 'Quantity' | 'LastUpdated'
+
+export type StockMovementSortField =
+  'PostedAt' | 'WarehouseDisplayName' | 'MaterialDisplayName' | 'MovementType' | 'QuantityDelta'
+
+/**
+ * Server-computed low-stock projection (`LowStockState` in the backend). The
+ * browser never compares quantities with thresholds itself.
+ */
+export type InventoryLowStockState = 'Low' | 'Sufficient' | 'NotConfigured' | 'Disabled'
+
 export interface PageMeta {
   readonly page: number
   readonly pageIndex: number
@@ -49,7 +70,7 @@ export interface InventoryBalance {
   readonly lastUpdatedUtc: string
   readonly rowVersion: number
   readonly lowStock: {
-    state: 'Disabled' | 'Low' | 'Sufficient' | 'NotConfigured'
+    state: InventoryLowStockState
     thresholdQuantity: number | null
   }
 }
@@ -65,6 +86,9 @@ export interface ListInventoryBalancesQuery {
   readonly search?: string
   readonly warehouseId?: string
   readonly materialId?: string
+  readonly sortBy?: InventoryBalanceSortField
+  readonly sortDirection?: SortDirection
+  readonly lowStockState?: InventoryLowStockState
 }
 
 // ---------------------------------------------------------------------------
@@ -106,4 +130,6 @@ export interface ListStockMovementsQuery {
   readonly materialId?: string
   readonly documentId?: string
   readonly movementType?: MovementType
+  readonly sortBy?: StockMovementSortField
+  readonly sortDirection?: SortDirection
 }

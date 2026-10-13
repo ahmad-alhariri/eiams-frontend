@@ -41,7 +41,7 @@ afterEach(() => {
 })
 
 describe('InventoryBalancesPage', () => {
-  it('renders the server page with default contract sort, Arabic low-stock labels, and zero-based pagination', async () => {
+  it('renders the server page with default contract sort, Arabic low-stock labels, and one-based pagination', async () => {
     const balances = [
       createInventoryBalance({ lowStock: { state: 'Low', thresholdQuantity: 10 } }),
       createInventoryBalance({
@@ -84,7 +84,7 @@ describe('InventoryBalancesPage', () => {
     expect(screen.getByLabelText('حدّ التنبيه: ١٠')).toBeInTheDocument()
     expect(screen.getByLabelText('حدّ التنبيه: ٥')).toBeInTheDocument()
     expect(initialQuery).toMatchObject({
-      pageIndex: '0',
+      page: '1',
       pageSize: '10',
       sortBy: 'WarehouseDisplayName',
       sortDirection: 'Ascending',
@@ -116,14 +116,14 @@ describe('InventoryBalancesPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'الصفحة التالية' }))
     await waitFor(() =>
-      expect(receivedQueries).toContainEqual(expect.objectContaining({ pageIndex: '1' })),
+      expect(receivedQueries).toContainEqual(expect.objectContaining({ page: '2' })),
     )
 
     await user.click(screen.getByRole('combobox', { name: 'تصفية حسب حالة التنبيه' }))
     await user.click(await screen.findByRole('option', { name: 'منخفض' }))
     await waitFor(() =>
       expect(receivedQueries).toContainEqual(
-        expect.objectContaining({ lowStockState: 'Low', pageIndex: '0' }),
+        expect.objectContaining({ lowStockState: 'Low', page: '1' }),
       ),
     )
 
@@ -132,7 +132,7 @@ describe('InventoryBalancesPage', () => {
       expect(receivedQueries).toContainEqual(
         expect.objectContaining({
           lowStockState: 'Low',
-          pageIndex: '0',
+          page: '1',
           sortBy: 'Quantity',
           sortDirection: 'Ascending',
         }),

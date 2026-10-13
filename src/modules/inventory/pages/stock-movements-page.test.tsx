@@ -52,7 +52,7 @@ afterEach(() => {
 })
 
 describe('StockMovementsPage', () => {
-  it('renders the immutable Arabic ledger and sends default server ordering with zero-based pagination', async () => {
+  it('renders the immutable Arabic ledger and sends default server ordering with one-based pagination', async () => {
     const movement = createMovement()
     let requestQuery: Record<string, string> | undefined
     server.use(
@@ -81,7 +81,7 @@ describe('StockMovementsPage', () => {
     )
     expect(screen.queryByRole('button', { name: /إضافة|تعديل|حذف/ })).not.toBeInTheDocument()
     expect(requestQuery).toMatchObject({
-      pageIndex: '0',
+      page: '1',
       pageSize: '10',
       sortBy: 'PostedAt',
       sortDirection: 'Descending',
@@ -106,12 +106,12 @@ describe('StockMovementsPage', () => {
     render(<StockMovementsPage />, { wrapper: createWrapper() })
     await screen.findByText('المستودع المركزي')
     await user.click(screen.getByRole('button', { name: 'الصفحة التالية' }))
-    await waitFor(() => expect(requests.at(-1)?.['pageIndex']).toBe('1'))
+    await waitFor(() => expect(requests.at(-1)?.['page']).toBe('2'))
 
     await user.click(screen.getByRole('button', { name: 'التغير في الرصيد' }))
     await waitFor(() =>
       expect(requests.at(-1)).toMatchObject({
-        pageIndex: '0',
+        page: '1',
         sortBy: 'QuantityDelta',
         sortDirection: 'Ascending',
       }),
@@ -121,7 +121,7 @@ describe('StockMovementsPage', () => {
       target: { value: '2026-08-01T08:30' },
     })
     await waitFor(() => {
-      expect(requests.at(-1)?.['pageIndex']).toBe('0')
+      expect(requests.at(-1)?.['page']).toBe('1')
       expect(requests.at(-1)?.['dateFrom']).toMatch(/^2026-08-01T.*Z$/)
     })
 

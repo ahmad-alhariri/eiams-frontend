@@ -98,7 +98,7 @@ describe('receiving and opening balance propagation', () => {
     expect(screen.getByText(receiving.systemReferenceNumber)).toBeInTheDocument()
     expect(screen.getByText(opening.systemReferenceNumber)).toBeInTheDocument()
     expect(movementListQueries.at(-1)).toMatchObject({
-      pageIndex: '0',
+      page: '1',
       pageSize: '10',
       sortBy: 'PostedAt',
       sortDirection: 'Descending',
@@ -120,7 +120,7 @@ describe('receiving and opening balance propagation', () => {
     expect(within(assetRow as HTMLElement).getByText('٢')).toBeInTheDocument()
     expect(within(consumableRow as HTMLElement).getByText('٩')).toBeInTheDocument()
     expect(balanceListQueries.at(-1)).toMatchObject({
-      pageIndex: '0',
+      page: '1',
       pageSize: '10',
       sortBy: 'WarehouseDisplayName',
       sortDirection: 'Ascending',

@@ -1,6 +1,6 @@
 import { Badge, type BadgeProps } from '@/shared/ui/badge'
 import { formatNumber } from '@/shared/utils/format'
-import type { InventoryLowStockState } from '@/shared/types/generated/eiams-v1'
+import type { InventoryLowStockState } from '@/modules/inventory/types/inventory.api-types'
 
 const LOW_STOCK_META = {
   Low: { label: 'منخفض', variant: 'critical' },
