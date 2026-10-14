@@ -65,6 +65,18 @@ export interface WarehouseDocumentSummary {
   readonly reversalOfDocumentId: Uuid | null
   readonly rowVersion: number
   readonly createdAtUtc: string
+  /**
+   * Cut-off date the opening inventory represents (D-OPEN-02, PRD §6.4).
+   * Only set on Opening documents. Independent of `postedAtUtc`; the
+   * former is the business date the physical inventory was measured.
+   */
+  readonly openingAsOfDate: string | null
+  /**
+   * True when this Opening document completed the warehouse's
+   * initialization with zero positive Opening lines (PRD §6.10). Always
+   * false for non-Opening documents.
+   */
+  readonly openingIsZeroStock: boolean
 }
 
 export interface ListWarehouseDocumentsQuery {
@@ -201,6 +213,17 @@ export interface WarehouseDocumentDetails {
   readonly inventoryAdjustment: InventoryAdjustmentResponse | null
   readonly lines: readonly DocumentLineResponse[]
   readonly attachments: readonly DocumentAttachmentResponse[]
+  /**
+   * Cut-off date the opening inventory represents (D-OPEN-02, PRD §6.4).
+   * Only set on Opening documents. Independent of `postedAtUtc`.
+   */
+  readonly openingAsOfDate: string | null
+  /**
+   * True when this Opening document completed the warehouse's
+   * initialization with zero positive Opening lines (PRD §6.10). Always
+   * false for non-Opening documents.
+   */
+  readonly openingIsZeroStock: boolean
 }
 
 // ---------------------------------------------------------------------------
