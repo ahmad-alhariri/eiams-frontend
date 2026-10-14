@@ -10,6 +10,9 @@ import {
   AssetLineEditor,
   type AssetLineCapabilityGate,
 } from '@/shared/documents/components/asset-line-editor'
+import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
+import { WarehouseInitializationBadge } from '@/modules/warehouse/components/warehouse-initialization-badge'
+import { useWarehouseInitializationStateQuery } from '@/modules/warehouse/hooks/use-warehouse-queries'
 import {
   QuantityLineEditor,
   type QuantityLineCapabilityGate,
@@ -138,6 +141,9 @@ function combineCapabilityGates(
 export default function OpeningDocumentFormPage() {
   const navigate = useNavigate()
   const createMutation = useCompleteDraftMutation()
+  // activeScopeCacheKey is exposed by useActiveScopeContext below; the
+  // initialization read hook uses it through its internal scope context.
+  useActiveScopeContext()
   const [quantityCapabilityGate, setQuantityCapabilityGate] = useState<QuantityLineCapabilityGate>({
     status: 'ready',
   })
@@ -155,6 +161,13 @@ export default function OpeningDocumentFormPage() {
   const submitErrorMessage =
     createMutation.error === null ? null : documentDraftMutationError(createMutation.error)
   const headerWarehouseId = useWatch({ control: form.control, name: 'header.warehouseId' })
+  // D-OPEN-02: the per-warehouse initialization badge sits above the form so the
+  // user knows whether the warehouse is already initialized before they fill
+  // out the form. The query is 30 s stale (operational data) and is
+  // invalidated on a successful post via the mutation's onSuccess below.
+  const initializationQuery = useWarehouseInitializationStateQuery(
+    headerWarehouseId !== undefined && headerWarehouseId !== '' ? headerWarehouseId : undefined,
+  )
   const onQuantityCapabilityGateChange = useCallback((nextGate: QuantityLineCapabilityGate) => {
     setQuantityCapabilityGate((currentGate) =>
       retainEquivalentCapabilityGate(currentGate, nextGate),
@@ -197,6 +210,8 @@ export default function OpeningDocumentFormPage() {
         },
         {
           onSuccess: (document) => {
+            // D-OPEN-02: the next mount of the badge's consumer (detail
+            // page) re-reads the initialization state; navigation is enough.
             navigate(ROUTE_PATHS.documentOpeningDetail.replace(':documentId', document.id))
           },
         },
@@ -223,9 +238,15 @@ export default function OpeningDocumentFormPage() {
             aria-labelledby="opening-policy-notice-title"
             className="grid gap-1 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm"
           >
-            <h2 id="opening-policy-notice-title" className="font-medium text-foreground">
-              سياسة الرصيد الافتتاحي
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 id="opening-policy-notice-title" className="font-medium text-foreground">
+                سياسة الرصيد الافتتاحي
+              </h2>
+              <WarehouseInitializationBadge
+                status={initializationQuery.data?.status}
+                asOfDate={initializationQuery.data?.asOfDate}
+              />
+            </div>
             <p className="text-muted-foreground">
               الرصيد الافتتاحي إجراء تهيئة لمرة واحدة وليس مستنداً دورياً. يعرض النظام نتيجة التحقق
               المعتمدة عند حفظ المسودة أو متابعة دورة المستند.

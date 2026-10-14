@@ -90,6 +90,26 @@ export function useWarehouseCapabilitiesQuery(warehouseId: string | undefined) {
   })
 }
 
+// Operational data is shorter-lived than master data; the per-warehouse
+// initialization read is consulted on the form + detail surfaces.
+const OPERATIONAL_STALE_TIME = 30 * 1000
+
+export function useWarehouseInitializationStateQuery(warehouseId: string | undefined) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey:
+      scope === undefined || warehouseId === undefined
+        ? queryKeys.public(WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'initialization')
+        : [
+            ...queryKeys.scoped(scope, WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'initialization'),
+          ],
+    queryFn: ({ signal }) =>
+      warehouseService.getInitializationState(warehouseId ?? '', { signal }),
+    enabled: scope !== undefined && warehouseId !== undefined,
+    staleTime: OPERATIONAL_STALE_TIME,
+  })
+}
+
 export function useWarehouseMaterialSettingsQuery(
   warehouseId: string | undefined,
   query: ListWarehouseMaterialSettingsQuery = EMPTY_QUERY,
