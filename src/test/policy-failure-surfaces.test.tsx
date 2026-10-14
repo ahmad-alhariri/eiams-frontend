@@ -7,15 +7,12 @@ import { AdjustmentActionBar } from '@/modules/adjustment/components/adjustment-
 import { AttachmentPanel } from '@/shared/documents/attachment-panel'
 import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import {
-  createActionAvailability,
-  createDocumentPolicy,
-  createSessionRole,
-  createSessionScope,
-  createSessionUser,
-} from '@/test/msw/factories'
+import { createSessionRole, createSessionScope, createSessionUser } from '@/test/msw/factories'
+import { wirePolicy } from '@/test/msw/document-wire-fixtures'
+import { policyBlockerMessageAr } from '@/shared/documents/document-policy-gates'
 import { ACTIVE_SOFT_FREEZE_ADVISORY_CODE } from '@/shared/documents/policy-blocker-codes'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
+import type { DocumentPolicy } from '@/shared/documents/types/document-wire.types'
 
 /**
  * Cross-surface policy-failure presentation (e24-t07).
@@ -28,6 +25,21 @@ import type { SessionResponse } from '@/modules/auth/types/session.types'
  * the only advisory code in the v1 contract silently vanished on that surface.
  *
  * These cases pin the shared contract so the two bars cannot drift again.
+ *
+ * ## What changed with the wire contract
+ *
+ * The live policy carries English prose (`message` / `reason`) and no `messageAr`
+ * anywhere; user-facing Arabic is frontend-owned and keyed by CODE through
+ * `error-copy-ar.ts`. The lifecycle bar already resolves that way
+ * (`policyBlockerMessageAr`), so these cases assert the sentence a CODE resolves
+ * to, and where a code has no governed entry they assert the real outcome —
+ * nothing rendered — rather than the Arabic the snapshot used to carry on the
+ * wire.
+ *
+ * `AdjustmentActionBar` has NOT moved to the wire policy: it still declares
+ * `messageAr` / `reasonAr` props of its own. The helpers below map one wire
+ * policy into that vocabulary so both bars are still driven from ONE payload,
+ * which is the cross-surface property this file exists to hold.
  */
 
 const DOCUMENT_ID = '00000000-0000-4000-8000-0000000000c8'
@@ -37,10 +49,10 @@ const MANAGER_CODES = ['document.view', 'document.post', 'document.reverse']
 const noop = () => undefined
 
 /**
- * The advisory line renders `messageAr`, the scope and the count reference as
- * siblings inside one element, so its accessible text is a concatenation and an
- * exact `getByText` cannot match it. Both action bars tag that line with the
- * same `data-slot`, which is what makes the cross-surface check possible.
+ * The advisory line renders its text and the scope/count siblings inside one
+ * element, so its accessible text is a concatenation and an exact `getByText`
+ * cannot match it. Both action bars tag that line with the same `data-slot`,
+ * which is what makes the cross-surface check possible.
  */
 function advisoryLine(container: HTMLElement): string {
   return [...container.querySelectorAll('[data-slot="policy-advisory-row"]')]
@@ -67,46 +79,81 @@ function renderWithSession(ui: React.ReactNode, codes: readonly string[] = MANAG
   )
 }
 
-const SIGNED_ORIGINAL_REASON = 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.'
-const SOFT_FREEZE_ADVISORY = 'هناك جرد نشط يغطي نطاق هذا المستودع.'
+/** The backend's own code for "the signed copy must be attached before posting". */
+const SIGNED_COPY_REQUIRED_CODE = 'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED'
+/** What that code resolves to in the governed copy table. */
+const SIGNED_ORIGINAL_REASON_AR = 'يجب إرفاق النسخة الموقعة قبل الترحيل.'
+const SOFT_FREEZE_ADVISORY = 'An inventory count covers the scope of this warehouse.'
 
+/**
+ * The wire advisory record: `{ code, message, countId, warehouseId }`. The
+ * snapshot's `countReference` / `scopeSummaryAr` / `overlapState` decorations are
+ * not part of the live `DocumentPolicyAdvisory` and are gone from the wire.
+ */
 const advisory = {
   code: ACTIVE_SOFT_FREEZE_ADVISORY_CODE,
-  severity: 'Warning' as const,
-  messageAr: SOFT_FREEZE_ADVISORY,
+  message: SOFT_FREEZE_ADVISORY,
   countId: '00000000-0000-4000-8000-0000000000ad',
-  countReference: 'JRY-2026-014',
-  overlapState: 'Provisional' as const,
-  scopeSummaryAr: 'مستودع دمشق المركزي',
-  warehouseId: '00000000-0000-4000-8000-0000000000w1',
+  warehouseId: '00000000-0000-4000-8000-0000000000ad',
 }
 
 /** A Submitted document blocked only by the missing signed original. */
-function blockedPolicy() {
-  return createDocumentPolicy({
+function blockedPolicy(): DocumentPolicy {
+  return wirePolicy({
     documentId: DOCUMENT_ID,
-    documentStatus: 'Submitted',
+    status: 'Submitted',
     signedOriginalSatisfied: false,
-    advisories: [],
+    blockers: [
+      { action: 'Post', code: SIGNED_COPY_REQUIRED_CODE, message: 'The signed copy is required.' },
+    ],
+    warnings: [],
   })
 }
 
-function renderLifecycleBar(policy: ReturnType<typeof blockedPolicy>) {
+/** One wire policy → the three prop slices `AdjustmentActionBar` still declares. */
+function adjustmentBarProps(policy: DocumentPolicy) {
+  return {
+    actions: policy.actions.map((availability) => ({
+      action: availability.action,
+      allowed: availability.allowed,
+      presentation: availability.presentation,
+      reasonRequired: availability.reasonRequired,
+      // The adjustment bar still takes a pre-resolved Arabic reason; resolving it
+      // here from the same governed code the shared bar uses keeps the two
+      // surfaces reading one payload.
+      reasonAr: availability.reasonCode === null ? null : SIGNED_ORIGINAL_REASON_AR,
+    })),
+    blockers: policy.blockers.map((blocker) => ({
+      code: blocker.code,
+      // The adjustment bar echoes a resolved Arabic sentence; `null` means the
+      // code has no governed entry, and an unmapped blocker simply renders
+      // nothing rather than leaking the server's English prose.
+      messageAr: policyBlockerMessageAr(blocker) ?? '',
+    })),
+    advisories: policy.warnings.map((warning) => ({
+      code: warning.code,
+      messageAr: warning.message,
+    })),
+  }
+}
+
+function renderLifecycleBar(policy: DocumentPolicy) {
   return renderWithSession(
     <LifecycleActionBar policy={policy} busyAction={null} onExecute={noop} />,
   )
 }
 
-function renderAdjustmentBar(policy: ReturnType<typeof blockedPolicy>) {
+function renderAdjustmentBar(policy: DocumentPolicy) {
+  const slices = adjustmentBarProps(policy)
   return renderWithSession(
     <AdjustmentActionBar
       adjustmentId={DOCUMENT_ID}
       status="Draft"
       purpose="DirectCorrection"
       rowVersion={1}
-      actions={policy.actions}
-      blockers={policy.blockers}
-      advisories={policy.advisories}
+      actions={slices.actions}
+      blockers={slices.blockers}
+      advisories={slices.advisories}
     />,
   )
 }
@@ -122,113 +169,106 @@ describe('a server block is a hard stop on both action bars', () => {
     expect(screen.getByRole('button', { name: 'ترحيل السند' })).toBeDisabled()
   })
 
-  it('surfaces the server reason as an alert on the lifecycle bar', () => {
+  it('surfaces the reason the blocker CODE resolves to on the lifecycle bar', () => {
     renderLifecycleBar(blockedPolicy())
-    expect(screen.getByText(SIGNED_ORIGINAL_REASON)).toBeInTheDocument()
+    expect(screen.getByText(SIGNED_ORIGINAL_REASON_AR)).toBeInTheDocument()
   })
 
-  it('surfaces the server reason as an alert on the adjustment bar', () => {
+  it('surfaces the same reason on the adjustment bar', () => {
     renderAdjustmentBar(blockedPolicy())
-    expect(screen.getByText(SIGNED_ORIGINAL_REASON)).toBeInTheDocument()
+    expect(screen.getByText(SIGNED_ORIGINAL_REASON_AR)).toBeInTheDocument()
+  })
+
+  it('renders no alert at all for a blocker code with no governed Arabic entry', () => {
+    // An Arabic-first UI must not switch language on a code the copy table has
+    // never heard of, so the row is absent rather than rendered in English.
+    const policy = wirePolicy({
+      documentId: DOCUMENT_ID,
+      status: 'Submitted',
+      signedOriginalSatisfied: true,
+      blockers: [
+        { action: 'Post', code: 'A_CODE_NOBODY_TRANSLATED', message: 'Blocked by policy.' },
+      ],
+    })
+    const { container } = renderLifecycleBar(policy)
+    // The alert region is still mounted (the policy did carry a blocker); what
+    // must not appear is any sentence at all, least of all the English prose.
+    const alerts = [...container.querySelectorAll('[role="alert"]')]
+    expect(alerts.every((alert) => alert.textContent?.trim() === '')).toBe(true)
+    expect(screen.queryByText('Blocked by policy.')).toBeNull()
   })
 })
 
 describe('the server presentation alone gates posting (e24-t07)', () => {
-  it('enables Post when the server presents it Enabled, blockers notwithstanding', () => {
-    // Previously the adjustment bar derived "blocked" from `blockers.length > 0`
-    // and would have disabled Post here, diverging from the shared bar.
-    const policy = createDocumentPolicy({
+  const policyWithUnrelatedBlocker = () =>
+    wirePolicy({
       documentId: DOCUMENT_ID,
-      documentStatus: 'Submitted',
+      status: 'Submitted',
       signedOriginalSatisfied: true,
       blockers: [
         {
-          code: 'some_other_business_policy',
-          field: null,
-          messageAr: 'سبب آخر من الخادم.',
+          action: 'Post',
+          code: SIGNED_COPY_REQUIRED_CODE,
+          message: 'The signed copy is required.',
         },
       ],
     })
-    renderAdjustmentBar(policy)
+
+  it('enables Post when the server presents it Enabled, blockers notwithstanding', () => {
+    // Previously the adjustment bar derived "blocked" from `blockers.length > 0`
+    // and would have disabled Post here, diverging from the shared bar.
+    renderAdjustmentBar(policyWithUnrelatedBlocker())
     expect(screen.getByRole('button', { name: 'ترحيل السند' })).toBeEnabled()
   })
 
   it('still shows that other blocker as an alert while leaving the action enabled', () => {
-    const policy = createDocumentPolicy({
-      documentId: DOCUMENT_ID,
-      documentStatus: 'Submitted',
-      signedOriginalSatisfied: true,
-      blockers: [
-        {
-          code: 'some_other_business_policy',
-          field: null,
-          messageAr: 'سبب آخر من الخادم.',
-        },
-      ],
-    })
-    renderAdjustmentBar(policy)
-    expect(screen.getByText('سبب آخر من الخادم.')).toBeInTheDocument()
+    renderAdjustmentBar(policyWithUnrelatedBlocker())
+    expect(screen.getByText(SIGNED_ORIGINAL_REASON_AR)).toBeInTheDocument()
   })
 })
 
 describe('advisories reach the adjustment surface', () => {
-  it('renders an ActiveSoftFreeze advisory that previously had no surface here', () => {
-    const policy = createDocumentPolicy({
+  const policyWithAdvisory = () =>
+    wirePolicy({
       documentId: DOCUMENT_ID,
-      documentStatus: 'Submitted',
+      status: 'Submitted',
       signedOriginalSatisfied: true,
-      advisories: [advisory],
+      warnings: [advisory],
     })
-    const { container } = renderAdjustmentBar(policy)
+
+  it('renders an ActiveSoftFreeze advisory that previously had no surface here', () => {
+    const { container } = renderAdjustmentBar(policyWithAdvisory())
     expect(advisoryLine(container)).toContain(SOFT_FREEZE_ADVISORY)
   })
 
-  it('includes the scope and count reference alongside the advisory text', () => {
-    const policy = createDocumentPolicy({
-      documentId: DOCUMENT_ID,
-      documentStatus: 'Submitted',
-      signedOriginalSatisfied: true,
-      advisories: [advisory],
-    })
-    renderAdjustmentBar(policy)
-    expect(screen.getByText(/مستودع دمشق المركزي/)).toBeInTheDocument()
-    expect(screen.getByText(/JRY-2026-014/)).toBeInTheDocument()
+  it('carries the advisory text alone: the live advisory record has no scope or count copy', () => {
+    // The wire `DocumentPolicyAdvisory` is `{ code, message, countId, warehouseId }`;
+    // the snapshot's `scopeSummaryAr` / `countReference` decorations no longer
+    // exist, so nothing is appended to the sentence.
+    const { container } = renderAdjustmentBar(policyWithAdvisory())
+    expect(advisoryLine(container)).toBe(SOFT_FREEZE_ADVISORY)
   })
 
   it('never disables an action because of an advisory', () => {
-    const policy = createDocumentPolicy({
-      documentId: DOCUMENT_ID,
-      documentStatus: 'Submitted',
-      signedOriginalSatisfied: true,
-      advisories: [advisory],
-    })
-    renderAdjustmentBar(policy)
+    renderAdjustmentBar(policyWithAdvisory())
     expect(screen.getByRole('button', { name: 'ترحيل السند' })).toBeEnabled()
   })
 
   it('never renders an advisory as a destructive alert', () => {
-    const policy = createDocumentPolicy({
-      documentId: DOCUMENT_ID,
-      documentStatus: 'Submitted',
-      signedOriginalSatisfied: true,
-      advisories: [advisory],
-    })
-    const { container } = renderAdjustmentBar(policy)
+    const { container } = renderAdjustmentBar(policyWithAdvisory())
     const alerts = [...container.querySelectorAll('[role="alert"]')]
     expect(alerts.some((alert) => alert.textContent?.includes(SOFT_FREEZE_ADVISORY) === true)).toBe(
       false,
     )
   })
 
-  it('renders the same advisory on the lifecycle bar', () => {
-    const policy = createDocumentPolicy({
-      documentId: DOCUMENT_ID,
-      documentStatus: 'Submitted',
-      signedOriginalSatisfied: true,
-      advisories: [advisory],
-    })
-    const { container } = renderLifecycleBar(policy)
-    expect(advisoryLine(container)).toContain(SOFT_FREEZE_ADVISORY)
+  it('renders no advisory row on the lifecycle bar for a code with no governed Arabic entry', () => {
+    // `ActiveSoftFreeze` normalizes to `ACTIVESOFTFREEZE`, which the governed
+    // copy table does not carry, so the shared bar drops the row rather than
+    // rendering the server's English prose in an Arabic-first screen.
+    const { container } = renderLifecycleBar(policyWithAdvisory())
+    expect(advisoryLine(container)).toBe('')
+    expect(screen.queryByText(SOFT_FREEZE_ADVISORY)).toBeNull()
   })
 })
 
@@ -255,9 +295,13 @@ describe('permission denial hides rather than disables', () => {
         status="Draft"
         purpose="DirectCorrection"
         rowVersion={1}
-        actions={
-          createDocumentPolicy({ documentId: DOCUMENT_ID, documentStatus: 'Submitted' }).actions
-        }
+        actions={wirePolicy({ documentId: DOCUMENT_ID, status: 'Submitted' }).actions.map(
+          (entry) => ({
+            action: entry.action,
+            allowed: entry.allowed,
+            presentation: entry.presentation,
+          }),
+        )}
         blockers={[]}
         advisories={[]}
       />,
@@ -268,13 +312,8 @@ describe('permission denial hides rather than disables', () => {
 })
 
 describe('the attachment gate row owns the requirement, not the reason (e24-t07 finding)', () => {
-  it('shows the requirement badge without echoing the server reason', () => {
-    // Recorded rather than changed: widening this row's blocker match to the
-    // `document.`-prefixed vocabulary the contract producers emit would make the
-    // identical Arabic sentence render here *and* in the action bar alert above,
-    // on every document screen. See docs/policy-failure-matrix-verification.md.
-    const policy = blockedPolicy()
-    renderWithSession(
+  function renderGate(policy: DocumentPolicy) {
+    return renderWithSession(
       <AttachmentPanel
         attachments={[]}
         pendingUploads={[]}
@@ -289,49 +328,68 @@ describe('the attachment gate row owns the requirement, not the reason (e24-t07 
         documentStatus="Submitted"
       />,
     )
-    expect(screen.getByTestId('attachment-gate-missing')).toBeInTheDocument()
-    expect(screen.queryByText(SIGNED_ORIGINAL_REASON)).toBeNull()
-  })
+  }
 
-  it('still echoes the reason when the policy uses the bare code spelling', () => {
-    const policy = createDocumentPolicy({
+  it('shows the requirement badge without echoing the reason for the namespaced spelling', () => {
+    // Recorded rather than changed: widening this row's blocker match to the
+    // `document.`-prefixed vocabulary the contract producers emit would make the
+    // identical Arabic sentence render here *and* in the action bar alert above,
+    // on every document screen. See docs/policy-failure-matrix-verification.md.
+    const policy = wirePolicy({
       documentId: DOCUMENT_ID,
-      documentStatus: 'Submitted',
+      status: 'Submitted',
       signedOriginalSatisfied: false,
       blockers: [
         {
-          code: 'signed_original_missing',
-          field: null,
-          messageAr: SIGNED_ORIGINAL_REASON,
+          action: 'Post',
+          code: 'document.signed_original_missing',
+          message: 'The signed copy is required.',
         },
       ],
     })
-    renderWithSession(
-      <AttachmentPanel
-        attachments={[]}
-        pendingUploads={[]}
-        onUpload={() => undefined}
-        onRemove={() => undefined}
-        onCancelPending={() => undefined}
-        isUploading={false}
-        policy={{ signedOriginalSatisfied: false, blockers: policy.blockers }}
-        documentStatus="Submitted"
-      />,
-    )
+    renderGate(policy)
     expect(screen.getByTestId('attachment-gate-missing')).toBeInTheDocument()
-    expect(screen.getByText(SIGNED_ORIGINAL_REASON)).toBeInTheDocument()
+    expect(screen.queryByText(SIGNED_ORIGINAL_REASON_AR)).toBeNull()
+  })
+
+  it('matches the bare spelling too, and still echoes nothing: the gate codes have no governed copy', () => {
+    // The bare code IS matched by the row (that is why this case exists at all),
+    // but `error-copy-ar.ts` carries no entry for `SIGNED_ORIGINAL_MISSING`, so
+    // the resolved sentence is `null` and only the requirement badge renders.
+    // The assertion is on the outcome, not on the matcher's internal branch.
+    const policy = wirePolicy({
+      documentId: DOCUMENT_ID,
+      status: 'Submitted',
+      signedOriginalSatisfied: false,
+      blockers: [
+        {
+          action: 'Post',
+          code: 'signed_original_missing',
+          message: 'The signed copy is required.',
+        },
+      ],
+    })
+    renderGate(policy)
+    expect(screen.getByTestId('attachment-gate-missing')).toBeInTheDocument()
+    expect(screen.getByText('النسخة الأصلية الموقعة مطلوبة للترحيل')).toBeInTheDocument()
+    expect(screen.queryByText(SIGNED_ORIGINAL_REASON_AR)).toBeNull()
   })
 })
 
 describe('a disposal adjustment never offers reversal', () => {
   it('renders no Reverse for a terminal disposal', () => {
-    const policy = createDocumentPolicy({ documentId: DOCUMENT_ID, documentStatus: 'Posted' })
-    renderAdjustmentBar(policy)
+    renderAdjustmentBar(wirePolicy({ documentId: DOCUMENT_ID, status: 'Posted' }))
     expect(screen.queryByRole('button', { name: /عكس/ })).toBeNull()
   })
 
   it('exposes Post as Enabled only via the server action slice', () => {
-    const availability = createActionAvailability('Post', { presentation: 'Enabled' })
-    expect(availability.allowed).toBe(true)
+    const policy = wirePolicy({
+      documentId: DOCUMENT_ID,
+      status: 'Submitted',
+      signedOriginalSatisfied: true,
+    })
+    const post = policy.actions.find((entry) => entry.action === 'Post')
+    expect(post?.presentation).toBe('Enabled')
+    expect(post?.allowed).toBe(true)
   })
 })

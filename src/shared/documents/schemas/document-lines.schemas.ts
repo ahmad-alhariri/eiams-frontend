@@ -1,7 +1,11 @@
 import { z } from 'zod'
 
 import { formatNumber } from '@/shared/utils/format'
-import type { AssetInput, DocumentLineInput, DocumentType } from '@/shared/types/generated/eiams-v1'
+import type {
+  CompleteDraftLine,
+  DocumentType,
+  OpeningType,
+} from '@/shared/documents/types/document-wire.types'
 import type { Material } from '@/modules/catalog/types/catalog.types'
 
 /**
@@ -10,16 +14,14 @@ import type { Material } from '@/modules/catalog/types/catalog.types'
  * React Hook Form, in separate containers:
  *
  * - Quantity lines (e12-t04): {@link quantityLineSchema} /
- *   {@link DocumentLinesContainer} / {@link toDocumentLineInputs}. Asset-kind
- *   materials are excluded and this schema never carries
- *   `assetInputs`/`trackedUnitInputs`.
+ *   {@link DocumentLinesContainer} / {@link toCompleteDraftLines}. Asset-kind
+ *   materials are excluded and this mapper never carries an asset list.
  * - Asset lines (e12-t05): {@link assetLineSchema} /
- *   {@link AssetLinesContainer} / {@link toAssetLineInputs}. One asset input
- *   per unit, quantity derived from the unit count — D-MAT-01 fixed assets.
+ *   {@link AssetLinesContainer} / {@link toCompleteDraftAssetLines}.
  *
  * Both editors read the page's form context through their own `lines` name
  * prefix; pages compose the two containers side by side and flatten them
- * through the matching mapper into `buildDraftRequest`.
+ * through the matching mapper into `buildCompleteDraftRequest`.
  */
 
 export type QuantityLineFeatures = {
@@ -40,7 +42,7 @@ export const QUANTITY_LINE_FEATURES_BY_TYPE: Readonly<
   Opening: { openingType: true },
 }
 
-export const OPENING_TYPE_LABELS: Readonly<Record<'Correction' | 'Initial', string>> = {
+export const OPENING_TYPE_LABELS: Readonly<Record<OpeningType, string>> = {
   Initial: 'افتتاحية أولية',
   Correction: 'افتتاحية تصحيحية',
 }
@@ -170,13 +172,18 @@ export function deriveBaseQuantity(quantity: number, factor: number): number {
 }
 
 /**
- * Maps form lines to the request contract. Snapshot fields and empty
- * optionals are dropped; unit/conversion are emitted only when an
- * alternative unit is actually selected.
+ * Maps form lines to the `complete-draft` line contract. Snapshot fields and
+ * empty optionals are dropped; the unit is emitted only when one is actually
+ * selected.
+ *
+ * Two draft-preview fields the form still captures have no slot in
+ * `CompleteWarehouseDocumentDraftLine`: the selected conversion (`conversionId`)
+ * and its derived `baseQuantity` preview. The server derives both from the
+ * material and the chosen unit and never trusts a client override, so they are
+ * display-only and are not sent.
  */
-export function toDocumentLineInputs(lines: readonly QuantityLineValues[]): DocumentLineInput[] {
+export function toCompleteDraftLines(lines: readonly QuantityLineValues[]): CompleteDraftLine[] {
   return lines.map((line) => ({
-    ...(line.lineId !== undefined ? { lineId: line.lineId } : {}),
     materialId: line.materialId,
     quantity: line.quantity,
     // D-IAR-01: existing-asset references travel only on Asset-kind lines.
@@ -184,12 +191,6 @@ export function toDocumentLineInputs(lines: readonly QuantityLineValues[]): Docu
       ? { assetIds: line.assetIds }
       : {}),
     ...(line.unitId !== undefined && line.unitId !== '' ? { unitId: line.unitId } : {}),
-    ...(line.conversionId !== null &&
-    line.conversionId !== undefined &&
-    line.conversionId !== '' &&
-    line.baseQuantity !== undefined
-      ? { conversionId: line.conversionId, baseQuantity: line.baseQuantity }
-      : {}),
     ...(line.unitPrice !== undefined ? { unitPrice: line.unitPrice } : {}),
     ...(line.batchNumber !== undefined && line.batchNumber.trim() !== ''
       ? { batchNumber: line.batchNumber.trim() }
@@ -327,30 +328,34 @@ export const assetLinesSchema = z
 export type AssetLinesValues = z.infer<typeof assetLinesSchema>
 
 /**
- * Maps asset-capture form lines to the request contract. Snapshot fields are
- * dropped and empty optional asset fields are omitted; a unit with no
- * identifiers still emits one empty `AssetInput` so the unit count always
- * equals the line quantity (the server allocates the missing asset number at
- * POST, per the `DocumentLineInput.assetInputs` contract comment).
+ * Maps asset-capture form lines to the `complete-draft` line contract.
+ *
+ * `CompleteWarehouseDocumentDraftLine.assetInputs` is the collection the live
+ * route reads to register one Asset per unit at post (D-MAT-01): a blank
+ * `assetNumber` is a recorded decision meaning "allocate one at post", while a
+ * supplied one is an institutional number the server must find unique.
+ *
+ * `acquisitionDate` and `warrantyExpiry` are the two fields the form still
+ * captures that the wire `AssetInput` has no slot for. They stay display-only,
+ * exactly as `conversionId` and `baseQuantity` do on the quantity mapper: the
+ * server derives them when it creates the Asset, and sending them would be a
+ * 400 rather than a saved field.
  */
-export function toAssetLineInputs(lines: readonly AssetLineValues[]): DocumentLineInput[] {
+export function toCompleteDraftAssetLines(lines: readonly AssetLineValues[]): CompleteDraftLine[] {
   return lines.map((line) => ({
-    ...(line.lineId !== undefined ? { lineId: line.lineId } : {}),
     materialId: line.materialId,
     quantity: line.quantity,
-    assetInputs: line.assetInputs.map((assetInput): AssetInput => ({
-      ...(assetInput.assetNumber !== undefined && assetInput.assetNumber.trim() !== ''
-        ? { assetNumber: assetInput.assetNumber.trim() }
-        : {}),
-      ...(assetInput.serialNumber !== undefined && assetInput.serialNumber.trim() !== ''
-        ? { serialNumber: assetInput.serialNumber.trim() }
-        : {}),
-      ...(assetInput.acquisitionDate !== undefined && assetInput.acquisitionDate !== ''
-        ? { acquisitionDate: assetInput.acquisitionDate }
-        : {}),
-      ...(assetInput.warrantyExpiry !== undefined && assetInput.warrantyExpiry !== ''
-        ? { warrantyExpiry: assetInput.warrantyExpiry }
-        : {}),
-    })),
+    ...(line.assetInputs.length === 0
+      ? {}
+      : {
+          assetInputs: line.assetInputs.map((assetInput) => ({
+            ...(assetInput.assetNumber === undefined || assetInput.assetNumber === ''
+              ? {}
+              : { assetNumber: assetInput.assetNumber }),
+            ...(assetInput.serialNumber === undefined || assetInput.serialNumber === ''
+              ? {}
+              : { serialNumber: assetInput.serialNumber }),
+          })),
+        }),
   }))
 }

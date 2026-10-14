@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { apiJson, okJson } from '@/test/msw/envelope'
+import { apiJson, okJson, toWireErrorResponse } from '@/test/msw/envelope'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { VersionOnlyDocumentActionRequest } from '@/shared/types/generated/eiams-v1'
+import type { VersionedDocumentActionRequest } from '@/shared/documents/types/document-wire.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   createDocumentPolicy,
@@ -26,7 +26,11 @@ import {
   createWarehouseDocumentDetailHandler,
   createWarehouseDocumentHistoryHandler,
   createWarehouseDocumentPolicyHandler,
+  toWirePolicy,
+  versionConflictProblem,
 } from '@/test/msw/warehouse-document-handlers'
+import { wireDocumentDetails, wireDocumentHistory } from '@/test/msw/document-wire-fixtures'
+import { toArabicDigits } from '@/shared/utils/format'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -137,7 +141,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     render(<DocumentDetailPage />, {
@@ -154,15 +158,22 @@ describe('DocumentDetailPage', () => {
     expect(screen.getAllByText('مرحّل').length).toBeGreaterThan(0)
     expect(screen.getAllByText('إيصال استلام').length).toBeGreaterThan(0)
     expect(screen.getAllByText('الإصدار: 2').length).toBeGreaterThan(0)
-    expect(screen.getByText('مدير المستودع')).toBeInTheDocument()
+    // The detail read carries the poster as a user id, not a display reference,
+    // so the field states the id rather than a name the server never sent.
+    expect(screen.getByText('00000000-0000-4000-8000-00000000000a')).toBeInTheDocument()
+    expect(screen.queryByText('مدير المستودع')).not.toBeInTheDocument()
     expect(screen.getAllByText(/يناير ٢٠٢٦/).length).toBeGreaterThan(0)
 
+    // The detail read names its warehouse inline (`warehouseName`), so the header
+    // shows the label the server sent rather than the id it also carries.
     expect(screen.getByText('المستودع المركزي')).toBeInTheDocument()
     expect(screen.getByText('2026/0300')).toBeInTheDocument()
     expect(screen.getByText('2026')).toBeInTheDocument()
 
+    // The wire line denormalises the material identity and label, so the table
+    // names the material and its unit instead of echoing their ids.
     expect(screen.getByText('حبر طابعة')).toBeInTheDocument()
-    expect(screen.getByText('٤٠')).toBeInTheDocument()
+    expect(screen.getByText('IT-CON-INK')).toBeInTheDocument()
     expect(screen.getByText('عبوة')).toBeInTheDocument()
 
     expect(screen.getByText('signed-receiving.pdf')).toBeInTheDocument()
@@ -203,7 +214,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     render(<DocumentDetailPage />, {
@@ -221,13 +232,49 @@ describe('DocumentDetailPage', () => {
     // never races the role-based queries below.
     expect(await screen.findByText('إنشاء الوثيقة')).toBeInTheDocument()
 
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
-    )
-
     expect(screen.getByRole('status')).toHaveTextContent('النسخة الأصلية الموقعة مطلوبة للترحيل')
     expect(screen.queryByRole('button', { name: /حذف المرفق/ })).not.toBeInTheDocument()
     expect(screen.getByText('signed-submitted.pdf')).toBeInTheDocument()
+  })
+
+  it('restates a signed-original blocker as an Arabic alert when its code resolves to one', async () => {
+    // The bar resolves blocker copy from the CODE through the governed
+    // `error-copy-ar.ts` table, and the preflight gate suppresses itself when the
+    // server already carries the same blocker code. With the backend's own code
+    // for the requirement, the reason reaches the operator exactly once.
+    const document = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentStatus: 'Submitted',
+      policy: {
+        ...createSubmittedPostedPolicy('Submitted', false),
+        blockers: [
+          {
+            code: 'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED',
+            field: 'attachmentType',
+            messageAr: 'Signed copy missing',
+          },
+        ],
+        signedOriginalSatisfied: false,
+      },
+    })
+
+    server.use(
+      ...createWarehouseDocumentDetailHandler(document),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
+      ...createWarehouseDocumentPolicyHandler(document),
+    )
+
+    render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/receiving/${DOCUMENT_ID}`),
+    })
+
+    // The gate no longer suppresses (the blocker code is not one of the
+    // `signed_original_*` gate codes), so the canonical Arabic sentence renders.
+    await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0))
+    const preflightAlert = screen
+      .getAllByRole('alert')
+      .find((node) => node.querySelector('[data-slot="preflight-blocker-icon"]') !== null)
+    expect(preflightAlert).toHaveTextContent('النسخة الموقعة من المستند مطلوبة قبل الترحيل.')
   })
 
   it('renders a compensating-style Posted document without any signed-original advisory (D-ATT-01)', async () => {
@@ -250,7 +297,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     render(<DocumentDetailPage />, {
@@ -337,14 +384,19 @@ describe('DocumentDetailPage', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     const { container } = render(<DocumentDetailPage />, {
       wrapper: createWrapper(`/documents/opening/${DOCUMENT_ID}`),
     })
 
-    expect(await screen.findByText('أقلام حبر')).toBeInTheDocument()
+    // The wire line denormalises the material identity and label, so each row names
+    // its own material; the row count still comes straight off the server detail.
+    await screen.findAllByText('أقلام حبر')
+    expect(screen.getByText('طابعة ليزر')).toBeInTheDocument()
+    expect(screen.getByText('ورق تصوير')).toBeInTheDocument()
+    expect(container.querySelectorAll('[data-slot="document-line-row"]')).toHaveLength(3)
     expect(screen.getByRole('columnheader', { name: 'نوع الافتتاحية' })).toBeInTheDocument()
     expect(screen.getByText('افتتاحية أولية')).toBeInTheDocument()
     expect(screen.getByText('افتتاحية تصحيحية')).toBeInTheDocument()
@@ -356,11 +408,11 @@ describe('DocumentDetailPage', () => {
     expect(assetIdentifiers).toHaveTextContent('الرقم التسلسلي: SN-001')
     expect(container.querySelector('[data-slot="asset-line-entries"] td')).toHaveAttribute(
       'colspan',
-      '8',
+      '7',
     )
     expect(screen.getByRole('button', { name: 'ترحيل' })).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.',
+    expect(screen.getByTestId('attachment-gate-missing')).toHaveTextContent(
+      'النسخة الأصلية الموقعة مطلوبة للترحيل',
     )
   })
 
@@ -395,7 +447,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     render(<DocumentDetailPage />, {
@@ -404,7 +456,8 @@ describe('DocumentDetailPage', () => {
 
     expect(await screen.findByText('الأصول المرتبطة — العدد: ٢')).toBeInTheDocument()
     for (const assetId of issuedAssetIds) {
-      expect(screen.getByRole('link', { name: assetId })).toHaveAttribute(
+      // The link label is the id rendered in Arabic-Indic digits.
+      expect(screen.getByRole('link', { name: toArabicDigits(assetId) })).toHaveAttribute(
         'href',
         `/assets/${assetId}`,
       )
@@ -423,7 +476,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     render(<DocumentDetailPage />, {
@@ -434,7 +487,7 @@ describe('DocumentDetailPage', () => {
     expect(screen.queryByRole('button', { name: 'عكس' })).not.toBeInTheDocument()
   })
 
-  it('reverses an Opening document with the exact reason, fresh row version, and reused idempotency key after 409 recovery', async () => {
+  it('reverses an Opening document through the bodyless reversals route and reuses the idempotency key after 409 recovery', async () => {
     const store = {
       document: createWarehouseDocument({
         documentId: DOCUMENT_ID,
@@ -446,46 +499,58 @@ describe('DocumentDetailPage', () => {
       events: [] as ReturnType<typeof deriveLifecycleEvents>,
     }
     store.events = deriveLifecycleEvents(store.document)
-    const reverseRequests: {
-      body: { reason: string; rowVersion: number }
-      idempotencyKey: string | null
-    }[] = []
-    let relatedDocumentReference: { systemReferenceNumber: string } | undefined
+    const reverseRequests: { body: string; idempotencyKey: string | null }[] = []
+    let reversalDocumentId: string | undefined
+    let conflictOnce = true
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+        okJson(wireDocumentDetails(store.document)),
+      ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        okJson({
-          documentId: DOCUMENT_ID,
-          currentStatus: store.document.documentStatus,
-          currentRowVersion: store.document.rowVersion,
-          events: store.events,
-        }),
+        okJson(
+          wireDocumentHistory(store.events, {
+            documentId: DOCUMENT_ID,
+            currentStatus: store.document.documentStatus,
+            currentRowVersion: store.document.rowVersion,
+          }),
+        ),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        okJson(store.document.policy),
+        okJson(toWirePolicy(store.document)),
       ),
+      // `POST /{documentId}/reversals` takes NO body and answers `201 { id }`
+      // for the NEW compensating document.
       http.post(
-        `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/reverse`,
+        `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/reversals`,
         async ({ request }) => {
-          const body = (await request.json()) as { reason: string; rowVersion: number }
-          reverseRequests.push({ body, idempotencyKey: request.headers.get('Idempotency-Key') })
+          reverseRequests.push({
+            body: await request.text(),
+            idempotencyKey: request.headers.get('Idempotency-Key'),
+          })
+          if (conflictOnce) {
+            conflictOnce = false
+            return toWireErrorResponse(
+              versionConflictProblem({
+                ...store.document,
+                rowVersion: store.document.rowVersion + 1,
+              }),
+              409,
+            )
+          }
           const outcome = applyDocumentAction({
             action: 'Reverse',
             document: store.document,
-            reason: body.reason,
-            rowVersion: body.rowVersion,
+            reason: 'تصحيح رصيد افتتاحي مكرر',
+            rowVersion: store.document.rowVersion,
           })
-          if (outcome.kind === 'conflict') {
-            return apiJson(outcome.problem, { status: 409 })
-          }
-          if (outcome.kind === 'validation') {
-            return apiJson(outcome.problem, { status: 422 })
+          if (outcome.kind !== 'ok') {
+            return toWireErrorResponse(outcome.problem, outcome.kind === 'conflict' ? 409 : 422)
           }
           store.document = outcome.document
           store.events = [...store.events, outcome.result.lifecycleEvent]
-          relatedDocumentReference = outcome.result.relatedDocument
-          return okJson(outcome.result)
+          reversalDocumentId = outcome.compensatingDocument?.documentId
+          return apiJson({ id: reversalDocumentId }, { status: 201 })
         },
       ),
     )
@@ -495,20 +560,6 @@ describe('DocumentDetailPage', () => {
     })
 
     await screen.findByRole('button', { name: 'عكس' })
-    // Another actor updates the document; the first client mutation remains a
-    // server-rejected conflict and never optimistically changes the UI.
-    store.document = createWarehouseDocument({
-      ...store.document,
-      documentId: DOCUMENT_ID,
-      documentType: 'Opening',
-      documentStatus: 'Posted',
-      rowVersion: 2,
-      policy: createDocumentPolicy({
-        documentId: DOCUMENT_ID,
-        documentStatus: 'Posted',
-        rowVersion: 2,
-      }),
-    })
 
     fireEvent.click(screen.getByRole('button', { name: 'عكس' }))
     const firstConfirm = await screen.findByRole('alertdialog', { name: 'تأكيد الإجراء' })
@@ -518,20 +569,14 @@ describe('DocumentDetailPage', () => {
     fireEvent.click(within(firstConfirm).getByRole('button', { name: 'عكس' }))
 
     await screen.findByRole('alertdialog', { name: 'تعديل متزامن على السند' })
-    expect(reverseRequests).toEqual([
-      {
-        body: { reason: 'تصحيح رصيد افتتاحي مكرر', rowVersion: 1 },
-        idempotencyKey: expect.any(String),
-      },
-    ])
+    expect(reverseRequests).toEqual([{ body: '', idempotencyKey: expect.any(String) }])
     expect(store.document.documentStatus).toBe('Posted')
     expect(screen.getAllByText('مرحّل').length).toBeGreaterThan(0)
     // The conflict dialog makes the underlying page inert, so inspect the
     // rendered page subtree rather than its temporarily hidden accessibility tree.
     expect(within(container).getByText('عكس', { selector: 'button' })).toBeInTheDocument()
     expect(screen.queryByText('معكوس')).not.toBeInTheDocument()
-    expect(container.querySelector('[data-event-type="Reversed"]')).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /فتح تفاصيل سند/ })).not.toBeInTheDocument()
+    expect(container.querySelector('[data-event-action="Reversed"]')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'تحميل النسخة الأحدث' }))
     await waitFor(() =>
@@ -549,15 +594,18 @@ describe('DocumentDetailPage', () => {
 
     await waitFor(() => expect(store.document.documentStatus).toBe('Reversed'))
     expect(reverseRequests).toHaveLength(2)
-    expect(reverseRequests[1]?.body).toEqual({ reason: 'تصحيح رصيد افتتاحي مكرر', rowVersion: 2 })
+    // Same user intent, same key: the server owns duplicate detection.
     expect(reverseRequests[1]?.idempotencyKey).toBe(reverseRequests[0]?.idempotencyKey)
-    expect(relatedDocumentReference).toBeDefined()
+    // The route answers the id of the NEW compensating document, which the
+    // timeline does not link: the history event carries no related-document
+    // reference, and the compensating row is reached from the detail read.
+    expect(reversalDocumentId).toBeDefined()
+    expect(reversalDocumentId).not.toBe(DOCUMENT_ID)
+    expect((await screen.findAllByText('معكوس')).length).toBeGreaterThan(0)
+    // The history branch is invalidated and refetched after the acknowledgement,
+    // so the Reversed event joins the chain without any local patch.
     await waitFor(() =>
-      expect(
-        screen.getByRole('link', {
-          name: new RegExp(relatedDocumentReference!.systemReferenceNumber),
-        }),
-      ).toBeInTheDocument(),
+      expect(container.querySelector('[data-event-action="Reversed"]')).toBeInTheDocument(),
     )
   })
 
@@ -567,7 +615,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(document, { delayMs: 400 }),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
-      ...createWarehouseDocumentPolicyHandler(document.policy, { delayMs: 400 }),
+      ...createWarehouseDocumentPolicyHandler(document, { delayMs: 400 }),
     )
 
     render(<DocumentDetailPage />, {
@@ -587,9 +635,11 @@ describe('DocumentDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         attempts += 1
-        return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson(document)
+        return attempts === 1
+          ? new HttpResponse(null, { status: 500 })
+          : okJson(wireDocumentDetails(document))
       }),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     render(<DocumentDetailPage />, {
@@ -633,7 +683,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     render(<DocumentDetailPage />, {
@@ -655,7 +705,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(doc),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(doc)),
-      ...createWarehouseDocumentPolicyHandler(doc.policy),
+      ...createWarehouseDocumentPolicyHandler(doc),
     )
 
     render(<DocumentDetailPage />, {
@@ -686,18 +736,22 @@ describe('DocumentDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return okJson(store.documents[0])
+        return okJson(wireDocumentDetails(store.documents[0]!))
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        okJson({
-          documentId: DOCUMENT_ID,
-          currentStatus: store.documents[0]?.documentStatus ?? 'Draft',
-          currentRowVersion: store.documents[0]?.rowVersion ?? 0,
-          events: deriveLifecycleEvents(store.documents[0] ?? createWarehouseDocument()),
-        }),
+        okJson(
+          wireDocumentHistory(
+            deriveLifecycleEvents(store.documents[0] ?? createWarehouseDocument()),
+            {
+              documentId: DOCUMENT_ID,
+              currentStatus: store.documents[0]?.documentStatus ?? 'Draft',
+              currentRowVersion: store.documents[0]?.rowVersion ?? 0,
+            },
+          ),
+        ),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        okJson(store.documents[0]?.policy),
+        okJson(toWirePolicy(store.documents[0]!)),
       ),
       ...createWarehouseDocumentActionHandler({
         initialDocument: store.documents[0]!,
@@ -746,7 +800,7 @@ describe('DocumentDetailPage', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(document),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     render(<DocumentDetailPage />, {
@@ -787,10 +841,10 @@ describe('DocumentDetailPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return okJson(document)
+        return okJson(wireDocumentDetails(document))
       }),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
-      ...createWarehouseDocumentPolicyHandler(document.policy),
+      ...createWarehouseDocumentPolicyHandler(document),
     )
 
     render(<DocumentDetailPage />, {
@@ -799,10 +853,12 @@ describe('DocumentDetailPage', () => {
 
     await screen.findByRole('heading', { level: 1, name: /EIAMS-DOC-2024-0001/ })
 
-    // The balance blocker renders above the action bar as the single alert.
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'الكمية المطلوبة (٢٥) تتجاوز الرصيد المتاح (١٢) للمادة «ورق تصوير A4».',
-    )
+    // The real detail read carries no per-line balance, so the client-side
+    // ceiling cannot resolve: the gate reports a NEUTRAL note (never a block)
+    // and the authoritative check stays the server's own `InsufficientQuantity`
+    // policy blocker at post time.
+    expect(screen.getByText('لا يتوفر رصيد حي لهذه المادة حالياً.')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'ترحيل' })).toBeEnabled()
 
     // The page and the coordinator observe the same cache keys: the detail
@@ -823,20 +879,23 @@ describe('DocumentDetailPage', () => {
     let detailRequests = 0
     let submitCalls = 0
     const capturedIdempotencyKeys: (string | null)[] = []
+    const capturedExpectedRowVersions: number[] = []
 
     server.use(
       // Custom submit route so the test can assert the Idempotency-Key header
-      // across both attempts; it replays the same transition engine the
-      // factory action handler uses (rowVersion guard → 409).
+      // and the `expectedRowVersion` body across both attempts; it replays the
+      // same transition engine the factory action handler uses (rowVersion
+      // guard → 409).
       http.post(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/submit`,
         async ({ request }) => {
+          const body = (await request.json()) as VersionedDocumentActionRequest
           capturedIdempotencyKeys.push(request.headers.get('Idempotency-Key'))
-          const body = (await request.json()) as VersionOnlyDocumentActionRequest
+          capturedExpectedRowVersions.push(body.expectedRowVersion)
           const outcome = applyDocumentAction({
             action: 'Submit',
             document: store.documents[0]!,
-            rowVersion: body.rowVersion,
+            rowVersion: body.expectedRowVersion,
           })
           if (outcome.kind === 'conflict') {
             return apiJson(outcome.problem, { status: 409 })
@@ -846,7 +905,8 @@ describe('DocumentDetailPage', () => {
           }
           submitCalls += 1
           store.documents[0] = outcome.document
-          return okJson(outcome.result)
+          // `EmptyResponse`: the route carries no post-action state.
+          return okJson({})
         },
       ),
       ...createWarehouseDocumentActionHandler({
@@ -855,18 +915,22 @@ describe('DocumentDetailPage', () => {
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return okJson(store.documents[0])
+        return okJson(wireDocumentDetails(store.documents[0]!))
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        okJson({
-          documentId: DOCUMENT_ID,
-          currentStatus: store.documents[0]?.documentStatus ?? 'Draft',
-          currentRowVersion: store.documents[0]?.rowVersion ?? 0,
-          events: deriveLifecycleEvents(store.documents[0] ?? createWarehouseDocument()),
-        }),
+        okJson(
+          wireDocumentHistory(
+            deriveLifecycleEvents(store.documents[0] ?? createWarehouseDocument()),
+            {
+              documentId: DOCUMENT_ID,
+              currentStatus: store.documents[0]?.documentStatus ?? 'Draft',
+              currentRowVersion: store.documents[0]?.rowVersion ?? 0,
+            },
+          ),
+        ),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        okJson(store.documents[0]?.policy),
+        okJson(toWirePolicy(store.documents[0]!)),
       ),
     )
 
@@ -911,6 +975,10 @@ describe('DocumentDetailPage', () => {
     expect(capturedIdempotencyKeys).toHaveLength(2)
     expect(capturedIdempotencyKeys[0]).not.toBeNull()
     expect(capturedIdempotencyKeys[1]).toBe(capturedIdempotencyKeys[0])
+    // The retry submits the version the recovery re-read: 1 first, then the
+    // fresh 2. That is what the body field is for — the snapshot called it
+    // `rowVersion`, the live contract calls it `expectedRowVersion`.
+    expect(capturedExpectedRowVersions).toEqual([1, 2])
 
     // The success cache write + detail invalidation refreshed the page.
     await waitFor(() =>

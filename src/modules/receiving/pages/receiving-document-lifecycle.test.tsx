@@ -20,7 +20,11 @@ import {
   fixtureUuid,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
-import { createWarehouseDocumentActionHandler } from '@/test/msw/warehouse-document-handlers'
+import { wireDocumentDetails, wireDocumentHistory } from '@/test/msw/document-wire-fixtures'
+import {
+  createWarehouseDocumentActionHandler,
+  toWirePolicy,
+} from '@/test/msw/warehouse-document-handlers'
 import { Toaster } from '@/shared/ui/toaster'
 
 import ReceivingDocumentDetailPage from './receiving-document-detail-page'
@@ -36,7 +40,16 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 const API_BASE_URL = '/api/v1'
 const DOCUMENT_ID = fixtureUuid(200)
 const DETAIL_PATH = ROUTE_PATHS.documentReceivingDetail.replace(':documentId', DOCUMENT_ID)
-const SIGNED_ORIGINAL_ALERT = 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.'
+/**
+ * The canonical Arabic the shared preflight renders when the signed-original
+ * gate blocks.
+ *
+ * The page resolves blocker and gate text from the CODE, never from a server
+ * message, and it suppresses a gate whose blocker is already on the policy. The
+ * sentence the user therefore sees for an unsatisfied gate is the governed
+ * default, not whatever prose a fixture attached to the blocker.
+ */
+const SIGNED_ORIGINAL_ALERT = 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.'
 
 const ALL_DOCUMENT_CODES = [
   'document.view',
@@ -107,27 +120,22 @@ function useMutableDocumentHandlers(store: WarehouseDocument[], signedOriginalSa
     }),
   }
   server.use(
-    http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store[0])),
+    http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+      okJson(wireDocumentDetails(store[0]!)),
+    ),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => {
       const document = store[0]!
-      return okJson({
-        documentId: DOCUMENT_ID,
-        currentStatus: document.documentStatus,
-        currentRowVersion: document.rowVersion,
-        events: deriveLifecycleEvents(document),
-      })
-    }),
-    http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => {
-      const document = store[0]!
       return okJson(
-        createDocumentPolicy({
+        wireDocumentHistory(deriveLifecycleEvents(document), {
           documentId: DOCUMENT_ID,
-          documentStatus: document.documentStatus,
-          rowVersion: document.rowVersion,
-          signedOriginalSatisfied,
+          currentStatus: document.documentStatus,
+          currentRowVersion: document.rowVersion,
         }),
       )
     }),
+    http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
+      okJson(toWirePolicy(store[0]!)),
+    ),
     ...createWarehouseDocumentActionHandler({
       initialDocument: store[0]!,
       documentStore: () => store,
@@ -141,30 +149,35 @@ afterEach(() => {
 
 describe('receiving lifecycle and policy gates (e13-t07)', () => {
   it('hides Post and Reject from a keeper session on the receiving route', async () => {
+    // The signed-original gate is server-authoritative, so this case pins it
+    // unsatisfied: the document itself must carry the policy that says so, and
+    // `toWirePolicy` projects it onto the live `signedOriginalSatisfied` flag.
     const document = createWarehouseDocument({
       documentId: DOCUMENT_ID,
       documentStatus: 'Submitted',
       rowVersion: 2,
+      policy: createDocumentPolicy({
+        documentId: DOCUMENT_ID,
+        documentStatus: 'Submitted',
+        rowVersion: 2,
+        signedOriginalSatisfied: false,
+      }),
     })
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(document)),
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        okJson({
-          documentId: DOCUMENT_ID,
-          currentStatus: 'Submitted',
-          currentRowVersion: 2,
-          events: deriveLifecycleEvents(document),
-        }),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+        okJson(wireDocumentDetails(document)),
       ),
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
         okJson(
-          createDocumentPolicy({
+          wireDocumentHistory(deriveLifecycleEvents(document), {
             documentId: DOCUMENT_ID,
-            documentStatus: 'Submitted',
-            rowVersion: 2,
-            signedOriginalSatisfied: false,
+            currentStatus: 'Submitted',
+            currentRowVersion: 2,
           }),
         ),
+      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
+        okJson(toWirePolicy(document)),
       ),
     )
 
@@ -173,7 +186,11 @@ describe('receiving lifecycle and policy gates (e13-t07)', () => {
     expect((await screen.findAllByText('بانتظار الترحيل')).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'ترحيل' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'رفض' })).not.toBeInTheDocument()
-    expect(screen.getByText(SIGNED_ORIGINAL_ALERT)).toBeInTheDocument()
+    // The signed-original requirement is owned by the attachment panel's gate row,
+    // which states the requirement itself; the preflight gate deliberately drops its
+    // own copy when the same blocker is already on the policy, so the row is the
+    // surface a user is guaranteed to see it on.
+    expect(screen.getByTestId('attachment-gate-missing')).toBeInTheDocument()
   })
 
   it('shows the unsigned Post blocker and enabled Reject to a manager session', async () => {
@@ -190,17 +207,20 @@ describe('receiving lifecycle and policy gates (e13-t07)', () => {
       policy: submittedPolicy,
     })
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(document)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+        okJson(wireDocumentDetails(document)),
+      ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        okJson({
-          documentId: DOCUMENT_ID,
-          currentStatus: 'Submitted',
-          currentRowVersion: 2,
-          events: deriveLifecycleEvents(document),
-        }),
+        okJson(
+          wireDocumentHistory(deriveLifecycleEvents(document), {
+            documentId: DOCUMENT_ID,
+            currentStatus: 'Submitted',
+            currentRowVersion: 2,
+          }),
+        ),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        okJson(document.policy),
+        okJson(toWirePolicy(document)),
       ),
     )
 

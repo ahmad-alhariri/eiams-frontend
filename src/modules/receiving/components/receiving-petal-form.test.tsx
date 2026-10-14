@@ -2,20 +2,25 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { Resolver } from 'react-hook-form'
 import { FormProvider, useForm } from 'react-hook-form'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createReceivingSuppliersHandler } from '@/test/msw/receiving-handlers'
 import { server } from '@/test/msw/server'
 
-import { ReceivingPetalForm, receivingPetalFormSchema } from './receiving-petal-form'
+import {
+  ReceivingPetalForm,
+  receivingPetalFormSchema,
+  type ReceivingPetalFormValues,
+} from './receiving-petal-form'
 
-type PetalFormValues = {
-  petal: {
-    receivingInfo: { receivingType: string; supplierRef: string; supplierInvoiceRef?: string }
-  }
-}
+/**
+ * The petal writes `ReceivingDraftDetails(SupplierPartyId, SupplierInvoiceRef)`.
+ * There is deliberately no `receivingType` control (the backend fixes
+ * `ReceivingType.Supplier` server-side) and no free-text "create supplier" row
+ * (a typed name has no external-party id, so committing it would save a draft the
+ * server cannot bind). Both controls here are the ones the real write carries.
+ */
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -31,11 +36,11 @@ function createWrapper() {
   })
 
   return function PetalWrapper() {
-    const form = useForm<PetalFormValues>({
-      resolver: zodResolver(receivingPetalFormSchema) as Resolver<PetalFormValues>,
+    const form = useForm<ReceivingPetalFormValues>({
+      resolver: zodResolver(receivingPetalFormSchema),
       defaultValues: {
         petal: {
-          receivingInfo: { receivingType: 'Supplier', supplierRef: '', supplierInvoiceRef: '' },
+          receivingInfo: { supplierPartyId: '', supplierInvoiceRef: '' },
         },
       },
     })
@@ -57,36 +62,25 @@ afterEach(() => {
 })
 
 describe('ReceivingPetalForm', () => {
-  it('renders the receiving type select with the PRD trio and the supplier fields', () => {
+  it('renders only the two controls the live write carries', () => {
     render(<ReceivingPetalForm />, { wrapper: createWrapper() })
 
     expect(screen.getByRole('group', { name: 'بيانات الاستلام' })).toBeInTheDocument()
-    expect(screen.getByLabelText('نوع الاستلام')).toBeInTheDocument()
     expect(screen.getByLabelText('المورد')).toBeInTheDocument()
     expect(screen.getByLabelText('رقم فاتورة المورد')).toBeInTheDocument()
-
-    const typeTrigger = screen.getByLabelText('نوع الاستلام')
-    expect(typeTrigger).toHaveTextContent('توريد من مورد')
+    // No receiving-type control: the server fixes it to `Supplier` for every
+    // receiving draft, so a control here would validate a value that reaches no
+    // server state.
+    expect(screen.queryByLabelText('نوع الاستلام')).not.toBeInTheDocument()
   })
 
-  it('offers the three PRD receiving types', async () => {
+  it('shows the Arabic validation error when no supplier is selected', async () => {
     const user = userEvent.setup()
     render(<ReceivingPetalForm />, { wrapper: createWrapper() })
 
-    await user.click(screen.getByLabelText('نوع الاستلام'))
-    expect(screen.getByRole('option', { name: 'توريد من مورد' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'تحويل من مستودع' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'إرجاع بضاعة' })).toBeInTheDocument()
-  })
-
-  it('shows Arabic validation errors when the required petal fields are empty', async () => {
-    const user = userEvent.setup()
-    render(<ReceivingPetalForm />, { wrapper: createWrapper() })
-
-    await user.type(screen.getByLabelText('المورد'), '   ')
     await user.click(screen.getByRole('button', { name: 'حفظ' }))
 
-    expect(await screen.findByText('يجب إدخال اسم أو مرجع المورد.')).toBeInTheDocument()
+    expect(await screen.findByText('يجب اختيار مورد صالح من القائمة.')).toBeInTheDocument()
   })
 
   it('selects a supplier suggestion and accepts an optional invoice reference', async () => {
@@ -101,10 +95,10 @@ describe('ReceivingPetalForm', () => {
     await user.type(screen.getByLabelText('رقم فاتورة المورد'), 'INV-2025-01')
     await user.click(screen.getByRole('button', { name: 'حفظ' }))
 
-    expect(screen.queryByText('يجب إدخال اسم أو مرجع المورد.')).not.toBeInTheDocument()
+    expect(screen.queryByText('يجب اختيار مورد صالح من القائمة.')).not.toBeInTheDocument()
   })
 
-  it('commits a typed free-text supplier reference through the create row', async () => {
+  it('offers no free-text create row: a typed name carries no external-party id', async () => {
     const user = userEvent.setup()
     server.use(...createReceivingSuppliersHandler(['Sham Co']))
     render(<ReceivingPetalForm />, { wrapper: createWrapper() })
@@ -112,10 +106,10 @@ describe('ReceivingPetalForm', () => {
     const supplierCombo = screen.getByRole('combobox', { name: 'المورد' })
     await user.click(supplierCombo)
     await user.type(supplierCombo, 'NewProvider')
-    await user.click(await screen.findByRole('button', { name: 'استخدام "NewProvider" كمورد' }))
-    await user.click(screen.getByRole('button', { name: 'حفظ' }))
 
-    expect(screen.queryByText('يجب إدخال اسم أو مرجع المورد.')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'استخدام "NewProvider" كمورد' }),
+    ).not.toBeInTheDocument()
   })
 
   it('disables the supplier autocomplete until a scope is active', () => {

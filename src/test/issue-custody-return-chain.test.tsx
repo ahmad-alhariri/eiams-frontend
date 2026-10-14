@@ -18,12 +18,15 @@ import { custodyQueryKeys, useCustodiesQuery } from '@/modules/custody/hooks/use
 import { documentQueryKeys, useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
+import { toArabicDigits } from '@/shared/utils/format'
 import type { AssetCustody, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
+import { wireDocumentDetails, wireDocumentHistory } from '@/test/msw/document-wire-fixtures'
 import { apiJson, okPageJson } from '@/test/msw/envelope'
+import { toWirePolicy } from '@/test/msw/warehouse-document-handlers'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -37,6 +40,12 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 const scenario = createCrossModuleScenario()
 const issue = scenario.documents.issue
 const returnDocument = scenario.documents.return
+// The document engine answers the handwritten wire contract, not the in-memory
+// snapshot the scenario keeps: the petals carry a recipient id rather than a
+// reference object, the issued assets travel on `lines[].selectedAssets`, and
+// `postedBy` is a user id. Serving the projection is what keeps this journey
+// honest about what the live routes return.
+const issueWire = wireDocumentDetails(issue)
 const returnedAsset = scenario.assets.returned
 const pendingAsset = scenario.assets.pending
 const returnedCustody = findCustody(returnedAsset.assetId)
@@ -84,7 +93,9 @@ describe('issue custody and return chain', () => {
     expect(screen.getByText('تسليم حاسوب للعمل الميداني')).toBeInTheDocument()
     expect(screen.getByText('سند-صرف-موقّع.pdf')).toBeInTheDocument()
     for (const assetId of issue.lines[0]?.issuedAssetIds ?? []) {
-      expect(screen.getByRole('link', { name: assetId })).toHaveAttribute(
+      // The issued assets travel on the wire line's `selectedAssets`, and the
+      // lines table renders each id in the app-wide Arabic-Indic digits.
+      expect(screen.getByRole('link', { name: toArabicDigits(assetId) })).toHaveAttribute(
         'href',
         ROUTE_PATHS.assetDetail.replace(':assetId', assetId),
       )
@@ -144,7 +155,9 @@ describe('issue custody and return chain', () => {
       'href',
       issueDetailPath(),
     )
-    expect(screen.getAllByRole('link', { name: returnedAsset.assetId }).length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByRole('link', { name: toArabicDigits(returnedAsset.assetId) }).length,
+    ).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /ترحيل|عكس|رفض/ })).not.toBeInTheDocument()
 
     await navigate(router, custodyHistoryPath())
@@ -184,6 +197,9 @@ describe('issue custody and return chain', () => {
       id: scenario.warehouses.source.id,
     } as const
     const warehouseIssue = { ...issue, rowVersion: issue.rowVersion + 1 }
+    // One projection per scope variant, so the cache comparison below asserts
+    // the wire shape the handler served for that scope.
+    const warehouseIssueWire = wireDocumentDetails(warehouseIssue)
     const warehouseAsset = {
       ...returnedAsset,
       serialNumber: `${returnedAsset.serialNumber}-WH`,
@@ -204,7 +220,7 @@ describe('issue custody and return chain', () => {
     server.use(
       http.get(`${environment.apiBaseUrl}/warehouse-documents/${issue.documentId}`, () => {
         requestCounts.document += 1
-        return apiJson(responseScope === 'enterprise' ? issue : warehouseIssue)
+        return apiJson(responseScope === 'enterprise' ? issueWire : warehouseIssueWire)
       }),
       http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.assetId}`, () => {
         requestCounts.asset += 1
@@ -232,7 +248,7 @@ describe('issue custody and return chain', () => {
     )
 
     await waitFor(() => {
-      expect(result.current.document).toEqual(issue)
+      expect(result.current.document).toEqual(issueWire)
       expect(result.current.asset).toEqual(returnedAsset)
       expect(result.current.custodyTimeline).toEqual([returnedCustody])
       expect(result.current.custodyList?.items).toEqual([pendingCustody])
@@ -244,7 +260,7 @@ describe('issue custody and return chain', () => {
     rerender()
 
     await waitFor(() => {
-      expect(result.current.document).toEqual(warehouseIssue)
+      expect(result.current.document).toEqual(warehouseIssueWire)
       expect(result.current.asset).toEqual(warehouseAsset)
       expect(result.current.custodyTimeline).toEqual([warehouseCustody])
       expect(result.current.custodyList?.items).toEqual([warehousePending])
@@ -252,10 +268,10 @@ describe('issue custody and return chain', () => {
     expect(requestCounts).toEqual({ asset: 2, custodyList: 2, custodyTimeline: 2, document: 2 })
     expect(
       client.getQueryData(documentQueryKeys.document(enterpriseScope, issue.documentId)),
-    ).toEqual(issue)
+    ).toEqual(issueWire)
     expect(
       client.getQueryData(documentQueryKeys.document(warehouseScope, issue.documentId)),
-    ).toEqual(warehouseIssue)
+    ).toEqual(warehouseIssueWire)
     expect(
       client.getQueryData(assetQueryKeys.asset(enterpriseScope, returnedAsset.assetId)),
     ).toEqual(returnedAsset)
@@ -329,26 +345,31 @@ function useScenarioHandlers(
   server.use(
     http.get(`${environment.apiBaseUrl}/warehouse-documents/:documentId`, ({ params }) => {
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
-      return document === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(document)
+      return document === undefined
+        ? new HttpResponse(null, { status: 404 })
+        : apiJson(wireDocumentDetails(document))
     }),
     http.get(`${environment.apiBaseUrl}/warehouse-documents/:documentId/history`, ({ params }) => {
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
       const events =
         document === undefined ? undefined : scenario.ledgers.lifecycleEvents[document.documentId]
+      // An absent chain stays a 404 rather than an empty envelope: the timeline
+      // is audit evidence, and a read that silently loses it is a defect.
       return document === undefined || events === undefined
         ? new HttpResponse(null, { status: 404 })
-        : apiJson({
-            documentId: document.documentId,
-            currentStatus: document.documentStatus,
-            currentRowVersion: document.rowVersion,
-            events,
-          })
+        : apiJson(
+            wireDocumentHistory(events, {
+              documentId: document.documentId,
+              currentStatus: document.documentStatus,
+              currentRowVersion: document.rowVersion,
+            }),
+          )
     }),
     http.get(`${environment.apiBaseUrl}/warehouse-documents/:documentId/policy`, ({ params }) => {
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
       return document === undefined
         ? new HttpResponse(null, { status: 404 })
-        : apiJson(document.policy)
+        : apiJson(toWirePolicy(document))
     }),
     http.get(`${environment.apiBaseUrl}/custodies`, ({ request }) => {
       const searchParams = new URL(request.url).searchParams

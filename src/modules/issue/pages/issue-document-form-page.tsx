@@ -17,7 +17,7 @@ import { toIssueInfo } from '@/modules/issue/schemas/issue-info.schema'
 import { QuantityLineEditor } from '@/shared/documents/components/quantity-line-editor'
 import { BalanceReadError } from '@/shared/documents/components/balance-read-error'
 import {
-  buildDraftRequest,
+  buildCompleteDraftRequest,
   DocumentHeaderSection,
   documentHeaderSchema,
 } from '@/shared/documents/document-header-form'
@@ -25,11 +25,11 @@ import {
   createEmptyQuantityLine,
   linesHaveUniqueMaterials,
   quantityLineSchema,
-  toDocumentLineInputs,
+  toCompleteDraftLines,
 } from '@/shared/documents/schemas/document-lines.schemas'
 import {
   documentDraftMutationError,
-  useCreateDocumentMutation,
+  useCompleteDraftMutation,
 } from '@/shared/documents/use-document-draft-mutations'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
@@ -91,7 +91,7 @@ const EMPTY_LINES: IssueDocumentFormValues['lines'] = []
  */
 export default function IssueDocumentFormPage() {
   const navigate = useNavigate()
-  const createMutation = useCreateDocumentMutation()
+  const createMutation = useCompleteDraftMutation()
   const form = useForm<IssueDocumentFormValues>({
     resolver: zodResolver(issueDocumentFormSchema) as Resolver<IssueDocumentFormValues>,
     defaultValues: DEFAULT_VALUES,
@@ -160,20 +160,28 @@ export default function IssueDocumentFormPage() {
     event.preventDefault()
     form.clearErrors('lines')
     void form.handleSubmit((values) => {
-      const draft = buildDraftRequest<'Issue'>({
+      const request = buildCompleteDraftRequest<'Issue'>({
         documentType: 'Issue',
         header: values.header,
-        lines: toDocumentLineInputs(values.lines),
+        lines: toCompleteDraftLines(values.lines),
         petals: {
           issueTo: toIssueInfo(values.petal.issueTo, values.petal.issueToDisplayName),
         },
-        rowVersion: 0,
       })
-      createMutation.mutate(draft, {
-        onSuccess: (document) => {
-          navigate(ROUTE_PATHS.documentIssueDetail.replace(':documentId', document.documentId))
+      createMutation.mutate(
+        {
+          request,
+          paperReference: {
+            paperDocumentNumber: values.header.paperDocumentNumber,
+            paperDocumentYear: values.header.paperDocumentYear,
+          },
         },
-      })
+        {
+          onSuccess: (document) => {
+            navigate(ROUTE_PATHS.documentIssueDetail.replace(':documentId', document.id))
+          },
+        },
+      )
     })(event)
   }
 

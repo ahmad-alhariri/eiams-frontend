@@ -8,9 +8,7 @@ import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
-  createActionAvailability,
   createDocumentAttachment,
-  createDocumentPolicy,
   createSessionRole,
   createSessionScope,
   createSessionUser,
@@ -19,6 +17,8 @@ import {
   fixtureUuid,
 } from '@/test/msw/factories'
 import { okJson, toWireErrorResponse } from '@/test/msw/envelope'
+import { wireDocumentDetails, wireDocumentHistory } from '@/test/msw/document-wire-fixtures'
+import { toWirePolicy } from '@/test/msw/warehouse-document-handlers'
 import { server } from '@/test/msw/server'
 
 /**
@@ -81,23 +81,6 @@ function draftWithSignedOriginal(): WarehouseDocument {
   })
 }
 
-/**
- * A Draft policy that presents the attachment-mutation actions the panel's
- * controls are gated on (`document-detail-page.tsx` `attachmentsReadOnly`).
- */
-function draftPolicy() {
-  return createDocumentPolicy({
-    documentId: DOCUMENT_ID,
-    documentStatus: 'Draft',
-    signedOriginalSatisfied: true,
-    actions: [
-      createActionAvailability('Submit', { allowed: true, presentation: 'Enabled' }),
-      createActionAvailability('UploadAttachment', { allowed: true, presentation: 'Enabled' }),
-      createActionAvailability('DeleteAttachment', { allowed: true, presentation: 'Enabled' }),
-    ],
-  })
-}
-
 function conflictProblem() {
   return {
     code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
@@ -145,18 +128,19 @@ describe('B1 — a failed attachment delete must leave user-visible feedback', (
     let deleteCalls = 0
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-        okJson(draftWithSignedOriginal()),
+        okJson(wireDocumentDetails(draftWithSignedOriginal())),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        okJson(draftPolicy()),
+        okJson(toWirePolicy(draftWithSignedOriginal())),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        okJson({
-          documentId: DOCUMENT_ID,
-          currentStatus: 'Draft',
-          currentRowVersion: 4,
-          events: deriveLifecycleEvents(draftWithSignedOriginal()),
-        }),
+        okJson(
+          wireDocumentHistory(deriveLifecycleEvents(draftWithSignedOriginal()), {
+            documentId: DOCUMENT_ID,
+            currentStatus: 'Draft',
+            currentRowVersion: 4,
+          }),
+        ),
       ),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/${ATTACHMENT_ID}`,
@@ -194,18 +178,19 @@ describe('B2 — attachment failures keep the server Arabic detail and recover o
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return okJson(draftWithSignedOriginal())
+        return okJson(wireDocumentDetails(draftWithSignedOriginal()))
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        okJson(draftPolicy()),
+        okJson(toWirePolicy(draftWithSignedOriginal())),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        okJson({
-          documentId: DOCUMENT_ID,
-          currentStatus: 'Draft',
-          currentRowVersion: 4,
-          events: deriveLifecycleEvents(draftWithSignedOriginal()),
-        }),
+        okJson(
+          wireDocumentHistory(deriveLifecycleEvents(draftWithSignedOriginal()), {
+            documentId: DOCUMENT_ID,
+            currentStatus: 'Draft',
+            currentRowVersion: 4,
+          }),
+        ),
       ),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/${ATTACHMENT_ID}`,

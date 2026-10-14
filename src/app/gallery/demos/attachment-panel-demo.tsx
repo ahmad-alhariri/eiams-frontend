@@ -6,55 +6,42 @@ import {
   type AttachmentPanelPolicy,
   type PendingAttachmentUpload,
 } from '@/shared/documents/attachment-panel'
-import type { AttachmentType, DocumentAttachment } from '@/shared/types/generated/eiams-v1'
+import type { AttachmentType } from '@/shared/documents/document-attachment-service'
+import type { DocumentAttachmentResponse } from '@/shared/documents/types/document-wire.types'
 import { Button } from '@/shared/ui/button'
 
 /* eslint-disable react-refresh/only-export-components -- dev-only gallery demo
    that intentionally exports its sections registry alongside local components. */
 
-const DEMO_UPLOADER = { id: 'user-demo', displayName: 'خالد الصباغ' }
-
-const INITIAL_ATTACHMENTS: DocumentAttachment[] = [
+const INITIAL_ATTACHMENTS: DocumentAttachmentResponse[] = [
   {
-    attachmentId: 'a1000000-0000-0000-0000-000000000001',
+    id: 'a1000000-0000-0000-0000-000000000001',
     attachmentType: 'SignedOriginal',
-    checksum: 'demo-checksum-1',
-    documentId: 'd1000000-0000-0000-0000-000000000001',
-    downloadUrl: null,
     fileSize: 2 * 1024 * 1024,
     mimeType: 'application/pdf',
     originalFilename: 'النسخة الموقعة من أمر الاستلام.pdf',
-    uploadedAt: '2026-08-10T09:30:00.000Z',
-    uploadedBy: DEMO_UPLOADER,
+    uploadedAtUtc: '2026-08-10T09:30:00.000Z',
   },
   {
-    attachmentId: 'a2000000-0000-0000-0000-000000000001',
+    id: 'a2000000-0000-0000-0000-000000000001',
     attachmentType: 'Supporting',
-    checksum: 'demo-checksum-2',
-    documentId: 'd1000000-0000-0000-0000-000000000001',
-    downloadUrl: null,
     fileSize: 512 * 1024,
     mimeType: 'image/jpeg',
     originalFilename: 'صورة تغليف.jpg',
-    uploadedAt: '2026-08-10T09:31:00.000Z',
-    uploadedBy: DEMO_UPLOADER,
+    uploadedAtUtc: '2026-08-10T09:31:00.000Z',
   },
   {
-    attachmentId: 'a3000000-0000-0000-0000-000000000001',
+    id: 'a3000000-0000-0000-0000-000000000001',
     attachmentType: 'Supporting',
-    checksum: 'demo-checksum-3',
-    documentId: 'd1000000-0000-0000-0000-000000000001',
-    downloadUrl: null,
     fileSize: 64 * 1024,
     mimeType: 'image/png',
     originalFilename: 'شهادة الفحص.png',
-    uploadedAt: '2026-08-10T09:32:00.000Z',
-    uploadedBy: DEMO_UPLOADER,
+    uploadedAtUtc: '2026-08-10T09:32:00.000Z',
   },
 ]
 
 function AttachmentPanelDemo() {
-  const [attachments, setAttachments] = useState<DocumentAttachment[]>(INITIAL_ATTACHMENTS)
+  const [attachments, setAttachments] = useState<DocumentAttachmentResponse[]>(INITIAL_ATTACHMENTS)
   const [pendingUploads, setPendingUploads] = useState<PendingAttachmentUpload[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -74,24 +61,18 @@ function AttachmentPanelDemo() {
     ? { signedOriginalSatisfied: true, blockers: [] }
     : {
         signedOriginalSatisfied: false,
-        blockers: [
-          { code: 'signed_original_missing', messageAr: 'لا توجد نسخة أصلية موقعة معتمدة بعد' },
-        ],
+        blockers: [{ code: 'signed_original_missing' }],
       }
 
   const completeUpload = (file: File, attachmentType: AttachmentType) => {
     setPendingUploads((current) => current.filter((pending) => pending.file !== file))
-    const attachment: DocumentAttachment = {
-      attachmentId: crypto.randomUUID(),
+    const attachment: DocumentAttachmentResponse = {
+      id: crypto.randomUUID(),
       attachmentType,
-      checksum: 'demo-checksum-uploaded',
-      documentId: 'd1000000-0000-0000-0000-000000000001',
-      downloadUrl: null,
       fileSize: file.size,
       mimeType: file.type,
       originalFilename: file.name,
-      uploadedAt: new Date().toISOString(),
-      uploadedBy: DEMO_UPLOADER,
+      uploadedAtUtc: new Date().toISOString(),
     }
     setAttachments((current) =>
       attachmentType === 'SignedOriginal'
@@ -119,10 +100,8 @@ function AttachmentPanelDemo() {
     timersRef.current.push(timer)
   }
 
-  const handleRemove = (attachment: DocumentAttachment) => {
-    setAttachments((current) =>
-      current.filter((item) => item.attachmentId !== attachment.attachmentId),
-    )
+  const handleRemove = (attachment: DocumentAttachmentResponse) => {
+    setAttachments((current) => current.filter((item) => item.id !== attachment.id))
     if (attachment.attachmentType === 'SignedOriginal') {
       setSatisfied(false)
     }

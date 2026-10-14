@@ -1,4 +1,4 @@
-﻿import { delay, http, type HttpHandler } from 'msw'
+import { delay, http, type HttpHandler } from 'msw'
 
 import { environment } from '@/config/env'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
@@ -28,10 +28,9 @@ import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 import type {
   DocumentActionType,
   DocumentActionResult,
+  DocumentAttachment,
   DocumentLifecycleEvent,
   DocumentLine,
-  DocumentLineInput,
-  DocumentPolicy,
   DocumentStatus,
   DocumentType,
   LifecycleActorSnapshot,
@@ -39,24 +38,45 @@ import type {
   LifecycleDocumentReference,
   NamedReference,
   ProblemDetails,
-  ReasonedDocumentActionRequest,
-  VersionOnlyDocumentActionRequest,
   WarehouseDocument,
-  WarehouseDocumentDraftRequest,
 } from '@/shared/types/generated/eiams-v1'
 
 import type { Material } from '@/modules/catalog/types/catalog.api-types'
+import type {
+  CompleteDraftLine,
+  CompleteDraftRequest,
+  DocumentActionPresentation,
+  DocumentAttachmentResponse,
+  DocumentLineResponse,
+  DocumentPolicy as WireDocumentPolicy,
+  DocumentLifecycleHistory,
+  DocumentLifecycleEvent as WireDocumentLifecycleEvent,
+  PostDocumentResponse,
+  WarehouseDocumentDetails,
+  WarehouseDocumentSummary,
+} from '@/shared/documents/types/document-wire.types'
 
 /**
  * Scenario handler builders for the shared document engine.
  *
  * These functions return MSW handler arrays (registered via `server.use(...)`)
  * so document-engine tests — list filtering, detail, history, policy, and the
- * six lifecycle action POSTs — exercise the exact contract shapes the deleted
- * dev mock API used to serve. The transition engine (`applyDocumentAction`) is
- * the single implementation it shared with `src/mocks/handlers.ts`: same
- * rowVersion guard, same reason validation, same state-transition table, same
- * 409 problem body.
+ * lifecycle action POSTs — exercise the exact shapes the LIVE API serves.
+ *
+ * ## Why the boundary projects
+ *
+ * The harness keeps the snapshot's nested `WarehouseDocument` as its IN-MEMORY
+ * model, because the transition engine, the idempotency memo and every fixture
+ * read its `warehouse`/`createdBy`/`policy` members. Everything that crosses HTTP
+ * is projected by the `toWire*` functions below into the handwritten wire
+ * contract (`document-wire.types.ts`): the flat `WarehouseDocumentSummary` and
+ * `WarehouseDocumentDetails`, the policy with `status`/`warnings`, the history
+ * with `action`/`actorDisplayName`, and the action routes that answer
+ * `EmptyResponse` / `PostDocumentResponse` / `201 { id }` instead of the
+ * snapshot's `DocumentActionResult`.
+ *
+ * A test that reads a response therefore sees exactly what the application sees,
+ * which is the whole point of the harness.
  *
  * What used to live ONLY in the dev mock, and now lives here so deleting
  * `src/mocks/` (EPIC G7, bead `eiams-frontend-79na` → `eiams-frontend-m4jm`)
@@ -99,10 +119,282 @@ const DOCUMENT_ACTION_ROUTES: ReadonlyArray<readonly [DocumentActionType, string
   ['Cancel', 'cancel'],
   ['Post', 'post'],
   ['Reject', 'reject'],
-  ['Reverse', 'reverse'],
-  ['Revise', 'revise'],
+  ['Reverse', 'reversals'],
+  ['Revise', 'return-to-draft'],
   ['Submit', 'submit'],
 ]
+
+// ---------------------------------------------------------------------------
+// Wire projection
+//
+// Everything above this line reasons about the snapshot's nested document; every
+// response below it is the handwritten wire contract the live API serves.
+// ---------------------------------------------------------------------------
+
+/**
+ * Warehouse code for the denormalised detail header.
+ *
+ * `WarehouseDocument.warehouse` is only a `NamedReference` (id + label), and the
+ * snapshot carried no code, so the projection reads the code off the canonical
+ * warehouse record that id names and falls back to a stable derived code for an
+ * id no warehouse fixture defines. Deriving is better than dropping: the live
+ * `WarehouseDocumentDetails` always serves `warehouseCode`.
+ */
+const CANONICAL_WAREHOUSE: Warehouse = createWarehouse()
+
+function wireWarehouseCode(warehouseId: string): string {
+  return warehouseId === CANONICAL_WAREHOUSE.id
+    ? CANONICAL_WAREHOUSE.code
+    : `WH-${warehouseId.slice(0, 8).toUpperCase()}`
+}
+
+export function toWireLine(line: DocumentLine): DocumentLineResponse {
+  // The snapshot spelled the issued-asset projection `issuedAssetIds`; the real
+  // `DocumentLineResponse` calls the same set `selectedAssets` and carries a
+  // selection id per entry.
+  const issuedAssetIds = line.issuedAssetIds ?? []
+  const selectedAssets = issuedAssetIds.map((assetId, index) => ({
+    selectionId: fixtureUuid(400 + index),
+    assetId,
+    assetNumber: `AST-${assetId.slice(0, 4)}`,
+    serialNumber: null,
+  }))
+  return {
+    id: line.lineId,
+    sourceLineId: null,
+    materialId: line.material.materialId,
+    // The wire line denormalises the material identity and label the detail
+    // table renders, so a read never joins the catalog. The harness's in-memory
+    // line still embeds the generated material snapshot, so the projection is
+    // what carries those three fields across.
+    materialCode: line.material.code,
+    materialNameAr: line.material.nameAr,
+    unitSymbol: line.unit?.displayName ?? null,
+    lineType: line.lineType,
+    quantity: line.quantity,
+    unitId: line.unit?.id ?? null,
+    baseQuantity: line.baseQuantity,
+    unitPrice: line.unitPrice ?? null,
+    batchNumber: line.batchNumber ?? null,
+    expiryDate: line.expiryDate ?? null,
+    openingType: line.openingType ?? null,
+    assets: (line.assetInputs ?? []).map((assetInput, index) => ({
+      id: fixtureUuid(500 + index),
+      warehouseId: null,
+      assetNumber: assetInput.assetNumber ?? `AST-${index + 1}`,
+      serialNumber: assetInput.serialNumber ?? null,
+      acquisitionDate: assetInput.acquisitionDate ?? '2024-01-01',
+      warrantyExpiry: assetInput.warrantyExpiry ?? null,
+    })),
+    selectedAssets,
+    adjustment: null,
+  }
+}
+
+/**
+ * One attachment record in the wire spelling.
+ *
+ * The live `DocumentAttachmentResponse` is a flat `{ id, attachmentType,
+ * originalFilename, mimeType, fileSize, uploadedAtUtc }`. The snapshot's record
+ * carried the document it belonged to, a checksum, the uploader and an optional
+ * download URL; none of that crosses HTTP, so none of it is projected.
+ */
+export function toWireAttachment(attachment: DocumentAttachment): DocumentAttachmentResponse {
+  return {
+    id: attachment.attachmentId,
+    attachmentType: attachment.attachmentType,
+    originalFilename: attachment.originalFilename,
+    mimeType: attachment.mimeType,
+    fileSize: attachment.fileSize,
+    uploadedAtUtc: attachment.uploadedAt,
+  }
+}
+
+export function toWireDetails(document: WarehouseDocument): WarehouseDocumentDetails {
+  return {
+    id: document.documentId,
+    warehouseId: document.warehouse.id,
+    // The detail read names its warehouse inline (code + label) and stamps the
+    // creating user and instant. The harness keeps only a `NamedReference` for
+    // the warehouse, so the label travels on that reference and the code comes
+    // from the canonical warehouse record the reference points at.
+    warehouseCode: wireWarehouseCode(document.warehouse.id),
+    warehouseName: document.warehouse.displayName,
+    documentType: document.documentType,
+    paperDocumentNumber: document.paperDocumentNumber,
+    paperDocumentYear: document.paperDocumentYear,
+    systemReferenceNumber: document.systemReferenceNumber,
+    signedCopyAttachmentId: document.policy.signedOriginalSatisfied
+      ? (document.attachments[0]?.attachmentId ?? null)
+      : null,
+    documentStatus: document.documentStatus,
+    createdAtUtc: document.createdAt,
+    createdBy: document.createdBy.id,
+    postedBy: document.postedBy?.id ?? null,
+    postedAtUtc: document.postedAt ?? null,
+    reversalOfDocumentId: null,
+    reversedByDocumentId: null,
+    rowVersion: document.rowVersion,
+    receivingInfo:
+      document.receivingInfo === undefined
+        ? null
+        : {
+            supplierRef: document.receivingInfo.supplierRef,
+            supplierInvoiceRef: document.receivingInfo.supplierInvoiceRef ?? null,
+            receivingType: document.receivingInfo.receivingType,
+          },
+    issueTo:
+      document.issueTo === undefined
+        ? null
+        : {
+            recipientType: document.issueTo.recipientType,
+            recipientId: document.issueTo.recipientId,
+            issueReason: document.issueTo.issueReason,
+            recipientDisplayName: document.issueTo.recipientDisplayName ?? null,
+            recipientStatus: null,
+          },
+    transferInfo:
+      document.transferInfo === undefined
+        ? null
+        : {
+            destinationWarehouseId: document.transferInfo.destinationWarehouseId,
+            transferReason: document.transferInfo.transferReason,
+          },
+    returnInfo:
+      document.returnInfo === undefined
+        ? null
+        : {
+            originalIssueDocumentId: document.returnInfo.originalIssueDocumentId,
+            returnReason: document.returnInfo.returnReason,
+            originalRecipientType: null,
+            originalRecipientId: null,
+            originalRecipientDisplayName: null,
+            originalRecipientStatus: null,
+          },
+    inventoryAdjustment: null,
+    lines: document.lines.map(toWireLine),
+    attachments: document.attachments.map(toWireAttachment),
+  }
+}
+
+export function toWireSummary(document: WarehouseDocument): WarehouseDocumentSummary {
+  return {
+    id: document.documentId,
+    warehouseId: document.warehouse.id,
+    documentType: document.documentType,
+    paperDocumentNumber: document.paperDocumentNumber,
+    paperDocumentYear: document.paperDocumentYear,
+    systemReferenceNumber: document.systemReferenceNumber,
+    documentStatus: document.documentStatus,
+    postedAtUtc: document.postedAt ?? null,
+    reversalOfDocumentId: null,
+    rowVersion: document.rowVersion,
+    createdAtUtc: document.createdAt,
+  }
+}
+
+/**
+ * Action reason codes: the harness vocabulary → the codes the live API serves.
+ *
+ * The in-memory policy evaluates a reason per action in the frontend's own
+ * `document.<state>` spelling, but the wire contract carries the backend's error
+ * codes, and the UI resolves every user-facing sentence from that code through
+ * the governed `error-copy-ar.ts` table. A harness that projected its own codes
+ * would answer with codes the copy table has never heard of, and every disabled
+ * action would render with no Arabic reason — a failure the tests could not
+ * distinguish from a real defect. Translating here keeps the in-memory
+ * evaluation readable and the response honest.
+ *
+ * Blocker codes are NOT translated: `policy-blocker-codes.ts` names the
+ * `signed_original_*` / `document.signed_original_*` vocabulary as the contract's
+ * own machine gate reasons, and both the preflight gate and the attachment gate
+ * row match on it.
+ */
+const WIRE_REASON_CODES: Readonly<Record<string, string>> = {
+  'document.not_posted': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.not_submitted': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.submitted': 'WAREHOUSE_DOCUMENTS_NOT_EDITABLE',
+  'document.posted': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.rejected': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.reversed': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.cancelled': 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+  'document.signed_original_missing': 'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED',
+}
+
+function toWireReasonCode(code: string | null): string | null {
+  if (code === null) {
+    return null
+  }
+  return WIRE_REASON_CODES[code] ?? code
+}
+
+export function toWirePolicy(document: WarehouseDocument): WireDocumentPolicy {
+  const policy = document.policy
+  return {
+    documentId: document.documentId,
+    status: document.documentStatus,
+    rowVersion: document.rowVersion,
+    evaluatedAtUtc: policy.evaluatedAt,
+    signedOriginalSatisfied: policy.signedOriginalSatisfied,
+    actions: policy.actions.map((availability) => ({
+      action: availability.action,
+      allowed: availability.allowed,
+      confirmationRequired: availability.confirmationRequired,
+      reasonRequired: availability.reasonRequired,
+      presentation: availability.presentation as DocumentActionPresentation,
+      reasonCode: toWireReasonCode(availability.reasonCode ?? null),
+      // The live projection carries English prose here. The UI never renders it;
+      // `document-policy-gates.ts` resolves the sentence by code.
+      reason: availability.reasonAr ?? null,
+    })),
+    blockers: policy.blockers.map((blocker) => ({
+      action: 'Post',
+      code: blocker.code,
+      message: blocker.messageAr,
+    })),
+    warnings: policy.advisories.map((advisory) => ({
+      code: advisory.code,
+      message: advisory.messageAr,
+      countId: advisory.countId ?? null,
+      warehouseId: advisory.warehouseId ?? null,
+    })),
+  }
+}
+
+export function toWireLifecycleEvent(event: DocumentLifecycleEvent): WireDocumentLifecycleEvent {
+  return {
+    eventId: event.eventId,
+    fromStatus: event.fromStatus ?? null,
+    toStatus: event.toStatus,
+    action: event.eventType,
+    reason: event.reason ?? null,
+    actorUserId: event.occurredBy.userId,
+    actorDisplayName: event.occurredBy.displayName,
+    occurredAtUtc: event.occurredAt,
+    resultingRowVersion: event.documentRowVersion,
+    requestId: event.correlationId ?? null,
+    operationId: fixtureUuid(900),
+  }
+}
+
+export function toWireHistory(
+  documentId: string,
+  events: readonly DocumentLifecycleEvent[],
+  currentStatus: DocumentStatus,
+  currentRowVersion: number,
+): DocumentLifecycleHistory {
+  return {
+    documentId,
+    currentStatus,
+    currentRowVersion,
+    events: events.map(toWireLifecycleEvent),
+  }
+}
+
+/** `PostDocumentResponse` — the one lifecycle route that answers anything. */
+export function toWirePostResult(document: WarehouseDocument): PostDocumentResponse {
+  return { documentId: document.documentId, warnings: [] }
+}
 
 export const WAREHOUSE_DOCUMENT_STATUSES = [
   'Draft',
@@ -128,7 +420,8 @@ interface DocumentListQuery {
   /** One-based page index, as bound by `PaginationQueryParameters.Page`. */
   page: number
   pageSize: number
-  search?: string
+  systemReferenceNumber?: string
+  paperDocumentNumber?: string
   warehouseId?: string
 }
 
@@ -165,9 +458,13 @@ function parseDocumentListQuery(url: URL): DocumentListQuery {
     page: Number.isFinite(page) && page >= 1 ? page : 1,
     pageSize: Number.isFinite(pageSize) && pageSize > 0 ? pageSize : LIST_DEFAULT_PAGE_SIZE,
   }
-  const search = url.searchParams.get('search')
-  if (search !== null) {
-    query.search = search
+  const systemReferenceNumber = url.searchParams.get('systemReferenceNumber')
+  if (systemReferenceNumber !== null) {
+    query.systemReferenceNumber = systemReferenceNumber
+  }
+  const paperDocumentNumber = url.searchParams.get('paperDocumentNumber')
+  if (paperDocumentNumber !== null) {
+    query.paperDocumentNumber = paperDocumentNumber
   }
   const warehouseId = url.searchParams.get('warehouseId')
   if (warehouseId !== null) {
@@ -187,15 +484,8 @@ function parseDocumentListQuery(url: URL): DocumentListQuery {
   return query
 }
 
-function matchesSearch<Record>(
-  record: Record,
-  search: string | undefined,
-  textOf: (record: Record) => string,
-): boolean {
-  if (search === undefined) {
-    return true
-  }
-  return textOf(record).toLowerCase().includes(search.toLowerCase())
+function contains(haystack: string, needle: string | undefined): boolean {
+  return needle === undefined || haystack.toLowerCase().includes(needle.toLowerCase())
 }
 
 /**
@@ -380,8 +670,23 @@ export interface IdempotentDocumentActionInput {
   rowVersion: number
   reason?: string | null
   occurredBy?: LifecycleActorSnapshot | undefined
+  /**
+   * True when the ROUTE has no reason slot at all — `POST /{documentId}/reversals`
+   * takes no body — so the reason-required guard cannot apply to it. The UI still
+   * asks the keeper for a reversal reason; the live contract has nowhere to put
+   * it, which is recorded rather than faked here.
+   */
+  reasonNotApplicable?: boolean | undefined
   /** Raw `Idempotency-Key` header value; `null` leaves this attempt unmemoized. */
   idempotencyKey: string | null
+  /**
+   * The version the memo identifies this INTENT by. Defaults to `rowVersion`,
+   * which is the body the client was shown. A bodyless route (`reversals`) has no
+   * such version, so it identifies by document + action + key alone — otherwise
+   * the retry of a bodyless route could never match, because the record it
+   * targets has necessarily moved on by the time the retry arrives.
+   */
+  idempotencyRowVersion?: number | undefined
   /** Memo to consult and record into; defaults to the module-scoped instance. */
   idempotency?: IdempotencyMemo
 }
@@ -424,11 +729,12 @@ export function applyIdempotentDocumentAction(
 ): IdempotentDocumentActionOutcome {
   const memo = input.idempotency ?? documentActionIdempotency
   const documentId = input.document.documentId
+  const memoRowVersion = input.idempotencyRowVersion ?? input.rowVersion
   const memoCheck = memo.check({
     idempotencyKey: input.idempotencyKey,
     action: input.action,
     documentId,
-    rowVersion: input.rowVersion,
+    rowVersion: memoRowVersion,
     reason: input.reason ?? null,
   })
   if (memoCheck.kind === 'replay') {
@@ -442,6 +748,7 @@ export function applyIdempotentDocumentAction(
     document: input.document,
     rowVersion: input.rowVersion,
     reason: input.reason ?? null,
+    reasonNotApplicable: input.reasonNotApplicable ?? false,
     occurredBy: input.occurredBy,
   })
   if (outcome.kind === 'conflict') {
@@ -455,7 +762,7 @@ export function applyIdempotentDocumentAction(
       input.idempotencyKey,
       input.action,
       documentId,
-      input.rowVersion,
+      memoRowVersion,
       input.reason ?? null,
       outcome.result,
     )
@@ -603,6 +910,11 @@ export interface DocumentActionInput {
   document: WarehouseDocument
   rowVersion: number
   reason?: string | null
+  /**
+   * True when the calling ROUTE cannot carry a reason — `reversals` takes no body
+   * — so the reason-required guard is skipped for it.
+   */
+  reasonNotApplicable?: boolean
   occurredAt?: string
   occurredBy?: LifecycleActorSnapshot | undefined
 }
@@ -646,7 +958,7 @@ export function applyDocumentAction(input: DocumentActionInput): DocumentActionO
       ),
     }
   }
-  if (actionRequiresReason(action) && !isPresent(input.reason)) {
+  if (!input.reasonNotApplicable && actionRequiresReason(action) && !isPresent(input.reason)) {
     return {
       kind: 'validation',
       problem: problemBase('REQUEST_VALIDATION_FAILED', 'يرجى إدخال سبب الإجراء.', 422, 'reason'),
@@ -765,11 +1077,8 @@ export function createWarehouseDocumentListHandler(
             document.documentStatus === query.documentStatus) &&
           (query.documentType === undefined || document.documentType === query.documentType) &&
           (query.warehouseId === undefined || document.warehouse.id === query.warehouseId) &&
-          matchesSearch(
-            document,
-            query.search,
-            (item) => `${item.paperDocumentNumber} ${item.systemReferenceNumber}`,
-          ),
+          contains(document.systemReferenceNumber, query.systemReferenceNumber) &&
+          contains(document.paperDocumentNumber, query.paperDocumentNumber),
       )
       // One-based `page`, so page 1 is the first slice.
       const start = (query.page - 1) * query.pageSize
@@ -778,7 +1087,7 @@ export function createWarehouseDocumentListHandler(
       // page here made the shared `ApiTransport` read `data`/`pagination` off
       // undefined and return an empty page, which is what eiams-frontend-3abe
       // exposed once the document services moved onto the transport.
-      return okPageJson(filtered.slice(start, start + query.pageSize), {
+      return okPageJson(filtered.slice(start, start + query.pageSize).map(toWireSummary), {
         page: query.page,
         pageSize: query.pageSize,
         totalCount: filtered.length,
@@ -796,7 +1105,9 @@ export function createWarehouseDocumentDetailHandler(
   return [
     http.get(`${DOCUMENT_PREFIX}/:documentId`, async ({ params }) => {
       await delay(options.delayMs ?? 0)
-      return params['documentId'] === document.documentId ? okJson(document) : notFound()
+      return params['documentId'] === document.documentId
+        ? okJson(toWireDetails(document))
+        : notFound()
     }),
   ]
 }
@@ -819,25 +1130,35 @@ export function createWarehouseDocumentHistoryHandler(
       if (params['documentId'] !== documentId) {
         return notFound()
       }
-      return okJson({
-        documentId,
-        currentStatus: options.currentStatus ?? lastEvent?.toStatus ?? EMPTY_HISTORY_STATUS,
-        currentRowVersion: options.currentRowVersion ?? lastEvent?.documentRowVersion ?? 0,
-        events,
-      })
+      return okJson(
+        toWireHistory(
+          documentId,
+          events,
+          options.currentStatus ?? lastEvent?.toStatus ?? EMPTY_HISTORY_STATUS,
+          options.currentRowVersion ?? lastEvent?.documentRowVersion ?? 0,
+        ),
+      )
     }),
   ]
 }
 
-/** GET /warehouse-documents/:documentId/policy — evaluated action availability. */
+/**
+ * GET /warehouse-documents/:documentId/policy — evaluated action availability.
+ *
+ * Takes the in-memory document and projects its policy, because the wire policy
+ * and the harness policy are two spellings of one evaluation (`status`/`warnings`
+ * and code-resolved reasons) rather than two separate objects.
+ */
 export function createWarehouseDocumentPolicyHandler(
-  policy: DocumentPolicy,
+  document: WarehouseDocument,
   options: DocumentListHandlerOptions = {},
 ): readonly HttpHandler[] {
   return [
     http.get(`${DOCUMENT_PREFIX}/:documentId/policy`, async ({ params }) => {
       await delay(options.delayMs ?? 0)
-      return params['documentId'] === policy.documentId ? okJson(policy) : notFound()
+      return params['documentId'] === document.documentId
+        ? okJson(toWirePolicy(document))
+        : notFound()
     }),
   ]
 }
@@ -853,6 +1174,14 @@ export interface DocumentActionHandlerOptions {
   documentStore?: () => WarehouseDocument[]
   /** Called after a successful transition, before the 200 response is sent. */
   onDocumentUpdated?: (document: WarehouseDocument, action: DocumentActionType) => void
+  /**
+   * Called with the lifecycle event one transition appended, before the
+   * acknowledgement. The live routes answer `EmptyResponse` /
+   * `PostDocumentResponse` / `201 { id }` and carry no event, so a test that
+   * needs to assert "exactly one event per accepted action" has no other way to
+   * observe the chain the route wrote.
+   */
+  onLifecycleEvent?: (event: DocumentLifecycleEvent, action: DocumentActionType) => void
   /** Called after a successful Reverse, before the 200 response, with the compensating document. */
   onCompensatingDocumentCreated?: (document: WarehouseDocument) => void
   occurredBy?: LifecycleActorSnapshot
@@ -860,10 +1189,10 @@ export interface DocumentActionHandlerOptions {
 }
 
 /**
- * The six lifecycle action POSTs (submit/post/reject/revise/cancel/reverse)
- * wired to one mutable in-memory document record. Replays the same transition
- * engine the dev mock API uses, so engine tests and `pnpm dev` agree on
- * rowVersion (409), reason (422), transition guards, and `Idempotency-Key`
+ * The six lifecycle action POSTs (submit / post / reject / return-to-draft /
+ * cancel / reversals) wired to one mutable in-memory document record. Replays the
+ * same transition engine the dev mock API uses, so engine tests and `pnpm dev`
+ * agree on rowVersion (409), reason (422), transition guards, and `Idempotency-Key`
  * replay/mismatch.
  *
  * The memo handed to `applyIdempotentDocumentAction` is PER HANDLER SET, not the
@@ -873,6 +1202,34 @@ export interface DocumentActionHandlerOptions {
  * long-lived process — where one key spans route re-registrations — use
  * `applyIdempotentDocumentAction` directly with the module-scoped memo.
  */
+/**
+ * One lifecycle route's wire answer.
+ *
+ * The live routes are deliberately asymmetric, and a harness that answered one
+ * envelope for all six would hide the very distinction the transport was
+ * rewritten for:
+ *  - `reversals` creates the compensating document and answers `201 { id }` for
+ *    the NEW document;
+ *  - `post` answers `PostDocumentResponse` (warnings included);
+ *  - submit / return-to-draft / reject / cancel answer `EmptyResponse`.
+ *
+ * A replay under the same `Idempotency-Key` answers what the original attempt
+ * answered, so it routes through here too rather than through a second spelling.
+ */
+function lifecycleRouteAnswer(
+  action: DocumentActionType,
+  document: WarehouseDocument,
+  reversalDocumentId: string | null,
+) {
+  if (action === 'Reverse' && reversalDocumentId !== null) {
+    return apiJson({ id: reversalDocumentId }, { status: 201 })
+  }
+  if (action === 'Post') {
+    return okJson(toWirePostResult(document))
+  }
+  return okJson({})
+}
+
 export function createWarehouseDocumentActionHandler(
   options: DocumentActionHandlerOptions,
 ): readonly HttpHandler[] {
@@ -888,20 +1245,45 @@ export function createWarehouseDocumentActionHandler(
       if (document === undefined) {
         return notFound()
       }
-      const body = (await request.json()) as
-        VersionOnlyDocumentActionRequest | ReasonedDocumentActionRequest
+      // The live body field is `expectedRowVersion` on every action, and the
+      // reasoned three additionally carry `reason`. The snapshot's `VersionOnly…`
+      // / `Reasoned…` pair is only the reason split; the version key differs.
+      // `reversals` reads no body at all.
+      const body =
+        action === 'Reverse'
+          ? ({} as { expectedRowVersion?: number; reason?: string | null })
+          : ((await request.json()) as {
+              expectedRowVersion?: number
+              reason?: string | null
+            })
+
       const outcome = applyIdempotentDocumentAction({
         action,
         document,
-        rowVersion: body.rowVersion,
-        reason: 'reason' in body ? (body.reason ?? null) : null,
+        rowVersion:
+          // `reversals` carries no version in a body, so the route evaluates the
+          // record it just read; every other action guards on the version the
+          // client was shown and a missing field is a client bug, not a fallback.
+          action === 'Reverse' ? document.rowVersion : (body.expectedRowVersion ?? 0),
+        reason: body.reason ?? null,
+        // `reversals` has no body slot at all, so the reversal reason the UI
+        // collects has nowhere to travel and the route cannot enforce one it
+        // never receives. Every other action carries its reason in the body and
+        // is guarded on it (422 when absent).
+        reasonNotApplicable: action === 'Reverse',
+        // A bodyless route identifies its intent by document + action + key only.
+        ...(action === 'Reverse' ? { idempotencyRowVersion: 0 } : {}),
         occurredBy: options.occurredBy,
         idempotencyKey: readIdempotencyKey(request),
         idempotency,
       })
       if (outcome.kind !== 'ok') {
         if (outcome.kind === 'replay') {
-          return okJson(outcome.result)
+          return lifecycleRouteAnswer(
+            action,
+            outcome.result.document,
+            outcome.result.relatedDocument?.documentId ?? null,
+          )
         }
         return toWireErrorResponse(outcome.problem, outcome.status)
       }
@@ -913,24 +1295,27 @@ export function createWarehouseDocumentActionHandler(
         }
       }
       options.onDocumentUpdated?.(outcome.document, action)
+      options.onLifecycleEvent?.(outcome.result.lifecycleEvent, action)
       if (outcome.compensatingDocument !== undefined) {
         options.onCompensatingDocumentCreated?.(outcome.compensatingDocument)
       }
-      return okJson(outcome.result)
+      return lifecycleRouteAnswer(
+        action,
+        outcome.document,
+        outcome.compensatingDocument?.documentId ?? null,
+      )
     }),
   )
 }
-
 // ---------------------------------------------------------------------------
-// Draft persistence (create / update)
+// Draft persistence
 //
-// POST/PUT /warehouse-documents are shared by every document module (the
-// spine draft endpoints). The draft engine below mirrors the contract:
-// - POST builds a Draft document (rowVersion 1, Created policy) from a
-//   WarehouseDocumentDraftRequest and persists it into an optional store.
-// - PUT applies the request onto an existing record and bumps both the
-//   document and its policy rowVersion — mismatches answer the same 409
-//   `versionConflictProblem` the lifecycle engine uses.
+// There is exactly ONE write that creates a document together with its lines:
+// `POST /warehouse-documents/complete-draft`, and it answers the whole detail
+// read. The bare `POST /warehouse-documents` route creates an EMPTY document and
+// answers `201 { id }`; `PUT /warehouse-documents/{id}` DOES NOT EXIST, so a saved
+// draft cannot be amended from the UI at all. The paper number/year live on a
+// second route, `PUT /{id}/paper-reference`.
 // ---------------------------------------------------------------------------
 
 const DEFAULT_DRAFT_ACTOR: LifecycleActorSnapshot = {
@@ -977,7 +1362,7 @@ function resolveLookups(lookups: Partial<DraftLookups> | undefined): DraftLookup
 }
 
 function mapDraftLine(
-  input: DocumentLineInput,
+  input: CompleteDraftLine,
   index: number,
   lookups: DraftLookups,
 ): DocumentLine {
@@ -987,30 +1372,38 @@ function mapDraftLine(
   // the same projection `createWarehouseDocumentLine` uses. A snapshot taken at
   // draft time must name the same material and unit the posted line will.
   const unit =
-    lookups.unitOf(input.unitId) ??
+    lookups.unitOf(input.unitId ?? undefined) ??
     createNamedReference({ id: material.baseUnitId, displayName: material.baseUnitSymbol })
   return {
-    ...(input.assetInputs === undefined ? {} : { assetInputs: input.assetInputs }),
     // D-IAR-01: Issue lines reference existing assets by id; the draft keeps
     // them verbatim and posting freezes the resolved set (mock parity).
     ...(input.assetIds === undefined ? {} : { assetIds: input.assetIds }),
+    // Receiving/Opening lines register one NEW asset per unit. The live command
+    // carries the captured identity as `assetInputs`, and dropping it here would
+    // silently lose every asset number and serial the keeper typed, because
+    // `toWireLine` below reads exactly this member. A `null` collection is
+    // treated as absent rather than stored, since the harness member is
+    // non-nullable.
+    ...(input.assetInputs == null ? {} : { assetInputs: input.assetInputs }),
     availableBalance: null,
-    baseQuantity: input.baseQuantity ?? input.quantity,
+    baseQuantity: input.quantity ?? 0,
     batchNumber: input.batchNumber ?? null,
-    conversionFactor: input.conversionFactor ?? '1.000000',
-    conversionId: input.conversionId ?? null,
+    conversionFactor: '1.000000',
+    conversionId: null,
     expiryDate: input.expiryDate ?? null,
-    lineId: input.lineId ?? fixtureUuid(201 + index),
+    lineId: fixtureUuid(201 + index),
     lineType: material.materialKind === 'Asset' ? 'Asset' : 'Normal',
     material: toDocumentLineMaterial(material),
-    ...(input.openingType === undefined ? {} : { openingType: input.openingType }),
-    quantity: input.quantity,
+    ...(input.openingType === undefined || input.openingType === null
+      ? {}
+      : { openingType: input.openingType }),
+    quantity: input.quantity ?? 0,
     unit,
     unitPrice: input.unitPrice ?? null,
   }
 }
 
-function mapDraftLines(lines: readonly DocumentLineInput[], lookups: DraftLookups): DocumentLine[] {
+function mapDraftLines(lines: readonly CompleteDraftLine[], lookups: DraftLookups): DocumentLine[] {
   return lines.map((line, index) => mapDraftLine(line, index, lookups))
 }
 
@@ -1036,13 +1429,15 @@ function draftWarehouseReferences(
 }
 
 /**
- * Builds a complete Draft `WarehouseDocument` from a
- * `WarehouseDocumentDraftRequest` — the shared shape the create handler and
- * the dev mock both persist. Petals (receiving/issue/transfer/return) pass
- * through untouched; the spine (header, warehouse/site, lines) is derived.
+ * Builds a complete Draft `WarehouseDocument` from a `CompleteDraftRequest` —
+ * the shared shape the complete-draft handler persists. Petals
+ * (receiving/issue/transfer/return) pass through untouched; the spine
+ * (warehouse/site, lines) is derived. The paper reference is NOT part of the
+ * command, so it stays at the harness defaults until the `paper-reference` route
+ * writes it.
  */
-export function buildDraftDocument(
-  request: WarehouseDocumentDraftRequest,
+export function buildCompleteDraftDocument(
+  request: CompleteDraftRequest,
   options: {
     documentId: string
     systemReferenceNumber: string
@@ -1056,6 +1451,13 @@ export function buildDraftDocument(
   const warehouse =
     lookups.warehouseOf(request.warehouseId) ?? createWarehouse({ id: request.warehouseId })
   const references = draftWarehouseReferences(warehouse, lookups)
+  // `Warehouse` carries optional members under `exactOptionalPropertyTypes`, and
+  // the harness's generated `NamedReference` wants the ones it reads. Narrow the
+  // three the document spine actually embeds rather than asserting the shape.
+  const warehouseReference: NamedReference = {
+    id: references.warehouse.id,
+    displayName: references.warehouse.displayName,
+  }
   return {
     attachments: [],
     createdAt: options.createdAt ?? new Date().toISOString(),
@@ -1063,91 +1465,89 @@ export function buildDraftDocument(
     documentId: options.documentId,
     documentStatus: 'Draft',
     documentType: request.documentType,
-    ...(request.issueTo === undefined ? {} : { issueTo: request.issueTo }),
+    ...(request.issueTo === undefined || request.issueTo === null
+      ? {}
+      : {
+          issueTo: {
+            recipientType: request.issueTo.recipientType,
+            recipientId: request.issueTo.recipientId,
+            issueReason: request.issueTo.issueReason,
+            recipientDisplayName: '',
+          },
+        }),
     lines: mapDraftLines(request.lines, lookups),
-    paperDocumentNumber: request.paperDocumentNumber,
-    paperDocumentYear: request.paperDocumentYear,
+    paperDocumentNumber: '2024/123',
+    paperDocumentYear: 2024,
     policy: createDocumentPolicy({
       documentId: options.documentId,
       documentStatus: 'Draft',
       rowVersion: 1,
     }),
     postedAt: null,
-    ...(request.receivingInfo === undefined ? {} : { receivingInfo: request.receivingInfo }),
-    ...(request.returnInfo === undefined ? {} : { returnInfo: request.returnInfo }),
+    ...(request.receivingInfo === undefined || request.receivingInfo === null
+      ? {}
+      : {
+          receivingInfo: {
+            receivingType: 'Supplier',
+            supplierRef: request.receivingInfo.supplierPartyId,
+            supplierInvoiceRef: request.receivingInfo.supplierInvoiceRef ?? null,
+          },
+        }),
+    ...(request.returnInfo === undefined || request.returnInfo === null
+      ? {}
+      : {
+          returnInfo: {
+            originalIssueDocumentId: request.returnInfo.originalIssueDocumentId,
+            returnReason: request.returnInfo.returnReason,
+          },
+        }),
     rowVersion: 1,
-    site: references.site,
+    site: { id: references.site.id, displayName: references.site.displayName },
     systemReferenceNumber: options.systemReferenceNumber,
-    ...(request.transferInfo === undefined ? {} : { transferInfo: request.transferInfo }),
-    warehouse: references.warehouse,
-  }
-}
-
-/**
- * Applies a draft request onto an existing document (PUT semantics): replaces
- * header, lines, and petals; bumps document and policy rowVersion by one. The
- * lifecycle event chain and immutable spine fields are left untouched.
- */
-export function applyDraftToDocument(
-  document: WarehouseDocument,
-  request: WarehouseDocumentDraftRequest,
-  lookups: Partial<DraftLookups> | undefined = undefined,
-): WarehouseDocument {
-  const resolved = resolveLookups(lookups)
-  const warehouse =
-    resolved.warehouseOf(request.warehouseId) ?? createWarehouse({ id: request.warehouseId })
-  const references = draftWarehouseReferences(warehouse, resolved)
-  const nextRowVersion = document.rowVersion + 1
-  return {
-    ...document,
-    documentType: request.documentType,
-    ...(request.issueTo === undefined ? {} : { issueTo: request.issueTo }),
-    lines: mapDraftLines(request.lines, resolved),
-    paperDocumentNumber: request.paperDocumentNumber,
-    paperDocumentYear: request.paperDocumentYear,
-    policy: createDocumentPolicy({
-      documentId: document.documentId,
-      documentStatus: document.documentStatus,
-      rowVersion: nextRowVersion,
-    }),
-    ...(request.receivingInfo === undefined ? {} : { receivingInfo: request.receivingInfo }),
-    ...(request.returnInfo === undefined ? {} : { returnInfo: request.returnInfo }),
-    rowVersion: nextRowVersion,
-    site: references.site,
-    ...(request.transferInfo === undefined ? {} : { transferInfo: request.transferInfo }),
-    warehouse: references.warehouse,
+    ...(request.transferInfo === undefined || request.transferInfo === null
+      ? {}
+      : {
+          transferInfo: {
+            destinationWarehouseId: request.transferInfo.destinationWarehouseId,
+            destinationWarehouseName:
+              lookups.warehouseOf(request.transferInfo.destinationWarehouseId)?.name ?? '—',
+            transferReason: request.transferInfo.transferReason,
+          },
+        }),
+    warehouse: warehouseReference,
   }
 }
 
 export interface DraftPersistenceHandlerOptions {
-  /** Live collection the record is read from / written into on PUT. */
+  /** Live collection the record is written into. */
   documentStore?: () => WarehouseDocument[]
   /** Called after a successful create, before the 201 response. */
   onDocumentCreated?: (document: WarehouseDocument) => void
-  /** Called after a successful update, before the 200 response. */
-  onDocumentUpdated?: (document: WarehouseDocument) => void
   /** Actor stamped on created documents (`createdBy`). */
   occurredBy?: LifecycleActorSnapshot
   lookups?: Partial<DraftLookups>
   /** Per-document-type system reference; defaults to `EIAMS-<PREFIX>-<year>-0001`. */
-  nextSystemReference?: (request: WarehouseDocumentDraftRequest) => string
+  nextSystemReference?: (request: CompleteDraftRequest) => string
   delayMs?: number
 }
 
 const DEFAULT_REFERENCE_SEQUENCE = '0001'
 
-/** POST /warehouse-documents — creates a Draft from the request body. */
-export function createWarehouseDocumentCreateHandler(
+/**
+ * POST /warehouse-documents/complete-draft — creates a Draft document WITH its
+ * lines and answers the whole `WarehouseDocumentDetails` read.
+ */
+export function createCompleteDraftHandler(
   options: DraftPersistenceHandlerOptions = {},
 ): readonly HttpHandler[] {
   return [
-    http.post(DOCUMENT_PREFIX, async ({ request }) => {
+    http.post(`${DOCUMENT_PREFIX}/complete-draft`, async ({ request }) => {
       await delay(options.delayMs ?? 0)
-      const body = (await request.json()) as WarehouseDocumentDraftRequest
+      const body = (await request.json()) as CompleteDraftRequest
       const reference =
         options.nextSystemReference?.(body) ??
-        `EIAMS-${SYSTEM_REFERENCE_PREFIX[body.documentType]}-${body.paperDocumentYear}-${DEFAULT_REFERENCE_SEQUENCE}`
-      const document = buildDraftDocument(body, {
+        `EIAMS-${SYSTEM_REFERENCE_PREFIX[body.documentType]}-2024-${DEFAULT_REFERENCE_SEQUENCE}`
+      const document = buildCompleteDraftDocument(body, {
         documentId: fixtureUuid(900),
         systemReferenceNumber: reference,
         ...(options.occurredBy === undefined ? {} : { occurredBy: options.occurredBy }),
@@ -1158,20 +1558,21 @@ export function createWarehouseDocumentCreateHandler(
         store.push(document)
       }
       options.onDocumentCreated?.(document)
-      return apiJson(document, { status: 201 })
+      return apiJson(toWireDetails(document), { status: 201 })
     }),
   ]
 }
 
-/** PUT /warehouse-documents/:documentId — applies a draft request with a rowVersion guard. */
-export function createWarehouseDocumentUpdateHandler(
-  options: DraftPersistenceHandlerOptions & {
-    initialDocument: WarehouseDocument
-  },
+/**
+ * PUT /warehouse-documents/:documentId/paper-reference — the second half of a
+ * draft save, guarded on the version the complete-draft call just issued.
+ */
+export function createPaperReferenceHandler(
+  options: DocumentPersistenceHandlerOptions,
 ): readonly HttpHandler[] {
   let current = options.initialDocument
   return [
-    http.put(`${DOCUMENT_PREFIX}/:documentId`, async ({ params, request }) => {
+    http.put(`${DOCUMENT_PREFIX}/:documentId/paper-reference`, async ({ params, request }) => {
       await delay(options.delayMs ?? 0)
       const documentId = String(params['documentId'])
       const store = options.documentStore?.()
@@ -1180,20 +1581,37 @@ export function createWarehouseDocumentUpdateHandler(
       if (document === undefined) {
         return notFound()
       }
-      const body = (await request.json()) as WarehouseDocumentDraftRequest
-      if (body.rowVersion !== document.rowVersion) {
+      const body = (await request.json()) as {
+        expectedRowVersion: number
+        paperDocumentNumber: string
+        paperDocumentYear: number
+      }
+      if (body.expectedRowVersion !== document.rowVersion) {
         return toWireErrorResponse(versionConflictProblem(document), 409)
       }
-      const updated = applyDraftToDocument(document, body, options.lookups)
+      const updated: WarehouseDocument = {
+        ...document,
+        paperDocumentNumber: body.paperDocumentNumber,
+        paperDocumentYear: body.paperDocumentYear,
+        rowVersion: document.rowVersion + 1,
+      }
       current = updated
-      if (store !== undefined) {
-        const index = store.findIndex((item) => item.documentId === documentId)
+      const list = store
+      if (list !== undefined) {
+        const index = list.findIndex((item) => item.documentId === documentId)
         if (index !== -1) {
-          store[index] = updated
+          list[index] = updated
         }
       }
       options.onDocumentUpdated?.(updated)
-      return okJson(updated)
+      return okJson({})
     }),
   ]
+}
+
+export interface DocumentPersistenceHandlerOptions {
+  initialDocument: WarehouseDocument
+  documentStore?: () => WarehouseDocument[]
+  onDocumentUpdated?: (document: WarehouseDocument) => void
+  delayMs?: number
 }

@@ -1,17 +1,21 @@
-import { IconFileText } from '@tabler/icons-react'
-import { Link } from 'react-router'
-
-import { ROUTE_PATHS } from '@/config/routes'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import type {
   DocumentLifecycleEvent,
   DocumentStatus,
-  DocumentType,
-  LifecycleDocumentReference,
-  LifecycleEventType,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/shared/documents/types/document-wire.types'
 import { cn } from '@/shared/utils/class-names'
 import { formatDateTime } from '@/shared/utils/format'
+
+/**
+ * The action vocabulary `DocumentLifecycleSaveChangesInterceptor` records.
+ * It is NOT the policy action vocabulary: the interceptor maps a status
+ * transition onto a past-tense event name, and `Rejected → Draft` is recorded as
+ * `RevisionStarted` (there is no `Revise` event, because the revise ROUTE is not
+ * what happens to the document — the status is). Spelled here rather than
+ * imported so the timeline cannot drift onto a policy action name.
+ */
+type LifecycleEventType =
+  'Created' | 'Submitted' | 'Posted' | 'Rejected' | 'RevisionStarted' | 'Cancelled' | 'Reversed'
 
 const EVENT_TITLE: Record<LifecycleEventType, string> = {
   Created: 'إنشاء الوثيقة',
@@ -33,29 +37,21 @@ const EVENT_DOT_CLASS: Record<LifecycleEventType, string> = {
   Reversed: 'border-2 border-muted-foreground bg-background',
 }
 
-const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
-  Receiving: 'استلام',
-  Issue: 'صرف',
-  Transfer: 'تحويل',
-  Adjustment: 'تسوية',
-  Opening: 'رصيد افتتاحي',
-  Return: 'إرجاع',
+/**
+ * Fallback title for an action the interceptor has added since this file was
+ * written. The dot colour falls back with it, so an unknown event is still
+ * visible and still ordered — it is never dropped from the chain, because the
+ * chain is the audit evidence and a missing row would be a lie.
+ */
+const UNKNOWN_EVENT_TITLE = 'حدث على الوثيقة'
+const UNKNOWN_EVENT_DOT_CLASS = 'bg-muted-foreground'
+
+function eventTypeOf(action: string): LifecycleEventType | null {
+  return action in EVENT_TITLE ? (action as LifecycleEventType) : null
 }
 
 const DEFAULT_TITLE = 'سجل الحالة'
 const EMPTY_MESSAGE = 'لا توجد أحداث بعد'
-
-type WarehouseDocumentRouteType = Exclude<DocumentType, 'Adjustment'>
-
-const DOCUMENT_DETAIL_PATH_FOR_TYPE: Readonly<
-  Record<WarehouseDocumentRouteType, (documentId: string) => string>
-> = {
-  Receiving: (documentId) => ROUTE_PATHS.documentReceivingDetail.replace(':documentId', documentId),
-  Issue: (documentId) => ROUTE_PATHS.documentIssueDetail.replace(':documentId', documentId),
-  Transfer: (documentId) => ROUTE_PATHS.documentTransferDetail.replace(':documentId', documentId),
-  Opening: (documentId) => ROUTE_PATHS.documentOpeningDetail.replace(':documentId', documentId),
-  Return: (documentId) => ROUTE_PATHS.documentReturnDetail.replace(':documentId', documentId),
-}
 
 export type DocumentTimelineProps = {
   /** Immutable lifecycle events from the server, oldest- or newest-first; rendering is chronological either way. */
@@ -70,78 +66,36 @@ function isNewestFirst(events: readonly DocumentLifecycleEvent[]) {
   if (events.length < 2) return false
   const first = events[0]
   const last = events[events.length - 1]
-  return first !== undefined && last !== undefined && first.occurredAt >= last.occurredAt
-}
-
-function RelatedDocumentChip({ reference }: { reference: LifecycleDocumentReference }) {
-  const documentTypeLabel = DOCUMENT_TYPE_LABEL[reference.documentType] ?? reference.documentType
-  const content = (
-    <>
-      <IconFileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="font-medium">{documentTypeLabel}</span>
-      <span dir="ltr" className="font-english text-muted-foreground">
-        {reference.systemReferenceNumber}
-      </span>
-    </>
-  )
-
-  const detailPath =
-    reference.documentType === 'Adjustment'
-      ? reference.adjustmentId
-        ? ROUTE_PATHS.adjustmentDetail.replace(':adjustmentId', reference.adjustmentId)
-        : undefined
-      : DOCUMENT_DETAIL_PATH_FOR_TYPE[reference.documentType](reference.documentId)
-
-  if (detailPath === undefined) {
-    return (
-      <span
-        role="note"
-        aria-label={`سند ${documentTypeLabel} مرتبط: ${reference.systemReferenceNumber}`}
-        className="inline-flex w-fit items-center gap-1.5 rounded-4xl border border-antique-sand bg-muted/50 px-3 py-1 text-xs text-foreground"
-      >
-        {content}
-      </span>
-    )
-  }
-
-  return (
-    <Link
-      to={detailPath}
-      aria-label={`فتح تفاصيل سند ${documentTypeLabel}: ${reference.systemReferenceNumber}`}
-      className="inline-flex w-fit items-center gap-1.5 rounded-4xl border border-antique-sand bg-muted/50 px-3 py-1 text-xs text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-    >
-      {content}
-    </Link>
-  )
+  return first !== undefined && last !== undefined && first.occurredAtUtc >= last.occurredAtUtc
 }
 
 function TimelineEventRow({ event, isLast }: { event: DocumentLifecycleEvent; isLast: boolean }) {
-  const actor = event.occurredBy
-  const actorLine = actor.roleNameAr
-    ? `بواسطة ${actor.displayName} — ${actor.roleNameAr}`
-    : `بواسطة ${actor.displayName}`
+  const eventType = eventTypeOf(event.action)
+  const title = eventType === null ? UNKNOWN_EVENT_TITLE : EVENT_TITLE[eventType]
+  const dotClass = eventType === null ? UNKNOWN_EVENT_DOT_CLASS : EVENT_DOT_CLASS[eventType]
+  // The real history response carries the actor as a display name only — there is
+  // no role reference on the event, so the line states the actor and nothing the
+  // server did not send.
+  const actorLine = `بواسطة ${event.actorDisplayName}`
 
   return (
-    <li data-event-type={event.eventType} className="relative flex gap-3">
+    <li data-event-action={event.action} className="relative flex gap-3">
       <div aria-hidden className="flex w-3 flex-col items-center">
-        <span
-          className={cn('mt-1.5 size-3 shrink-0 rounded-full', EVENT_DOT_CLASS[event.eventType])}
-        />
+        <span className={cn('mt-1.5 size-3 shrink-0 rounded-full', dotClass)} />
         {!isLast ? <span className="my-1 w-0.5 flex-1 bg-antique-sand" /> : null}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1 pb-5">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-foreground">
-            {EVENT_TITLE[event.eventType]}
-          </span>
+          <span className="text-sm font-semibold text-foreground">{title}</span>
           <StatusBadge entity="document" status={event.toStatus} />
         </div>
-        <time dateTime={event.occurredAt} className="text-xs text-muted-foreground">
-          {formatDateTime(event.occurredAt)}
+        <time dateTime={event.occurredAtUtc} className="text-xs text-muted-foreground">
+          {formatDateTime(event.occurredAtUtc)}
         </time>
         <p className="text-sm text-foreground">{actorLine}</p>
-        {event.reason ? <p className="text-sm text-muted-foreground">{event.reason}</p> : null}
-        {event.relatedDocument ? <RelatedDocumentChip reference={event.relatedDocument} /> : null}
+        {event.reason === null || event.reason === '' ? null : (
+          <p className="text-sm text-muted-foreground">{event.reason}</p>
+        )}
       </div>
     </li>
   )

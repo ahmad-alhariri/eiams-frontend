@@ -1,5 +1,5 @@
 import type { RouteKey } from '@/config/routes'
-import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { DocumentType } from '@/shared/documents/types/document-wire.types'
 
 /**
  * Pinned document-list entries shared by the route-driven shared list page
@@ -7,7 +7,7 @@ import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
  * component file so both stay fast-refresh compatible.
  */
 export type DocumentRouteEntry = {
-  documentType: WarehouseDocument['documentType']
+  documentType: DocumentType
   detailRouteKey: RouteKey
   routeKey: RouteKey
   /** New-document route opened by the create action in the list header. */

@@ -80,7 +80,7 @@ function useDocumentHandlers(document: ReturnType<typeof createWarehouseDocument
   server.use(
     ...createWarehouseDocumentDetailHandler(document),
     ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
-    ...createWarehouseDocumentPolicyHandler(document.policy),
+    ...createWarehouseDocumentPolicyHandler(document),
   )
 }
 

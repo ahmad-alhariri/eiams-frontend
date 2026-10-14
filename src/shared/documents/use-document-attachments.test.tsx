@@ -1,4 +1,4 @@
-﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { type PropsWithChildren } from 'react'
@@ -6,8 +6,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
 import { apiClient } from '@/shared/services/api.client'
-import type { DocumentAttachment } from '@/shared/types/generated/eiams-v1'
-import { createWarehouseDocument, fixtureUuid } from '@/test/msw/factories'
+import type { DocumentAttachmentResponse } from '@/shared/documents/types/document-wire.types'
+import {
+  createDocumentAttachment,
+  createWarehouseDocument,
+  fixtureUuid,
+} from '@/test/msw/factories'
+import { wireDocumentDetails } from '@/test/msw/document-wire-fixtures'
 import { readRequestForm } from '@/test/msw/multipart-parser'
 import { apiJson, errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
@@ -30,27 +35,43 @@ const API_BASE_URL = '/api/v1'
 const DOCUMENT_ID = fixtureUuid(150)
 const SIGNED_ATTACHMENT_ID = fixtureUuid(170)
 
-function signedAttachment(): DocumentAttachment {
+/**
+ * The wire attachment record: `{ id, attachmentType, originalFilename, mimeType,
+ * fileSize, uploadedAtUtc }`. The snapshot's `attachmentId` / `checksum` /
+ * `uploadedBy` / `downloadUrl` are not served by the API.
+ */
+function signedAttachment(): DocumentAttachmentResponse {
   return {
-    attachmentId: SIGNED_ATTACHMENT_ID,
+    id: SIGNED_ATTACHMENT_ID,
     attachmentType: 'SignedOriginal',
-    checksum: 'sha256:fixture',
-    documentId: DOCUMENT_ID,
-    downloadUrl: null,
     fileSize: 4,
     mimeType: 'application/pdf',
     originalFilename: 'signed.pdf',
-    uploadedAt: '2026-08-12T09:00:00.000Z',
-    uploadedBy: { id: fixtureUuid(10), displayName: 'مستخدم تجريبي' },
+    uploadedAtUtc: '2026-08-12T09:00:00.000Z',
   }
 }
 
-function makeDraftDocument(attachments: readonly DocumentAttachment[] = []) {
+/**
+ * The in-memory record the handlers project on every read: the detail endpoint
+ * serves the flat `WarehouseDocumentDetails`, never the nested snapshot.
+ */
+function makeDraftDocument(attachments: readonly DocumentAttachmentResponse[] = []) {
   return createWarehouseDocument({
     documentId: DOCUMENT_ID,
     documentStatus: 'Draft',
     rowVersion: 1,
-    attachments,
+    attachments: attachments.map((attachment) =>
+      createDocumentAttachment({
+        attachmentId: attachment.id,
+        attachmentType:
+          attachment.attachmentType === 'Supporting' ? 'Supporting' : 'SignedOriginal',
+        documentId: DOCUMENT_ID,
+        fileSize: attachment.fileSize,
+        mimeType: attachment.mimeType,
+        originalFilename: attachment.originalFilename,
+        uploadedAt: attachment.uploadedAtUtc,
+      }),
+    ),
   })
 }
 
@@ -59,7 +80,7 @@ function makePostedDocument() {
     documentId: DOCUMENT_ID,
     documentStatus: 'Posted',
     rowVersion: 2,
-    attachments: [signedAttachment()],
+    attachments: makeDraftDocument([signedAttachment()]).attachments,
   })
 }
 
@@ -85,15 +106,16 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return okJson(store.document)
+        return okJson(wireDocumentDetails(store.document))
       }),
       http.post(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`,
         async ({ request }) => {
           const form = await readRequestForm(request)
           expect(form.get('attachmentType')).toBe('SignedOriginal')
+          expect(form.get('expectedRowVersion')).toBe('1')
           store.document = makeDraftDocument([signedAttachment()])
-          return apiJson(store.document.attachments[0], { status: 201 })
+          return apiJson(signedAttachment(), { status: 201 })
         },
       ),
     )
@@ -109,7 +131,7 @@ describe('useDocumentAttachmentManager', () => {
 
     await waitFor(() => expect(result.current.pendingUploads).toHaveLength(0))
     await waitFor(() => expect(result.current.attachments).toHaveLength(1))
-    expect(result.current.attachments[0]?.attachmentId).toBe(SIGNED_ATTACHMENT_ID)
+    expect(result.current.attachments[0]?.id).toBe(SIGNED_ATTACHMENT_ID)
     expect(detailRequests).toBe(before + 1)
     expect(result.current.uploadError).toBeNull()
   })
@@ -117,7 +139,9 @@ describe('useDocumentAttachmentManager', () => {
   it('keeps the pending entry failed and surfaces the Arabic upload error', async () => {
     const store = { document: makeDraftDocument() }
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+        okJson(wireDocumentDetails(store.document)),
+      ),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () =>
         errJson(413, {
           code: 'DOCUMENT_ATTACHMENTS_FILE_TOO_LARGE',
@@ -144,7 +168,9 @@ describe('useDocumentAttachmentManager', () => {
     const store = { document: makeDraftDocument() }
     let uploadCalls = 0
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+        okJson(wireDocumentDetails(store.document)),
+      ),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, async () => {
         uploadCalls += 1
         if (uploadCalls === 1) {
@@ -154,7 +180,7 @@ describe('useDocumentAttachmentManager', () => {
           })
         }
         store.document = makeDraftDocument([signedAttachment()])
-        return apiJson(store.document.attachments[0], { status: 201 })
+        return apiJson(signedAttachment(), { status: 201 })
       }),
     )
 
@@ -183,12 +209,12 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return okJson(store.document)
+        return okJson(wireDocumentDetails(store.document))
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
         ({ request }) => {
-          deletedRowVersion = new URL(request.url).searchParams.get('rowVersion')
+          deletedRowVersion = new URL(request.url).searchParams.get('expectedRowVersion')
           store.document = makeDraftDocument([])
           return new HttpResponse(null, { status: 204 })
         },
@@ -214,7 +240,9 @@ describe('useDocumentAttachmentManager', () => {
     let posts = 0
     let deletes = 0
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+        okJson(wireDocumentDetails(store.document)),
+      ),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () => {
         posts += 1
         return apiJson(signedAttachment(), { status: 201 })
@@ -253,12 +281,12 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return okJson(store.document)
+        return okJson(wireDocumentDetails(store.document))
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
         ({ request }) => {
-          expect(new URL(request.url).searchParams.get('rowVersion')).toBe('1')
+          expect(new URL(request.url).searchParams.get('expectedRowVersion')).toBe('1')
           return errJson(409, {
             code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
             message: 'The document row version did not match.',
@@ -296,7 +324,7 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return okJson(store.document)
+        return okJson(wireDocumentDetails(store.document))
       }),
       http.delete(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments/:attachmentId`,
@@ -329,7 +357,9 @@ describe('useDocumentAttachmentManager', () => {
   it('surfaces the server Arabic detail of a failed upload, not the generic title', async () => {
     const store = { document: makeDraftDocument() }
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(store.document)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+        okJson(wireDocumentDetails(store.document)),
+      ),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () =>
         errJson(409, {
           code: 'DOCUMENT_ATTACHMENTS_SIGNED_ORIGINAL_ALREADY_EXISTS',
@@ -356,7 +386,7 @@ describe('useDocumentAttachmentManager', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return okJson(makeDraftDocument())
+        return okJson(wireDocumentDetails(makeDraftDocument()))
       }),
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`, () => {
         posts += 1

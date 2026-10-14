@@ -18,16 +18,14 @@ const JANUARY_2026 = '2026-01-02T00:00:00.000Z'
 
 function postedReceivingDocument() {
   const inkLine = createWarehouseDocumentLine({
-    availableBalance: 40,
-    lineId: fixtureUuid(232),
-    material: createMaterial({ code: 'IT-CON-INK', nameAr: 'حبر طابعة ليزر' }),
     quantity: 40,
-    unit: { id: fixtureUuid(233), displayName: 'عبوة' },
+    id: fixtureUuid(232),
+    material: createMaterial({ code: 'IT-CON-INK', nameAr: 'حبر طابعة ليزر' }),
+    unitId: fixtureUuid(233),
     unitPrice: 95000,
   })
   const assetLine = createWarehouseDocumentLine({
-    availableBalance: 2,
-    lineId: fixtureUuid(234),
+    id: fixtureUuid(234),
     lineType: 'Asset',
     material: createMaterial({
       code: 'IT-HW-PC-018',
@@ -38,56 +36,74 @@ function postedReceivingDocument() {
     }),
     quantity: 2,
     unitPrice: null,
-    assetInputs: [
-      { assetNumber: 'AST-2026-0112', serialNumber: 'SN-88421-001' },
-      { assetNumber: 'AST-2026-0113', serialNumber: 'SN-88421-002' },
+    assets: [
+      {
+        id: fixtureUuid(239),
+        warehouseId: fixtureUuid(238),
+        assetNumber: 'AST-2026-0112',
+        serialNumber: 'SN-88421-001',
+        acquisitionDate: '2026-01-01',
+        warrantyExpiry: null,
+      },
+      {
+        id: fixtureUuid(240),
+        warehouseId: fixtureUuid(238),
+        assetNumber: 'AST-2026-0113',
+        serialNumber: 'SN-88421-002',
+        acquisitionDate: '2026-01-01',
+        warrantyExpiry: null,
+      },
     ],
   })
   return createWarehouseDocument({
     attachments: [
       createDocumentAttachment({
-        attachmentId: fixtureUuid(235),
-        documentId: WH_DOC_ID,
+        id: fixtureUuid(235),
         originalFilename: 'signed-receiving-2026-0300.pdf',
-        uploadedAt: JANUARY_2026,
+        uploadedAtUtc: JANUARY_2026,
       }),
     ],
-    createdAt: JANUARY_2026,
-    createdBy: { id: fixtureUuid(236), displayName: 'مريم حمادة' },
-    documentId: WH_DOC_ID,
+    id: WH_DOC_ID,
     documentStatus: 'Posted',
     documentType: 'Receiving',
     lines: [inkLine, assetLine],
     paperDocumentNumber: '2026/0300',
     paperDocumentYear: 2026,
-    policy: { signedOriginalSatisfied: true },
-    postedAt: JANUARY_2026,
-    postedBy: { id: fixtureUuid(237), displayName: 'مدير المستودع' },
+    signedCopyAttachmentId: fixtureUuid(235),
+    postedAtUtc: JANUARY_2026,
+    postedBy: fixtureUuid(237),
     rowVersion: 2,
     systemReferenceNumber: 'EIAMS-DOC-2026-0300',
-    warehouse: { id: fixtureUuid(238), displayName: 'المستودع المركزي — دمشق' },
+    warehouseId: fixtureUuid(238),
   })
 }
 
 function submittedIssueDocument() {
   return createWarehouseDocument({
-    documentId: fixtureUuid(240),
+    id: fixtureUuid(240),
     documentStatus: 'Submitted',
     documentType: 'Issue',
+    issueTo: {
+      recipientType: 'OrganizationalUnit',
+      recipientId: fixtureUuid(244),
+      issueReason: 'تأمين سددي',
+      recipientDisplayName: 'وحدة المشتريات',
+      recipientStatus: 'Active',
+    },
+    receivingInfo: null,
     lines: [
       createWarehouseDocumentLine({
-        availableBalance: 12,
-        lineId: fixtureUuid(241),
+        id: fixtureUuid(241),
         material: createMaterial({ code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' }),
         quantity: 6,
-        unit: { id: fixtureUuid(242), displayName: 'رزمة' },
+        unitId: fixtureUuid(242),
       }),
     ],
     paperDocumentNumber: '2026/0451',
     paperDocumentYear: 2026,
     rowVersion: 1,
     systemReferenceNumber: 'EIAMS-DOC-2026-0451',
-    warehouse: { id: fixtureUuid(243), displayName: 'مستودع الفرع — حلب' },
+    warehouseId: fixtureUuid(243),
   })
 }
 
@@ -98,7 +114,12 @@ function PostedReceivingDemo() {
       detailRouteKey="documentReceivingDetail"
       document={document}
       listRouteKey="documentReceiving"
-      policy={document.policy}
+      policy={createDocumentPolicy({
+        documentId: document.id,
+        status: document.documentStatus,
+        rowVersion: document.rowVersion,
+        signedOriginalSatisfied: true,
+      })}
       petalSlot={
         <dl className="grid gap-1 text-sm sm:grid-cols-2">
           <div className="flex justify-between gap-2 rounded border border-border bg-muted/30 px-2 py-1.5">
@@ -126,7 +147,9 @@ function SubmittedIssueDemo() {
       document={document}
       listRouteKey="documentIssue"
       policy={createDocumentPolicy({
-        ...document.policy,
+        documentId: document.id,
+        status: document.documentStatus,
+        rowVersion: document.rowVersion,
         blockers: [createPolicyBlocker()],
         signedOriginalSatisfied: false,
       })}
@@ -136,24 +159,30 @@ function SubmittedIssueDemo() {
 
 function submittedIssueOverBalanceDocument() {
   return createWarehouseDocument({
-    documentId: fixtureUuid(250),
+    id: fixtureUuid(250),
     documentStatus: 'Submitted',
     documentType: 'Issue',
+    issueTo: {
+      recipientType: 'OrganizationalUnit',
+      recipientId: fixtureUuid(244),
+      issueReason: 'تأمين سددي',
+      recipientDisplayName: 'وحدة المشتريات',
+      recipientStatus: 'Active',
+    },
+    receivingInfo: null,
     lines: [
       createWarehouseDocumentLine({
-        availableBalance: 12,
-        lineId: fixtureUuid(251),
+        id: fixtureUuid(251),
         material: createMaterial({ code: 'OFF-SUP-A4', nameAr: 'ورق تصوير A4' }),
         quantity: 25,
-        unit: { id: fixtureUuid(252), displayName: 'رزمة' },
+        unitId: fixtureUuid(252),
       }),
     ],
     paperDocumentNumber: '2026/0462',
     paperDocumentYear: 2026,
-    policy: { signedOriginalSatisfied: true },
     rowVersion: 1,
     systemReferenceNumber: 'EIAMS-DOC-2026-0462',
-    warehouse: { id: fixtureUuid(253), displayName: 'مستودع الفرع — حلب' },
+    warehouseId: fixtureUuid(253),
   })
 }
 
@@ -165,7 +194,15 @@ function SubmittedIssueOverBalanceDemo() {
       document={document}
       listRouteKey="documentIssue"
       policy={createDocumentPolicy({
-        ...document.policy,
+        documentId: document.id,
+        status: document.documentStatus,
+        rowVersion: document.rowVersion,
+        blockers: [
+          createPolicyBlocker({
+            code: 'InventoryBalances.InsufficientQuantity',
+            message: 'Material exceeds the currently available quantity.',
+          }),
+        ],
         signedOriginalSatisfied: true,
       })}
     />

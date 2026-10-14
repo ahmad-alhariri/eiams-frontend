@@ -7,7 +7,7 @@ import type { GallerySection } from '@/app/gallery/gallery-sections'
 import { AssetLineEditor } from '@/shared/documents/components/asset-line-editor'
 import {
   assetLinesSchema,
-  toAssetLineInputs,
+  toCompleteDraftAssetLines,
   type AssetLineDocumentType,
   type AssetLinesContainer,
 } from '@/shared/documents/schemas/document-lines.schemas'
@@ -51,7 +51,7 @@ function DraftDump({ draft }: { draft: object | null }) {
  * Dev-only surface for the asset-line capture editor: a self-contained draft
  * form hosting the shared `lines` FieldArray + a header group (document type
  * + scoped warehouse picker), served by the dev mock API. The submitted dump
- * shows the exact `DocumentLineInput` payload `toAssetLineInputs` produces.
+ * shows the exact `CompleteDraftLine` payload `toCompleteDraftAssetLines` produces.
  */
 function AssetLineEditorDemo() {
   const [documentType, setDocumentType] = useState<AssetLineDocumentType>('Receiving')
@@ -71,7 +71,7 @@ function AssetLineEditorDemo() {
         warehouseId: values.header.warehouseId,
         warehouseDisplayName: warehouse?.payload?.name ?? null,
       },
-      assetLines: toAssetLineInputs(values.lines),
+      assetLines: toCompleteDraftAssetLines(values.lines),
     })
   }
 

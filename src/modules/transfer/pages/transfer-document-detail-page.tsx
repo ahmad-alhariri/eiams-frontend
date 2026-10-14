@@ -3,7 +3,7 @@ import { useParams } from 'react-router'
 import { DetailField } from '@/shared/layout/detail-field'
 import DocumentDetailPage from '@/shared/documents/pages/document-detail-page'
 import { useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
-import type { TransferInfo } from '@/shared/types/generated/eiams-v1'
+import type { TransferInfoResponse } from '@/shared/documents/types/document-wire.types'
 
 /**
  * Transfer document detail (e17-t06).
@@ -14,6 +14,9 @@ import type { TransferInfo } from '@/shared/types/generated/eiams-v1'
  * and the policy-driven lifecycle action bar. The petal query shares the
  * detail cache key with the shell, so no extra round-trip occurs after first
  * load.
+ *
+ * `transferInfo` is NULLABLE on the real detail projection (see the Issue seam
+ * for the reasoning), so an absent petal renders nothing.
  */
 export default function TransferDocumentDetailPage() {
   const { documentId } = useParams<{ documentId: string }>()
@@ -23,18 +26,21 @@ export default function TransferDocumentDetailPage() {
   return (
     <DocumentDetailPage
       petalSlot={
-        document === undefined || document.transferInfo === undefined ? null : (
-          <TransferPetalView info={document.transferInfo} />
-        )
+        document?.transferInfo == null ? null : <TransferPetalView info={document.transferInfo} />
       }
     />
   )
 }
 
-function TransferPetalView({ info }: { info: TransferInfo }) {
+function TransferPetalView({ info }: { info: TransferInfoResponse }) {
   return (
     <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-      <DetailField label="مستودع الوجهة">{info.destinationWarehouseName}</DetailField>
+      {/* The projection carries the destination warehouse as an id only — there is no
+          display reference on the wire, so the id is shown rather than a name the
+          server never sent. */}
+      <DetailField label="مستودع الوجهة" ltr>
+        <span className="break-all font-mono text-xs">{info.destinationWarehouseId}</span>
+      </DetailField>
       <DetailField label="سبب التحويل">{info.transferReason}</DetailField>
     </dl>
   )

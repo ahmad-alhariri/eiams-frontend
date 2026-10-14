@@ -152,11 +152,17 @@ export default defineConfig([
     // the auth session key that the standard explicitly assigns to the auth
     // module — the `*.service.ts` convention is what makes this scope exact, and
     // is a reason to keep that naming.
+    //
+    // `axios-transport.ts` is deliberately absent even though the glob would match
+    // it: it is the ONE place allowed to unwrap the envelope (its `request`
+    // resolves `response.data.data` into the payload every other layer then
+    // receives). The guard targets SERVICES, not the adapter they all share.
     files: [
       'src/modules/*/services/*.service.ts',
       'src/shared/documents/*-service.ts',
       'src/shared/documents/*-transport.ts',
-      'src/shared/services/*-transport.ts',
+      'src/shared/api/api-transport.ts',
+      'src/shared/api/transport.ts',
     ],
     rules: {
       'no-restricted-imports': [

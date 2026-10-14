@@ -5,7 +5,8 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { createDocumentAttachmentService } from '@/shared/documents/document-attachment-service'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { readRequestForm } from '@/test/msw/multipart-parser'
-import { createDocumentAttachment, fixtureUuid } from '@/test/msw/factories'
+import { fixtureUuid } from '@/test/msw/factories'
+import { wireAttachment } from '@/test/msw/document-wire-fixtures'
 import { apiJson, errJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
@@ -30,12 +31,9 @@ function setupService() {
 }
 
 describe('document attachment transport', () => {
-  it('uploads multipart file, attachmentType and rowVersion fields to the document URL', async () => {
+  it('uploads multipart file, attachmentType and expectedRowVersion fields to the document URL', async () => {
     const { service } = setupService()
-    const attachment = createDocumentAttachment({
-      attachmentId: ATTACHMENT_ID,
-      documentId: DOCUMENT_ID,
-    })
+    const attachment = wireAttachment({ attachmentId: ATTACHMENT_ID })
     const capturedUrl = vi.fn<() => URL>()
     const capturedForm = vi.fn<() => FormData>()
 
@@ -53,9 +51,13 @@ describe('document attachment transport', () => {
     const file = new File([new Uint8Array([1, 2, 3, 4])], 'signed.pdf', {
       type: 'application/pdf',
     })
-    await expect(service.uploadAttachment(DOCUMENT_ID, file, 'SignedOriginal', 3)).resolves.toEqual(
-      attachment,
-    )
+    await expect(
+      service.uploadAttachment(DOCUMENT_ID, {
+        attachmentType: 'SignedOriginal',
+        expectedRowVersion: 3,
+        file,
+      }),
+    ).resolves.toEqual(attachment)
 
     expect(capturedUrl().pathname).toBe(
       `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`,
@@ -69,13 +71,13 @@ describe('document attachment transport', () => {
     // browser dev-mode sees real names and bytes via native formData().
     expect(sentFile).toMatchObject({ name: 'blob', type: 'application/pdf' })
     expect(capturedForm().get('attachmentType')).toBe('SignedOriginal')
-    expect(capturedForm().get('rowVersion')).toBe('3')
+    expect(capturedForm().get('expectedRowVersion')).toBe('3')
   })
 
   it('url-encodes the document id in the upload path', async () => {
     const { service } = setupService()
     const documentId = 'doc id / ١'
-    const attachment = createDocumentAttachment({ documentId: fixtureUuid(60) })
+    const attachment = wireAttachment({ attachmentId: fixtureUuid(60) })
 
     server.use(
       http.post(
@@ -90,11 +92,15 @@ describe('document attachment transport', () => {
     )
 
     await expect(
-      service.uploadAttachment(documentId, new File(['x'], 'note.txt'), 'Supporting', 1),
+      service.uploadAttachment(documentId, {
+        attachmentType: 'Supporting',
+        expectedRowVersion: 1,
+        file: new File(['x'], 'note.txt'),
+      }),
     ).resolves.toEqual(attachment)
   })
 
-  it('deletes an attachment with the rowVersion query parameter and resolves on 204', async () => {
+  it('deletes an attachment with the expectedRowVersion query parameter and resolves on 204', async () => {
     const { service } = setupService()
     const requested = vi.fn()
 
@@ -112,7 +118,15 @@ describe('document attachment transport', () => {
 
     expect(requested).toHaveBeenCalledOnce()
     const { url } = requested.mock.calls[0]?.[0] as unknown as { url: URL }
-    expect(url.searchParams.get('rowVersion')).toBe('7')
+    expect(url.searchParams.get('expectedRowVersion')).toBe('7')
+  })
+
+  it('builds the content path for a browser download, outside the JSON envelope', async () => {
+    const { service } = setupService()
+
+    expect(service.attachmentContentPath('doc id / ١', ATTACHMENT_ID)).toBe(
+      `/warehouse-documents/doc%20id%20%2F%20%D9%A1/attachments/${ATTACHMENT_ID}/content`,
+    )
   })
 
   it('rejects a forbidden delete with the Arabic 403 envelope', async () => {

@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
+import { wireDocumentSummary } from '@/test/msw/document-wire-fixtures'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -53,7 +54,9 @@ describe('ReceivingDocumentsListPage', () => {
       http.get(`${API_BASE_URL}/warehouse-documents`, async ({ request }) => {
         const url = new URL(request.url)
         expect(url.searchParams.get('documentType')).toBe('Receiving')
-        return okPageJson([document])
+        // The list read is served as the wire summary. It carries `warehouseId`
+        // and no display reference, which is why the row shows the id.
+        return okPageJson([wireDocumentSummary(document)])
       }),
       http.get(`${API_BASE_URL}/warehouses`, () => okJson([warehouse])),
     )
@@ -68,7 +71,9 @@ describe('ReceivingDocumentsListPage', () => {
         screen.getByRole('link', { name: document.systemReferenceNumber }),
       ).toBeInTheDocument(),
     )
-    expect(screen.getByText(document.warehouse.displayName)).toBeInTheDocument()
+    // The list projection identifies a warehouse by id only — it carries no display
+    // reference — so the row renders the id the server actually sent.
+    expect(screen.getByText(document.warehouse.id)).toBeInTheDocument()
     expect(screen.getByText('مسودة')).toBeInTheDocument()
   })
 

@@ -1,18 +1,20 @@
-import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
+import { useMutation, type UseMutationResult } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { documentService } from '@/shared/documents/document-transport'
-import {
-  documentQueryKeys,
-  useInvalidateDocumentDetail,
-} from '@/shared/documents/use-document-queries'
+import { policyAdvisoryMessageAr } from '@/shared/documents/document-policy-gates'
+import { useInvalidateDocumentDetail } from '@/shared/documents/use-document-queries'
+import type {
+  DocumentPolicyAdvisory,
+  PostDocumentResponse,
+  Uuid,
+} from '@/shared/documents/types/document-wire.types'
 import { normalizeApiError } from '@/shared/services/api-error'
 import {
   isConflictError,
   withIdempotencyKey,
   type IdempotencyKey,
 } from '@/shared/services/mutation-safety'
-import type { DocumentActionResult, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import { toast } from '@/shared/ui/toast-manager'
 
 /** The six transition actions the detail page can execute (Edit/attachment actions flow elsewhere). */
@@ -34,9 +36,26 @@ export interface LifecycleActionVariables {
   idempotencyKey: IdempotencyKey
 }
 
+/**
+ * What a successful action actually returned.
+ *
+ * The real backend is deliberately asymmetric here and the distinction is not
+ * cosmetic: `submit` / `return-to-draft` / `reject` / `cancel` answer
+ * `EmptyResponse`, `post` answers `PostDocumentResponse` (which carries the
+ * post-time `warnings[]` the policy read will NOT show again, because a posted
+ * document is no longer a `post` candidate), and `reversals` answers `201 { id }`
+ * for the NEW compensating document. Nothing is inferred locally: D-LIFE-01
+ * forbids patching the cached document from a transition the UI guessed, so a
+ * caller re-reads the document, policy and history after every acknowledgement.
+ */
+export type LifecycleActionResult =
+  | { readonly kind: 'Acknowledged' }
+  | { readonly kind: 'Posted'; readonly response: PostDocumentResponse }
+  | { readonly kind: 'Reversed'; readonly reversalDocumentId: Uuid }
+
 export interface LifecycleActionMutationApi {
   mutate: (variables: LifecycleActionVariables) => void
-  mutateAsync: (variables: LifecycleActionVariables) => Promise<DocumentActionResult>
+  mutateAsync: (variables: LifecycleActionVariables) => Promise<LifecycleActionResult>
   isPending: boolean
   error: Error | null
   reset: () => void
@@ -60,45 +79,74 @@ const SUCCESS_TOAST_TITLES_AR: Readonly<Record<LifecycleActionKind, string>> = {
  */
 const CONFLICT_GUIDANCE_AR = 'المستند عدّله مستخدم آخر. أعد تحميل البيانات'
 
-function runLifecycleAction(
+/**
+ * Joins the post-time advisories the server returned into one Arabic sentence.
+ * Advisory copy is resolved by CODE from the governed table; an unmapped code
+ * contributes nothing rather than leaking the server's English prose.
+ */
+function postWarningsDescriptionAr(warnings: readonly DocumentPolicyAdvisory[]): string | null {
+  const sentences = warnings
+    .map((advisory) => policyAdvisoryMessageAr(advisory))
+    .filter((message): message is string => message !== null)
+  return sentences.length === 0 ? null : sentences.join(' ')
+}
+
+async function runLifecycleAction(
   kind: LifecycleActionKind,
   documentId: string,
   variables: LifecycleActionVariables,
-): Promise<DocumentActionResult> {
+): Promise<LifecycleActionResult> {
   const idempotentRequest = withIdempotencyKey(variables.idempotencyKey)
+  const reason = variables.reason ?? ''
   switch (kind) {
     case 'Submit':
-      return documentService.submitDocument(documentId, variables.rowVersion, idempotentRequest)
+      await documentService.submitDocument(documentId, variables.rowVersion, idempotentRequest)
+      return { kind: 'Acknowledged' }
     case 'Post':
-      return documentService.postDocument(documentId, variables.rowVersion, idempotentRequest)
+      return {
+        kind: 'Posted',
+        response: await documentService.postDocument(
+          documentId,
+          variables.rowVersion,
+          idempotentRequest,
+        ),
+      }
     case 'Revise':
-      return documentService.reviseDocument(documentId, variables.rowVersion, idempotentRequest)
+      // The live route is `POST /{documentId}/return-to-draft` and it REQUIRES a
+      // reason; there is no reason-less revise.
+      await documentService.returnToDraft(
+        documentId,
+        variables.rowVersion,
+        reason,
+        idempotentRequest,
+      )
+      return { kind: 'Acknowledged' }
     case 'Reject':
-      return documentService.rejectDocument(
+      await documentService.rejectDocument(
         documentId,
         variables.rowVersion,
-        variables.reason ?? '',
+        reason,
         idempotentRequest,
       )
+      return { kind: 'Acknowledged' }
     case 'Cancel':
-      return documentService.cancelDocument(
+      await documentService.cancelDocument(
         documentId,
         variables.rowVersion,
-        variables.reason ?? '',
+        reason,
         idempotentRequest,
       )
+      return { kind: 'Acknowledged' }
     case 'Reverse':
-      return documentService.reverseDocument(
-        documentId,
-        variables.rowVersion,
-        variables.reason ?? '',
-        idempotentRequest,
-      )
+      return {
+        kind: 'Reversed',
+        reversalDocumentId: await documentService.reverseDocument(documentId, idempotentRequest),
+      }
   }
 }
 
 function toLifecycleActionApi(
-  mutation: UseMutationResult<DocumentActionResult, Error, LifecycleActionVariables>,
+  mutation: UseMutationResult<LifecycleActionResult, Error, LifecycleActionVariables>,
 ): LifecycleActionMutationApi {
   return {
     mutate: mutation.mutate,
@@ -111,19 +159,19 @@ function toLifecycleActionApi(
 }
 
 /**
- * One mutation per lifecycle action kind. On success the server-returned
- * document is written into the scoped detail branch (server-authoritative, no
- * refetch flicker) and detail/history/policy are invalidated; every failure is
- * surfaced as an Arabic toast. Without an active scope the cache write is
- * guarded away (the detail queries are disabled anyway); without a documentId
- * the mutation fails fast.
+ * One mutation per lifecycle action kind. On success the server is
+ * authoritative: no timeline event is appended and no cached document is
+ * patched — the scoped detail branch (detail + history + policy) is invalidated
+ * and refetched, which is the only state that can be trusted after a transition
+ * (D-LIFE-01). Every failure is surfaced as an Arabic toast. Without an active
+ * scope the invalidation is guarded away (the detail queries are disabled
+ * anyway); without a documentId the mutation fails fast.
  */
 function useDocumentLifecycleAction(kind: LifecycleActionKind, documentId: string | null) {
-  const queryClient = useQueryClient()
   const { activeScopeCacheKey } = useActiveScopeContext()
   const invalidateDetail = useInvalidateDocumentDetail()
 
-  return useMutation<DocumentActionResult, Error, LifecycleActionVariables>({
+  return useMutation<LifecycleActionResult, Error, LifecycleActionVariables>({
     mutationFn: (variables) => {
       if (documentId === null) {
         return Promise.reject(new Error('documentId is required'))
@@ -131,14 +179,21 @@ function useDocumentLifecycleAction(kind: LifecycleActionKind, documentId: strin
       return runLifecycleAction(kind, documentId, variables)
     },
     onSuccess: (result) => {
-      toast.success({ title: SUCCESS_TOAST_TITLES_AR[kind] })
+      const title = SUCCESS_TOAST_TITLES_AR[kind]
+      if (result.kind === 'Posted') {
+        const description = postWarningsDescriptionAr(result.response.warnings)
+        toast.success({ title, ...(description === null ? {} : { description }) })
+      } else {
+        toast.success({ title })
+      }
       if (documentId === null || activeScopeCacheKey === undefined) {
         return
       }
-      queryClient.setQueryData<WarehouseDocument>(
-        documentQueryKeys.document(activeScopeCacheKey, documentId),
-        result.document,
-      )
+      // One invalidation, not two: `useInvalidateDocumentDetail` already covers
+      // the whole `document(scope, id)` prefix, which is the detail, history AND
+      // policy keys. Issuing it a second time makes every one of those three
+      // refetch twice per action, which is three redundant round-trips on a
+      // slow government link and nothing gained.
       void invalidateDetail(documentId)
     },
     onError: (error) => {

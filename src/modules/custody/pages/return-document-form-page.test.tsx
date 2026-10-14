@@ -1,5 +1,4 @@
 ﻿import { QueryClientProvider } from '@tanstack/react-query'
-import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -8,7 +7,14 @@ import { describe, expect, it, vi } from 'vitest'
 
 import ReturnDocumentFormPage from './return-document-form-page'
 import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
-import { createWarehouse, createWarehouseCapability, fixtureUuid } from '@/test/msw/factories'
+import { wireDocumentDetails } from '@/test/msw/document-wire-fixtures'
+import {
+  createWarehouse,
+  createWarehouseCapability,
+  createWarehouseDocument,
+  fixtureUuid,
+} from '@/test/msw/factories'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { ROUTE_PATHS } from '@/config/routes'
 import { createQueryClient } from '@/shared/services/query.client'
@@ -64,21 +70,33 @@ function useDocumentHandlers() {
         }),
       ]),
     ),
-    http.post(`${API_BASE_URL}/warehouse-documents`, async ({ request }) => {
+    // A form with lines to save must use `complete-draft`: it is the only write
+    // that creates a document together with its lines, and it answers the whole
+    // detail read. The bare `POST /warehouse-documents` creates an EMPTY document
+    // and answers `201 { id }`, which is why stubbing it left this journey on the
+    // form.
+    http.post(`${API_BASE_URL}/warehouse-documents/complete-draft`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>
       expect(body['documentType']).toBe('Return')
       const returnInfo = body['returnInfo'] as Record<string, unknown>
       expect(returnInfo['originalIssueDocumentId']).toBe(ISSUE_DOC_ID)
-      return apiJson(
-        {
-          documentId: RETURN_DOC_ID,
-          documentNumber: 'RETURN-2026-0001',
-          documentType: 'Return',
-          status: 'Draft',
-        },
-        { status: 201 },
+      return okJson(
+        wireDocumentDetails(
+          createWarehouseDocument({
+            documentId: RETURN_DOC_ID,
+            documentType: 'Return',
+            documentStatus: 'Draft',
+            systemReferenceNumber: 'EIAMS-RTN-2026-0001',
+          }),
+        ),
       )
     }),
+    // The paper number/year are NOT part of the draft command; they live on
+    // their own route, so the form writes them in a second call after the
+    // document exists.
+    http.put(`${API_BASE_URL}/warehouse-documents/${RETURN_DOC_ID}/paper-reference`, () =>
+      okJson({}),
+    ),
   )
 }
 

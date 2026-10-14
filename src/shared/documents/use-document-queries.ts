@@ -2,10 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
-import {
-  documentService,
-  type ListWarehouseDocumentsQuery,
-} from '@/shared/documents/document-transport'
+import { documentService } from '@/shared/documents/document-transport'
+import type { ListWarehouseDocumentsQuery } from '@/shared/documents/types/document-wire.types'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 

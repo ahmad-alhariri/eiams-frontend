@@ -4,7 +4,7 @@ import { ROUTE_PATHS } from '@/config/routes'
 import { DetailField } from '@/shared/layout/detail-field'
 import DocumentDetailPage from '@/shared/documents/pages/document-detail-page'
 import { useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
-import type { ReturnInfo } from '@/shared/types/generated/eiams-v1'
+import type { ReturnInfoResponse } from '@/shared/documents/types/document-wire.types'
 
 /**
  * Return document detail (e19-t07).
@@ -15,6 +15,14 @@ import type { ReturnInfo } from '@/shared/types/generated/eiams-v1'
  * policy-driven lifecycle action bar (Draft → Submitted → Posted, with
  * Reject/Cancel paths). The petal query shares the detail cache key with the
  * shell, so no extra round-trip occurs after first load.
+ *
+ * `returnInfo` is NULLABLE on the real detail projection (see the Issue seam for
+ * the reasoning), so an absent petal renders nothing.
+ *
+ * The projection also dropped two fields the snapshot had: `assetIds` (the
+ * returned assets are on the document's own `lines[].selectedAssets`, rendered by
+ * the shared lines card) and `originalIssueReference` (the live route has no slot
+ * for it). Neither is faked here.
  */
 export default function ReturnDocumentDetailPage() {
   const { documentId } = useParams<{ documentId: string }>()
@@ -24,17 +32,13 @@ export default function ReturnDocumentDetailPage() {
   return (
     <DocumentDetailPage
       petalSlot={
-        document === undefined || document.returnInfo === undefined ? null : (
-          <ReturnPetalView info={document.returnInfo} />
-        )
+        document?.returnInfo == null ? null : <ReturnPetalView info={document.returnInfo} />
       }
     />
   )
 }
 
-function ReturnPetalView({ info }: { info: ReturnInfo }) {
-  const assetIds = info.assetIds ?? []
-
+function ReturnPetalView({ info }: { info: ReturnInfoResponse }) {
   return (
     <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
       <DetailField label="سند الصرف الأصلي" ltr>
@@ -45,27 +49,16 @@ function ReturnPetalView({ info }: { info: ReturnInfo }) {
           {info.originalIssueDocumentId}
         </Link>
       </DetailField>
-      <DetailField label="رقم سند الصرف الورقي" ltr>
-        {info.originalIssueReference ?? '—'}
-      </DetailField>
       <DetailField label="سبب الإرجاع">{info.returnReason}</DetailField>
-      {assetIds.length > 0 ? (
-        <DetailField label="الأصول المعادة">
-          <ul className="grid gap-1">
-            {assetIds.map((assetId) => (
-              <li key={assetId}>
-                <Link
-                  className="break-all font-mono text-sm underline-offset-4 hover:underline"
-                  dir="ltr"
-                  to={ROUTE_PATHS.assetDetail.replace(':assetId', assetId)}
-                >
-                  {assetId}
-                </Link>
-              </li>
-            ))}
-          </ul>
+      {info.originalRecipientId === null ? null : (
+        <DetailField label="الجهة الأصلية">
+          {info.originalRecipientDisplayName ?? (
+            <span dir="ltr" className="break-all font-mono text-xs">
+              {info.originalRecipientId}
+            </span>
+          )}
         </DetailField>
-      ) : null}
+      )}
     </dl>
   )
 }

@@ -1,20 +1,23 @@
 import { useMutation } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import type { PendingAttachmentUpload } from '@/shared/documents/attachment-panel'
+import {
+  attachmentService,
+  type AttachmentType,
+} from '@/shared/documents/document-attachment-service'
 import type {
-  AttachmentPanelPolicy,
-  PendingAttachmentUpload,
-} from '@/shared/documents/attachment-panel'
-import { attachmentService } from '@/shared/documents/document-attachment-service'
+  DocumentAttachmentResponse,
+  WarehouseDocumentDetails,
+} from '@/shared/documents/types/document-wire.types'
 import {
   useDocumentDetailQuery,
   useInvalidateDocumentDetail,
 } from '@/shared/documents/use-document-queries'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { isConflictError } from '@/shared/services/mutation-safety'
-import type { AttachmentType, DocumentAttachment } from '@/shared/types/generated/eiams-v1'
 
-const EMPTY_ATTACHMENTS: readonly DocumentAttachment[] = []
+const EMPTY_ATTACHMENTS: readonly DocumentAttachmentResponse[] = []
 
 /**
  * Arabic feedback for a failed attachment mutation: the server's own
@@ -36,14 +39,19 @@ function attachmentErrorMessageAr(error: unknown): string {
  * read/write flows through the detail query and the attachment mutations.
  */
 export interface DocumentAttachmentManager {
-  attachments: readonly DocumentAttachment[]
+  attachments: readonly DocumentAttachmentResponse[]
   pendingUploads: readonly PendingAttachmentUpload[]
   onUpload: (files: File[], attachmentType: AttachmentType) => void
-  onRemove: (attachment: DocumentAttachment) => void
+  onRemove: (attachment: DocumentAttachmentResponse) => void
   onCancelPending: (file: File) => void
   isUploading: boolean
   uploadError: string | null
-  policy: AttachmentPanelPolicy | null
+  /**
+   * NOTE: there is deliberately no `policy` member. The signed-original gate is
+   * SERVER-AUTHORITATIVE (D-ATT-01) and lives on the policy projection, which is a
+   * separate read: `WarehouseDocumentDetails` carries no embedded policy. The
+   * detail page passes the policy it already fetched straight to the panel.
+   */
   readOnly: boolean
   disabled: boolean
   /**
@@ -56,7 +64,7 @@ export interface DocumentAttachmentManager {
   deleteError: string | null
 }
 
-function isUploadable(document: { documentStatus: string } | undefined): boolean {
+function isUploadable(document: WarehouseDocumentDetails | undefined): boolean {
   return document?.documentStatus === 'Draft'
 }
 
@@ -111,12 +119,11 @@ export function useDocumentAttachmentManager(documentId: string | null): Documen
 
   const uploadMutation = useMutation({
     mutationFn: ({ file, attachmentType }: { file: File; attachmentType: AttachmentType }) =>
-      attachmentService.uploadAttachment(
-        documentId ?? '',
+      attachmentService.uploadAttachment(documentId ?? '', {
         file,
         attachmentType,
-        document?.rowVersion ?? 0,
-      ),
+        expectedRowVersion: document?.rowVersion ?? 0,
+      }),
     onSuccess: (_attachment, { file }) => {
       setUploadError(null)
       setPendingUploads((previous) => previous.filter((pending) => pending.file !== file))
@@ -134,10 +141,10 @@ export function useDocumentAttachmentManager(documentId: string | null): Documen
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (attachment: DocumentAttachment) =>
+    mutationFn: (attachment: DocumentAttachmentResponse) =>
       attachmentService.deleteAttachment(
         documentId ?? '',
-        attachment.attachmentId,
+        attachment.id,
         document?.rowVersion ?? 0,
       ),
     onSuccess: () => {
@@ -171,7 +178,7 @@ export function useDocumentAttachmentManager(documentId: string | null): Documen
   )
 
   const onRemove = useCallback(
-    (attachment: DocumentAttachment) => {
+    (attachment: DocumentAttachmentResponse) => {
       if (documentId === null || !isUploadable(document)) return
 
       deleteMutation.mutate(attachment)
@@ -195,12 +202,6 @@ export function useDocumentAttachmentManager(documentId: string | null): Documen
     onCancelPending,
     isUploading: uploadMutation.isPending,
     uploadError,
-    policy: document
-      ? {
-          signedOriginalSatisfied: document.policy.signedOriginalSatisfied,
-          blockers: document.policy.blockers,
-        }
-      : null,
     readOnly: document?.documentStatus !== 'Draft',
     disabled: document === undefined || detailQuery.isFetching,
     deleteError,

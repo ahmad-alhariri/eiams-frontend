@@ -3,14 +3,14 @@ import { useState } from 'react'
 import type { GallerySection } from '@/app/gallery/gallery-sections'
 import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
 import { StatusBadge } from '@/shared/feedback/status-badge'
+import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
 import type {
-  ActionAvailability,
-  DocumentActionType,
+  DocumentActionAvailability,
   DocumentPolicy,
+  DocumentPolicyAdvisory,
+  DocumentPolicyBlocker,
   DocumentStatus,
-  OperationalAdvisory,
-  PolicyBlocker,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/shared/documents/types/document-wire.types'
 import { Button } from '@/shared/ui/button'
 import { Checkbox } from '@/shared/ui/checkbox'
 
@@ -28,29 +28,37 @@ const DEMO_ACTION_LABELS: Record<string, string> = {
   Reverse: 'عكس',
 }
 
-function enabledAction(action: DocumentActionType, reasonRequired: boolean): ActionAvailability {
+function enabledAction(
+  action: DocumentActionType,
+  reasonRequired: boolean,
+): DocumentActionAvailability {
   return {
     action,
     allowed: true,
     confirmationRequired: true,
     presentation: 'Enabled',
-    reasonAr: null,
+    reason: null,
     reasonCode: null,
     reasonRequired,
   }
 }
 
+/**
+ * The live backend states a disabled action's reason by CODE plus an English
+ * sentence; the bar resolves its Arabic tooltip from the code through the
+ * governed `error-copy-ar.ts` table, so the demo uses the real codes rather than
+ * inventing its own (an invented code would render no tooltip at all).
+ */
 function disabledAction(
   action: DocumentActionType,
-  reasonAr: string,
   reasonCode: string,
-): ActionAvailability {
+): DocumentActionAvailability {
   return {
     action,
     allowed: false,
     confirmationRequired: true,
     presentation: 'Disabled',
-    reasonAr,
+    reason: null,
     reasonCode,
     reasonRequired: false,
   }
@@ -61,48 +69,44 @@ function buildDemoPolicy(
   signedOriginalSatisfied: boolean,
   balanceSufficient: boolean,
 ): DocumentPolicy {
-  const actions: ActionAvailability[] = []
-  const blockers: PolicyBlocker[] = []
-  const advisories: OperationalAdvisory[] = []
+  const actions: DocumentActionAvailability[] = []
+  const blockers: DocumentPolicyBlocker[] = []
+  const warnings: DocumentPolicyAdvisory[] = []
 
   if (status === 'Draft') {
     actions.push(
       enabledAction('Submit', false),
-      disabledAction('Post', 'لا يمكن الترحيل قبل إرسال المستند للترحيل', 'state_not_submitted'),
+      disabledAction('Post', 'STATE_OR_PERMISSION_NOT_ALLOWED'),
       {
-        ...disabledAction('Reverse', 'لا يمكن عكس مستند غير مرحّل', 'state_not_posted'),
+        ...disabledAction('Reverse', 'STATE_OR_PERMISSION_NOT_ALLOWED'),
         presentation: 'Hidden',
       },
     )
     if (!signedOriginalSatisfied) {
       blockers.push({
-        code: 'signed_original_missing',
-        messageAr: 'يجب إرفاق النسخة الموقعة من المستند قبل الإرسال',
-        field: null,
+        action: 'Submit',
+        code: 'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED',
+        message: 'The signed copy of the document is required before posting.',
       })
     }
   } else if (status === 'Submitted') {
     if (!signedOriginalSatisfied) {
       blockers.push({
-        code: 'signed_original_missing',
-        messageAr: 'يجب إرفاق النسخة الموقعة من المستند قبل الترحيل',
-        field: null,
+        action: 'Post',
+        code: 'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED',
+        message: 'The signed copy of the document is required before posting.',
       })
     }
     if (!balanceSufficient) {
       blockers.push({
-        code: 'insufficient_balance',
-        messageAr: 'الرصيد غير كافٍ لتغطية بنود الصرف',
-        field: null,
+        action: 'Post',
+        code: 'INVENTORY_BALANCES_NOT_FOUND',
+        message: 'The available balance cannot cover the requested quantities.',
       })
     }
-    advisories.push({
+    warnings.push({
       code: 'ActiveSoftFreeze',
-      severity: 'Warning',
-      messageAr: 'يوجد جرد نشط على هذا المستودع وقد تتجمد الحركة مؤقتاً',
-      scopeSummaryAr: 'مستودع دمشق المركزي',
-      countReference: 'JC-2026-0114',
-      overlapState: 'Provisional',
+      message: 'An inventory count is running on this warehouse.',
       countId: 'count-1',
       warehouseId: 'wh-1',
     })
@@ -112,9 +116,8 @@ function buildDemoPolicy(
         ? disabledAction(
             'Post',
             !signedOriginalSatisfied
-              ? 'يجب إرفاق النسخة الموقعة من المستند قبل الترحيل'
-              : 'الرصيد غير كافٍ لتغطية بنود الصرف',
-            !signedOriginalSatisfied ? 'signed_original_missing' : 'insufficient_balance',
+              ? 'WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED'
+              : 'INVENTORY_BALANCES_NOT_FOUND',
           )
         : enabledAction('Post', false),
       enabledAction('Reject', true),
@@ -128,13 +131,12 @@ function buildDemoPolicy(
 
   return {
     documentId: 'demo-document-001',
-    documentStatus: status,
-    evaluatedAt: new Date().toISOString(),
-    policyKind: 'Generic',
+    status,
+    evaluatedAtUtc: new Date().toISOString(),
     rowVersion: 1,
     signedOriginalSatisfied,
     actions,
-    advisories,
+    warnings,
     blockers,
   }
 }

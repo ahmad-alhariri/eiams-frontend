@@ -15,7 +15,7 @@ import {
   type QuantityLineCapabilityGate,
 } from '@/shared/documents/components/quantity-line-editor'
 import {
-  buildDraftRequest,
+  buildCompleteDraftRequest,
   DocumentHeaderSection,
   documentHeaderSchema,
 } from '@/shared/documents/document-header-form'
@@ -24,12 +24,12 @@ import {
   createEmptyQuantityLine,
   linesHaveUniqueMaterials,
   quantityLineSchema,
-  toAssetLineInputs,
-  toDocumentLineInputs,
+  toCompleteDraftAssetLines,
+  toCompleteDraftLines,
 } from '@/shared/documents/schemas/document-lines.schemas'
 import {
   documentDraftMutationError,
-  useCreateDocumentMutation,
+  useCompleteDraftMutation,
 } from '@/shared/documents/use-document-draft-mutations'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
@@ -112,7 +112,7 @@ function combineCapabilityGates(
  */
 export default function OpeningDocumentFormPage() {
   const navigate = useNavigate()
-  const createMutation = useCreateDocumentMutation()
+  const createMutation = useCompleteDraftMutation()
   const [quantityCapabilityGate, setQuantityCapabilityGate] = useState<QuantityLineCapabilityGate>({
     status: 'ready',
   })
@@ -153,18 +153,29 @@ export default function OpeningDocumentFormPage() {
     }
     form.clearErrors('lines')
     void form.handleSubmit((values) => {
-      const draft = buildDraftRequest<'Opening'>({
+      const request = buildCompleteDraftRequest<'Opening'>({
         documentType: 'Opening',
         header: values.header,
-        lines: [...toDocumentLineInputs(values.lines), ...toAssetLineInputs(values.assetLines)],
+        lines: [
+          ...toCompleteDraftLines(values.lines),
+          ...toCompleteDraftAssetLines(values.assetLines),
+        ],
         petals: {},
-        rowVersion: 0,
       })
-      createMutation.mutate(draft, {
-        onSuccess: (document) => {
-          navigate(ROUTE_PATHS.documentOpeningDetail.replace(':documentId', document.documentId))
+      createMutation.mutate(
+        {
+          request,
+          paperReference: {
+            paperDocumentNumber: values.header.paperDocumentNumber,
+            paperDocumentYear: values.header.paperDocumentYear,
+          },
         },
-      })
+        {
+          onSuccess: (document) => {
+            navigate(ROUTE_PATHS.documentOpeningDetail.replace(':documentId', document.id))
+          },
+        },
+      )
     })(event)
   }
 

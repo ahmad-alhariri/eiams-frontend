@@ -26,7 +26,8 @@ import {
   deriveLifecycleEvents,
   fixtureUuid,
 } from '@/test/msw/factories'
-import { applyDocumentAction } from '@/test/msw/warehouse-document-handlers'
+import { applyDocumentAction, toWirePolicy } from '@/test/msw/warehouse-document-handlers'
+import { wireDocumentDetails, wireDocumentHistory } from '@/test/msw/document-wire-fixtures'
 import { apiJson, okJson, toWireErrorResponse } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
@@ -253,21 +254,26 @@ describe('F-1 — a failed policy read degrades only the policy-dependent surfac
     let policyShouldFail = true
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(document)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+        okJson(wireDocumentDetails(document)),
+      ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        okJson({
-          documentId: DOCUMENT_ID,
-          currentStatus: document.documentStatus,
-          currentRowVersion: document.rowVersion,
-          events: deriveLifecycleEvents(document),
-        }),
+        okJson(
+          wireDocumentHistory(deriveLifecycleEvents(document), {
+            documentId: DOCUMENT_ID,
+            currentStatus: document.documentStatus,
+            currentRowVersion: document.rowVersion,
+          }),
+        ),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => {
         policyRequests += 1
         if (policyShouldFail) {
           return new HttpResponse(null, { status: 500 })
         }
-        return okJson(policy)
+        // `toWirePolicy` projects a document's policy, so the recovered read is served
+        // from a document carrying the draft policy this case stands for.
+        return okJson(toWirePolicy({ ...document, policy }))
       }),
     )
 
@@ -317,17 +323,20 @@ describe('F-1 — a failed policy read degrades only the policy-dependent surfac
     const document = detailFixture()
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(document)),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
+        okJson(wireDocumentDetails(document)),
+      ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-        okJson({
-          documentId: DOCUMENT_ID,
-          currentStatus: document.documentStatus,
-          currentRowVersion: document.rowVersion,
-          events: deriveLifecycleEvents(document),
-        }),
+        okJson(
+          wireDocumentHistory(deriveLifecycleEvents(document), {
+            documentId: DOCUMENT_ID,
+            currentStatus: document.documentStatus,
+            currentRowVersion: document.rowVersion,
+          }),
+        ),
       ),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        okJson(draftPolicy()),
+        okJson(toWirePolicy(detailFixture())),
       ),
     )
 
@@ -511,29 +520,31 @@ describe('verify-only — the shared document lifecycle action path already comp
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         detailRequests += 1
-        return okJson(store.document)
+        return okJson(wireDocumentDetails(store.document))
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => {
         historyRequests += 1
-        return okJson({
-          documentId: DOCUMENT_ID,
-          currentStatus: store.document.documentStatus,
-          currentRowVersion: store.document.rowVersion,
-          events: deriveLifecycleEvents(store.document),
-        })
+        return okJson(
+          wireDocumentHistory(deriveLifecycleEvents(store.document), {
+            documentId: DOCUMENT_ID,
+            currentStatus: store.document.documentStatus,
+            currentRowVersion: store.document.rowVersion,
+          }),
+        )
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => {
         policyRequests += 1
-        return okJson(draftPolicy())
+        return okJson(toWirePolicy(store.document))
       }),
       http.post(
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/submit`,
         async ({ request }) => {
-          const body = (await request.json()) as { rowVersion: number }
+          // The live body spells the guarded version `expectedRowVersion`.
+          const body = (await request.json()) as { expectedRowVersion: number }
           const outcome = applyDocumentAction({
             action: 'Submit',
             document: store.document,
-            rowVersion: body.rowVersion,
+            rowVersion: body.expectedRowVersion,
           })
           if (outcome.kind !== 'ok') {
             return apiJson(outcome.problem, {
@@ -541,7 +552,8 @@ describe('verify-only — the shared document lifecycle action path already comp
             })
           }
           submitCalls += 1
-          return okJson(outcome.result)
+          // Submit acknowledges with `EmptyResponse`; the client re-reads.
+          return okJson({})
         },
       ),
     )

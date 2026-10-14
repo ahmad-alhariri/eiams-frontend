@@ -12,9 +12,11 @@ import {
   createSessionUser,
   createWarehouse,
   createWarehouseCapability,
+  createWarehouseDocument,
 } from '@/test/msw/factories'
 import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
-import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
+import { wireDocumentDetails } from '@/test/msw/document-wire-fixtures'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
@@ -76,9 +78,11 @@ function unitsOfMeasureHandler() {
 }
 
 let postedBody: Record<string, unknown> | undefined
+let paperReferenceBody: Record<string, unknown> | undefined
 
 function useHandlers() {
   postedBody = undefined
+  paperReferenceBody = undefined
   server.use(
     http.get(`${API_BASE_URL}/warehouses`, () =>
       okPageJson([sourceWarehouse, destinationWarehouse]),
@@ -114,19 +118,34 @@ function useHandlers() {
       }
       return okPageJson([])
     }),
-    http.post(`${API_BASE_URL}/warehouse-documents`, async ({ request }) => {
+    // A form with lines to save must use `complete-draft`: it is the only write
+    // that creates a document together with its lines, and it answers the whole
+    // detail read. The bare `POST /warehouse-documents` creates an EMPTY document
+    // and answers `201 { id }`, which is why stubbing it left this journey on the
+    // form.
+    http.post(`${API_BASE_URL}/warehouse-documents/complete-draft`, async ({ request }) => {
       postedBody = (await request.json()) as Record<string, unknown>
-      return apiJson(
-        {
-          documentId: RETURN_DOC_ID,
-          documentNumber: 'TRF-2026-0001',
-          documentType: 'Transfer',
-          documentStatus: 'Draft',
-          systemReferenceNumber: 'EIAMS-TRF-2026-0001',
-        },
-        { status: 201 },
+      return okJson(
+        wireDocumentDetails(
+          createWarehouseDocument({
+            documentId: RETURN_DOC_ID,
+            documentType: 'Transfer',
+            documentStatus: 'Draft',
+            systemReferenceNumber: 'EIAMS-TRF-2026-0001',
+          }),
+        ),
       )
     }),
+    // The paper number/year are NOT part of the draft command; they live on
+    // their own route, so the form writes them in a second call after the
+    // document exists.
+    http.put(
+      `${API_BASE_URL}/warehouse-documents/${RETURN_DOC_ID}/paper-reference`,
+      async ({ request }) => {
+        paperReferenceBody = (await request.json()) as Record<string, unknown>
+        return okJson({})
+      },
+    ),
   )
 }
 
@@ -244,6 +263,13 @@ describe('TransferDocumentFormPage (e17-t04/t05/t06)', () => {
     const transferInfo = postedBody?.['transferInfo'] as Record<string, unknown>
     expect(transferInfo['destinationWarehouseId']).toBe(DESTINATION_WAREHOUSE_ID)
     expect(transferInfo['destinationWarehouseName']).toBe('مستودع الفرع الشمالي')
+    // The paper reference is not part of the draft command: it is written on its
+    // own route, guarded on the version the user was shown.
+    expect(paperReferenceBody).toEqual({
+      expectedRowVersion: 1,
+      paperDocumentNumber: '2026/000042',
+      paperDocumentYear: 2026,
+    })
   }, 40000)
 
   // e24-t10 / B3. A failed per-line balance read used to be mapped to "no stock

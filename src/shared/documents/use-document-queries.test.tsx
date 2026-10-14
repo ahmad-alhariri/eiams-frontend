@@ -6,12 +6,13 @@ import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import type {
-  DocumentLifecycleHistory,
-  DocumentPolicy,
-  WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
-import { createNamedReference, fixtureUuid } from '@/test/msw/factories'
+import type { DocumentLifecycleHistory } from '@/shared/documents/types/document-wire.types'
+import { createNamedReference, createWarehouseDocument, fixtureUuid } from '@/test/msw/factories'
+import {
+  wireDocumentDetails,
+  wireDocumentSummary,
+  wirePolicy,
+} from '@/test/msw/document-wire-fixtures'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -35,37 +36,38 @@ const DOCUMENT_ID = fixtureUuid(60)
 const WAREHOUSE_ID = fixtureUuid(30)
 const TIMESTAMP = '2026-08-12T09:00:00.000Z'
 
-function createPolicyFixture(): DocumentPolicy {
-  return {
-    actions: [],
-    advisories: [],
-    blockers: [],
-    documentId: DOCUMENT_ID,
-    documentStatus: 'Draft',
-    evaluatedAt: TIMESTAMP,
-    policyKind: 'Generic',
-    rowVersion: 1,
-    signedOriginalSatisfied: false,
-  }
-}
-
-function createDocumentFixture(): WarehouseDocument {
-  return {
-    attachments: [],
+/**
+ * The four reads the shared document model owns, each served in the wire
+ * spelling: a flat summary row for the list, the denormalised detail read, the
+ * `status`-keyed policy, and the `action`/`actorDisplayName` history chain.
+ */
+function createDocumentLike() {
+  return createWarehouseDocument({
     createdAt: TIMESTAMP,
-    createdBy: createNamedReference({ id: fixtureUuid(10), displayName: 'أمين المستودع' }),
     documentId: DOCUMENT_ID,
     documentStatus: 'Submitted',
     documentType: 'Receiving',
     lines: [],
     paperDocumentNumber: 'DOC-001',
     paperDocumentYear: 2026,
-    policy: createPolicyFixture(),
     rowVersion: 1,
-    site: createNamedReference({ id: fixtureUuid(31), displayName: 'المقر الرئيسي' }),
     systemReferenceNumber: 'RCP-2026-0001',
     warehouse: createNamedReference({ id: WAREHOUSE_ID, displayName: 'المستودع المركزي' }),
-  }
+  })
+}
+
+/** A list row: the flat `WarehouseDocumentSummary` the list endpoint serves. */
+function createSummaryFixture() {
+  return wireDocumentSummary(createDocumentLike())
+}
+
+/** A detail read: the flat `WarehouseDocumentDetails` with lines and petals inline. */
+function createDetailFixture() {
+  return wireDocumentDetails(createDocumentLike())
+}
+
+function createPolicyFixture() {
+  return wirePolicy({ documentId: DOCUMENT_ID })
 }
 
 function createHistoryFixture(): DocumentLifecycleHistory {
@@ -130,13 +132,14 @@ describe('document query hooks', () => {
   })
 
   it('reads documents, detail, history, and policy through scoped operational queries', async () => {
-    const document = createDocumentFixture()
+    const summary = createSummaryFixture()
+    const detail = createDetailFixture()
     const history = createHistoryFixture()
     const policy = createPolicyFixture()
 
     server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents`, () => okPageJson([document])),
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(document)),
+      http.get(`${API_BASE_URL}/warehouse-documents`, () => okPageJson([summary])),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => okJson(detail)),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => okJson(history)),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => okJson(policy)),
     )
@@ -145,7 +148,7 @@ describe('document query hooks', () => {
       () => useDocumentListQuery({ documentStatus: 'Submitted', pageSize: 25 }),
       { wrapper: createWrapper() },
     )
-    const detail = renderHook(() => useDocumentDetailQuery(DOCUMENT_ID), {
+    const detailHook = renderHook(() => useDocumentDetailQuery(DOCUMENT_ID), {
       wrapper: createWrapper(),
     })
     const historyHook = renderHook(() => useDocumentHistoryQuery(DOCUMENT_ID), {
@@ -157,13 +160,13 @@ describe('document query hooks', () => {
 
     await waitFor(() => {
       expect(list.result.current.isSuccess).toBe(true)
-      expect(detail.result.current.isSuccess).toBe(true)
+      expect(detailHook.result.current.isSuccess).toBe(true)
       expect(historyHook.result.current.isSuccess).toBe(true)
       expect(policyHook.result.current.isSuccess).toBe(true)
     })
 
-    expect(list.result.current.data?.items).toEqual([document])
-    expect(detail.result.current.data).toEqual(document)
+    expect(list.result.current.data?.items).toEqual([summary])
+    expect(detailHook.result.current.data).toEqual(detail)
     expect(historyHook.result.current.data).toEqual(history)
     expect(policyHook.result.current.data).toEqual(policy)
   })
@@ -174,13 +177,16 @@ describe('document query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, () => {
         requestCount += 1
-        return okPageJson([createDocumentFixture()])
+        return okPageJson([createSummaryFixture()])
       }),
     )
 
-    const { result } = renderHook(() => useDocumentListQuery({ search: 'حاسوب' }), {
-      wrapper: createWrapper(),
-    })
+    // There is no free-text `search` filter any more: the list is narrowed by
+    // `systemReferenceNumber` / `paperDocumentNumber` / status / type / date.
+    const { result } = renderHook(
+      () => useDocumentListQuery({ systemReferenceNumber: 'RCP-2026' }),
+      { wrapper: createWrapper() },
+    )
 
     await waitFor(() => expect(result.current.fetchStatus).toBe('idle'))
     expect(result.current.data).toBeUndefined()
@@ -192,7 +198,7 @@ describe('document query hooks', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
         requestCount += 1
-        return okJson(createDocumentFixture())
+        return okJson(createDetailFixture())
       }),
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => {
         requestCount += 1

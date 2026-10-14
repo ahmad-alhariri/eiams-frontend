@@ -22,7 +22,9 @@ import type { StockMovement } from '@/modules/inventory/types/inventory.api-type
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
+import { wireDocumentDetails, wireDocumentHistory } from '@/test/msw/document-wire-fixtures'
 import { apiJson, okPageJson } from '@/test/msw/envelope'
+import { toWirePolicy } from '@/test/msw/warehouse-document-handlers'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -155,7 +157,9 @@ describe('receiving and opening balance propagation', () => {
     server.use(
       http.get(`${environment.apiBaseUrl}/warehouse-documents/${receiving.documentId}`, () => {
         requestCounts.document += 1
-        return apiJson(responseScope === 'enterprise' ? receiving : warehouseDocument)
+        return apiJson(
+          wireDocumentDetails(responseScope === 'enterprise' ? receiving : warehouseDocument),
+        )
       }),
       http.get(
         `${environment.apiBaseUrl}/inventory/movements/${receivingMovement.movementId}`,
@@ -181,7 +185,7 @@ describe('receiving and opening balance propagation', () => {
     )
 
     await waitFor(() => {
-      expect(result.current.document).toEqual(receiving)
+      expect(result.current.document).toEqual(wireDocumentDetails(receiving))
       expect(result.current.movement).toEqual(receivingMovement)
       expect(result.current.balance).toEqual(receivingBalance)
     })
@@ -192,17 +196,17 @@ describe('receiving and opening balance propagation', () => {
     rerender()
 
     await waitFor(() => {
-      expect(result.current.document).toEqual(warehouseDocument)
+      expect(result.current.document).toEqual(wireDocumentDetails(warehouseDocument))
       expect(result.current.movement).toEqual(warehouseMovement)
       expect(result.current.balance).toEqual(warehouseBalance)
     })
     expect(requestCounts).toEqual({ document: 2, movement: 2, balance: 2 })
     expect(
       client.getQueryData(documentQueryKeys.document(enterpriseScope, receiving.documentId)),
-    ).toEqual(receiving)
+    ).toEqual(wireDocumentDetails(receiving))
     expect(
       client.getQueryData(documentQueryKeys.document(warehouseScope, receiving.documentId)),
-    ).toEqual(warehouseDocument)
+    ).toEqual(wireDocumentDetails(warehouseDocument))
     expect(
       client.getQueryData(
         inventoryQueryKeys.movement(enterpriseScope, receivingMovement.movementId),
@@ -272,9 +276,14 @@ function useScenarioHandlers(
   const balances = [receivingBalance, openingBalance]
 
   server.use(
+    // The document engine is served on the wire contract, never on the harness's
+    // nested snapshot: `postedBy`/`warehouse` are Uuid/label pairs over HTTP and
+    // lines are flat, so serving the snapshot crashes the detail read outright.
     http.get(`${environment.apiBaseUrl}/warehouse-documents/:documentId`, ({ params }) => {
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
-      return document === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(document)
+      return document === undefined
+        ? new HttpResponse(null, { status: 404 })
+        : apiJson(wireDocumentDetails(document))
     }),
     http.get(`${environment.apiBaseUrl}/warehouse-documents/:documentId/history`, ({ params }) => {
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
@@ -282,18 +291,19 @@ function useScenarioHandlers(
         document === undefined ? undefined : scenario.ledgers.lifecycleEvents[document.documentId]
       return document === undefined || events === undefined
         ? new HttpResponse(null, { status: 404 })
-        : apiJson({
-            documentId: document.documentId,
-            currentStatus: document.documentStatus,
-            currentRowVersion: document.rowVersion,
-            events,
-          })
+        : apiJson(
+            wireDocumentHistory(events, {
+              documentId: document.documentId,
+              currentStatus: document.documentStatus,
+              currentRowVersion: document.rowVersion,
+            }),
+          )
     }),
     http.get(`${environment.apiBaseUrl}/warehouse-documents/:documentId/policy`, ({ params }) => {
       const document = documents.find((candidate) => candidate.documentId === params['documentId'])
       return document === undefined
         ? new HttpResponse(null, { status: 404 })
-        : apiJson(document.policy)
+        : apiJson(toWirePolicy(document))
     }),
     http.get(`${environment.apiBaseUrl}/inventory/movements`, ({ request }) => {
       movementListQueries.push(Object.fromEntries(new URL(request.url).searchParams))

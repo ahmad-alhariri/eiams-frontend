@@ -1,8 +1,9 @@
-﻿import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createAxiosTransport } from '@/shared/api/axios-transport'
 import { okJson } from '@/test/msw/envelope'
 import { createReceivingSuppliersHandler } from '@/test/msw/receiving-handlers'
+import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { apiClient } from '@/shared/services/api.client'
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -43,8 +44,12 @@ describe('createReceivingSuppliersHandler', () => {
     server.use(...createReceivingSuppliersHandler([...SUPPLIERS, 'مورد الشام']))
     const service = createReceivingService(createAxiosTransport(apiClient))
 
-    await expect(service.searchReceivingSuppliers('شام')).resolves.toEqual(['مورد الشام'])
-    await expect(service.searchReceivingSuppliers('مؤسسة')).resolves.toEqual(['مؤسسة الإمداد'])
+    await expect(service.searchReceivingSuppliers('شام')).resolves.toEqual([
+      { code: null, id: fixtureUuid(600), nameAr: 'مورد الشام' },
+    ])
+    await expect(service.searchReceivingSuppliers('مؤسسة')).resolves.toEqual([
+      { code: null, id: fixtureUuid(603), nameAr: 'مؤسسة الإمداد' },
+    ])
     await expect(service.searchReceivingSuppliers('غير موجود')).resolves.toEqual([])
   })
 
@@ -66,10 +71,10 @@ describe('useReceivingSuppliersLoader', () => {
     expect(result.current.scopeReady).toBe(true)
 
     await expect(result.current.loadOptions('شام')).resolves.toEqual([
-      { value: 'مورد الشام', label: 'مورد الشام' },
+      { value: fixtureUuid(600), label: 'مورد الشام' },
     ])
     await expect(result.current.loadOptions('نور')).resolves.toEqual([
-      { value: 'مورد النور', label: 'مورد النور' },
+      { value: fixtureUuid(601), label: 'مورد النور' },
     ])
   })
 
@@ -95,9 +100,9 @@ describe('useReceivingSuppliersLoader', () => {
     let calls = 0
     const wrapper = createWrapper()
     server.use(
-      http.get(`${environment.apiBaseUrl}/receiving/suppliers`, () => {
+      http.get(`${environment.apiBaseUrl}/receiving-infos/suppliers`, () => {
         calls += 1
-        return okJson(['مورد الشام'])
+        return okJson([{ code: null, id: fixtureUuid(600), nameAr: 'مورد الشام' }])
       }),
     )
 

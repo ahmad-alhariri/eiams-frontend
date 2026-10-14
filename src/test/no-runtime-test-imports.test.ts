@@ -106,6 +106,14 @@ import {
  * a role id to its Arabic label, replacing three separate lookups (and, in the
  * users table, no lookup at all, which is how `SYSTEM_ADMIN` reached an Arabic
  * column).
+ * Re-measured at 386 by `eiams-frontend-whhu.19`, which rewired the shared
+ * document spine onto the handwritten wire contract and landed on the SAME
+ * total: +1 for `src/shared/documents/types/document-action.types.ts` and -2 for
+ * `src/shared/services/document-attachment-transport.ts` (the duplicate
+ * attachment transport, consolidated per `eiams-frontend-71fp`) and the
+ * unreferenced `src/shared/documents/types/document-transport.types.ts`. The
+ * number did not move, but the file set did, and that is recorded here rather
+ * than left to look like "no change".
  */
 const SCANNED_FILE_COUNT = 386
 

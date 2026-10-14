@@ -62,7 +62,7 @@ describe('IssueDocumentDetailPage', () => {
     server.use(
       ...createWarehouseDocumentDetailHandler(issueDocument),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(issueDocument)),
-      ...createWarehouseDocumentPolicyHandler(issueDocument.policy),
+      ...createWarehouseDocumentPolicyHandler(issueDocument),
     )
 
     renderPage()

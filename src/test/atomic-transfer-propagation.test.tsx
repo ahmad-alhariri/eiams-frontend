@@ -22,7 +22,9 @@ import type { StockMovement } from '@/modules/inventory/types/inventory.api-type
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
+import { wireDocumentDetails, wireDocumentHistory } from '@/test/msw/document-wire-fixtures'
 import { apiJson, okPageJson } from '@/test/msw/envelope'
+import { toWirePolicy } from '@/test/msw/warehouse-document-handlers'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -35,6 +37,13 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 const scenario = createCrossModuleScenario()
 const transfer = scenario.documents.transfer
+// The document engine answers the handwritten wire contract, not the in-memory
+// snapshot the scenario keeps: lines are flat (`materialNameAr`, `assets`,
+// `selectedAssets`), the warehouse is denormalised into `warehouseCode` /
+// `warehouseName`, and `postedBy` is a user id. Every document-engine response
+// and every query-cache comparison below is therefore written against the
+// projection rather than against the scenario record itself.
+const transferWire = wireDocumentDetails(transfer)
 const transferOut = findTransferMovement('TransferOut')
 const transferIn = findTransferMovement('TransferIn')
 const sourceBalance = findTransferBalance(scenario.warehouses.source.id)
@@ -71,7 +80,10 @@ describe('atomic transfer propagation', () => {
     expect(transferHeading.closest('[dir="rtl"]')).not.toBeNull()
     expect(screen.getAllByText('مرحّل').length).toBeGreaterThan(0)
     expect(screen.getByText(scenario.warehouses.source.name)).toBeInTheDocument()
-    expect(screen.getByText(scenario.warehouses.destination.name)).toBeInTheDocument()
+    // The transfer petal carries the destination as an id only — the live
+    // `TransferInfoResponse` has no display reference for it — so the journey
+    // asserts the id the page renders instead of a name the server never sent.
+    expect(screen.getByText(scenario.warehouses.destination.id)).toBeInTheDocument()
     expect(screen.getByText('تغذية فرع حمص بالورق')).toBeInTheDocument()
     expect(screen.getByText('سند-نقل-موقّع.pdf')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /ترحيل|عكس|رفض/ })).not.toBeInTheDocument()
@@ -158,6 +170,10 @@ describe('atomic transfer propagation', () => {
     const enterpriseScope = { kind: 'enterprise' } as const
     const siteScope = { kind: 'site', id: transfer.site.id } as const
     const siteTransfer = { ...transfer, rowVersion: transfer.rowVersion + 1 }
+    // Each scope variant is projected exactly once, so the cache comparison
+    // below asserts the wire shape the handler served for that scope rather
+    // than re-deriving it per assertion.
+    const siteTransferWire = wireDocumentDetails(siteTransfer)
     const siteTransferOut = {
       ...transferOut,
       documentReference: `${transferOut.documentReference}-SITE`,
@@ -188,7 +204,7 @@ describe('atomic transfer propagation', () => {
     server.use(
       http.get(`${environment.apiBaseUrl}/warehouse-documents/${transfer.documentId}`, () => {
         requestCounts.document += 1
-        return apiJson(responseScope === 'enterprise' ? transfer : siteTransfer)
+        return apiJson(responseScope === 'enterprise' ? transferWire : siteTransferWire)
       }),
       http.get(`${environment.apiBaseUrl}/inventory/movements/${transferOut.movementId}`, () => {
         requestCounts.transferOut += 1
@@ -226,7 +242,7 @@ describe('atomic transfer propagation', () => {
     )
 
     await waitFor(() => {
-      expect(result.current.document).toEqual(transfer)
+      expect(result.current.document).toEqual(transferWire)
       expect(result.current.transferOut).toEqual(transferOut)
       expect(result.current.transferIn).toEqual(transferIn)
       expect(result.current.sourceBalance).toEqual(sourceBalance)
@@ -245,7 +261,7 @@ describe('atomic transfer propagation', () => {
     rerender()
 
     await waitFor(() => {
-      expect(result.current.document).toEqual(siteTransfer)
+      expect(result.current.document).toEqual(siteTransferWire)
       expect(result.current.transferOut).toEqual(siteTransferOut)
       expect(result.current.transferIn).toEqual(siteTransferIn)
       expect(result.current.sourceBalance).toEqual(siteSourceBalance)
@@ -261,9 +277,9 @@ describe('atomic transfer propagation', () => {
 
     expect(
       client.getQueryData(documentQueryKeys.document(enterpriseScope, transfer.documentId)),
-    ).toEqual(transfer)
+    ).toEqual(transferWire)
     expect(client.getQueryData(documentQueryKeys.document(siteScope, transfer.documentId))).toEqual(
-      siteTransfer,
+      siteTransferWire,
     )
     expect(
       client.getQueryData(inventoryQueryKeys.movement(enterpriseScope, transferOut.movementId)),
@@ -343,18 +359,24 @@ function registerScenarioHandlers(
 
   server.use(
     http.get(`${environment.apiBaseUrl}/warehouse-documents/${transfer.documentId}`, () =>
-      apiJson(transfer),
+      apiJson(transferWire),
     ),
-    http.get(`${environment.apiBaseUrl}/warehouse-documents/${transfer.documentId}/history`, () =>
-      apiJson({
-        documentId: transfer.documentId,
-        currentStatus: transfer.documentStatus,
-        currentRowVersion: transfer.rowVersion,
-        events: scenario.ledgers.lifecycleEvents[transfer.documentId],
-      }),
-    ),
+    http.get(`${environment.apiBaseUrl}/warehouse-documents/${transfer.documentId}/history`, () => {
+      const events = scenario.ledgers.lifecycleEvents[transfer.documentId]
+      // An absent chain stays a 404 rather than an empty envelope: the timeline
+      // is audit evidence, and a read that silently loses it is a defect.
+      return events === undefined
+        ? new HttpResponse(null, { status: 404 })
+        : apiJson(
+            wireDocumentHistory(events, {
+              documentId: transfer.documentId,
+              currentStatus: transfer.documentStatus,
+              currentRowVersion: transfer.rowVersion,
+            }),
+          )
+    }),
     http.get(`${environment.apiBaseUrl}/warehouse-documents/${transfer.documentId}/policy`, () =>
-      apiJson(transfer.policy),
+      apiJson(toWirePolicy(transfer)),
     ),
     http.get(`${environment.apiBaseUrl}/inventory/movements`, ({ request }) => {
       movementListQueries.push(Object.fromEntries(new URL(request.url).searchParams))

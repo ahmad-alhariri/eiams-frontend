@@ -22,7 +22,7 @@ export default function ReceivingDocumentDetailPage() {
   return (
     <DocumentDetailPage
       petalSlot={
-        document === undefined || document.receivingInfo === undefined ? null : (
+        document?.receivingInfo == null ? null : (
           <ReceivingPetalView info={document.receivingInfo} />
         )
       }
