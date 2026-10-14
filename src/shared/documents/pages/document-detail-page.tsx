@@ -22,6 +22,7 @@ import {
 } from '@/shared/documents/document-policy-gates'
 import { DocumentTimelineSection } from '@/shared/documents/document-timeline-section'
 import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
+import { DocumentScopeReadOnlyBanner } from '@/shared/documents/components/document-scope-read-only-banner'
 import { useDocumentConflictRecovery } from '@/shared/documents/use-document-conflict-recovery'
 import { useDocumentAttachmentManager } from '@/shared/documents/use-document-attachments'
 import {
@@ -681,6 +682,7 @@ export function DocumentDetailBody({
             isActionPermitted={permitAction}
           />
         )}
+        <DocumentScopeReadOnlyBanner />
         {readOnlyReasonAr !== null ? (
           <p
             data-slot="document-read-only-note"
