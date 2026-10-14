@@ -115,7 +115,7 @@ import {
  * number did not move, but the file set did, and that is recorded here rather
  * than left to look like "no change".
  */
-const SCANNED_FILE_COUNT = 386
+const SCANNED_FILE_COUNT = 387
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.
