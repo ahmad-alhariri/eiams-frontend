@@ -475,6 +475,8 @@ export function createWarehouseDocument(
     inventoryAdjustment: null,
     lines: [createWarehouseDocumentLine({ id: fixtureUuid(201) })],
     attachments: [],
+    openingAsOfDate: null,
+    openingIsZeroStock: false,
   }
   return mergeDeep(defaults, overrides)
 }

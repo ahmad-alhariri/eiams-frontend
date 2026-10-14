@@ -6,4 +6,5 @@ export const ASSET_MOVEMENT_TYPE_LABELS_AR: Readonly<Record<AssetMovement['event
   Issued: 'صرف',
   Returned: 'إرجاع',
   Disposed: 'استبعاد',
+  OpeningRegistered: 'تسجيل افتتاحي',
 }

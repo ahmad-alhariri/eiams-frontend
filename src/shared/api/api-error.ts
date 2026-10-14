@@ -49,6 +49,19 @@ export function normalizeErrorMessage(code: string): string {
     'material.unit_conversion.invalid_factor': 'عامل التحويل يجب أن يكون موجباً وصحيحاً.',
     'count.invalid_state_transition': 'الانتقال غير مسموح في حالة جلسة الجرد الحالية.',
     'gateway.unexpected_response': 'استجابة غير متوقعة من الخدمة. يرجى التحقق من إعدادات الخادم.',
+    // D-OPEN-02 (PRD §6.2, §6.3, §6.4, §6.6, §6.7, §6.10, §6.12).
+    'OpeningDocuments.WarehouseAlreadyInitialized':
+      'هذا المستودع مهيأ بالفعل. تُسجَّل التصحيحات عبر مستند تسوية.',
+    'OpeningDocuments.OpeningAsOfDateRequired':
+      'يجب تحديد تاريخ الرصيد الافتتاحي قبل نشر سند الفتح.',
+    'OpeningDocuments.OpeningCapabilityNotGranted':
+      'المستودع لا يملك قدرة "الفتح" لهذا المجال. يرجى منحها من إدارة المستودعات.',
+    'OpeningDocuments.OpeningQuantityMustBePositive':
+      'يجب أن تكون الكمية في كل بند افتتاحي أكبر من صفر.',
+    'OpeningDocuments.UseZeroStockInitialization':
+      'المستودعات الفارغة تُهيَّأ عبر مسار "تهيئة بدون حركة" وليس عبر سند فتح فارغ.',
+    'OpeningDocuments.OpeningReversalBlockedByDownstream':
+      'لا يمكن عكس سند الفتح: توجد حركات لاحقة أو سجلات عهدة مرتبطة به. يرجى إصدار مستند تسوية تعويضي.',
   }
   return mappings[code] ?? 'حدث خطأ غير متوقع أثناء المعالجة. يرجى المحاولة مجدداً.'
 }

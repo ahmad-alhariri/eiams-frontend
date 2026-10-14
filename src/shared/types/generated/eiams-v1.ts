@@ -1623,7 +1623,7 @@ export type components = {
             readonly meta: components["schemas"]["PageMeta"];
         };
         /** @enum {string} */
-        readonly AssetMovementType: "Received" | "Issued" | "Returned" | "Disposed";
+        readonly AssetMovementType: "Received" | "Issued" | "Returned" | "Disposed" | "OpeningRegistered";
         readonly AssetPage: {
             readonly items: readonly components["schemas"]["Asset"][];
             readonly meta: components["schemas"]["PageMeta"];

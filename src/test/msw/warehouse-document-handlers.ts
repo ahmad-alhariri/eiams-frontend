@@ -274,6 +274,8 @@ export function toWireDetails(document: WarehouseDocument): WarehouseDocumentDet
     inventoryAdjustment: null,
     lines: document.lines.map(toWireLine),
     attachments: document.attachments.map(toWireAttachment),
+    openingAsOfDate: null,
+    openingIsZeroStock: false,
   }
 }
 
@@ -290,6 +292,8 @@ export function toWireSummary(document: WarehouseDocument): WarehouseDocumentSum
     reversalOfDocumentId: null,
     rowVersion: document.rowVersion,
     createdAtUtc: document.createdAt,
+    openingAsOfDate: null,
+    openingIsZeroStock: false,
   }
 }
 
