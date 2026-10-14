@@ -281,17 +281,26 @@ export default function OpeningDocumentFormPage() {
             />
           </section>
           {capabilityGate.status !== 'ready' ? (
-            <p
+            <div
+              data-slot="opening-capability-notice"
               role={capabilityGate.status === 'blocked' ? 'alert' : 'status'}
               aria-live="polite"
               className={
                 capabilityGate.status === 'blocked'
-                  ? 'text-sm text-destructive'
-                  : 'text-sm text-muted-foreground'
+                  ? 'rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive'
+                  : 'rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900'
               }
             >
-              {capabilityGate.messageAr}
-            </p>
+              <p>{capabilityGate.messageAr}</p>
+              {capabilityGate.reason === 'opening_capability_not_granted' ? (
+                <p className="mt-1 text-xs">
+                  <a href={ROUTE_PATHS.warehouses ?? '#'} className="underline">
+                    إدارة المستودعات
+                  </a>{' '}
+                  لمنح قدرة "الفتح" لهذا المجال.
+                </p>
+              ) : null}
+            </div>
           ) : null}
           {submitErrorMessage !== null ? (
             <p role="alert" className="text-sm text-destructive">

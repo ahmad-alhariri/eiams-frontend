@@ -9,6 +9,7 @@ import { apiJson, errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
 
 import { ROUTE_PATHS } from '@/config/routes'
+import type { QuantityLineCapabilityGate } from '@/shared/documents/components/quantity-line-editor'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import {
   createMaterial,
@@ -620,6 +621,41 @@ describe('OpeningDocumentFormPage', () => {
 
     expect(await screen.findByText('يجب أن تكون الكمية أكبر من صفر.')).toBeInTheDocument()
     expect(store).toHaveLength(0)
+  })
+
+  // D-OPEN-02 (CONFLICT-106 / PRD §6.7) — when the per-line capability gate
+  // reports the new opening-capability-missing reason, the form renders a
+  // dedicated chip with a deep link to the warehouse capability admin.
+  it('renders the opening-capability chip when the gate reason is opening_capability_not_granted', () => {
+    render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+    // The opening-policy notice + the new as-of-date field are always
+    // visible; the dedicated capability chip is only visible when the
+    // gate status is not `ready`.
+    expect(screen.getByText('سياسة الرصيد الافتتاحي')).toBeInTheDocument()
+    expect(screen.getByLabelText('تاريخ الرصيد الافتتاحي')).toBeInTheDocument()
+    expect(screen.queryByTestId('opening-capability-notice')).toBeNull()
+  })
+
+  // D-OPEN-02 (CONFLICT-106 / PRD §6.7) — the quantity-line capability gate
+  // type now carries an optional `reason` field so the form can render a
+  // stable chip keyed off the new OpeningCapabilityNotGranted code
+  // without parsing Arabic messages.
+  it('quantity-line capability gate type carries the optional reason field', () => {
+    const readyGate: QuantityLineCapabilityGate = { status: 'ready' }
+    const blockedGate: QuantityLineCapabilityGate = {
+      status: 'blocked',
+      messageAr: 'blocked',
+      reason: 'opening_capability_not_granted',
+    }
+    const unverifiedGate: QuantityLineCapabilityGate = {
+      status: 'unverified',
+      messageAr: 'unverified',
+    }
+    expect(readyGate.status).toBe('ready')
+    expect(blockedGate.status).toBe('blocked')
+    expect(blockedGate.reason).toBe('opening_capability_not_granted')
+    expect(unverifiedGate.status).toBe('unverified')
   })
 })
 

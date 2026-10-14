@@ -63,8 +63,8 @@ export interface AssetLineEditorProps {
 /** Aggregate capability state for the currently selected asset-line materials. */
 export type AssetLineCapabilityGate =
   | { status: 'ready' }
-  | { status: 'blocked'; messageAr: string }
-  | { status: 'unverified'; messageAr: string }
+  | { status: 'blocked'; messageAr: string; reason?: string }
+  | { status: 'unverified'; messageAr: string; reason?: string }
 
 /** Inbound opening balances share the Receiving capability operation. */
 function capabilityOperationFor(documentType: AssetLineDocumentType): CapabilityOperation {

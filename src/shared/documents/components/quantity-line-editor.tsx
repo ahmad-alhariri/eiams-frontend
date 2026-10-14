@@ -75,8 +75,8 @@ export interface QuantityLineEditorProps {
 /** Aggregate capability state for the currently selected quantity-line materials. */
 export type QuantityLineCapabilityGate =
   | { status: 'ready' }
-  | { status: 'blocked'; messageAr: string }
-  | { status: 'unverified'; messageAr: string }
+  | { status: 'blocked'; messageAr: string; reason?: string }
+  | { status: 'unverified'; messageAr: string; reason?: string }
 
 const BASE_UNIT_VALUE = 'base'
 
