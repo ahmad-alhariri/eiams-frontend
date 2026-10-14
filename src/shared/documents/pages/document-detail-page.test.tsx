@@ -164,14 +164,17 @@ describe('DocumentDetailPage', () => {
     expect(screen.queryByText('مدير المستودع')).not.toBeInTheDocument()
     expect(screen.getAllByText(/يناير ٢٠٢٦/).length).toBeGreaterThan(0)
 
-    expect(screen.getByText('00000000-0000-4000-8000-00000000001e')).toBeInTheDocument()
+    // The detail read names its warehouse inline (`warehouseName`), so the header
+    // shows the label the server sent rather than the id it also carries.
+    expect(screen.getByText('المستودع المركزي')).toBeInTheDocument()
     expect(screen.getByText('2026/0300')).toBeInTheDocument()
     expect(screen.getByText('2026')).toBeInTheDocument()
 
-    // The read-only lines table identifies a line's material and unit by id.
-    expect(screen.getByText('00000000-0000-4000-8000-000000000018')).toBeInTheDocument()
-    expect(screen.getByText('٤٠')).toBeInTheDocument()
-    expect(screen.getByText('00000000-0000-4000-8000-000000000017')).toBeInTheDocument()
+    // The wire line denormalises the material identity and label, so the table
+    // names the material and its unit instead of echoing their ids.
+    expect(screen.getByText('حبر طابعة')).toBeInTheDocument()
+    expect(screen.getByText('IT-CON-INK')).toBeInTheDocument()
+    expect(screen.getByText('عبوة')).toBeInTheDocument()
 
     expect(screen.getByText('signed-receiving.pdf')).toBeInTheDocument()
     expect(screen.getByTestId('attachment-gate-moot')).toHaveTextContent(
@@ -388,9 +391,11 @@ describe('DocumentDetailPage', () => {
       wrapper: createWrapper(`/documents/opening/${DOCUMENT_ID}`),
     })
 
-    // The read-only lines table identifies a line's material by id; the row count
-    // and the material identity come straight off the server detail.
-    expect(await screen.findAllByText('00000000-0000-4000-8000-000000000018')).toHaveLength(3)
+    // The wire line denormalises the material identity and label, so each row names
+    // its own material; the row count still comes straight off the server detail.
+    await screen.findAllByText('أقلام حبر')
+    expect(screen.getByText('طابعة ليزر')).toBeInTheDocument()
+    expect(screen.getByText('ورق تصوير')).toBeInTheDocument()
     expect(container.querySelectorAll('[data-slot="document-line-row"]')).toHaveLength(3)
     expect(screen.getByRole('columnheader', { name: 'نوع الافتتاحية' })).toBeInTheDocument()
     expect(screen.getByText('افتتاحية أولية')).toBeInTheDocument()

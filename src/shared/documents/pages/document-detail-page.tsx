@@ -327,22 +327,14 @@ function DocumentLineRow({
     <>
       <tr data-slot="document-line-row" className="border-b border-border last:border-b-0">
         <td className="px-3 py-2 font-medium text-foreground">
-          {/* The detail read identifies a line's material by id only — it carries no
-              material code or Arabic name — so the id is shown rather than a label
-              the server did not send. */}
-          <span dir="ltr" className="break-all font-mono text-xs">
-            {line.materialId}
+          {line.materialNameAr}
+          <span dir="ltr" className="ms-2 text-xs text-muted-foreground">
+            {line.materialCode}
           </span>
         </td>
         <td className="px-3 py-2 text-foreground">{formatNumber(line.quantity)}</td>
         <td className="px-3 py-2 text-foreground">
-          {line.unitId === null ? (
-            '—'
-          ) : (
-            <span dir="ltr" className="break-all font-mono text-xs">
-              {line.unitId}
-            </span>
-          )}
+          {line.unitSymbol === null ? '—' : line.unitSymbol}
         </td>
         <td className="px-3 py-2 text-foreground">
           {line.unitPrice === null ? '—' : formatNumber(line.unitPrice)}
@@ -622,9 +614,9 @@ export function DocumentDetailBody({
             readOnly
             initialValues={{
               rowVersion: document.rowVersion,
-              // The detail read identifies the warehouse by id only; the header
-              // section falls back to the id when no display name is supplied.
-              warehouseDisplayName: document.warehouseId,
+              // The detail read names its warehouse inline, so the label the
+              // server sent is shown rather than the id it also carries.
+              warehouseDisplayName: document.warehouseName,
             }}
             petalSlot={petalSlot}
           />

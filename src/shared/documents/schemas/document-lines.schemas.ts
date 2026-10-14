@@ -330,29 +330,32 @@ export type AssetLinesValues = z.infer<typeof assetLinesSchema>
 /**
  * Maps asset-capture form lines to the `complete-draft` line contract.
  *
- * ## KNOWN CONTRACT GAP — per-unit asset registration is not writable
+ * `CompleteWarehouseDocumentDraftLine.assetInputs` is the collection the live
+ * route reads to register one Asset per unit at post (D-MAT-01): a blank
+ * `assetNumber` is a recorded decision meaning "allocate one at post", while a
+ * supplied one is an institutional number the server must find unique.
  *
- * The asset editor captures one NEW asset per unit (`assetNumber`,
- * `serialNumber`, `acquisitionDate`, `warrantyExpiry`) for the Receiving and
- * Opening flows, D-MAT-01 "one Asset record per unit on post".
- *
- * `CompleteWarehouseDocumentDraftLine` has NO such collection. It carries
- * `assetIds?: readonly Uuid[]` and nothing else asset-shaped, and
- * `CompleteWarehouseDocumentDraftCommandHandler` uses it exclusively to SELECT
- * assets that ALREADY EXIST (`AddDocumentLineAssetSelectionCommand`, guarded by
- * `CompleteDraftAssetSelectionCount` against `BaseQuantity`). There is no
- * `assetInputs` on any live route: the field belonged to the provisional
- * snapshot's fictional `DocumentLineInput`, which the API never shipped.
- *
- * So the captured identifiers cannot be persisted, and this mapper sends only
- * what the contract can carry: the material and its unit count. The editor stays
- * in the form because removing a D-MAT-01 capture flow is a product decision, not
- * a types fix; the missing backend write is filed as the blocker. Nothing here
- * invents a payload the server would reject with a 400.
+ * `acquisitionDate` and `warrantyExpiry` are the two fields the form still
+ * captures that the wire `AssetInput` has no slot for. They stay display-only,
+ * exactly as `conversionId` and `baseQuantity` do on the quantity mapper: the
+ * server derives them when it creates the Asset, and sending them would be a
+ * 400 rather than a saved field.
  */
 export function toCompleteDraftAssetLines(lines: readonly AssetLineValues[]): CompleteDraftLine[] {
   return lines.map((line) => ({
     materialId: line.materialId,
     quantity: line.quantity,
+    ...(line.assetInputs.length === 0
+      ? {}
+      : {
+          assetInputs: line.assetInputs.map((assetInput) => ({
+            ...(assetInput.assetNumber === undefined || assetInput.assetNumber === ''
+              ? {}
+              : { assetNumber: assetInput.assetNumber }),
+            ...(assetInput.serialNumber === undefined || assetInput.serialNumber === ''
+              ? {}
+              : { serialNumber: assetInput.serialNumber }),
+          })),
+        }),
   }))
 }

@@ -339,10 +339,15 @@ describe('ReceivingDocumentFormPage', () => {
 
   it('surfaces the Arabic error banner when the create request fails', async () => {
     server.use(
-      http.post(`${API_BASE_URL}/warehouse-documents`, () =>
+      // The save goes through `complete-draft` (the only write that creates a
+      // document together with its lines), so THAT is the route that has to
+      // fail for this banner to be exercised. `WAREHOUSE_DOCUMENTS_LINES_REQUIRED`
+      // is a governed create-side code; the paper-reference code it replaced was
+      // never reachable here because the paper number is no longer in the command.
+      http.post(`${API_BASE_URL}/warehouse-documents/complete-draft`, () =>
         errJson(409, {
-          code: 'WAREHOUSE_DOCUMENTS_PAPER_REFERENCE_REQUIRED',
-          message: 'The paper document reference is missing or invalid.',
+          code: 'WAREHOUSE_DOCUMENTS_LINES_REQUIRED',
+          message: 'The draft must carry at least one line.',
         }),
       ),
       http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
@@ -359,9 +364,7 @@ describe('ReceivingDocumentFormPage', () => {
     await fillValidForm(user)
     await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
 
-    expect(
-      await screen.findByText('يجب إدخال رقم المستند الورقي وسنته قبل التقديم.'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('يجب إضافة بند واحد على الأقل قبل التقديم.')).toBeInTheDocument()
     expect(screen.queryByTestId('detail-stub')).not.toBeInTheDocument()
   })
 })

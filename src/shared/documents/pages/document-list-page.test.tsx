@@ -13,6 +13,7 @@ import {
   createWarehouseDocument,
 } from '@/test/msw/factories'
 import { okPageJson } from '@/test/msw/envelope'
+import { wireDocumentSummary } from '@/test/msw/document-wire-fixtures'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
@@ -89,7 +90,12 @@ describe('DocumentListPage', () => {
           page: url.searchParams.get('page'),
           pageSize: url.searchParams.get('pageSize'),
         })
-        return okPageJson([document], { page: 1, pageSize: 10, totalCount: 11, totalPages: 2 })
+        return okPageJson([wireDocumentSummary(document)], {
+          page: 1,
+          pageSize: 10,
+          totalCount: 11,
+          totalPages: 2,
+        })
       }),
       http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )
@@ -101,9 +107,12 @@ describe('DocumentListPage', () => {
     ).toBeInTheDocument()
     expect(await screen.findByText(document.systemReferenceNumber)).toBeInTheDocument()
     expect(screen.getByText(document.paperDocumentNumber)).toBeInTheDocument()
-    expect(screen.getByText('المستودع المركزي')).toBeInTheDocument()
+    // The list projection carries `warehouseId` and no display reference, so the
+    // row shows the id the server sent rather than a label it never sent.
+    expect(screen.getByText(document.warehouse.id)).toBeInTheDocument()
     expect(screen.getByText('مرحّل')).toBeInTheDocument()
-    expect(screen.getByText(document.createdBy.displayName)).toBeInTheDocument()
+    // No creator column exists: `WarehouseDocumentSummary` carries no user
+    // reference, so the creator name the snapshot had is asserted nowhere.
     expect(screen.getByText(/يناير ٢٠٢٦/)).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'الحالة' })).toBeInTheDocument()
 
@@ -156,8 +165,8 @@ describe('DocumentListPage', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
-        receivedSearches.push(new URL(request.url).searchParams.get('search'))
-        return okPageJson([createWarehouseDocument()])
+        receivedSearches.push(new URL(request.url).searchParams.get('systemReferenceNumber'))
+        return okPageJson([wireDocumentSummary(createWarehouseDocument())])
       }),
       http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )
@@ -178,7 +187,7 @@ describe('DocumentListPage', () => {
         attempts += 1
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : okPageJson([createWarehouseDocument()])
+          : okPageJson([wireDocumentSummary(createWarehouseDocument())])
       }),
       http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
     )

@@ -1,12 +1,9 @@
-import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
+import { useMutation, type UseMutationResult } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { documentService } from '@/shared/documents/document-transport'
 import { policyAdvisoryMessageAr } from '@/shared/documents/document-policy-gates'
-import {
-  documentQueryKeys,
-  useInvalidateDocumentDetail,
-} from '@/shared/documents/use-document-queries'
+import { useInvalidateDocumentDetail } from '@/shared/documents/use-document-queries'
 import type {
   DocumentPolicyAdvisory,
   PostDocumentResponse,
@@ -171,7 +168,6 @@ function toLifecycleActionApi(
  * anyway); without a documentId the mutation fails fast.
  */
 function useDocumentLifecycleAction(kind: LifecycleActionKind, documentId: string | null) {
-  const queryClient = useQueryClient()
   const { activeScopeCacheKey } = useActiveScopeContext()
   const invalidateDetail = useInvalidateDocumentDetail()
 
@@ -193,10 +189,11 @@ function useDocumentLifecycleAction(kind: LifecycleActionKind, documentId: strin
       if (documentId === null || activeScopeCacheKey === undefined) {
         return
       }
-      void queryClient.invalidateQueries({
-        queryKey: documentQueryKeys.document(activeScopeCacheKey, documentId),
-        exact: false,
-      })
+      // One invalidation, not two: `useInvalidateDocumentDetail` already covers
+      // the whole `document(scope, id)` prefix, which is the detail, history AND
+      // policy keys. Issuing it a second time makes every one of those three
+      // refetch twice per action, which is three redundant round-trips on a
+      // slow government link and nothing gained.
       void invalidateDetail(documentId)
     },
     onError: (error) => {

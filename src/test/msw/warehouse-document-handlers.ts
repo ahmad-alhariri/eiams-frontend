@@ -392,7 +392,7 @@ export function toWireHistory(
 }
 
 /** `PostDocumentResponse` — the one lifecycle route that answers anything. */
-function toWirePostResult(document: WarehouseDocument): PostDocumentResponse {
+export function toWirePostResult(document: WarehouseDocument): PostDocumentResponse {
   return { documentId: document.documentId, warnings: [] }
 }
 
@@ -1378,6 +1378,13 @@ function mapDraftLine(
     // D-IAR-01: Issue lines reference existing assets by id; the draft keeps
     // them verbatim and posting freezes the resolved set (mock parity).
     ...(input.assetIds === undefined ? {} : { assetIds: input.assetIds }),
+    // Receiving/Opening lines register one NEW asset per unit. The live command
+    // carries the captured identity as `assetInputs`, and dropping it here would
+    // silently lose every asset number and serial the keeper typed, because
+    // `toWireLine` below reads exactly this member. A `null` collection is
+    // treated as absent rather than stored, since the harness member is
+    // non-nullable.
+    ...(input.assetInputs == null ? {} : { assetInputs: input.assetInputs }),
     availableBalance: null,
     baseQuantity: input.quantity ?? 0,
     batchNumber: input.batchNumber ?? null,

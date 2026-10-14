@@ -6,7 +6,10 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createLifecycleEvent } from '@/test/msw/factories'
-import { createWarehouseDocumentHistoryHandler } from '@/test/msw/warehouse-document-handlers'
+import {
+  createWarehouseDocumentHistoryHandler,
+  toWireLifecycleEvent,
+} from '@/test/msw/warehouse-document-handlers'
 import { server } from '@/test/msw/server'
 
 import DocumentTimelineSection from './document-timeline-section'
@@ -62,7 +65,9 @@ describe('DocumentTimelineSection', () => {
 
     expect(await screen.findByText('إنشاء الوثيقة')).toBeInTheDocument()
     expect(screen.getByText('ترحيل الوثيقة')).toBeInTheDocument()
-    expect(screen.getByText('بواسطة أحمد علي — أمين المستودع')).toBeInTheDocument()
+    // The wire event carries the actor as a flat `actorDisplayName` and no role
+    // reference at all, so the timeline's actor line stops at the name.
+    expect(screen.getByText('بواسطة أحمد علي')).toBeInTheDocument()
     expect(screen.getByText('سجل الحالة')).toBeInTheDocument()
     expect(screen.getAllByText('مرحّل').length).toBeGreaterThan(0)
     expect(document.querySelector('[data-slot="document-timeline-section"]')).not.toBeNull()
@@ -85,11 +90,15 @@ describe('DocumentTimelineSection', () => {
         attempts += 1
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : okJson({
+          : // The live history envelope spells each event the wire way
+            // (`action` / `actorDisplayName`, not the snapshot's `eventType` /
+            // `occurredBy`), so a hand-built fallback has to project too — the
+            // harness handler above already does this for every other case.
+            okJson({
               documentId: DOCUMENT_ID,
               currentStatus: 'Posted',
               currentRowVersion: 2,
-              events: HISTORY_EVENTS,
+              events: HISTORY_EVENTS.map((event) => toWireLifecycleEvent(event)),
             })
       }),
     )

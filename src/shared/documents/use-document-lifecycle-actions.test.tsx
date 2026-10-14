@@ -1,4 +1,4 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { okJson } from '@/test/msw/envelope'
 import { act, renderHook, screen, waitFor } from '@testing-library/react'
 import { http } from 'msw'
@@ -8,15 +8,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from '@/shared/services/query.client'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
 import { Toaster } from '@/shared/ui/toaster'
+import type { WarehouseDocumentDetails } from '@/shared/documents/types/document-wire.types'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import {
-  createDocumentActionResult,
   createDocumentPolicy,
   createWarehouseDocument,
   deriveLifecycleEvents,
   fixtureUuid,
 } from '@/test/msw/factories'
-import { createWarehouseDocumentActionHandler } from '@/test/msw/warehouse-document-handlers'
+import { wireDocumentDetails, wireDocumentHistory } from '@/test/msw/document-wire-fixtures'
+import {
+  createWarehouseDocumentActionHandler,
+  toWirePolicy,
+} from '@/test/msw/warehouse-document-handlers'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -68,25 +72,40 @@ function createHarness() {
   return { client, plainWrapper, toastWrapper }
 }
 
+/**
+ * Wires the three read branches plus the six action routes for one mutable
+ * in-memory document.
+ *
+ * Every answer is PROJECTED to the wire (`document-wire-fixtures` /
+ * `toWirePolicy`): the live `/warehouse-documents/{id}` route serves
+ * `WarehouseDocumentDetails`, and the history and policy reads serve their own
+ * wire shapes. Serving the nested snapshot directly leaves the cached detail
+ * without `assets`/`selectedAssets`/`materialNameAr`, so the detail branch holds
+ * a record the API never sends.
+ */
 function useMutableDocumentHandlers(store: { documents: WarehouseDocument[] }) {
   const counters = { detailRequests: 0, historyRequests: 0, policyRequests: 0 }
   server.use(
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
       counters.detailRequests += 1
-      return okJson(store.documents[0])
+      return okJson(wireDocumentDetails(store.documents[0]!))
     }),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () => {
       counters.historyRequests += 1
-      return okJson({
-        documentId: DOCUMENT_ID,
-        currentStatus: store.documents[0]?.documentStatus ?? 'Draft',
-        currentRowVersion: store.documents[0]?.rowVersion ?? 0,
-        events: deriveLifecycleEvents(store.documents[0] ?? createWarehouseDocument()),
-      })
+      return okJson(
+        wireDocumentHistory(
+          deriveLifecycleEvents(store.documents[0] ?? createWarehouseDocument()),
+          {
+            documentId: DOCUMENT_ID,
+            currentStatus: store.documents[0]?.documentStatus ?? 'Draft',
+            currentRowVersion: store.documents[0]?.rowVersion ?? 0,
+          },
+        ),
+      )
     }),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () => {
       counters.policyRequests += 1
-      return okJson(store.documents[0]?.policy)
+      return okJson(toWirePolicy(store.documents[0]!))
     }),
     ...createWarehouseDocumentActionHandler({
       initialDocument: store.documents[0]!,
@@ -96,12 +115,20 @@ function useMutableDocumentHandlers(store: { documents: WarehouseDocument[] }) {
   return counters
 }
 
+/**
+ * The server document as the app now caches it (the wire detail read), so a
+ * seeded cache entry is the record the application actually holds.
+ */
+function cachedDocument(client: QueryClient): WarehouseDocumentDetails | undefined {
+  return client.getQueryData<WarehouseDocumentDetails>(SCOPED_DOCUMENT_KEY)
+}
+
 afterEach(() => {
   activeScope.key = { kind: 'enterprise' }
 })
 
 describe('useDocumentLifecycleAction family', () => {
-  it('submits a Draft document: cache updated from the server result, detail branches invalidated, Arabic success toast', async () => {
+  it('submits a Draft document: detail branch refetched from the server, Arabic success toast', async () => {
     const { client, plainWrapper, toastWrapper } = createHarness()
     const store = {
       documents: [
@@ -136,7 +163,7 @@ describe('useDocumentLifecycleAction family', () => {
     expect(result.current.error).toBeNull()
     expect(result.current.isConflict).toBe(false)
 
-    const cached = client.getQueryData<WarehouseDocument>(SCOPED_DOCUMENT_KEY)
+    const cached = cachedDocument(client)
     expect(cached?.documentStatus).toBe('Submitted')
     expect(cached?.rowVersion).toBe(2)
 
@@ -146,7 +173,7 @@ describe('useDocumentLifecycleAction family', () => {
   })
 
   it('rejects a Submitted document with a reason and surfaces the Arabic success toast', async () => {
-    const { client, toastWrapper } = createHarness()
+    const { client, plainWrapper, toastWrapper } = createHarness()
     const store = {
       documents: [
         createWarehouseDocument({
@@ -158,6 +185,7 @@ describe('useDocumentLifecycleAction family', () => {
     }
     useMutableDocumentHandlers(store)
 
+    renderHook(() => useDocumentDetailQuery(DOCUMENT_ID), { wrapper: plainWrapper })
     const { result } = renderHook(() => useRejectDocumentMutation(DOCUMENT_ID), {
       wrapper: toastWrapper,
     })
@@ -169,9 +197,10 @@ describe('useDocumentLifecycleAction family', () => {
     await waitFor(() => expect(screen.getByText('تم رفض السند')).toBeInTheDocument())
     expect(result.current.error).toBeNull()
 
-    const cached = client.getQueryData<WarehouseDocument>(SCOPED_DOCUMENT_KEY)
-    expect(cached?.documentStatus).toBe('Rejected')
-    expect(cached?.rowVersion).toBe(2)
+    // The 422-free acknowledge carries no post-action state, so the only honest
+    // cached status is the one the refetched detail read returns.
+    await waitFor(() => expect(cachedDocument(client)?.documentStatus).toBe('Rejected'))
+    expect(cachedDocument(client)?.rowVersion).toBe(2)
   })
 
   it('surfaces an Arabic 422 error when a reason-required action omits the reason', async () => {
@@ -260,16 +289,9 @@ describe('useDocumentLifecycleAction family', () => {
         `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/submit`,
         async ({ request }) => {
           capturedKey = request.headers.get('Idempotency-Key')
-          const updated = createWarehouseDocument({
-            documentId: DOCUMENT_ID,
-            documentStatus: 'Submitted',
-            rowVersion: 2,
-          })
-          return okJson(
-            createDocumentActionResult('Submit', {
-              document: updated,
-            }),
-          )
+          // Submit acknowledges with `EmptyResponse`: the live route carries no
+          // post-action state, so the caller re-reads the document.
+          return okJson({})
         },
       ),
     )
@@ -288,7 +310,7 @@ describe('useDocumentLifecycleAction family', () => {
   })
 
   it('posts a Submitted document: cache updated and Arabic success toast', async () => {
-    const { client, toastWrapper } = createHarness()
+    const { client, plainWrapper, toastWrapper } = createHarness()
     const store = {
       documents: [
         createWarehouseDocument({
@@ -306,6 +328,9 @@ describe('useDocumentLifecycleAction family', () => {
     }
     useMutableDocumentHandlers(store)
 
+    // Post acknowledges with `{ documentId, warnings }`, so the only place the new
+    // status can come from is the refetched detail read — mount it.
+    renderHook(() => useDocumentDetailQuery(DOCUMENT_ID), { wrapper: plainWrapper })
     const { result } = renderHook(() => usePostDocumentMutation(DOCUMENT_ID), {
       wrapper: toastWrapper,
     })
@@ -317,13 +342,12 @@ describe('useDocumentLifecycleAction family', () => {
     await waitFor(() => expect(screen.getByText('تم ترحيل السند بنجاح')).toBeInTheDocument())
     expect(result.current.error).toBeNull()
 
-    const cached = client.getQueryData<WarehouseDocument>(SCOPED_DOCUMENT_KEY)
-    expect(cached?.documentStatus).toBe('Posted')
-    expect(cached?.rowVersion).toBe(2)
+    await waitFor(() => expect(cachedDocument(client)?.documentStatus).toBe('Posted'))
+    expect(cachedDocument(client)?.rowVersion).toBe(2)
   })
 
   it('reverses a Posted document with a reason: cache updated and Arabic success toast', async () => {
-    const { client, toastWrapper } = createHarness()
+    const { client, plainWrapper, toastWrapper } = createHarness()
     const store = {
       documents: [
         createWarehouseDocument({
@@ -335,6 +359,9 @@ describe('useDocumentLifecycleAction family', () => {
     }
     useMutableDocumentHandlers(store)
 
+    // The reversal route answers `201 { id }` for the compensating document, so
+    // the refreshed status comes from the refetched detail read.
+    renderHook(() => useDocumentDetailQuery(DOCUMENT_ID), { wrapper: plainWrapper })
     const { result } = renderHook(() => useReverseDocumentMutation(DOCUMENT_ID), {
       wrapper: toastWrapper,
     })
@@ -350,9 +377,8 @@ describe('useDocumentLifecycleAction family', () => {
     await waitFor(() => expect(screen.getByText('تم عكس السند')).toBeInTheDocument())
     expect(result.current.error).toBeNull()
 
-    const cached = client.getQueryData<WarehouseDocument>(SCOPED_DOCUMENT_KEY)
-    expect(cached?.documentStatus).toBe('Reversed')
-    expect(cached?.rowVersion).toBe(3)
+    await waitFor(() => expect(cachedDocument(client)?.documentStatus).toBe('Reversed'))
+    expect(cachedDocument(client)?.rowVersion).toBe(3)
   })
 
   it('is a zero-network mutation when the documentId is null', async () => {
@@ -361,7 +387,7 @@ describe('useDocumentLifecycleAction family', () => {
     server.use(
       http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/submit`, () => {
         submitCalls += 1
-        return okJson(createDocumentActionResult('Submit'))
+        return okJson({})
       }),
     )
 

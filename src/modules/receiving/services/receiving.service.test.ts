@@ -1,15 +1,28 @@
 import { createAxiosTransport } from '@/shared/api/axios-transport'
 import { errJson, okJson } from '@/test/msw/envelope'
+import { fixtureUuid } from '@/test/msw/factories'
 import { http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { createReceivingService } from '@/modules/receiving/services/receiving.service'
+import {
+  createReceivingService,
+  receivingService,
+  type SupplierSuggestion,
+} from '@/modules/receiving/services/receiving.service'
+import { normalizeApiError } from '@/shared/services/api-error'
 import { createApiClient, type ApiClientBundle } from '@/shared/services/api.client'
 import { createDevSession } from '@/shared/services/dev-session'
 
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
+
+// The live route, verified in `eiams-frontend-67ky`: the provisional snapshot's
+// `GET /receiving/suppliers` never existed on the backend, so a handler mocking
+// that path left MSW with an unhandled request — which the transport surfaces as
+// `AxiosError: Network Error`, not as a wrong-shape assertion.
+const SUPPLIERS_PATH = `${API_BASE_URL}/receiving-infos/suppliers`
+
 const bundles: ApiClientBundle[] = []
 
 function setupService() {
@@ -25,56 +38,77 @@ afterEach(() => {
   for (const bundle of bundles.splice(0)) bundle.dispose()
 })
 
+/** `SupplierSuggestionResponse` as the backend serves it, not the invented `string[]`. */
+function createSupplierSuggestion(overrides: Partial<SupplierSuggestion> = {}): SupplierSuggestion {
+  return { id: fixtureUuid(600), nameAr: 'مورد الشام', code: null, ...overrides }
+}
+
 describe('ReceivingService', () => {
-  it('maps the supplier-suggestion query to the contract endpoint and trims the result', async () => {
+  it('maps the supplier-suggestion query to the contract endpoint and returns the typed rows', async () => {
     const service = setupService()
     const requestedUrls: string[] = []
+    const suppliers = [
+      createSupplierSuggestion(),
+      createSupplierSuggestion({ id: fixtureUuid(601), nameAr: 'مورد النور', code: 'SUP-02' }),
+    ]
 
     server.use(
-      http.get(`${API_BASE_URL}/receiving/suppliers`, ({ request }) => {
-        requestedUrls.push(new URL(request.url).pathname + new URL(request.url).search)
-        return okJson(['مورد الشام', 'مورد النور'])
+      http.get(SUPPLIERS_PATH, ({ request }) => {
+        const url = new URL(request.url)
+        requestedUrls.push(`${url.pathname}${url.search}`)
+        // The envelope is what the API sends; the transport unwraps `data`, so the
+        // service hands back the suggestion rows themselves.
+        return okJson(suppliers)
       }),
     )
 
-    await expect(service.searchReceivingSuppliers('شام')).resolves.toEqual([
-      'مورد الشام',
-      'مورد النور',
-    ])
-    expect(requestedUrls).toEqual([
-      `${API_BASE_URL}/receiving/suppliers?search=${encodeURIComponent('شام')}`,
-    ])
+    await expect(service.searchReceivingSuppliers('شام')).resolves.toEqual(suppliers)
+    expect(requestedUrls).toEqual([`${SUPPLIERS_PATH}?search=${encodeURIComponent('شام')}`])
   })
 
   it('propagates a 401 as a normalized API error for the consuming hook to surface', async () => {
     const service = setupService()
+
     server.use(
-      http.get(`${API_BASE_URL}/receiving/suppliers`, () =>
+      http.get(SUPPLIERS_PATH, () =>
         errJson(401, {
-          code: 'auth.session_expired',
-          message: 'Unauthorized.',
+          code: 'AUTHENTICATION_REQUIRED',
+          message: 'The request requires an authenticated session.',
           detail: 'غير مصرح',
         }),
       ),
     )
 
-    await expect(service.searchReceivingSuppliers('شام')).rejects.toMatchObject({
-      response: { status: 401 },
+    const error = await service
+      .searchReceivingSuppliers('شام')
+      .then(() => null)
+      .catch((caught: unknown) => caught)
+
+    // The service translates nothing: it rejects with the raw transport error, so
+    // the assertion is on the status and the nested code the hook boundary reads.
+    expect(error).toMatchObject({ response: { status: 401 } })
+    expect(normalizeApiError(error)).toMatchObject({
+      kind: 'problem',
+      status: 401,
+      code: 'AUTHENTICATION_REQUIRED',
+      titleAr: 'انتهت الجلسة. يرجى تسجيل الدخول مجدداً.',
     })
   })
 
   it('exposes the shared singleton wired to the configured API client', async () => {
-    const { receivingService } = await import('@/modules/receiving/services/receiving.service')
     const requestedUrls: string[] = []
+    const supplier = createSupplierSuggestion()
 
     server.use(
-      http.get(`${API_BASE_URL}/receiving/suppliers`, ({ request }) => {
+      http.get(SUPPLIERS_PATH, ({ request }) => {
         requestedUrls.push(new URL(request.url).search)
-        return okJson(['مورد الشام'])
+        return okJson([supplier])
       }),
     )
 
-    await expect(receivingService.searchReceivingSuppliers('شام')).resolves.toEqual(['مورد الشام'])
+    // The singleton is built over `apiTransport` at module scope, so this fails
+    // the moment the composition root loses its real three-method transport.
+    await expect(receivingService.searchReceivingSuppliers('شام')).resolves.toEqual([supplier])
     expect(requestedUrls).toEqual([`?search=${encodeURIComponent('شام')}`])
   })
 })

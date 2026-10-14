@@ -154,12 +154,16 @@ describe('asset-line capture schema (e12-t05)', () => {
   })
 
   it('maps asset lines to what the request contract can actually carry', () => {
-    // KNOWN CONTRACT GAP (documented in `toCompleteDraftAssetLines`): the live
-    // `CompleteWarehouseDocumentDraftLine` has no per-unit identity collection —
-    // only `assetIds`, used to SELECT assets that already exist. So the captured
-    // `assetNumber` / `serialNumber` / dates are NOT sent, and the mapper emits
-    // the material and its unit count only. Nothing here invents a payload the
-    // server would reject.
+    // The live `CompleteWarehouseDocumentDraftLine` carries `assetInputs`, the
+    // collection the draft route reads to register one Asset per unit at post
+    // (D-MAT-01), so the captured identity travels with the line.
+    //
+    // Two rules hold inside `assetInputs`:
+    //  - a blank member is OMITTED rather than sent as an empty string, because a
+    //    blank asset number is a recorded decision meaning "generate one at post",
+    //    and a blank serial on a Quantity-tracked material is forbidden outright;
+    //  - `acquisitionDate` / `warrantyExpiry` have no slot on the wire `AssetInput`,
+    //    so the server derives them when it creates the Asset.
     const lines: AssetLineValues[] = [
       validLine({
         lineId: '00000000-0000-4000-8000-000000000201',
@@ -181,8 +185,17 @@ describe('asset-line capture schema (e12-t05)', () => {
     ]
 
     expect(toCompleteDraftAssetLines(lines)).toEqual([
-      { materialId: MATERIAL_ID, quantity: 2 },
-      { materialId: MATERIAL_ID, quantity: 1 },
+      {
+        materialId: MATERIAL_ID,
+        quantity: 2,
+        assetInputs: [
+          { assetNumber: '  A-1001  ' },
+          { assetNumber: 'A-1002', serialNumber: 'SN-9002' },
+        ],
+      },
+      // A unit with neither number is sent as an empty input: that empty object
+      // IS the "allocate both at post" decision, not an absent collection.
+      { materialId: MATERIAL_ID, quantity: 1, assetInputs: [{}] },
     ])
   })
 

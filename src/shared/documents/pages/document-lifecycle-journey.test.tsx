@@ -9,12 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { environment } from '@/config/env'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { LifecycleActionKind } from '@/shared/documents/use-document-lifecycle-actions'
-import type {
-  DocumentLifecycleEvent,
-  ReasonedDocumentActionRequest,
-  VersionOnlyDocumentActionRequest,
-  WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
+import type { DocumentLifecycleEvent, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { Toaster } from '@/shared/ui/toaster'
 import {
@@ -26,7 +21,9 @@ import {
   createWarehouseDocument,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
-import { applyDocumentAction } from '@/test/msw/warehouse-document-handlers'
+import { applyDocumentAction, toWirePostResult } from '@/test/msw/warehouse-document-handlers'
+import { wireDocumentDetails, wireDocumentHistory } from '@/test/msw/document-wire-fixtures'
+import { toWirePolicy } from '@/test/msw/warehouse-document-handlers'
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -60,6 +57,20 @@ const ALL_DOCUMENT_CODES = [
   'document.cancel',
   'document.reverse',
 ]
+
+/**
+ * The live route suffix per lifecycle action. The snapshot derived a suffix from
+ * the action name (`reverse`, `revise`), but the API serves `reversals` and
+ * `return-to-draft`, so the mapping is spelled out rather than lower-cased.
+ */
+const LIFECYCLE_ROUTES: Readonly<Record<LifecycleActionKind, string>> = {
+  Submit: 'submit',
+  Post: 'post',
+  Reject: 'reject',
+  Revise: 'return-to-draft',
+  Cancel: 'cancel',
+  Reverse: 'reversals',
+}
 
 const DROPZONE_LABEL_AR = 'اسحب وأفلت الملف هنا أو انقر للاختيار'
 
@@ -125,38 +136,57 @@ function useMutableJourney(delayMs = 0): MutableJourney {
     capturedKeys: { Submit: [], Post: [], Reject: [], Revise: [], Cancel: [], Reverse: [] },
   }
 
+  // Every read is answered on the live wire contract: the detail read is the flat
+  // `WarehouseDocumentDetails` projection, the history envelope carries wire
+  // events, and the policy carries `status` rather than `documentStatus`. Serving
+  // the nested snapshot here leaves the page holding a record the API never sends
+  // — lines with no `assets`/`selectedAssets`, and a `postedBy` reference object
+  // where the wire promises a Uuid.
   server.use(
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
-      okJson(journey.documents[0]),
+      okJson(wireDocumentDetails(journey.documents[0]!)),
     ),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/history`, () =>
-      okJson({
-        documentId: DOCUMENT_ID,
-        currentStatus: journey.documents[0]?.documentStatus ?? 'Draft',
-        currentRowVersion: journey.documents[0]?.rowVersion ?? 0,
-        events: journey.events,
-      }),
+      okJson(
+        wireDocumentHistory(journey.events, {
+          documentId: DOCUMENT_ID,
+          currentStatus: journey.documents[0]?.documentStatus ?? 'Draft',
+          currentRowVersion: journey.documents[0]?.rowVersion ?? 0,
+        }),
+      ),
     ),
     http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-      okJson(journey.documents[0]?.policy),
+      okJson(toWirePolicy(journey.documents[0]!)),
     ),
   )
 
   for (const action of LIFECYCLE_ACTIONS) {
     server.use(
       http.post(
-        `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/${action.toLowerCase()}`,
+        `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/${LIFECYCLE_ROUTES[action]}`,
         async ({ request }) => {
           journey.actionCalls[action] += 1
           journey.capturedKeys[action].push(request.headers.get('Idempotency-Key'))
           await delay(delayMs)
-          const body = (await request.json()) as
-            VersionOnlyDocumentActionRequest | ReasonedDocumentActionRequest
+          // `reversals` is the one bodyless lifecycle route; every other action
+          // guards on the version the user was shown, which the live body spells
+          // `expectedRowVersion`.
+          const body =
+            action === 'Reverse'
+              ? ({} as { expectedRowVersion?: number; reason?: string | null })
+              : ((await request.json()) as { expectedRowVersion?: number; reason?: string | null })
           const outcome = applyDocumentAction({
             action,
             document: journey.documents[0]!,
-            rowVersion: body.rowVersion,
-            reason: 'reason' in body ? (body.reason ?? null) : null,
+            rowVersion:
+              action === 'Reverse'
+                ? journey.documents[0]!.rowVersion
+                : (body.expectedRowVersion ?? 0),
+            reason: body.reason ?? null,
+            // The reversal route carries no body, so the reason the dialog
+            // collects cannot travel to it and the route cannot enforce one it
+            // never receives.
+            reasonNotApplicable: action === 'Reverse',
           })
           if (outcome.kind === 'conflict') {
             return apiJson(outcome.problem, { status: 409 })
@@ -166,7 +196,20 @@ function useMutableJourney(delayMs = 0): MutableJourney {
           }
           journey.documents[0] = outcome.document
           journey.events.push(outcome.result.lifecycleEvent)
-          return okJson(outcome.result)
+          // Live action answers: the reversal route reports the compensating
+          // document with a 201, post returns `{ documentId, warnings }`, and
+          // every other action acknowledges with an empty body — the client
+          // re-reads the document rather than trusting a returned copy.
+          if (action === 'Reverse') {
+            const reversalId = outcome.compensatingDocument?.documentId
+            return reversalId === undefined
+              ? okJson({})
+              : apiJson({ id: reversalId }, { status: 201 })
+          }
+          if (action === 'Post') {
+            return okJson(toWirePostResult(outcome.document))
+          }
+          return okJson({})
         },
       ),
     )
@@ -244,7 +287,11 @@ describe('composed canonical document lifecycle journey', () => {
     await waitFor(() => expect(screen.getAllByText('الإصدار: 4').length).toBeGreaterThan(0))
     await waitFor(() => expect(timelineWithin().getByText('عكس الوثيقة')).toBeInTheDocument())
     expect(timelineWithin().getAllByRole('listitem')).toHaveLength(4)
-    expect(timelineWithin().getByText('خطأ في الترحيل')).toBeInTheDocument()
+    // The reversal reason does NOT reach the timeline: `reversals` is the one
+    // bodyless lifecycle route, so the reason the dialog collects has no wire
+    // slot to travel in and the server records the event without one. Asserting
+    // the reason here would pin behaviour the live contract cannot produce.
+    expect(timelineWithin().queryByText('خطأ في الترحيل')).not.toBeInTheDocument()
     expect(timelineWithin().queryByText('رفض الوثيقة')).not.toBeInTheDocument()
     expect(timelineWithin().queryByText('بدء المراجعة')).not.toBeInTheDocument()
     expect(timelineWithin().queryByText('إلغاء الوثيقة')).not.toBeInTheDocument()

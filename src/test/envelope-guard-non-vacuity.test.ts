@@ -120,12 +120,19 @@ describe('the guards actually run against the real service files', () => {
     // The other half of non-vacuity: if the compliant fixtures above are the only
     // clean cases, this proves the migration is complete rather than proving the
     // rule is toothless.
+    //
+    // Every glob is mirrored from the `files` list of the guard block in
+    // `eslint.config.js`, so a path that moves has to move in both places — a
+    // glob that matches nothing throws here instead of quietly guarding nothing.
+    // `axios-transport.ts` is intentionally absent: it is the one sanctioned
+    // unwrapper, excluded from the guard itself.
     const eslint = new ESLint({ cwd: process.cwd() })
     const results = await eslint.lintFiles([
       'src/modules/*/services/*.service.ts',
       'src/shared/documents/*-service.ts',
       'src/shared/documents/*-transport.ts',
-      'src/shared/services/*-transport.ts',
+      'src/shared/api/api-transport.ts',
+      'src/shared/api/transport.ts',
     ])
 
     const offences = results.flatMap((result) =>

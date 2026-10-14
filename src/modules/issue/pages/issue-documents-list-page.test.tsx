@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
+import { wireDocumentSummary } from '@/test/msw/document-wire-fixtures'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -53,7 +54,7 @@ describe('IssueDocumentsListPage', () => {
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
         expect(new URL(request.url).searchParams.get('documentType')).toBe('Issue')
-        return okPageJson([document])
+        return okPageJson([wireDocumentSummary(document)])
       }),
       http.get(`${API_BASE_URL}/warehouses`, () => okJson([warehouse])),
     )
@@ -66,7 +67,9 @@ describe('IssueDocumentsListPage', () => {
     expect(
       await screen.findByRole('link', { name: document.systemReferenceNumber }),
     ).toHaveAttribute('href', `/documents/issue/${document.documentId}`)
-    expect(screen.getByText(document.warehouse.displayName)).toBeInTheDocument()
+    // The list projection identifies a warehouse by id only — it carries no display
+    // reference — so the row renders the id the server actually sent.
+    expect(screen.getByText(document.warehouse.id)).toBeInTheDocument()
   })
 
   it('shows the Arabic error state and retries the issue-document request', async () => {
