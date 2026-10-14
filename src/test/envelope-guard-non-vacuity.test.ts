@@ -23,9 +23,27 @@ import { describe, expect, it } from 'vitest'
 // apply to it at all and every assertion below passes vacuously.
 const SERVICE_GLOB_DIR = 'src/modules/envelope-guard-probe/services'
 
+/**
+ * ONE ESLint instance for every probe in this file.
+ *
+ * Each `new ESLint()` re-reads and re-resolves the whole flat config from disk,
+ * so building one per probe made this suite pay that cost eight times over.
+ *
+ * The dominant cost is unavoidable: ESLint must resolve the flat config at
+ * least once, which measures ~2.4s here, while every later probe costs 10–20ms.
+ * That first resolution used to land inside the FIRST probe's assertion window.
+ * On an idle machine it fit comfortably inside the 20s default, but in the full
+ * suite — where 297 files compete for the same workers — it occasionally blew
+ * past it, failing a suite that passes every time it is run alone. `PROBE_TIMEOUT`
+ * below gives the config resolution room to finish on a loaded machine. It does
+ * NOT relax any assertion: a probe that fails to report its violation still fails.
+ */
+const SHARED_ESLINT = new ESLint({ cwd: process.cwd() })
+
+const PROBE_TIMEOUT = 60_000
+
 async function lint(code: string): Promise<string[]> {
-  const eslint = new ESLint({ cwd: process.cwd() })
-  const [result] = await eslint.lintText(code, {
+  const [result] = await SHARED_ESLINT.lintText(code, {
     filePath: `${SERVICE_GLOB_DIR}/probe.service.ts`,
   })
   return (result?.messages ?? []).map((message) => message.ruleId ?? 'parse-error')
@@ -52,58 +70,64 @@ export function createProbeService(transport: ApiTransport) {
 }
 `
 
-describe('envelope guard: a service may not read .data', () => {
-  it('reports a leftover hand-unwrap of the envelope', async () => {
-    const violations = await lint(`
+describe(
+  'envelope guard: a service may not read .data',
+  () => {
+    it('reports a leftover hand-unwrap of the envelope', async () => {
+      const violations = await lint(`
       export async function bad(transport: ApiTransport) {
         const response = await transport.request<{ id: string }>({ path: '/x', method: 'GET' })
         return response.data
       }
     `)
 
-    expect(violations).toContain('no-restricted-syntax')
-  })
+      expect(violations).toContain('no-restricted-syntax')
+    })
 
-  it('reports a .data read reached through any receiver', async () => {
-    // The rule is intentionally receiver-agnostic. A payload that happens to own
-    // a `data` field is a real possibility, and the fix is to rename the field or
-    // read it in the hook boundary — not to widen the escape hatch that let the
-    // original drift through.
-    const violations = await lint(`
+    it('reports a .data read reached through any receiver', async () => {
+      // The rule is intentionally receiver-agnostic. A payload that happens to own
+      // a `data` field is a real possibility, and the fix is to rename the field or
+      // read it in the hook boundary — not to widen the escape hatch that let the
+      // original drift through.
+      const violations = await lint(`
       export function readIt(response: { data: unknown }) {
         return response.data
       }
     `)
 
-    expect(violations).toContain('no-restricted-syntax')
-  })
+      expect(violations).toContain('no-restricted-syntax')
+    })
 
-  it('does not report a service that takes the payload directly', async () => {
-    expect(await lint(COMPLIANT)).not.toContain('no-restricted-syntax')
-  })
-})
+    it('does not report a service that takes the payload directly', async () => {
+      expect(await lint(COMPLIANT)).not.toContain('no-restricted-syntax')
+    })
+  },
+  PROBE_TIMEOUT,
+)
 
-describe('envelope guard: a service may not call an HTTP client directly', () => {
-  it.each(['get', 'post', 'put', 'patch', 'delete'])(
-    'reports client.%s(...) bypassing the transport',
-    async (method) => {
-      const violations = await lint(`
+describe(
+  'envelope guard: a service may not call an HTTP client directly',
+  () => {
+    it.each(['get', 'post', 'put', 'patch', 'delete'])(
+      'reports client.%s(...) bypassing the transport',
+      async (method) => {
+        const violations = await lint(`
         export async function bad(client: { ${method}(path: string): Promise<unknown> }) {
           const response = await client.${method}('/x')
           return response
         }
       `)
 
-      expect(violations).toContain('no-restricted-syntax')
-    },
-  )
+        expect(violations).toContain('no-restricted-syntax')
+      },
+    )
 
-  it('reports a bare fetch, which the pre-existing rule also covers', async () => {
-    expect(await lint(`export const go = () => fetch('/x')`)).toContain('no-restricted-syntax')
-  })
+    it('reports a bare fetch, which the pre-existing rule also covers', async () => {
+      expect(await lint(`export const go = () => fetch('/x')`)).toContain('no-restricted-syntax')
+    })
 
-  it('does not report the transport methods themselves', async () => {
-    const violations = await lint(`
+    it('does not report the transport methods themselves', async () => {
+      const violations = await lint(`
       export async function fine(transport: ApiTransport) {
         const page = await transport.requestPage<{ id: string }>({ path: '/x', method: 'GET' })
         await transport.requestEmpty({ path: '/x', method: 'DELETE' })
@@ -111,36 +135,41 @@ describe('envelope guard: a service may not call an HTTP client directly', () =>
       }
     `)
 
-    expect(violations).not.toContain('no-restricted-syntax')
-  })
-})
+      expect(violations).not.toContain('no-restricted-syntax')
+    })
+  },
+  PROBE_TIMEOUT,
+)
 
-describe('the guards actually run against the real service files', () => {
-  it('finds no .data read left in any service today', async () => {
-    // The other half of non-vacuity: if the compliant fixtures above are the only
-    // clean cases, this proves the migration is complete rather than proving the
-    // rule is toothless.
-    //
-    // Every glob is mirrored from the `files` list of the guard block in
-    // `eslint.config.js`, so a path that moves has to move in both places — a
-    // glob that matches nothing throws here instead of quietly guarding nothing.
-    // `axios-transport.ts` is intentionally absent: it is the one sanctioned
-    // unwrapper, excluded from the guard itself.
-    const eslint = new ESLint({ cwd: process.cwd() })
-    const results = await eslint.lintFiles([
-      'src/modules/*/services/*.service.ts',
-      'src/shared/documents/*-service.ts',
-      'src/shared/documents/*-transport.ts',
-      'src/shared/api/api-transport.ts',
-      'src/shared/api/transport.ts',
-    ])
+describe(
+  'the guards actually run against the real service files',
+  () => {
+    it('finds no .data read left in any service today', async () => {
+      // The other half of non-vacuity: if the compliant fixtures above are the only
+      // clean cases, this proves the migration is complete rather than proving the
+      // rule is toothless.
+      //
+      // Every glob is mirrored from the `files` list of the guard block in
+      // `eslint.config.js`, so a path that moves has to move in both places — a
+      // glob that matches nothing throws here instead of quietly guarding nothing.
+      // `axios-transport.ts` is intentionally absent: it is the one sanctioned
+      // unwrapper, excluded from the guard itself.
+      const results = await SHARED_ESLINT.lintFiles([
+        'src/modules/*/services/*.service.ts',
+        'src/shared/documents/*-service.ts',
+        'src/shared/documents/*-transport.ts',
+        'src/shared/api/api-transport.ts',
+        'src/shared/api/transport.ts',
+      ])
 
-    const offences = results.flatMap((result) =>
-      result.messages
-        .filter((message) => message.ruleId === 'no-restricted-syntax')
-        .map((message) => `${result.filePath}: ${message.message}`),
-    )
+      const offences = results.flatMap((result) =>
+        result.messages
+          .filter((message) => message.ruleId === 'no-restricted-syntax')
+          .map((message) => `${result.filePath}: ${message.message}`),
+      )
 
-    expect(offences).toEqual([])
-  })
-})
+      expect(offences).toEqual([])
+    })
+  },
+  PROBE_TIMEOUT,
+)
