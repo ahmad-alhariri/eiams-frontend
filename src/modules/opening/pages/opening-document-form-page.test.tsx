@@ -93,7 +93,7 @@ const capability = createWarehouseCapability({
   materialDomainId: MATERIAL_DOMAIN_ID,
   materialDomainName: 'تقنية المعلومات',
   materialDomainCode: 'TEST',
-  operations: ['Receiving', 'Issue'],
+  operations: ['Receiving', 'Issue', 'Opening'],
 })
 
 function createWrapper() {
@@ -203,6 +203,14 @@ async function fillHeader(user: ReturnType<typeof userEvent.setup>) {
 
   await user.type(screen.getByLabelText('رقم المستند الورقي'), '2024/151')
   await user.type(screen.getByLabelText('السنة الورقية'), '2024')
+  // D-OPEN-02 / PRD §6.4: the cut-off date the inventory represents is
+  // mandatory for every Opening document. Native date inputs do not accept
+  // `user.type` character-by-character; dispatch a bubbling input event so
+  // RHF's Controller onChange fires and the form state updates.
+  const asOfDateInput = screen.getByLabelText('تاريخ الرصيد الافتتاحي')
+  asOfDateInput.focus()
+  fireEvent.input(asOfDateInput, { target: { value: '2024-01-01' } })
+  fireEvent.change(asOfDateInput, { target: { value: '2024-01-01' } })
 }
 
 async function fillAssetLine(user: ReturnType<typeof userEvent.setup>) {
@@ -545,4 +553,82 @@ describe('OpeningDocumentFormPage', () => {
     releaseRequest?.()
     await waitFor(() => expect(screen.getByTestId('detail-stub')).toBeInTheDocument())
   }, 10_000)
+
+  // D-OPEN-02 (PRD §6.4) — the as-of-date is mandatory at submit time.
+  it('refuses submit when openingAsOfDate is empty', async () => {
+    const store: WarehouseDocument[] = []
+    usePageHandlers(store, () => 'OPEN-2026-0001')
+    const user = userEvent.setup()
+    render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+    await fillHeaderExceptOpeningAsOfDate(user)
+    await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
+
+    expect(await screen.findByText('تاريخ الرصيد الافتتاحي مطلوب.')).toBeInTheDocument()
+    expect(store).toHaveLength(0)
+  })
+
+  // D-OPEN-02 (PRD §6.6) — zero quantity is rejected client-side.
+  it('refuses a line with zero baseQuantity', async () => {
+    const store: WarehouseDocument[] = []
+    usePageHandlers(store, () => 'OPEN-2026-0003')
+    const user = userEvent.setup()
+    render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+    await fillHeader(user)
+
+    const materialCombo = screen.getByRole('combobox', { name: 'المادة' })
+    await user.click(materialCombo)
+    await user.type(materialCombo, 'pc')
+    await user.click(await screen.findByRole('option', { name: material.nameAr }))
+
+    const quantityInput = screen.getByLabelText('الكمية')
+    await user.clear(quantityInput)
+    await user.type(quantityInput, '0')
+
+    await user.click(screen.getByLabelText('نوع الافتتاحية للبند 1'))
+    await user.click(await screen.findByRole('option', { name: 'افتتاحية أولية' }))
+
+    await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
+
+    expect(await screen.findByText('يجب أن تكون الكمية أكبر من صفر.')).toBeInTheDocument()
+    expect(store).toHaveLength(0)
+  })
+
+  // D-OPEN-02 (PRD §6.6) — negative quantity is rejected client-side.
+  it('refuses a line with negative baseQuantity', async () => {
+    const store: WarehouseDocument[] = []
+    usePageHandlers(store, () => 'OPEN-2026-0004')
+    const user = userEvent.setup()
+    render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+    await fillHeader(user)
+
+    const materialCombo = screen.getByRole('combobox', { name: 'المادة' })
+    await user.click(materialCombo)
+    await user.type(materialCombo, 'pc')
+    await user.click(await screen.findByRole('option', { name: material.nameAr }))
+
+    const quantityInput = screen.getByLabelText('الكمية')
+    await user.clear(quantityInput)
+    await user.type(quantityInput, '-5')
+
+    await user.click(screen.getByLabelText('نوع الافتتاحية للبند 1'))
+    await user.click(await screen.findByRole('option', { name: 'افتتاحية أولية' }))
+
+    await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
+
+    expect(await screen.findByText('يجب أن تكون الكمية أكبر من صفر.')).toBeInTheDocument()
+    expect(store).toHaveLength(0)
+  })
 })
+
+async function fillHeaderExceptOpeningAsOfDate(user: ReturnType<typeof userEvent.setup>) {
+  const warehouseCombo = screen.getByRole('combobox', { name: 'المستودع' })
+  await user.click(warehouseCombo)
+  await user.type(warehouseCombo, 'central')
+  await user.click(await screen.findByRole('option', { name: warehouse.name }))
+
+  await user.type(screen.getByLabelText('رقم المستند الورقي'), '2024/151')
+  await user.type(screen.getByLabelText('السنة الورقية'), '2024')
+}

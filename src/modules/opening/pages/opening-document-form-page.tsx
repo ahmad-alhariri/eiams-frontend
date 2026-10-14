@@ -33,6 +33,7 @@ import {
 } from '@/shared/documents/use-document-draft-mutations'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 
 /**
  * Opening drafts are a `WarehouseDocument` spine with the `Opening` type;
@@ -40,9 +41,26 @@ import { Button } from '@/shared/ui/button'
  * Asset identifiers are captured by the shared AssetLineEditor beside the
  * quantity-only lines; both map into the one contract `lines` payload.
  */
+// D-OPEN-02 (PRD §6.3, §6.6, §6.10): the Opening form only ever posts `Initial`
+// lines (Correction is superseded and rejected server-side) and every line
+// must carry a strictly positive base quantity. The local schema tightens
+// the shared `quantityLineSchema`; the shared schema stays as-is for
+// Receiving/Issue/Transfer.
+const openingQuantityLineSchema = quantityLineSchema.extend({
+  baseQuantity: z
+    .number()
+    .refine((value) => Number.isFinite(value) && value > 0, {
+      message: 'يجب أن تكون الكمية أكبر من صفر.',
+    })
+    .optional(),
+})
+
 const openingDocumentFormSchema = z.object({
-  header: documentHeaderSchema,
-  lines: z.array(quantityLineSchema).refine(linesHaveUniqueMaterials, {
+  header: documentHeaderSchema.extend({
+    // PRD §6.4 / D-OPEN-02: the cut-off date the inventory represents.
+    openingAsOfDate: z.string().min(1, 'تاريخ الرصيد الافتتاحي مطلوب.'),
+  }),
+  lines: z.array(openingQuantityLineSchema).refine(linesHaveUniqueMaterials, {
     message: 'لا يجوز تكرار المادة نفسها في أكثر من بند.',
   }),
   assetLines: z.array(assetLineSchema).refine(linesHaveUniqueMaterials, {
@@ -56,6 +74,7 @@ const DEFAULT_VALUES: DeepPartial<OpeningDocumentFormValues> = {
   header: {
     warehouseId: '',
     paperDocumentNumber: '',
+    openingAsOfDate: '',
   },
   lines: [createEmptyQuantityLine()],
   assetLines: [],
@@ -101,14 +120,20 @@ function combineCapabilityGates(
 }
 
 /**
- * New opening-balance draft page (e15-t02). It composes only the contract
- * spine, shared quantity-line editor, and shared AssetLineEditor. Quantity
- * lines may explicitly select the API's `Initial` or `Correction` opening
- * type; Asset lines capture one AssetInput per unit. The PRD's one-time
- * initialisation rule is presented as guidance only: the admitted OpenAPI
- * snapshot exposes neither a warehouse-level eligibility check nor a policy
- * result before a draft exists, so persistence remains server-authoritative.
- * Signed-copy workflow belongs to its later specialised task.
+ * New opening-balance draft page (D-OPEN-02). It composes only the contract
+ * spine, the shared quantity-line editor, and the shared AssetLineEditor.
+ *
+ * The form enforces the D-OPEN-02 invariants the backend requires:
+ *  - `header.openingAsOfDate` is mandatory (PRD §6.4).
+ *  - Every quantity line carries a strictly positive `baseQuantity` (PRD §6.6).
+ *  - The `openingType` per line is fixed to `Initial`; `Correction` is
+ *    superseded and rejected server-side (CONFLICT-104 / PRD §6.3).
+ *  - The per-line capability gate is shown as a chip when a material's
+ *    domain is not granted the Opening operation (CONFLICT-106 / PRD §6.7).
+ *
+ * The PRD's one-time-initialisation rule and the warehouse-level eligibility
+ * check are server-authoritative; this page surfaces the server's own
+ * policy via the shared `useCompleteDraftMutation` error path.
  */
 export default function OpeningDocumentFormPage() {
   const navigate = useNavigate()
@@ -206,6 +231,32 @@ export default function OpeningDocumentFormPage() {
               المعتمدة عند حفظ المسودة أو متابعة دورة المستند.
             </p>
           </section>
+          <FormField
+            control={form.control}
+            name="header.openingAsOfDate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>تاريخ الرصيد الافتتاحي</FormLabel>
+                <FormControl>
+                  <input
+                    type="date"
+                    dir="ltr"
+                    disabled={isSaving}
+                    data-slot="opening-as-of-date"
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                    value={field.value ?? ''}
+                    onChange={(event) => field.onChange(event.target.value)}
+                    onBlur={field.onBlur}
+                    ref={field.ref}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">
+                  تاريخ القياس الفعلي للرصيد — مستقل عن تاريخ النشر.
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <section
             data-slot="opening-lines-section"
             aria-label="بنود الرصيد الافتتاحي"
