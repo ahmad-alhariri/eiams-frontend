@@ -108,7 +108,7 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // `eiams-frontend-71fp`) and the unreferenced
     // `src/shared/documents/types/document-transport.types.ts`. Re-measured, not
     // assumed: an unchanged number here is a coincidence, not "no change".
-    assertScannedFiles(PRODUCTION_FILES, 386)
+    assertScannedFiles(PRODUCTION_FILES, 387)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)
