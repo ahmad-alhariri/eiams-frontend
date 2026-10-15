@@ -15,6 +15,7 @@ import {
   createSessionRole,
   createSessionScope,
   createSessionUser,
+  createWarehouse,
   createWarehouseDocument,
   createWarehouseDocumentLine,
   deriveLifecycleEvents,
@@ -984,6 +985,93 @@ describe('DocumentDetailPage', () => {
     await waitFor(() =>
       expect(screen.getAllByText('بانتظار الترحيل').length).toBeGreaterThanOrEqual(1),
     )
+  })
+
+  // D-OPEN-02 (PRD §6.4): the cut-off date the opening inventory represents
+  // is shown on the detail page separately from the posting timestamp.
+  // The generated `WarehouseDocument` type predates D-OPEN-02's Opening
+  // fields; the wire payload carries them, so we cast the factory output
+  // to the wire DTO and pass the extra Opening fields through. The page
+  // reads `openingAsOfDate` / `openingIsZeroStock` off the wire DTO, not
+  // the generated type.
+  it('renders openingAsOfDate and the zero-stock chip for a posted Opening document', async () => {
+    const base = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Opening',
+      documentStatus: 'Posted',
+      rowVersion: 2,
+      postedAt: '2026-01-02T10:00:00.000Z',
+      systemReferenceNumber: 'EIAMS-DOC-2026-0001',
+      paperDocumentNumber: '2024/151',
+      paperDocumentYear: 2024,
+      warehouse: { id: 'wh-1', displayName: 'المستودع المركزي' },
+    })
+    const document = {
+      ...base,
+      openingAsOfDate: '2026-01-01',
+      openingIsZeroStock: true,
+    } as typeof base & { openingAsOfDate: string; openingIsZeroStock: boolean }
+    server.use(
+      ...createWarehouseDocumentDetailHandler(document),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
+      ...createWarehouseDocumentPolicyHandler(document),
+    )
+
+    render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/opening/${DOCUMENT_ID}`),
+    })
+
+    expect(await screen.findByText(/2026-01-01/)).toBeInTheDocument()
+    expect(screen.getByText('تاريخ الرصيد الافتتاحي')).toBeInTheDocument()
+    expect(screen.getByText('تهيئة بدون حركة')).toBeInTheDocument()
+  })
+
+  // D-OPEN-02 (PRD §6.12): the reversal-blocked alert with the Adjustment
+  // CTA renders when the reverse mutation fails with
+  // OpeningDocuments.ReversalBlockedByDownstream.
+  it('surfaces the reversal-blocked alert with the Adjustment CTA on Opening reversal', async () => {
+    const warehouse = createWarehouse()
+    const document = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Opening',
+      documentStatus: 'Posted',
+      warehouse: { id: warehouse.id, displayName: warehouse.name },
+    })
+    server.use(
+      ...createWarehouseDocumentDetailHandler(document),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
+      ...createWarehouseDocumentPolicyHandler(document),
+    )
+
+    server.use(
+      http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/reversals`, () =>
+        toWireErrorResponse(
+          {
+            code: 'OpeningDocuments.ReversalBlockedByDownstream',
+            detailAr: 'downstream',
+            status: 409,
+          },
+          409,
+        ),
+      ),
+    )
+
+    render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/opening/${DOCUMENT_ID}`),
+    })
+
+    await screen.findByText(document.systemReferenceNumber, { exact: false })
+    fireEvent.click(screen.getByRole('button', { name: 'عكس' }))
+    const confirmDialog = await screen.findByRole('alertdialog', { name: 'تأكيد الإجراء' })
+    fireEvent.change(within(confirmDialog).getByLabelText('سبب الإجراء'), {
+      target: { value: 'تصحيح خطأ في التهيئة' },
+    })
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'عكس' }))
+
+    const alert = await screen.findByTestId('opening-reverse-blocked', {}, { timeout: 5000 })
+    expect(alert.textContent).toContain('لا يمكن عكس سند الفتح')
+    const adjustmentLink = within(alert).getByText('نموذج التسوية').closest('a')
+    expect(adjustmentLink).not.toBeNull()
   })
 })
 

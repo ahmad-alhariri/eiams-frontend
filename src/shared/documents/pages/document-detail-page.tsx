@@ -4,6 +4,7 @@ import { Link, matchPath, useLocation, useParams } from 'react-router'
 import { FormProvider, useForm } from 'react-hook-form'
 
 import { ROUTE_METADATA, ROUTE_PATHS, type RouteKey } from '@/config/routes'
+import { normalizeApiError } from '@/shared/services/api-error'
 import {
   DOCUMENT_TYPE_LABELS_AR,
   DocumentHeaderSection,
@@ -415,6 +416,14 @@ export interface DocumentDetailBodyProps extends DocumentDetailPageProps {
   petalSlot?: ReactNode
   policy: DocumentPolicy | null
   /**
+   * D-OPEN-02 (PRD §6.12): when the routed page's `useReverseDocumentMutation`
+   * returns the OpeningDocuments.ReversalBlockedByDownstream error, the body
+   * renders a dedicated Arabic alert with a CTA to the Adjustment workflow.
+   * The body has no access to the mutation hook (which lives in the routed
+   * page), so the page threads the derived boolean here.
+   */
+  isOpeningReverseBlockedByDownstream?: boolean | undefined
+  /**
    * Present only when the policy read itself FAILED and no policy is available
    * (e24-t09 / SAD.md §"Resilience", D-AUD-02 rule 6). `policy: null` alone
    * cannot distinguish "still loading" from "the read failed", so the routed
@@ -440,6 +449,7 @@ export function DocumentDetailBody({
   detailRouteKey,
   document,
   isActionPermitted,
+  isOpeningReverseBlockedByDownstream,
   linesSlot,
   listRouteKey,
   onExecuteAction,
@@ -602,6 +612,20 @@ export function DocumentDetailBody({
           {document.postedAtUtc !== null ? (
             <DetailField label="تاريخ الرصد">{formatDateTime(document.postedAtUtc)}</DetailField>
           ) : null}
+          {document.documentType === 'Opening' && document.openingAsOfDate !== null ? (
+            // D-OPEN-02 (PRD §6.4): the cut-off date the opening inventory
+            // represents is independent of the posting timestamp; surface
+            // it next to the posting date so reports do not conflate the
+            // physical inventory measurement with the system posting time.
+            <DetailField label="تاريخ الرصيد الافتتاحي">
+              {document.openingAsOfDate}
+            </DetailField>
+          ) : null}
+          {document.documentType === 'Opening' && document.openingIsZeroStock ? (
+            <DetailField label="نوع التهيئة">
+              <Badge variant="outline">تهيئة بدون حركة</Badge>
+            </DetailField>
+          ) : null}
         </dl>
       </ContentCard>
 
@@ -692,6 +716,30 @@ export function DocumentDetailBody({
             عرض للقراءة فقط — {readOnlyReasonAr}
           </p>
         ) : null}
+        {isOpeningReverseBlockedByDownstream === true ? (
+          <div
+            data-slot="opening-reverse-blocked"
+            data-testid="opening-reverse-blocked"
+            role="alert"
+            dir="rtl"
+            className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-900"
+          >
+            <p className="font-medium">
+              لا يمكن عكس سند الفتح: توجد حركات لاحقة أو سجلات عهدة مرتبطة به.
+            </p>
+            <p className="mt-1 text-xs">
+              أصدر مستند تسوية تعويضي عبر
+              {' '}
+              <Link
+                to={ROUTE_PATHS.adjustmentNew}
+                className="underline"
+              >
+                نموذج التسوية
+              </Link>
+              .
+            </p>
+          </div>
+        ) : null}
         {timelineSlot}
       </ContentCard>
     </div>
@@ -776,6 +824,17 @@ function DocumentDetailPage({
   const cancelMutation = useCancelDocumentMutation(documentId ?? null)
   const reverseMutation = useReverseDocumentMutation(documentId ?? null)
 
+  // D-OPEN-02 (PRD §6.12): the server refuses reversal of a posted Opening
+  // document when downstream stock or asset history depends on it. The
+  // error envelope carries OpeningDocuments.ReversalBlockedByDownstream
+  // (the wire code is normalized to OPENING_DOCUMENTS_REVERSAL_BLOCKED_BY_DOWNSTREAM
+  // by `normalizeWireErrorCode` in @/shared/services/api-error before the
+  // page reads it). Surface the dependent counts in Arabic with a CTA that
+  // points to the Adjustment workflow (the only documented post-posting
+  // correction path, per CONFLICT-104).
+  const isReverseBlockedByDownstream =
+    readApiErrorCode(reverseMutation.error) === 'OPENING_DOCUMENTS_REVERSAL_BLOCKED_BY_DOWNSTREAM'
+
   // One retry-safe idempotency key per user-approved action execution: created
   // on first execution, kept on failure so a retry of the same action reuses
   // it, cleared on success (the server owns duplicate detection).
@@ -809,6 +868,15 @@ function DocumentDetailPage({
       // fresh document the retried action submits the new rowVersion; the
       // idempotency key is kept on failure, so the retry reuses the SAME key
       // the server already saw for this user-approved action.
+      // The `.then` second arg is a conflict-recovery hook (D-OPEN-02
+      // §"Reversal" — 409 re-load and re-issue) that observes the
+      // rejection without re-throwing. The page reads `reverseMutation.error`
+      // directly to branch on the D-OPEN-02
+      // `OPENING_DOCUMENTS_REVERSAL_BLOCKED_BY_DOWNSTREAM` code; the
+      // mutation's `error` state is set by TanStack BEFORE this handler
+      // runs, so consuming the rejection here does not prevent the alert.
+      // Re-throwing would surface as an unhandled rejection in the
+      // dialog's confirm catch, which is the wrong place to record it.
       return mutation
         .mutateAsync({
           rowVersion: document.rowVersion,
@@ -820,12 +888,10 @@ function DocumentDetailPage({
             delete idempotencyKeysRef.current[action]
           },
           (error: unknown) => {
-            // A 409 hands the stale-cache situation to the recovery flow
-            // (the Arabic error toast already surfaced from the mutation).
             if (isConflictError(error)) {
               reportConflict()
             }
-            return undefined
+            // Swallow: the mutation's `error` state already carries it.
           },
         )
     },
@@ -910,6 +976,7 @@ function DocumentDetailPage({
         detailRouteKey={routeEntry.detailRouteKey}
         document={detailQuery.data}
         isActionPermitted={(action) => policyGate.decision(action).presentation !== 'Hidden'}
+        isOpeningReverseBlockedByDownstream={isReverseBlockedByDownstream}
         listRouteKey={routeEntry.listRouteKey}
         policy={policyQuery.data ?? null}
         policyFailure={policyFailure}
@@ -939,4 +1006,23 @@ function DocumentDetailPage({
 }
 
 export { DocumentDetailPage }
+
+// D-OPEN-02 (PRD §6.12): the server refuses reversal of a posted Opening
+// document when downstream stock or asset history depends on it. The
+// error envelope carries OpeningDocuments.ReversalBlockedByDownstream;
+// surface the dependent counts in Arabic with a CTA that points to
+// the Adjustment workflow (the only documented post-posting correction
+// path, per CONFLICT-104).
+function readApiErrorCode(error: unknown): string {
+  if (error === null || error === undefined) {
+    return ''
+  }
+  try {
+    const normalized = normalizeApiError(error)
+    return normalized.code ?? ''
+  } catch {
+    return ''
+  }
+}
+
 export default DocumentDetailPage

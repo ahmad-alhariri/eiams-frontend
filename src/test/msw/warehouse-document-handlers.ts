@@ -210,6 +210,32 @@ export function toWireAttachment(attachment: DocumentAttachment): DocumentAttach
   }
 }
 
+/**
+ * Read an Opening-only field off a `WarehouseDocument` fixture without
+ * requiring the generated type to know about D-OPEN-02's wire additions.
+ * The factory's generated `WarehouseDocument` predates the Opening
+ * detail fields; tests cast the fixture to add them, and this helper
+ * narrows the cast at the single place that needs to read them.
+ */
+function readOpeningField(
+  document: WarehouseDocument,
+  key: 'openingAsOfDate',
+): string | null | undefined
+function readOpeningField(
+  document: WarehouseDocument,
+  key: 'openingIsZeroStock',
+): boolean | undefined
+function readOpeningField(
+  document: WarehouseDocument,
+  key: 'openingAsOfDate' | 'openingIsZeroStock',
+): string | null | boolean | undefined {
+  return (document as unknown as Record<string, unknown>)[key] as
+    | string
+    | null
+    | boolean
+    | undefined
+}
+
 export function toWireDetails(document: WarehouseDocument): WarehouseDocumentDetails {
   return {
     id: document.documentId,
@@ -274,8 +300,14 @@ export function toWireDetails(document: WarehouseDocument): WarehouseDocumentDet
     inventoryAdjustment: null,
     lines: document.lines.map(toWireLine),
     attachments: document.attachments.map(toWireAttachment),
-    openingAsOfDate: null,
-    openingIsZeroStock: false,
+    // D-OPEN-02 (PRD §6.4 + §6.10): the Opening cut-off date and the
+    // zero-stock initialization flag travel on the detail wire (the
+    // backend fills them in production; the test harness reads them
+    // off the same `WarehouseDocument` fixture the factory builds so
+    // detail-page tests can assert the cut-off date independently of
+    // the posting timestamp).
+    openingAsOfDate: readOpeningField(document, 'openingAsOfDate') ?? null,
+    openingIsZeroStock: readOpeningField(document, 'openingIsZeroStock') ?? false,
   }
 }
 
