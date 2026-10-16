@@ -347,3 +347,23 @@ export interface WarehouseInitializationStateResponse {
   readonly reversedAtUtc: string | null
   readonly reversedBy: Uuid | null
 }
+
+/**
+ * `Application.WarehouseDocuments.Opening.ZeroStockInitializeWarehouseCommand`.
+ *
+ * Endpoint: `POST /api/v1/warehouses/{warehouseId}/initialization`. Records
+ * the canonical zero-stock initialization for a warehouse that physically
+ * contains no inventory at the approved cut-off date. Produces no document,
+ * no Opening stock movements, and no Asset records — just the
+ * `WarehouseInitializationState` row with `IsZeroStock = true`.
+ *
+ * Requires `document.create` at Warehouse scope (D-RBAC-02): the seeded
+ * permission catalog does not grant this code at Site or Enterprise scope,
+ * so a Site/Enterprise Manager cannot invoke the command even by direct
+ * API call. The 403 + 404 refusal paths therefore run server-side and the
+ * UI never needs to second-guess them.
+ */
+export interface InitializeWarehouseZeroStockRequest {
+  /** ISO date `YYYY-MM-DD` — the cut-off date the (empty) inventory represents. */
+  readonly asOfDate: string
+}

@@ -17,7 +17,7 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
 }))
 
-import { useCreateWarehouseMutation, useUpdateWarehouseMutation } from './use-warehouse-mutations'
+import { useCreateWarehouseMutation, useUpdateWarehouseMutation, useInitializeWarehouseZeroStockMutation } from './use-warehouse-mutations'
 
 const API_BASE_URL = '/api/v1'
 
@@ -143,5 +143,60 @@ describe('warehouse mutation hooks', () => {
     expect(receivedBody).not.toHaveProperty('siteId')
     expect(receivedBody).not.toHaveProperty('code')
     expect(receivedBody).not.toHaveProperty('status')
+  })
+
+  it('posts the zero-stock initialization body and invalidates the per-warehouse init read (D-OPEN-02 §6.10)', async () => {
+    const client = createQueryClient()
+    const scope = { kind: 'enterprise' as const }
+    const initKey = [
+      ...queryKeys.scoped(scope, 'warehouse', 'warehouses', WAREHOUSE.id, 'initialization'),
+    ]
+    const warehousesKey = warehouseQueryKeys.warehouses(scope, {})
+    // Seed both keys: the init read is what the badge subscribes to; the
+    // list key is the broader "warehouses" resource that other
+    // invalidations touch. The mutation must invalidate the init read
+    // (badge flips) but leave the list key alone (the zero-stock event
+    // is a per-warehouse sub-resource, not a column on the list).
+    client.setQueryData(initKey, { status: 'NotInitialized' as const })
+    client.setQueryData(warehousesKey, [])
+
+    let receivedBody: unknown = null
+    let receivedPath = ''
+    server.use(
+      http.post(
+        `${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/initialization`,
+        async ({ request }) => {
+          receivedBody = await request.json()
+          receivedPath = new URL(request.url).pathname
+          return apiJson({ id: WAREHOUSE_ID }, { status: 201 })
+        },
+      ),
+    )
+
+    function QueryWrapper({ children }: PropsWithChildren) {
+      return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    }
+
+    const { result } = renderHook(() => useInitializeWarehouseZeroStockMutation(), {
+      wrapper: QueryWrapper,
+    })
+
+    await expect(
+      result.current.mutateAsync({
+        warehouseId: WAREHOUSE.id,
+        request: { asOfDate: '2026-01-01' },
+      }),
+    ).resolves.toEqual({ id: WAREHOUSE_ID })
+
+    // The body is exactly the documented shape: a single `asOfDate`
+    // field in ISO `YYYY-MM-DD` format. No warehouseId in the body —
+    // it's the route parameter.
+    expect(receivedBody).toEqual({ asOfDate: '2026-01-01' })
+    expect(receivedPath).toBe(`/api/v1/warehouses/${WAREHOUSE_ID}/initialization`)
+
+    await waitFor(() => {
+      expect(client.getQueryState(initKey)?.isInvalidated).toBe(true)
+    })
+    expect(client.getQueryState(warehousesKey)?.isInvalidated).toBe(false)
   })
 })

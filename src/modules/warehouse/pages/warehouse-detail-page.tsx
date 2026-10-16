@@ -1,4 +1,4 @@
-import { IconArrowRight, IconEdit } from '@tabler/icons-react'
+import { IconArrowRight, IconEdit, IconPackage } from '@tabler/icons-react'
 import { useCallback, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 
@@ -8,8 +8,10 @@ import { useSitesQuery } from '@/modules/organization/hooks/use-organization-que
 import { WarehouseCapabilitiesOverview } from '@/modules/warehouse/components/warehouse-capabilities-overview'
 import { WarehouseMaterialSettingsOverview } from '@/modules/warehouse/components/warehouse-material-settings-overview'
 import { WarehouseFormDialog } from '@/modules/warehouse/components/warehouse-form-dialog'
+import { WarehouseInitializationBadge } from '@/modules/warehouse/components/warehouse-initialization-badge'
+import { InitializeWarehouseZeroStockDialog } from '@/modules/warehouse/components/initialize-warehouse-zero-stock-dialog'
 import { useUpdateWarehouseMutation } from '@/modules/warehouse/hooks/use-warehouse-mutations'
-import { useWarehouseQuery } from '@/modules/warehouse/hooks/use-warehouse-queries'
+import { useWarehouseInitializationStateQuery, useWarehouseQuery } from '@/modules/warehouse/hooks/use-warehouse-queries'
 import {
   toUpdateWarehouseRequest,
   type WarehouseFormValues,
@@ -30,11 +32,18 @@ function WarehouseDetailPage() {
   const { has } = usePermission()
   const warehouseQuery = useWarehouseQuery(warehouseId)
   const sitesQuery = useSitesQuery({ page: 0, pageSize: 200 })
+  const initializationQuery = useWarehouseInitializationStateQuery(warehouseId)
   const updateMutation = useUpdateWarehouseMutation()
   const submitFeedback = useSubmitFeedback()
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isZeroStockDialogOpen, setIsZeroStockDialogOpen] = useState(false)
   const warehouse = warehouseQuery.data
   const canManage = has('warehouse.manage')
+  // The zero-stock mutation is gated by `document.create` at Warehouse
+  // scope (D-RBAC-02): a Site/Enterprise Manager cannot invoke it even
+  // by direct API call, so hiding the trigger at the UI layer is the
+  // honest answer.
+  const canCreateDocument = has('document.create')
   const returnToWarehouses = useCallback(() => navigate(ROUTE_PATHS.warehouses), [navigate])
 
   // The wire carries a flat `siteId` and no site label, so the name comes from
@@ -138,6 +147,38 @@ function WarehouseDetailPage() {
           </DetailField>
         </dl>
       </ContentCard>
+      <ContentCard
+        title="حالة تهيئة الرصيد الافتتاحي"
+        description="حالة تهيئة المستودع للعمليات اللاحقة؛ لا يمكن تغييرها إلا عبر مستند افتتاحي أو تهيئة صريحة برصيد صفري."
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">الحالة الحالية:</span>
+            <WarehouseInitializationBadge
+              status={initializationQuery.data?.status}
+              asOfDate={initializationQuery.data?.asOfDate}
+            />
+          </div>
+          {canCreateDocument &&
+          initializationQuery.data?.status === 'NotInitialized' &&
+          initializationQuery.data?.isZeroStock === false ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsZeroStockDialogOpen(true)}
+              data-testid="warehouse-zero-stock-trigger"
+            >
+              <IconPackage aria-hidden data-icon="inline-start" />
+              تهيئة برصيد صفري
+            </Button>
+          ) : null}
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          التهيئة برصيد صفري تسجّل المستودع كغير قابل للافتتاح الاعتيادي. إن
+          كان المستودع يحوي مخزوناً فعلياً، استخدم نموذج الرصيد الافتتاحي
+          داخله بدلاً من ذلك.
+        </p>
+      </ContentCard>
       <WarehouseCapabilitiesOverview warehouseId={warehouse.id} />
       <WarehouseMaterialSettingsOverview warehouseId={warehouse.id} />
       <WarehouseFormDialog
@@ -148,6 +189,12 @@ function WarehouseDetailPage() {
           if (!open) setIsEditDialogOpen(false)
         }}
         onSubmit={submitForm}
+      />
+      <InitializeWarehouseZeroStockDialog
+        warehouseId={warehouse.id}
+        warehouseName={warehouse.name}
+        open={isZeroStockDialogOpen}
+        onOpenChange={setIsZeroStockDialogOpen}
       />
     </div>
   )

@@ -16,6 +16,7 @@ import type {
   ListWarehousesQuery,
   ListWarehouseMaterialSettingsQuery,
   CapabilityOperation,
+  InitializeWarehouseZeroStockRequest,
   Uuid,
 } from '@/modules/warehouse/types/warehouse.api-types'
 import type { ApiPage, ResourceIdResponse } from '@/shared/api/api-contracts'
@@ -77,6 +78,10 @@ export interface WarehouseService {
     warehouseId: string,
     context?: RequestContext,
   ) => Promise<WarehouseInitializationStateResponse>
+  initializeZeroStock: (
+    warehouseId: string,
+    request: InitializeWarehouseZeroStockRequest,
+  ) => Promise<ResourceIdResponse>
   createWarehouse: (request: WarehouseCreateRequest) => Promise<ResourceIdResponse>
   updateWarehouse: (warehouseId: string, request: WarehouseUpdateRequest) => Promise<void>
   listWarehouseCapabilities: (
@@ -137,6 +142,14 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         path: pathWithId(WAREHOUSE_INITIALIZATION_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
         ...withSignal(context),
+      })
+    },
+
+    async initializeZeroStock(warehouseId, request) {
+      return transport.request<ResourceIdResponse>({
+        path: pathWithId(WAREHOUSE_INITIALIZATION_PATH, '{warehouseId}', warehouseId),
+        method: 'POST',
+        body: request,
       })
     },
 

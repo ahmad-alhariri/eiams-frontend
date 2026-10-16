@@ -9,6 +9,7 @@ export type {
   CreateWarehouseMaterialSettingRequest,
   UpdateWarehouseMaterialSettingRequest,
   SetWarehouseMaterialSettingStatusRequest,
+  InitializeWarehouseZeroStockRequest,
   ListWarehousesQuery,
   ListWarehouseMaterialSettingsQuery,
   CapabilityOperation,
