@@ -123,8 +123,12 @@ import {
  *
  * Then +1 again for `src/modules/auth/hooks/use-cached-session.ts`, the single
  * shared session observer the four previous copies were consolidated into.
+ *
+ * Then +1 again for `src/modules/opening/opening-initialization.ts`, the pure
+ * D-OPEN-02 rule that decides whether a warehouse's reported initialization
+ * state blocks a new Opening draft.
  */
-const SCANNED_FILE_COUNT = 390
+const SCANNED_FILE_COUNT = 391
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

@@ -9,6 +9,7 @@ import { apiJson, errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
 
 import { ROUTE_PATHS } from '@/config/routes'
+import type { WarehouseInitializationStatus } from '@/modules/warehouse/types/warehouse.api-types'
 import type { QuantityLineCapabilityGate } from '@/shared/documents/components/quantity-line-editor'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import {
@@ -132,9 +133,30 @@ function usePageHandlers(
   store: WarehouseDocument[],
   nextSystemReference: () => string,
   capabilityResponse = [capability],
+  initializationStatus: WarehouseInitializationStatus = 'NotInitialized',
 ) {
   server.use(
     http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
+    // D-OPEN-02: the form reads the warehouse initialization state to decide
+    // whether a new Opening draft is allowed at all. Without this handler the
+    // read fails, and decision 3 means a failed read must leave the form usable
+    // — so every other test in this suite would silently pass through the
+    // "state unknown" path rather than the "state says no" path.
+    http.get(`${API_BASE_URL}/warehouses/:warehouseId/initialization`, () =>
+      okJson({
+        warehouseId: WAREHOUSE_ID,
+        status: initializationStatus,
+        sourceDocumentId:
+          initializationStatus === 'ZeroStock' ? null : '00000000-0000-4000-8000-00000000aa01',
+        asOfDate: initializationStatus === 'NotInitialized' ? null : '2024-01-01',
+        isZeroStock: initializationStatus === 'ZeroStock',
+        initializedAtUtc: initializationStatus === 'NotInitialized' ? null : '2024-01-02T10:00:00Z',
+        initializedBy:
+          initializationStatus === 'NotInitialized' ? null : '00000000-0000-4000-8000-00000000bb01',
+        reversedAtUtc: null,
+        reversedBy: null,
+      }),
+    ),
     http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material, assetMaterial])),
     http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () =>
       okJson(capabilityResponse),
@@ -656,6 +678,116 @@ describe('OpeningDocumentFormPage', () => {
     expect(blockedGate.status).toBe('blocked')
     expect(blockedGate.reason).toBe('opening_capability_not_granted')
     expect(unverifiedGate.status).toBe('unverified')
+  })
+
+  // D-OPEN-02 / PRD §6.2, §6.10: an Opening document is a one-time
+  // initialization, not a routine document type. Once the warehouse carries an
+  // Initialized state row — with a positive balance or through the explicit
+  // zero-stock path — a new Opening draft is refused server-side, so the form
+  // must refuse it before the user spends effort filling it in.
+  describe('initialization-state gating (D-OPEN-02 §6.2/§6.10)', () => {
+    it('disables save and explains why when the warehouse is already Initialized', async () => {
+      const store: WarehouseDocument[] = []
+      usePageHandlers(store, () => 'EIAMS-OPN-2024-0001', [capability], 'Initialized')
+
+      const user = userEvent.setup()
+      render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+      await fillValidForm(user)
+
+      const save = await screen.findByRole('button', { name: 'حفظ المسودة' })
+      await waitFor(() => expect(save).toBeDisabled())
+      expect(
+        await screen.findByText(
+          'سبق تهيئة هذا المستودع برصيد افتتاحي، لذلك لا يمكن إنشاء سند افتتاحي جديد. تُسجَّل تصحيحات الرصيد عبر مستند تسوية.',
+        ),
+      ).toBeInTheDocument()
+    })
+
+    it('disables save and explains why when the warehouse was initialized with zero stock', async () => {
+      const store: WarehouseDocument[] = []
+      usePageHandlers(store, () => 'EIAMS-OPN-2024-0001', [capability], 'ZeroStock')
+
+      const user = userEvent.setup()
+      render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+      await fillValidForm(user)
+
+      const save = await screen.findByRole('button', { name: 'حفظ المسودة' })
+      await waitFor(() => expect(save).toBeDisabled())
+      expect(
+        await screen.findByText(
+          'سبق تهيئة هذا المستودع على أنه فارغ، لذلك لا يمكن إنشاء سند افتتاحي جديد.',
+        ),
+      ).toBeInTheDocument()
+    })
+
+    it('does not write a draft when a blocked form is submitted anyway', async () => {
+      // Defence in depth: `disabled` is not a boundary, so the submit handler
+      // must apply the same rule. Removing the attribute here is what proves the
+      // guard is in the handler and not only on the button.
+      const store: WarehouseDocument[] = []
+      usePageHandlers(store, () => 'EIAMS-OPN-2024-0001', [capability], 'Initialized')
+
+      const user = userEvent.setup()
+      render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+      await fillValidForm(user)
+
+      const save = await screen.findByRole('button', { name: 'حفظ المسودة' })
+      await waitFor(() => expect(save).toBeDisabled())
+      save.removeAttribute('disabled')
+      await user.click(save)
+
+      expect(store).toHaveLength(0)
+      expect(screen.queryByTestId('detail-stub')).toBeNull()
+    })
+
+    it('leaves save available when the warehouse is NotInitialized', async () => {
+      const store: WarehouseDocument[] = []
+      usePageHandlers(store, () => 'EIAMS-OPN-2024-0001', [capability], 'NotInitialized')
+
+      const user = userEvent.setup()
+      render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+      await fillValidForm(user)
+      await waitFor(() => expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeEnabled())
+      expect(screen.queryByText(/سبق تهيئة هذا المستودع/)).toBeNull()
+    })
+
+    it('leaves save available on a Reversed state, because the wire does not refuse re-initialization', async () => {
+      // `Reversed` preserves the source document for audit and its contract note
+      // says re-initialization is "not permitted by the default policy" — which
+      // is not a refusal. Blocking here would be the browser inventing a rule.
+      const store: WarehouseDocument[] = []
+      usePageHandlers(store, () => 'EIAMS-OPN-2024-0001', [capability], 'Reversed')
+
+      const user = userEvent.setup()
+      render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+      await fillValidForm(user)
+      await waitFor(() => expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeEnabled())
+    })
+
+    it('leaves the form usable when the initialization read cannot be answered', async () => {
+      // Decision 3: the read is advisory. A 404 must not be invented into
+      // "not initialized", and it must not block the form either — the server
+      // remains the authority on the one-time rule and will refuse the write.
+      const store: WarehouseDocument[] = []
+      usePageHandlers(store, () => 'EIAMS-OPN-2024-0001')
+      server.use(
+        http.get(`${API_BASE_URL}/warehouses/:warehouseId/initialization`, () =>
+          errJson(404, { code: 'RESOURCE_NOT_FOUND' }),
+        ),
+      )
+
+      const user = userEvent.setup()
+      render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+      await fillValidForm(user)
+      await waitFor(() => expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeEnabled())
+      expect(screen.queryByText(/سبق تهيئة هذا المستودع/)).toBeNull()
+    })
   })
 })
 

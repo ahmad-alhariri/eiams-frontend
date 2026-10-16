@@ -321,8 +321,13 @@ export function toWireSummary(document: WarehouseDocument): WarehouseDocumentSum
     reversalOfDocumentId: null,
     rowVersion: document.rowVersion,
     createdAtUtc: document.createdAt,
-    openingAsOfDate: null,
-    openingIsZeroStock: false,
+    // Read from the model the way `toWireDetails` does. These used to be
+    // hard-coded to `null` / `false`, which meant every Opening list row came
+    // back looking uninitialized: the cut-off-date column had nothing to render
+    // and the zero-stock chip could never appear, so a defect in either was
+    // unreproducible rather than absent.
+    openingAsOfDate: readOpeningField(document, 'openingAsOfDate') ?? null,
+    openingIsZeroStock: readOpeningField(document, 'openingIsZeroStock') ?? false,
   }
 }
 
