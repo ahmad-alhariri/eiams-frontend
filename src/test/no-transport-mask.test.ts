@@ -113,7 +113,8 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // `initialize-warehouse-zero-stock-dialog.tsx` (`68ae09f`). Neither pin
     // moved when those landed, so this gate was red on the branch until now.
     // Then +1 for `use-cached-session.ts`, the consolidated session observer.
-    assertScannedFiles(PRODUCTION_FILES, 390)
+    // Then +1 for `opening-initialization.ts`, the D-OPEN-02 initialization rule.
+    assertScannedFiles(PRODUCTION_FILES, 391)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

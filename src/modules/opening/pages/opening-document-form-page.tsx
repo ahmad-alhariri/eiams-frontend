@@ -7,6 +7,10 @@ import { z } from 'zod'
 
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import {
+  blocksNewOpeningDocument,
+  openingInitializationBlockMessageAr,
+} from '@/modules/opening/opening-initialization'
+import {
   AssetLineEditor,
   type AssetLineCapabilityGate,
 } from '@/shared/documents/components/asset-line-editor'
@@ -157,7 +161,6 @@ export default function OpeningDocumentFormPage() {
   const capabilityGate = combineCapabilityGates(quantityCapabilityGate, assetCapabilityGate)
   const isCapabilityUnverified = capabilityGate.status !== 'ready'
   const isSaving = form.formState.isSubmitting || createMutation.isPending
-  const saveDisabled = isSaving || isCapabilityUnverified
   const submitErrorMessage =
     createMutation.error === null ? null : documentDraftMutationError(createMutation.error)
   const headerWarehouseId = useWatch({ control: form.control, name: 'header.warehouseId' })
@@ -168,6 +171,13 @@ export default function OpeningDocumentFormPage() {
   const initializationQuery = useWarehouseInitializationStateQuery(
     headerWarehouseId !== undefined && headerWarehouseId !== '' ? headerWarehouseId : undefined,
   )
+  // The badge reports the state; this decides whether the action is allowed.
+  // Keeping the two apart is deliberate — the badge is presentation, the gate
+  // is the rule, and they must not drift into disagreeing.
+  const initializationStatus = initializationQuery.data?.status
+  const isAlreadyInitialized = blocksNewOpeningDocument(initializationStatus)
+  const initializationBlockMessageAr = openingInitializationBlockMessageAr(initializationStatus)
+  const saveDisabled = isSaving || isCapabilityUnverified || isAlreadyInitialized
   const onQuantityCapabilityGateChange = useCallback((nextGate: QuantityLineCapabilityGate) => {
     setQuantityCapabilityGate((currentGate) =>
       retainEquivalentCapabilityGate(currentGate, nextGate),
@@ -180,6 +190,12 @@ export default function OpeningDocumentFormPage() {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (capabilityGate.status !== 'ready') {
+      return
+    }
+    // Defence in depth: `saveDisabled` already hides the button, but a
+    // disabled attribute is not a boundary. Enter-key submission and any
+    // future call site must hit the same rule.
+    if (isAlreadyInitialized) {
       return
     }
     const { assetLines, lines } = form.getValues()
@@ -321,6 +337,16 @@ export default function OpeningDocumentFormPage() {
                   لمنح قدرة "الفتح" لهذا المجال.
                 </p>
               ) : null}
+            </div>
+          ) : null}
+          {initializationBlockMessageAr !== null ? (
+            <div
+              data-slot="opening-initialization-blocked"
+              role="status"
+              aria-live="polite"
+              className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-foreground"
+            >
+              <p>{initializationBlockMessageAr}</p>
             </div>
           ) : null}
           {submitErrorMessage !== null ? (

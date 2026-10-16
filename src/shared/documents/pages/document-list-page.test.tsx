@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -268,5 +268,125 @@ describe('DocumentListPage', () => {
 
     await screen.findByRole('heading', { level: 1, name: 'سندات الاستلام' })
     expect(screen.queryByRole('button', { name: 'سند استلام جديد' })).not.toBeInTheDocument()
+  })
+
+  describe('D-OPEN-02 Opening cut-off column', () => {
+    const AS_OF_DATE = '2026-01-01'
+
+    function openingDocumentHandler(
+      overrides: { openingAsOfDate?: string | null; openingIsZeroStock?: boolean } = {},
+    ) {
+      return http.get(`${API_BASE_URL}/warehouse-documents`, () =>
+        okPageJson([
+          // The generated nested model predates the D-OPEN-02 columns, so they
+          // are written onto it by name here — the same way the harness reads
+          // them back through `readOpeningField`. Writing them at the wire level
+          // instead would bypass the projection and stop proving anything.
+          wireDocumentSummary({
+            ...createWarehouseDocument({ documentType: 'Opening' }),
+            openingAsOfDate: AS_OF_DATE,
+            openingIsZeroStock: false,
+            ...overrides,
+          } as Parameters<typeof wireDocumentSummary>[0]),
+        ]),
+      )
+    }
+
+    it('renders the as-of-date column on the Opening list', async () => {
+      server.use(
+        openingDocumentHandler(),
+        http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
+      )
+
+      render(<DocumentListPage />, { wrapper: createWrapper('/documents/opening') })
+
+      expect(
+        await screen.findByRole('columnheader', { name: 'تاريخ الرصيد الافتتاحي' }),
+      ).toBeInTheDocument()
+    })
+
+    /**
+     * The cell of the first data row under a given column header.
+     *
+     * The Opening list carries two dates — the cut-off date and `createdAtUtc` —
+     * and `paperDocumentNumber` falls back to an em dash. Matching on text alone
+     * would match both dates and cannot tell which cell rendered, so the
+     * assertion is scoped by column position instead.
+     */
+    async function cellUnderColumn(name: string): Promise<HTMLElement> {
+      const header = await screen.findByRole('columnheader', { name })
+      const columnIndex = within(header.parentElement as HTMLElement)
+        .getAllByRole('columnheader')
+        .indexOf(header)
+      const row = await screen.findByRole('row', { name: /EIAMS-DOC/ })
+      return within(row).getAllByRole('cell')[columnIndex] as HTMLElement
+    }
+
+    it('renders the cut-off date from the ISO wire value, in its own cell', async () => {
+      server.use(
+        openingDocumentHandler(),
+        http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
+      )
+
+      render(<DocumentListPage />, { wrapper: createWrapper('/documents/opening') })
+
+      const cell = await cellUnderColumn('تاريخ الرصيد الافتتاحي')
+      // `formatDate` renders Arabic-Indic digits, so the formatted output is
+      // matched rather than the raw `2026-01-01` the wire carried.
+      expect(cell).toHaveTextContent('٢٠٢٦')
+      expect(cell).not.toHaveTextContent('2026-01-01')
+    })
+
+    it('does not render the column on a non-Opening list', async () => {
+      server.use(
+        http.get(`${API_BASE_URL}/warehouse-documents`, () =>
+          okPageJson([wireDocumentSummary(createWarehouseDocument({ documentType: 'Receiving' }))]),
+        ),
+        http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
+      )
+
+      render(<DocumentListPage />, { wrapper: createWrapper('/documents/receiving') })
+
+      await screen.findByRole('heading', { level: 1, name: 'سندات الاستلام' })
+      expect(
+        screen.queryByRole('columnheader', { name: 'تاريخ الرصيد الافتتاحي' }),
+      ).not.toBeInTheDocument()
+    })
+
+    it('shows a zero-stock chip only on a zero-stock row', async () => {
+      server.use(
+        openingDocumentHandler({ openingIsZeroStock: true }),
+        http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
+      )
+
+      render(<DocumentListPage />, { wrapper: createWrapper('/documents/opening') })
+
+      expect(await screen.findByText('تهيئة بدون حركة')).toBeInTheDocument()
+    })
+
+    it('omits the zero-stock chip on a positive-stock row', async () => {
+      server.use(
+        openingDocumentHandler({ openingIsZeroStock: false }),
+        http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
+      )
+
+      render(<DocumentListPage />, { wrapper: createWrapper('/documents/opening') })
+
+      await screen.findByRole('columnheader', { name: 'تاريخ الرصيد الافتتاحي' })
+      expect(screen.queryByText('تهيئة بدون حركة')).not.toBeInTheDocument()
+    })
+
+    it('renders an em dash for a draft that has no cut-off date yet', async () => {
+      server.use(
+        openingDocumentHandler({ openingAsOfDate: null }),
+        http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
+      )
+
+      render(<DocumentListPage />, { wrapper: createWrapper('/documents/opening') })
+
+      const cell = await cellUnderColumn('تاريخ الرصيد الافتتاحي')
+      expect(cell).toHaveTextContent('—')
+      expect(cell).not.toHaveTextContent('٢٠٢٦')
+    })
   })
 })
