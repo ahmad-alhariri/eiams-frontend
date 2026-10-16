@@ -7,6 +7,7 @@ import type {
   CapabilityOperation,
   CreateWarehouseMaterialSettingRequest,
   GrantWarehouseCapabilityRequest,
+  InitializeWarehouseZeroStockRequest,
   SetWarehouseMaterialSettingStatusRequest,
   UpdateWarehouseMaterialSettingRequest,
   WarehouseCreateRequest,
@@ -83,6 +84,28 @@ function invalidateWarehouseMaterialSettings(
   })
 }
 
+// D-OPEN-02 (PRD §6.10): invalidate the per-warehouse initialization
+// read so the badge flips from `NotInitialized` → `ZeroStock` as soon
+// as the mutation succeeds. The cache key matches the one
+// `useWarehouseInitializationStateQuery` registers (the one without a
+// trailing `{}` segment so it catches both the populated read and the
+// not-yet-fetched one).
+function invalidateWarehouseInitialization(
+  client: QueryClient,
+  scope: ScopeCacheKey,
+  warehouseId: string,
+) {
+  return client.invalidateQueries({
+    queryKey: queryKeys.scoped(
+      scope,
+      WAREHOUSE_PUBLIC_KEY,
+      'warehouses',
+      warehouseId,
+      'initialization',
+    ),
+  })
+}
+
 function resolveScope(scope: ScopeCacheKey | undefined): ScopeCacheKey {
   return scope ?? { kind: 'enterprise' }
 }
@@ -116,6 +139,37 @@ export function useUpdateWarehouseMutation() {
     onSuccess: () => {
       invalidateWarehouses(queryClient, resolveScope(scope))
       toast.success({ title: 'تم حفظ تعديلات المستودع.' })
+    },
+  })
+}
+
+/**
+ * D-OPEN-02 (PRD §6.10): records the canonical zero-stock
+ * initialization for a warehouse that physically contains no
+ * inventory at the approved cut-off date. Produces no document, no
+ * stock movements, and no Asset records — just the
+ * `WarehouseInitializationState` row with `IsZeroStock = true`.
+ *
+ * The cache invalidation covers the per-warehouse initialization
+ * read so the badge flips to `ZeroStock` on the same render that
+ * shows the success toast. The warehouse list itself is NOT
+ * invalidated: the row's status field is a per-warehouse
+ * sub-resource, not a column on the list projection.
+ */
+export function useInitializeWarehouseZeroStockMutation() {
+  const queryClient = useQueryClient()
+  const scope = useActiveScopeCacheKey()
+  return useMutation({
+    mutationFn: ({
+      warehouseId,
+      request,
+    }: {
+      readonly warehouseId: string
+      readonly request: InitializeWarehouseZeroStockRequest
+    }) => warehouseService.initializeZeroStock(warehouseId, request),
+    onSuccess: (_, { warehouseId }) => {
+      invalidateWarehouseInitialization(queryClient, resolveScope(scope), warehouseId)
+      toast.success({ title: 'تم تسجيل تهيئة المستودع برصيد صفري.' })
     },
   })
 }

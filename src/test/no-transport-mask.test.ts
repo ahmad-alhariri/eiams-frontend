@@ -108,7 +108,15 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // `eiams-frontend-71fp`) and the unreferenced
     // `src/shared/documents/types/document-transport.types.ts`. Re-measured, not
     // assumed: an unchanged number here is a coincidence, not "no change".
-    assertScannedFiles(PRODUCTION_FILES, 386)
+    // Re-measured at 389 for the D-OPEN-02 warehouse-initialization surface on
+    // this branch: `warehouse-initialization-badge.tsx` (`c86e7d8`) and
+    // `initialize-warehouse-zero-stock-dialog.tsx` (`68ae09f`). Neither pin
+    // moved when those landed, so this gate was red on the branch until now.
+    // Then +1 for `use-cached-session.ts`, the consolidated session observer.
+    // Then +1 for `opening-initialization.ts`, the D-OPEN-02 initialization rule.
+    // Then -1 for the deleted `shared/api/api-error.ts`, a dead second
+    // error-copy table keyed on codes the wire never carries.
+    assertScannedFiles(PRODUCTION_FILES, 390)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

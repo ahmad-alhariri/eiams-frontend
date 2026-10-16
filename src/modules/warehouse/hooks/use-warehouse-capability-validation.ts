@@ -22,6 +22,7 @@ export const OPERATION_LABELS: Record<CapabilityOperation, string> = {
   Count: 'جرد',
   Return: 'إرجاع',
   Adjustment: 'تسوية',
+  Opening: 'فتح افتتاحي',
 }
 
 const EMPTY_CAPABILITIES: readonly WarehouseCapability[] = []

@@ -1,10 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
 
 import type { PermissionCode } from '@/config/permissions'
 import { ROUTE_METADATA, type RouteKey } from '@/config/routes'
-import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { useCachedSession } from '@/modules/auth/hooks/use-cached-session'
 
 export interface PermissionPredicates {
   has: (code: PermissionCode) => boolean
@@ -59,12 +57,7 @@ export function hasRoutePermission(permissionCodes: readonly string[], route: Ro
  * application hydration flow owns the sole session query.
  */
 export function usePermission(): PermissionPredicates {
-  const { data: session } = useQuery<SessionResponse>({
-    queryKey: authSessionQueryKey,
-    queryFn: () => Promise.reject(new Error('Session hydration is owned by the application root.')),
-    enabled: false,
-    staleTime: Number.POSITIVE_INFINITY,
-  })
+  const session = useCachedSession()
 
   const effectivePermissions = useMemo(() => new Set(session?.permissionCodes ?? []), [session])
 

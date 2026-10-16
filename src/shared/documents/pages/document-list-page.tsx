@@ -17,6 +17,7 @@ import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { AsyncSelect } from '@/shared/ui/async-select'
+import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
@@ -25,7 +26,7 @@ import type {
   DocumentStatus,
   WarehouseDocumentSummary,
 } from '@/shared/documents/types/document-wire.types'
-import { formatDateTime } from '@/shared/utils/format'
+import { formatDate, formatDateTime } from '@/shared/utils/format'
 import { pageRows } from '@/shared/utils/table-data'
 
 export interface DocumentListPageProps {
@@ -173,6 +174,41 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
               header: 'رقم السند الورقي',
               cell: ({ getValue }) => <span dir="ltr">{getValue() ?? '—'}</span>,
             }),
+            // D-OPEN-02 (PRD §6.4): the Opening cut-off date is the day the stock
+            // physically measured, which is NOT the creation date, so it needs its
+            // own column rather than being folded into `createdAtUtc`. Only the
+            // Opening list carries it; the other four document types have no such
+            // concept and must render exactly as they did before.
+            ...(routeEntry.documentType === 'Opening'
+              ? [
+                  documentColumnHelper.accessor('openingAsOfDate', {
+                    id: 'openingAsOfDate',
+                    header: 'تاريخ الرصيد الافتتاحي',
+                    cell: ({ getValue, row }) => {
+                      // A draft has no cut-off date yet, so the column is
+                      // genuinely nullable — narrow once, then format.
+                      // `formatDate` returns Arabic text (Arabic-Indic digits and
+                      // an Arabic month name), so this cell deliberately sets no
+                      // `dir` and inherits the RTL table like `createdAtUtc` does.
+                      // The `dir="ltr"` cells above are the ones holding raw
+                      // LTR codes off the wire.
+                      const asOfDate = getValue()
+                      return (
+                        <div className="flex flex-col items-start gap-1">
+                          <span>
+                            {asOfDate === null || asOfDate === undefined
+                              ? '—'
+                              : formatDate(asOfDate)}
+                          </span>
+                          {row.original.openingIsZeroStock ? (
+                            <Badge variant="warning">تهيئة بدون حركة</Badge>
+                          ) : null}
+                        </div>
+                      )
+                    },
+                  }),
+                ]
+              : []),
             documentColumnHelper.accessor('warehouseId', {
               id: 'warehouse',
               header: 'المستودع',

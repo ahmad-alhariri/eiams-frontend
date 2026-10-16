@@ -16,14 +16,18 @@ import {
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
-const permissions = vi.hoisted(() => ({ canManage: false }))
+const permissions = vi.hoisted(() => ({ canManage: false, canCreateDocument: false }))
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
 }))
 vi.mock('@/modules/auth/hooks/use-permission', () => ({
   usePermission: () => ({
-    has: (code: string) => (code === 'warehouse.manage' ? permissions.canManage : false),
+    has: (code: string) => {
+      if (code === 'warehouse.manage') return permissions.canManage
+      if (code === 'document.create') return permissions.canCreateDocument
+      return false
+    },
   }),
 }))
 
@@ -53,6 +57,7 @@ function renderPage(warehouseId: string) {
 
 beforeEach(() => {
   permissions.canManage = false
+  permissions.canCreateDocument = false
   activeScope.key = { kind: 'enterprise' }
 })
 
@@ -206,5 +211,108 @@ describe('WarehouseDetailPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       'لا توجد قدرات معرّفة لهذا المستودع.',
     )
+  })
+
+  // D-OPEN-02 (PRD §6.10): the warehouse detail page surfaces the
+  // per-warehouse initialization badge from the read endpoint, and
+  // offers the "initialize as zero-stock" action only when the
+  // permission is granted AND the warehouse is still in the
+  // NotInitialized state. A Site/Enterprise Manager (no
+  // document.create) sees the badge but never the trigger.
+  it('surfaces the zero-stock initialization trigger for a Warehouse-scoped Keeper on a NotInitialized warehouse', async () => {
+    permissions.canCreateDocument = true
+    const warehouse = createWarehouse()
+    server.use(
+      http.get(`${API_BASE_URL}/warehouses/${warehouse.id}`, () => okJson(warehouse)),
+      http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, () =>
+        okPageJson([], { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 }),
+      ),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([createSite({ id: warehouse.siteId })])),
+      http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/material-settings`, () =>
+        okPageJson([], { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 }),
+      ),
+      http.get(`${API_BASE_URL}/organizational-units`, () =>
+        okPageJson([
+          createOrganizationalUnit({ id: warehouse.organizationalUnitId ?? fixtureUuid(52) }),
+        ]),
+      ),
+      // NotInitialized + isZeroStock=false is the exact wire state the
+      // page branches on to render the trigger.
+      http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/initialization`, () =>
+        okJson({
+          warehouseId: warehouse.id,
+          status: 'NotInitialized',
+          sourceDocumentId: null,
+          asOfDate: null,
+          isZeroStock: false,
+          initializedAtUtc: null,
+          initializedBy: null,
+          reversedAtUtc: null,
+          reversedBy: null,
+        }),
+      ),
+    )
+
+    const user = userEvent.setup()
+    renderPage(warehouse.id)
+
+    // The badge subscribes to the read endpoint and renders once it
+    // resolves. Waiting for the trigger implicitly proves the read also
+    // resolved (the trigger branch checks the read state).
+    const trigger = await screen.findByTestId('warehouse-zero-stock-trigger')
+    expect(trigger).toHaveTextContent('تهيئة برصيد صفري')
+
+    // Open the dialog: it carries the as-of-date input and the confirm
+    // button, in Arabic.
+    await user.click(trigger)
+    const confirmButton = await screen.findByTestId('warehouse-zero-stock-confirm')
+    const dialog = confirmButton.closest('[role="dialog"]') as HTMLElement
+    expect(within(dialog).getByLabelText('تاريخ القطع')).toBeInTheDocument()
+    expect(within(dialog).getByText('تأكيد التهيئة برصيد صفري')).toBeInTheDocument()
+  })
+
+  it('hides the zero-stock trigger when the warehouse is already initialized', async () => {
+    permissions.canCreateDocument = true
+    const warehouse = createWarehouse()
+    server.use(
+      http.get(`${API_BASE_URL}/warehouses/${warehouse.id}`, () => okJson(warehouse)),
+      http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, () =>
+        okPageJson([], { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 }),
+      ),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([createSite({ id: warehouse.siteId })])),
+      http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/material-settings`, () =>
+        okPageJson([], { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 }),
+      ),
+      http.get(`${API_BASE_URL}/organizational-units`, () =>
+        okPageJson([
+          createOrganizationalUnit({ id: warehouse.organizationalUnitId ?? fixtureUuid(52) }),
+        ]),
+      ),
+      // Initialized is the post-condition: the trigger must disappear
+      // because the warehouse is already locked in.
+      http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/initialization`, () =>
+        okJson({
+          warehouseId: warehouse.id,
+          status: 'Initialized',
+          sourceDocumentId: fixtureUuid(800),
+          asOfDate: '2026-01-01',
+          isZeroStock: false,
+          initializedAtUtc: '2026-01-02T10:00:00.000Z',
+          initializedBy: fixtureUuid(10),
+          reversedAtUtc: null,
+          reversedBy: null,
+        }),
+      ),
+    )
+
+    renderPage(warehouse.id)
+
+    await screen.findByRole('heading', { name: warehouse.name })
+    // The badge renders Initialized; the trigger never appears.
+    expect(await screen.findByTestId('warehouse-initialization-badge')).toHaveAttribute(
+      'data-status',
+      'Initialized',
+    )
+    expect(screen.queryByTestId('warehouse-zero-stock-trigger')).not.toBeInTheDocument()
   })
 })

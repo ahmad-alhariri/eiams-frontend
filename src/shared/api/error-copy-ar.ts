@@ -406,6 +406,40 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'تصحيح الرصيد الافتتاحي يتم عبر مستند تسوية.',
     detailAr: null,
   },
+  // --- D-OPEN-02 warehouse initialization state. The backend normalizes every
+  // domain code through `ApiResults.NormalizeErrorCode` before serializing it,
+  // so these keys are UPPER_SNAKE even though the C# source reads as dotted
+  // PascalCase (`OpeningDocuments.OpeningAsOfDateRequired`). Note that the
+  // reversal guard is `ReversalBlockedByDownstream` in the C# source; the
+  // `Opening` infix used elsewhere in the family is NOT part of this code.
+  OPENING_DOCUMENTS_WAREHOUSE_ALREADY_INITIALIZED: {
+    titleAr: 'سبق تهيئة هذا المستودع بالكامل.',
+    detailAr: 'تُسجَّل التصحيحات عبر مستند تسوية.',
+  },
+  OPENING_DOCUMENTS_OPENING_AS_OF_DATE_REQUIRED: {
+    titleAr: 'يجب تحديد تاريخ الرصيد الافتتاحي في سند الفتح.',
+    detailAr: 'هذا التاريخ هو تاريخ القياس الفعلي للرصيد وليس تاريخ النشر.',
+  },
+  OPENING_DOCUMENTS_OPENING_CAPABILITY_NOT_GRANTED: {
+    titleAr: 'المستودع لا يملك قدرة الفتح لهذه المادة.',
+    detailAr: 'امنح قدرة الفتح لهذا المجال من إدارة المستودعات ثم أعد المحاولة.',
+  },
+  OPENING_DOCUMENTS_OPENING_QUANTITY_MUST_BE_POSITIVE: {
+    titleAr: 'يجب أن تكون الكمية في كل بند افتتاحي أكبر من صفر.',
+    detailAr: 'للمستودعات الفارغة استخدم تهيئة بدون حركة بدلاً من سند فتح فارغ.',
+  },
+  OPENING_DOCUMENTS_USE_ZERO_STOCK_INITIALIZATION: {
+    titleAr: 'لا يمكن تهيئة مستودع فارغ عبر سند فتح فارغ.',
+    detailAr: 'استخدم مسار تهيئة بدون حركة لهذا المستودع.',
+  },
+  OPENING_DOCUMENTS_REVERSAL_BLOCKED_BY_DOWNSTREAM: {
+    titleAr: 'لا يمكن عكس سند الفتح لوجود حركات أو سجلات عهدة لاحقة مرتبطة به.',
+    detailAr: 'أصدر مستند تسوية تعويضي بدلاً من عكس سند الفتح.',
+  },
+  WAREHOUSE_INITIALIZATION_ALREADY_REVERSED: {
+    titleAr: 'سبق عكس تهيئة هذا المستودع ولا يمكن عكسها مرة أخرى.',
+    detailAr: 'راجع سجل تهيئة المستودع قبل المتابعة.',
+  },
   WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH: {
     titleAr: 'تغيرت البيانات من قبل مستخدم آخر. حدّث الصفحة ثم أعد المحاولة.',
     detailAr: null,

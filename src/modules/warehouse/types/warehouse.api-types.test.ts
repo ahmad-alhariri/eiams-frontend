@@ -17,7 +17,7 @@ import {
  * pin both ordinal tables so no second, drifting copy can exist.
  */
 describe('CapabilityOperation ordinal encoding (single source of truth)', () => {
-  it('matches the backend Domain.Common.OperationType declaration order, Adjustment=5', () => {
+  it('matches the backend Domain.Common.OperationType declaration order, Opening=6', () => {
     expect(CAPABILITY_OPERATION_VALUES).toEqual([
       'Receiving',
       'Issue',
@@ -25,6 +25,7 @@ describe('CapabilityOperation ordinal encoding (single source of truth)', () => 
       'Count',
       'Return',
       'Adjustment',
+      'Opening',
     ])
     expect(operationOrdinal('Receiving')).toBe(0)
     expect(operationOrdinal('Issue')).toBe(1)
@@ -32,6 +33,7 @@ describe('CapabilityOperation ordinal encoding (single source of truth)', () => 
     expect(operationOrdinal('Count')).toBe(3)
     expect(operationOrdinal('Return')).toBe(4)
     expect(operationOrdinal('Adjustment')).toBe(5)
+    expect(operationOrdinal('Opening')).toBe(6)
   })
 
   it('round-trips every ordinal through operationFromOrdinal', () => {
@@ -42,7 +44,8 @@ describe('CapabilityOperation ordinal encoding (single source of truth)', () => 
   })
 
   it('rejects an out-of-range ordinal rather than silently projecting `undefined`', () => {
-    expect(() => operationFromOrdinal(6)).toThrow(RangeError)
+    // CAPABILITY_OPERATION_VALUES.length === 7 (Receiving..Opening)
+    expect(() => operationFromOrdinal(7)).toThrow(RangeError)
     expect(() => operationFromOrdinal(-1)).toThrow(RangeError)
   })
 

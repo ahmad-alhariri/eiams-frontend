@@ -114,8 +114,26 @@ import {
  * unreferenced `src/shared/documents/types/document-transport.types.ts`. The
  * number did not move, but the file set did, and that is recorded here rather
  * than left to look like "no change".
+ *
+ * Re-measured again at 389 for the D-OPEN-02 warehouse-initialization surface
+ * added on this branch: `warehouse-initialization-badge.tsx` (`c86e7d8`) and
+ * `initialize-warehouse-zero-stock-dialog.tsx` (`68ae09f`). Neither pin moved
+ * when those landed, so this gate was red on the branch. Recorded so the next
+ * delta is read as a fact about the file set rather than a coincidence.
+ *
+ * Then +1 again for `src/modules/auth/hooks/use-cached-session.ts`, the single
+ * shared session observer the four previous copies were consolidated into.
+ *
+ * Then +1 again for `src/modules/opening/opening-initialization.ts`, the pure
+ * D-OPEN-02 rule that decides whether a warehouse's reported initialization
+ * state blocks a new Opening draft.
+ *
+ * Then -1 for `src/shared/api/api-error.ts`, deleted: a second error-copy table
+ * keyed on dotted codes the wire never carries, whose only importer was its own
+ * test. `shared/services/api-error.ts` and `shared/api/error-copy-ar.ts` are
+ * the live pair.
  */
-const SCANNED_FILE_COUNT = 386
+const SCANNED_FILE_COUNT = 390
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

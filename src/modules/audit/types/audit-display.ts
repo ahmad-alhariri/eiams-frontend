@@ -4,6 +4,20 @@ import type { AuditEntityFilter } from '@/modules/audit/types/audit.types'
 
 export const REDACTED_AUDIT_VALUE_AR = 'قيمة محجوبة'
 
+/**
+ * Arabic label per audited action.
+ *
+ * Keyed on the wire action string. An action absent here is not an error:
+ * `getAuditActionDisplay` reports `isKnown: false` and falls back to the raw
+ * string, so a newly added backend action degrades honestly instead of
+ * rendering a blank cell.
+ *
+ * `SetActiveScope` was removed here with the rest of the withdrawn scope
+ * switching (D-SRS-01, RESOLUTION-015, `eiams-frontend-z34j`). It was a label
+ * for an operation the backend has never emitted — `Domain/AuditLogs/AuditActions.cs`
+ * is a closed vocabulary with no such member and a grep of the backend returns
+ * zero hits — so it advertised a capability the system does not have.
+ */
 const AUDIT_ACTION_LABELS_AR: Readonly<Record<string, string>> = {
   Assign: 'تكليف',
   Cancel: 'إلغاء',
@@ -20,7 +34,6 @@ const AUDIT_ACTION_LABELS_AR: Readonly<Record<string, string>> = {
   Return: 'إرجاع',
   Reverse: 'عكس',
   Revise: 'إعادة إلى المسودة',
-  SetActiveScope: 'تعيين النطاق النشط',
   Start: 'بدء',
   Submit: 'إرسال',
   Transfer: 'نقل',

@@ -7,9 +7,16 @@ import { z } from 'zod'
 
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import {
+  blocksNewOpeningDocument,
+  openingInitializationBlockMessageAr,
+} from '@/modules/opening/opening-initialization'
+import {
   AssetLineEditor,
   type AssetLineCapabilityGate,
 } from '@/shared/documents/components/asset-line-editor'
+import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
+import { WarehouseInitializationBadge } from '@/modules/warehouse/components/warehouse-initialization-badge'
+import { useWarehouseInitializationStateQuery } from '@/modules/warehouse/hooks/use-warehouse-queries'
 import {
   QuantityLineEditor,
   type QuantityLineCapabilityGate,
@@ -33,6 +40,7 @@ import {
 } from '@/shared/documents/use-document-draft-mutations'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 
 /**
  * Opening drafts are a `WarehouseDocument` spine with the `Opening` type;
@@ -40,9 +48,26 @@ import { Button } from '@/shared/ui/button'
  * Asset identifiers are captured by the shared AssetLineEditor beside the
  * quantity-only lines; both map into the one contract `lines` payload.
  */
+// D-OPEN-02 (PRD §6.3, §6.6, §6.10): the Opening form only ever posts `Initial`
+// lines (Correction is superseded and rejected server-side) and every line
+// must carry a strictly positive base quantity. The local schema tightens
+// the shared `quantityLineSchema`; the shared schema stays as-is for
+// Receiving/Issue/Transfer.
+const openingQuantityLineSchema = quantityLineSchema.extend({
+  baseQuantity: z
+    .number()
+    .refine((value) => Number.isFinite(value) && value > 0, {
+      message: 'يجب أن تكون الكمية أكبر من صفر.',
+    })
+    .optional(),
+})
+
 const openingDocumentFormSchema = z.object({
-  header: documentHeaderSchema,
-  lines: z.array(quantityLineSchema).refine(linesHaveUniqueMaterials, {
+  header: documentHeaderSchema.extend({
+    // PRD §6.4 / D-OPEN-02: the cut-off date the inventory represents.
+    openingAsOfDate: z.string().min(1, 'تاريخ الرصيد الافتتاحي مطلوب.'),
+  }),
+  lines: z.array(openingQuantityLineSchema).refine(linesHaveUniqueMaterials, {
     message: 'لا يجوز تكرار المادة نفسها في أكثر من بند.',
   }),
   assetLines: z.array(assetLineSchema).refine(linesHaveUniqueMaterials, {
@@ -56,6 +81,7 @@ const DEFAULT_VALUES: DeepPartial<OpeningDocumentFormValues> = {
   header: {
     warehouseId: '',
     paperDocumentNumber: '',
+    openingAsOfDate: '',
   },
   lines: [createEmptyQuantityLine()],
   assetLines: [],
@@ -101,18 +127,27 @@ function combineCapabilityGates(
 }
 
 /**
- * New opening-balance draft page (e15-t02). It composes only the contract
- * spine, shared quantity-line editor, and shared AssetLineEditor. Quantity
- * lines may explicitly select the API's `Initial` or `Correction` opening
- * type; Asset lines capture one AssetInput per unit. The PRD's one-time
- * initialisation rule is presented as guidance only: the admitted OpenAPI
- * snapshot exposes neither a warehouse-level eligibility check nor a policy
- * result before a draft exists, so persistence remains server-authoritative.
- * Signed-copy workflow belongs to its later specialised task.
+ * New opening-balance draft page (D-OPEN-02). It composes only the contract
+ * spine, the shared quantity-line editor, and the shared AssetLineEditor.
+ *
+ * The form enforces the D-OPEN-02 invariants the backend requires:
+ *  - `header.openingAsOfDate` is mandatory (PRD §6.4).
+ *  - Every quantity line carries a strictly positive `baseQuantity` (PRD §6.6).
+ *  - The `openingType` per line is fixed to `Initial`; `Correction` is
+ *    superseded and rejected server-side (CONFLICT-104 / PRD §6.3).
+ *  - The per-line capability gate is shown as a chip when a material's
+ *    domain is not granted the Opening operation (CONFLICT-106 / PRD §6.7).
+ *
+ * The PRD's one-time-initialisation rule and the warehouse-level eligibility
+ * check are server-authoritative; this page surfaces the server's own
+ * policy via the shared `useCompleteDraftMutation` error path.
  */
 export default function OpeningDocumentFormPage() {
   const navigate = useNavigate()
   const createMutation = useCompleteDraftMutation()
+  // activeScopeCacheKey is exposed by useActiveScopeContext below; the
+  // initialization read hook uses it through its internal scope context.
+  useActiveScopeContext()
   const [quantityCapabilityGate, setQuantityCapabilityGate] = useState<QuantityLineCapabilityGate>({
     status: 'ready',
   })
@@ -126,10 +161,23 @@ export default function OpeningDocumentFormPage() {
   const capabilityGate = combineCapabilityGates(quantityCapabilityGate, assetCapabilityGate)
   const isCapabilityUnverified = capabilityGate.status !== 'ready'
   const isSaving = form.formState.isSubmitting || createMutation.isPending
-  const saveDisabled = isSaving || isCapabilityUnverified
   const submitErrorMessage =
     createMutation.error === null ? null : documentDraftMutationError(createMutation.error)
   const headerWarehouseId = useWatch({ control: form.control, name: 'header.warehouseId' })
+  // D-OPEN-02: the per-warehouse initialization badge sits above the form so the
+  // user knows whether the warehouse is already initialized before they fill
+  // out the form. The query is 30 s stale (operational data) and is
+  // invalidated on a successful post via the mutation's onSuccess below.
+  const initializationQuery = useWarehouseInitializationStateQuery(
+    headerWarehouseId !== undefined && headerWarehouseId !== '' ? headerWarehouseId : undefined,
+  )
+  // The badge reports the state; this decides whether the action is allowed.
+  // Keeping the two apart is deliberate — the badge is presentation, the gate
+  // is the rule, and they must not drift into disagreeing.
+  const initializationStatus = initializationQuery.data?.status
+  const isAlreadyInitialized = blocksNewOpeningDocument(initializationStatus)
+  const initializationBlockMessageAr = openingInitializationBlockMessageAr(initializationStatus)
+  const saveDisabled = isSaving || isCapabilityUnverified || isAlreadyInitialized
   const onQuantityCapabilityGateChange = useCallback((nextGate: QuantityLineCapabilityGate) => {
     setQuantityCapabilityGate((currentGate) =>
       retainEquivalentCapabilityGate(currentGate, nextGate),
@@ -142,6 +190,12 @@ export default function OpeningDocumentFormPage() {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (capabilityGate.status !== 'ready') {
+      return
+    }
+    // Defence in depth: `saveDisabled` already hides the button, but a
+    // disabled attribute is not a boundary. Enter-key submission and any
+    // future call site must hit the same rule.
+    if (isAlreadyInitialized) {
       return
     }
     const { assetLines, lines } = form.getValues()
@@ -172,6 +226,8 @@ export default function OpeningDocumentFormPage() {
         },
         {
           onSuccess: (document) => {
+            // D-OPEN-02: the next mount of the badge's consumer (detail
+            // page) re-reads the initialization state; navigation is enough.
             navigate(ROUTE_PATHS.documentOpeningDetail.replace(':documentId', document.id))
           },
         },
@@ -198,14 +254,46 @@ export default function OpeningDocumentFormPage() {
             aria-labelledby="opening-policy-notice-title"
             className="grid gap-1 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm"
           >
-            <h2 id="opening-policy-notice-title" className="font-medium text-foreground">
-              سياسة الرصيد الافتتاحي
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 id="opening-policy-notice-title" className="font-medium text-foreground">
+                سياسة الرصيد الافتتاحي
+              </h2>
+              <WarehouseInitializationBadge
+                status={initializationQuery.data?.status}
+                asOfDate={initializationQuery.data?.asOfDate}
+              />
+            </div>
             <p className="text-muted-foreground">
               الرصيد الافتتاحي إجراء تهيئة لمرة واحدة وليس مستنداً دورياً. يعرض النظام نتيجة التحقق
               المعتمدة عند حفظ المسودة أو متابعة دورة المستند.
             </p>
           </section>
+          <FormField
+            control={form.control}
+            name="header.openingAsOfDate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>تاريخ الرصيد الافتتاحي</FormLabel>
+                <FormControl>
+                  <input
+                    type="date"
+                    dir="ltr"
+                    disabled={isSaving}
+                    data-slot="opening-as-of-date"
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                    value={field.value ?? ''}
+                    onChange={(event) => field.onChange(event.target.value)}
+                    onBlur={field.onBlur}
+                    ref={field.ref}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">
+                  تاريخ القياس الفعلي للرصيد — مستقل عن تاريخ النشر.
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <section
             data-slot="opening-lines-section"
             aria-label="بنود الرصيد الافتتاحي"
@@ -230,17 +318,36 @@ export default function OpeningDocumentFormPage() {
             />
           </section>
           {capabilityGate.status !== 'ready' ? (
-            <p
+            <div
+              data-slot="opening-capability-notice"
               role={capabilityGate.status === 'blocked' ? 'alert' : 'status'}
               aria-live="polite"
               className={
                 capabilityGate.status === 'blocked'
-                  ? 'text-sm text-destructive'
-                  : 'text-sm text-muted-foreground'
+                  ? 'rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive'
+                  : 'rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-foreground'
               }
             >
-              {capabilityGate.messageAr}
-            </p>
+              <p>{capabilityGate.messageAr}</p>
+              {capabilityGate.reason === 'opening_capability_not_granted' ? (
+                <p className="mt-1 text-xs">
+                  <a href={ROUTE_PATHS.warehouses ?? '#'} className="underline">
+                    إدارة المستودعات
+                  </a>{' '}
+                  لمنح قدرة "الفتح" لهذا المجال.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {initializationBlockMessageAr !== null ? (
+            <div
+              data-slot="opening-initialization-blocked"
+              role="status"
+              aria-live="polite"
+              className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-foreground"
+            >
+              <p>{initializationBlockMessageAr}</p>
+            </div>
           ) : null}
           {submitErrorMessage !== null ? (
             <p role="alert" className="text-sm text-destructive">

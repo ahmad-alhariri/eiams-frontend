@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { arabicCopyForCode, KNOWN_ERROR_CODES } from '@/shared/api/error-copy-ar'
+import { applicationSourceFiles, readSource, relativeToRepo } from '@/test/support/source-scan'
 import {
   isApiErrorResponse,
   isApiSuccessResponse,
@@ -162,6 +163,143 @@ const BACKEND_STATUS_CODES = [
   'REQUEST_TIMEOUT',
   'REQUEST_FAILED',
 ] as const
+
+/**
+ * Domain codes are gated separately from the bare status codes above, because
+ * the failure they cause is silent: `ApiResults.CreateErrorResponse` runs every
+ * code through `NormalizeErrorCode`, so an unmapped domain code reaches the UI
+ * as the generic per-status Arabic fallback and nobody sees the specific
+ * message the backend meant to convey. This family is the D-OPEN-02 opening and
+ * warehouse-initialization surface; listing it here makes a C# rename or a
+ * dropped mapping fail the build instead of reaching a user.
+ */
+const BACKEND_OPENING_DOMAIN_CODES = [
+  'OPENING_DOCUMENTS_ALREADY_INITIALIZED',
+  'OPENING_DOCUMENTS_DUPLICATE_MATERIAL',
+  'OPENING_DOCUMENTS_CORRECTION_REQUIRES_ADJUSTMENT',
+  'OPENING_DOCUMENTS_WAREHOUSE_ALREADY_INITIALIZED',
+  'OPENING_DOCUMENTS_OPENING_AS_OF_DATE_REQUIRED',
+  'OPENING_DOCUMENTS_OPENING_CAPABILITY_NOT_GRANTED',
+  'OPENING_DOCUMENTS_OPENING_QUANTITY_MUST_BE_POSITIVE',
+  'OPENING_DOCUMENTS_USE_ZERO_STOCK_INITIALIZATION',
+  'OPENING_DOCUMENTS_REVERSAL_BLOCKED_BY_DOWNSTREAM',
+  'WAREHOUSE_INITIALIZATION_ALREADY_REVERSED',
+] as const
+
+/**
+ * The C# source writes these codes dotted-PascalCase, but the wire never
+ * carries that form. Pairing each one with the key this map must use proves the
+ * mapping key still follows the backend's own normalization rule rather than a
+ * locally reimplemented guess.
+ */
+const OPENING_DOMAIN_CODE_NORMALIZATION: ReadonlyArray<readonly [string, string]> = [
+  ['OpeningDocuments.AlreadyInitialized', 'OPENING_DOCUMENTS_ALREADY_INITIALIZED'],
+  ['OpeningDocuments.DuplicateMaterial', 'OPENING_DOCUMENTS_DUPLICATE_MATERIAL'],
+  [
+    'OpeningDocuments.CorrectionRequiresAdjustment',
+    'OPENING_DOCUMENTS_CORRECTION_REQUIRES_ADJUSTMENT',
+  ],
+  [
+    'OpeningDocuments.WarehouseAlreadyInitialized',
+    'OPENING_DOCUMENTS_WAREHOUSE_ALREADY_INITIALIZED',
+  ],
+  ['OpeningDocuments.OpeningAsOfDateRequired', 'OPENING_DOCUMENTS_OPENING_AS_OF_DATE_REQUIRED'],
+  [
+    'OpeningDocuments.OpeningCapabilityNotGranted',
+    'OPENING_DOCUMENTS_OPENING_CAPABILITY_NOT_GRANTED',
+  ],
+  [
+    'OpeningDocuments.OpeningQuantityMustBePositive',
+    'OPENING_DOCUMENTS_OPENING_QUANTITY_MUST_BE_POSITIVE',
+  ],
+  [
+    'OpeningDocuments.UseZeroStockInitialization',
+    'OPENING_DOCUMENTS_USE_ZERO_STOCK_INITIALIZATION',
+  ],
+  [
+    'OpeningDocuments.ReversalBlockedByDownstream',
+    'OPENING_DOCUMENTS_REVERSAL_BLOCKED_BY_DOWNSTREAM',
+  ],
+  ['WarehouseInitialization.AlreadyReversed', 'WAREHOUSE_INITIALIZATION_ALREADY_REVERSED'],
+]
+
+describe('D-OPEN-02 opening and initialization codes (domain-code drift guard)', () => {
+  it.each(BACKEND_OPENING_DOMAIN_CODES)('has Arabic copy for the backend code %s', (code) => {
+    const copy = arabicCopyForCode(code)
+    expect(copy, `no Arabic copy for backend code ${code}`).not.toBeNull()
+    expect(copy?.titleAr.trim().length ?? 0).toBeGreaterThan(0)
+  })
+
+  it.each(OPENING_DOMAIN_CODE_NORMALIZATION)(
+    'normalizes the C# code %s to the key this map uses',
+    (dottedCode, expectedKey) => {
+      expect(normalizeWireErrorCode(dottedCode), dottedCode).toBe(expectedKey)
+    },
+  )
+
+  it('speaks no dotted code, because the wire never carries one', () => {
+    // The defect this guard was written for: six Arabic messages landed in a
+    // module keyed on the C# spelling, so the live lookup could never match.
+    for (const [dottedCode] of OPENING_DOMAIN_CODE_NORMALIZATION) {
+      expect(arabicCopyForCode(dottedCode), dottedCode).toBeNull()
+    }
+  })
+
+  it('reproduces the rule observed live on a running backend', () => {
+    // The Opening codes above are derived, not observed: provoking one needs an
+    // authenticated document-scoped account plus warehouse, capability and
+    // document setup. The normalization rule they rely on is the same single
+    // function for every domain error, and it WAS observed live on 2026-10-15
+    // against the running API on :5000 (backend build db0a372). Both samples
+    // below are the C# literal paired with the code that actually came over the
+    // wire; the second is deliberately a multi-segment camelCase one because it
+    // exercises the humps inside a segment, not just the dot.
+    //
+    //   POST /api/v1/auth/login                   -> 404 USERS_NOT_FOUND
+    //   POST /api/v1/admin/recovery/administrator -> 403 USERS_ADMINISTRATOR_RECOVERY_UNAVAILABLE
+    //
+    // Source: src/Domain/Users/UserErrors.cs:8 and :48.
+    const observed: ReadonlyArray<readonly [string, string]> = [
+      ['Users.NotFound', 'USERS_NOT_FOUND'],
+      ['Users.AdministratorRecoveryUnavailable', 'USERS_ADMINISTRATOR_RECOVERY_UNAVAILABLE'],
+    ]
+    for (const [csharpLiteral, wireCode] of observed) {
+      expect(normalizeWireErrorCode(csharpLiteral), csharpLiteral).toBe(wireCode)
+    }
+  })
+
+  it('rejects a dotted error key in production source, because the wire never carries one', () => {
+    // The deleted `shared/api/api-error.ts` was exactly this: a quoted
+    // dotted-lowercase error map, reachable only from its own test, whose keys
+    // could not match a normalized wire code. Twelve of its thirteen keys were
+    // also phantom codes the backend has never emitted in any form — they came
+    // from the provisional OpenAPI snapshot ADR-0001 retired.
+    //
+    // The scan is narrow on purpose: a quoted object key of two lowercase
+    // segments. Route paths, import specifiers and CSS classes do not take that
+    // shape, and any false positive names its file so it is easy to judge.
+    const dottedErrorKey = /['"][a-z][a-z0-9_]*\.[a-z][a-z0-9_]*['"]\s*:\s*['"]/u
+    const offenders = applicationSourceFiles().filter((file) =>
+      dottedErrorKey.test(readSource(file)),
+    )
+    expect(offenders.map(relativeToRepo)).toEqual([])
+  })
+
+  it('would catch a reintroduced dotted error key (non-vacuity)', () => {
+    const dottedErrorKey = /['"][a-z][a-z0-9_]*\.[a-z][a-z0-9_]*['"]\s*:\s*['"]/u
+    expect(dottedErrorKey.test("  'document.insufficient_stock': 'الرصيد غير كافٍ.'")).toBe(true)
+    // A UPPER_SNAKE key — the only shape the wire carries — must not match.
+    expect(dottedErrorKey.test('  DOCUMENT_INSUFFICIENT_STOCK: {')).toBe(false)
+  })
+
+  it('keeps every mapped code free of Latin characters', () => {
+    for (const code of BACKEND_OPENING_DOMAIN_CODES) {
+      const copy = arabicCopyForCode(code)
+      expect(copy?.titleAr, code).not.toMatch(/[A-Za-z]/u)
+      expect(copy?.detailAr ?? '', code).not.toMatch(/[A-Za-z]/u)
+    }
+  })
+})
 
 describe('Arabic error copy (frontend-owned, D-OAS-01 inverted)', () => {
   it.each(BACKEND_STATUS_CODES)('has Arabic copy for the backend code %s', (code) => {

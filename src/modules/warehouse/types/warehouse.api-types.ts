@@ -50,7 +50,7 @@ export type RecordStatus = 'Active' | 'Inactive'
  * without telling the user.
  */
 export type CapabilityOperation =
-  'Receiving' | 'Issue' | 'Transfer' | 'Count' | 'Return' | 'Adjustment'
+  'Receiving' | 'Issue' | 'Transfer' | 'Count' | 'Return' | 'Adjustment' | 'Opening'
 
 /**
  * The backend serialises `OperationType` as the enum NAME STRING (not the
@@ -69,6 +69,7 @@ export const CAPABILITY_OPERATION_VALUES: readonly CapabilityOperation[] = [
   'Count',
   'Return',
   'Adjustment',
+  'Opening',
 ] as const
 
 export function operationOrdinal(name: CapabilityOperation): number {
@@ -309,4 +310,60 @@ export interface ListWarehouseMaterialSettingsQuery {
   readonly pageSize?: number
   readonly search?: string
   readonly isActive?: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Warehouse initialization state (D-OPEN-02, PRD §6.2, §6.4, §6.10, §6.12)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wire projection of the explicit `WarehouseInitializationState` row.
+ *
+ * `status` is one of:
+ *  - `NotInitialized` — no state row + no positive Opening movement.
+ *  - `Initialized` — initialization completed with positive Opening stock.
+ *  - `ZeroStock` — initialization completed via the explicit zero-stock path.
+ *  - `Reversed` — a prior initialization was reversed.
+ */
+export type WarehouseInitializationStatus =
+  'NotInitialized' | 'Initialized' | 'ZeroStock' | 'Reversed'
+
+/**
+ * `Application.Warehouses.GetInitializationState.WarehouseInitializationStateResponse`.
+ *
+ * Endpoint: `GET /api/v1/warehouses/{warehouseId}/initialization`. The UI
+ * uses this to render the per-warehouse initialization badge truthfully
+ * without re-deriving it from the Opening documents list.
+ */
+export interface WarehouseInitializationStateResponse {
+  readonly warehouseId: Uuid
+  readonly status: WarehouseInitializationStatus
+  readonly sourceDocumentId: Uuid | null
+  /** ISO date `YYYY-MM-DD` — the cut-off date the inventory represents. */
+  readonly asOfDate: string | null
+  readonly isZeroStock: boolean
+  readonly initializedAtUtc: string | null
+  readonly initializedBy: Uuid | null
+  readonly reversedAtUtc: string | null
+  readonly reversedBy: Uuid | null
+}
+
+/**
+ * `Application.WarehouseDocuments.Opening.ZeroStockInitializeWarehouseCommand`.
+ *
+ * Endpoint: `POST /api/v1/warehouses/{warehouseId}/initialization`. Records
+ * the canonical zero-stock initialization for a warehouse that physically
+ * contains no inventory at the approved cut-off date. Produces no document,
+ * no Opening stock movements, and no Asset records — just the
+ * `WarehouseInitializationState` row with `IsZeroStock = true`.
+ *
+ * Requires `document.create` at Warehouse scope (D-RBAC-02): the seeded
+ * permission catalog does not grant this code at Site or Enterprise scope,
+ * so a Site/Enterprise Manager cannot invoke the command even by direct
+ * API call. The 403 + 404 refusal paths therefore run server-side and the
+ * UI never needs to second-guess them.
+ */
+export interface InitializeWarehouseZeroStockRequest {
+  /** ISO date `YYYY-MM-DD` — the cut-off date the (empty) inventory represents. */
+  readonly asOfDate: string
 }

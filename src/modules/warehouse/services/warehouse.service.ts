@@ -4,6 +4,7 @@ import { apiTransport } from '@/shared/api/transport'
 import type {
   Warehouse,
   WarehouseCapability,
+  WarehouseInitializationStateResponse,
   WarehouseMaterialSetting,
   WarehouseCreateRequest,
   WarehouseUpdateRequest,
@@ -15,12 +16,14 @@ import type {
   ListWarehousesQuery,
   ListWarehouseMaterialSettingsQuery,
   CapabilityOperation,
+  InitializeWarehouseZeroStockRequest,
   Uuid,
 } from '@/modules/warehouse/types/warehouse.api-types'
 import type { ApiPage, ResourceIdResponse } from '@/shared/api/api-contracts'
 
 const WAREHOUSES_PATH = '/warehouses'
 const WAREHOUSE_PATH = '/warehouses/{warehouseId}'
+const WAREHOUSE_INITIALIZATION_PATH = '/warehouses/{warehouseId}/initialization'
 const WAREHOUSE_CAPABILITIES_PATH = '/warehouses/{warehouseId}/capabilities'
 // Capability + operation commands live on the standalone resource, not under
 // the warehouse sub-resource. The capability id is the route parameter on
@@ -71,6 +74,14 @@ export interface WarehouseService {
     context?: RequestContext,
   ) => Promise<ApiPage<Warehouse>>
   getWarehouse: (warehouseId: string, context?: RequestContext) => Promise<Warehouse>
+  getInitializationState: (
+    warehouseId: string,
+    context?: RequestContext,
+  ) => Promise<WarehouseInitializationStateResponse>
+  initializeZeroStock: (
+    warehouseId: string,
+    request: InitializeWarehouseZeroStockRequest,
+  ) => Promise<ResourceIdResponse>
   createWarehouse: (request: WarehouseCreateRequest) => Promise<ResourceIdResponse>
   updateWarehouse: (warehouseId: string, request: WarehouseUpdateRequest) => Promise<void>
   listWarehouseCapabilities: (
@@ -123,6 +134,22 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
         path: pathWithId(WAREHOUSE_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
         ...withSignal(context),
+      })
+    },
+
+    async getInitializationState(warehouseId, context) {
+      return transport.request<WarehouseInitializationStateResponse>({
+        path: pathWithId(WAREHOUSE_INITIALIZATION_PATH, '{warehouseId}', warehouseId),
+        method: 'GET',
+        ...withSignal(context),
+      })
+    },
+
+    async initializeZeroStock(warehouseId, request) {
+      return transport.request<ResourceIdResponse>({
+        path: pathWithId(WAREHOUSE_INITIALIZATION_PATH, '{warehouseId}', warehouseId),
+        method: 'POST',
+        body: request,
       })
     },
 
