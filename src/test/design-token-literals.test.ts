@@ -1,20 +1,24 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 
 import { applicationSourceFiles, readSource, relativeToRepo } from './support/source-scan'
 
 /**
- * Two design-system rules that `docs/design-tokens.md` states in prose but that
- * nothing enforced, both of which the D-OPEN-02 slice violated six times across
- * five commits before this gate existed:
+ * A design-system rule that `docs/design-tokens.md` states in prose and that
+ * nothing enforced, which the D-OPEN-02 slice violated six times across five
+ * commits before this gate existed:
  *
- *  1. "Do not introduce literal color, spacing, radius, shadow, or animation
- *     values inside feature components where a documented token exists."
- *  2. "Feature code must not maintain its own status-color switch statements."
+ *   "Do not introduce literal color, spacing, radius, shadow, or animation
+ *    values inside feature components where a documented token exists."
  *
- * Rule 2 is enforced structurally rather than by pattern: a component that owns
- * a tone map is caught by rule 1 only if it happens to use a literal palette.
- * The registry check below closes that gap by requiring a status surface to
- * delegate to `StatusBadge`.
+ * It also closes the related "feature code must not maintain its own
+ * status-color switch statements" gap structurally: a component that owns a
+ * tone map is caught here only if it happens to use a literal palette, so the
+ * accompanying change moved the warehouse-initialization tones into the shared
+ * `StatusBadge` registry rather than leaving a local `TONES` map behind.
+ *
+ * The companion gate for the duplicate session observer lives in
+ * `session-read-path.test.ts`; this file deliberately covers only colour
+ * literals so each gate is findable by its own name.
  *
  * Every scan here carries non-vacuity evidence, per `support/source-scan.ts`:
  * an "expect no offenders" assertion over an empty file set proves nothing.
@@ -31,13 +35,7 @@ import { applicationSourceFiles, readSource, relativeToRepo } from './support/so
  * be mistaken for palette hits.
  */
 const LITERAL_PALETTE =
-  /(?:^|[\s"'`:])(?:[a-z-]+:)*(?:bg|text|border|ring|from|to|via|fill|stroke|shadow|outline|decoration|divide|accent|caret)-(?:amber|emerald|sky|rose|slate|zinc|gray|neutral|stone|red|orange|amber|lime|green|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|yellow)-\d{2,3}\b/gu
-
-/** A `useQuery` opened on the session key by anything other than the canonical observer. */
-const OWN_SESSION_QUERY = /useQuery<[^>]*>\(\s*\{[^}]*queryKey:\s*authSessionQueryKey/su
-
-/** The one module allowed to open that query: the shared observer itself. */
-const CANONICAL_SESSION_OBSERVER = 'src/modules/auth/hooks/use-cached-session.ts'
+  /(?:^|[\s"'`:])(?:[a-z-]+:)*(?:bg|text|border|ring|from|to|via|fill|stroke|shadow|outline|decoration|divide|accent|caret)-(?:amber|emerald|sky|rose|slate|zinc|gray|neutral|stone|red|orange|lime|green|teal|cyan|blue|indigo|violet|purple|fuchsia|pink|yellow)-\d{2,3}\b/gu
 
 function productionFiles(): string[] {
   return applicationSourceFiles()
@@ -47,14 +45,14 @@ function productionFiles(): string[] {
  * Files whose source matches `pattern`.
  *
  * `support/source-scan.ts` deliberately does not export a shared `offenders`
- * helper: the two existing scans each keep a private one because they also need
- * their own allow-marker handling, and a third shared version would only be
- * exercised by this file. `applicationSourceFiles` already excludes test files
- * and `src/test`, so no filtering happens here.
+ * helper: the existing scans each keep a private one because they also need
+ * their own allow-marker handling, and a shared version would only be exercised
+ * by two call sites. `applicationSourceFiles` already excludes test files and
+ * `src/test`, so no filtering happens here.
  */
 function filesMatching(pattern: RegExp, files: readonly string[]): string[] {
   return files.filter((file) => {
-    // A fresh lastIndex per file: both patterns carry /g, and a shared
+    // A fresh lastIndex per file: the pattern carries /g, and a shared
     // instance would skip matches on every second file.
     pattern.lastIndex = 0
     return pattern.test(readSource(file))
@@ -68,7 +66,7 @@ describe('design-token literals in application source', () => {
     // every legitimate production file added since has broken one of those pins
     // and turned the failure into noise. This floor still fails loudly if the
     // glob is narrowed to a handful of files, which is the failure mode that
-    // matters — a "no offenders" pass over an empty scan proves nothing.
+    // matters â€” a "no offenders" pass over an empty scan proves nothing.
     expect(files.length).toBeGreaterThan(300)
   })
 
@@ -98,31 +96,5 @@ describe('design-token literals in application source', () => {
     const banner = readSource('src/shared/documents/components/document-scope-read-only-banner.tsx')
     expect(banner).toContain('border-warning/30')
     expect(LITERAL_PALETTE.test(banner)).toBe(false)
-  })
-})
-
-describe('single session-read path', () => {
-  it('no production file opens its own useQuery on the session key', () => {
-    const found = filesMatching(OWN_SESSION_QUERY, productionFiles()).filter(
-      (file) => relativeToRepo(file) !== CANONICAL_SESSION_OBSERVER,
-    )
-    expect(
-      found.map(relativeToRepo),
-      `import and call the exported useCachedSession() from ${CANONICAL_SESSION_OBSERVER} instead of re-opening the session query`,
-    ).toEqual([])
-  })
-
-  it('the canonical observer still exists and is exported', () => {
-    const observer = readSource(CANONICAL_SESSION_OBSERVER)
-    expect(observer).toContain('export function useCachedSession')
-  })
-
-  it('would catch a second session query (non-vacuity)', () => {
-    const negativeControl = [
-      'const { data } = useQuery<SessionResponse>({',
-      '  queryKey: authSessionQueryKey,',
-      '})',
-    ].join('\n')
-    expect(OWN_SESSION_QUERY.test(negativeControl)).toBe(true)
   })
 })
