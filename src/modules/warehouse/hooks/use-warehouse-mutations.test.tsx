@@ -17,7 +17,11 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
 }))
 
-import { useCreateWarehouseMutation, useUpdateWarehouseMutation, useInitializeWarehouseZeroStockMutation } from './use-warehouse-mutations'
+import {
+  useCreateWarehouseMutation,
+  useUpdateWarehouseMutation,
+  useInitializeWarehouseZeroStockMutation,
+} from './use-warehouse-mutations'
 
 const API_BASE_URL = '/api/v1'
 

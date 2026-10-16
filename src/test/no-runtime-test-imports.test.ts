@@ -114,8 +114,17 @@ import {
  * unreferenced `src/shared/documents/types/document-transport.types.ts`. The
  * number did not move, but the file set did, and that is recorded here rather
  * than left to look like "no change".
+ *
+ * Re-measured again at 389 for the D-OPEN-02 warehouse-initialization surface
+ * added on this branch: `warehouse-initialization-badge.tsx` (`c86e7d8`) and
+ * `initialize-warehouse-zero-stock-dialog.tsx` (`68ae09f`). Neither pin moved
+ * when those landed, so this gate was red on the branch. Recorded so the next
+ * delta is read as a fact about the file set rather than a coincidence.
+ *
+ * Then +1 again for `src/modules/auth/hooks/use-cached-session.ts`, the single
+ * shared session observer the four previous copies were consolidated into.
  */
-const SCANNED_FILE_COUNT = 387
+const SCANNED_FILE_COUNT = 390
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

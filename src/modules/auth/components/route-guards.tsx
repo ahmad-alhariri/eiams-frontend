@@ -1,15 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
 import { IconLockAccess, IconShieldLock } from '@tabler/icons-react'
 import type { ReactNode } from 'react'
 import { Link, Navigate } from 'react-router'
 
 import { ROUTE_PATHS, type RouteKey } from '@/config/routes'
+import { useCachedSession } from '@/modules/auth/hooks/use-cached-session'
 import { useRoutePermission } from '@/modules/auth/hooks/use-permission'
-import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { FullPageSpinner } from '@/shared/feedback/full-page-spinner'
 import { Button } from '@/shared/ui/button'
-import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 type RouteGuardProps = {
   children: ReactNode
@@ -17,22 +15,6 @@ type RouteGuardProps = {
 
 type RouteAccessGuardProps = RouteGuardProps & {
   route: RouteKey
-}
-
-/**
- * Observes the single query-backed session projection without triggering a
- * second hydration request. The application root owns hydration; guards only
- * decide what may render once its lifecycle outcome is known.
- */
-function useCachedSession(): SessionResponse | undefined {
-  const { data } = useQuery<SessionResponse>({
-    queryKey: authSessionQueryKey,
-    queryFn: () => Promise.reject(new Error('Session hydration is owned by the application root.')),
-    enabled: false,
-    staleTime: Number.POSITIVE_INFINITY,
-  })
-
-  return data
 }
 
 function AuthLoadingBoundary() {

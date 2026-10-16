@@ -227,9 +227,7 @@ describe('WarehouseDetailPage', () => {
       http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, () =>
         okPageJson([], { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 }),
       ),
-      http.get(`${API_BASE_URL}/sites`, () =>
-        okPageJson([createSite({ id: warehouse.siteId })]),
-      ),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([createSite({ id: warehouse.siteId })])),
       http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/material-settings`, () =>
         okPageJson([], { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 }),
       ),
@@ -281,9 +279,7 @@ describe('WarehouseDetailPage', () => {
       http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, () =>
         okPageJson([], { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 }),
       ),
-      http.get(`${API_BASE_URL}/sites`, () =>
-        okPageJson([createSite({ id: warehouse.siteId })]),
-      ),
+      http.get(`${API_BASE_URL}/sites`, () => okPageJson([createSite({ id: warehouse.siteId })])),
       http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/material-settings`, () =>
         okPageJson([], { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 }),
       ),
@@ -313,9 +309,10 @@ describe('WarehouseDetailPage', () => {
 
     await screen.findByRole('heading', { name: warehouse.name })
     // The badge renders Initialized; the trigger never appears.
-    expect(
-      await screen.findByTestId('warehouse-initialization-badge'),
-    ).toHaveAttribute('data-status', 'Initialized')
+    expect(await screen.findByTestId('warehouse-initialization-badge')).toHaveAttribute(
+      'data-status',
+      'Initialized',
+    )
     expect(screen.queryByTestId('warehouse-zero-stock-trigger')).not.toBeInTheDocument()
   })
 })
