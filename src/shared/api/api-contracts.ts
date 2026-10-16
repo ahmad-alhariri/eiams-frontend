@@ -22,7 +22,7 @@
  *    `asset.service.ts`) own module-specific endpoint constants and wire types.
  *
  * Used by: `shared/api/api-transport.ts` (interface definition); `shared/api/axios-transport.ts`
- * (production adapter); `shared/api/pagination.ts` (normalization); `shared/api/api-error.ts`
+ * (production adapter); `shared/api/pagination.ts` (normalization); `shared/services/api-error.ts`
  * (error-shape normalization); and all feature service files after `whhu.13` migration.
  *
  * Pattern mirrored from: `docs/direct-backend-integration-plan.md` §4.2 (`ApiSuccessResponse`,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { arabicCopyForCode, KNOWN_ERROR_CODES } from '@/shared/api/error-copy-ar'
+import { applicationSourceFiles, readSource, relativeToRepo } from '@/test/support/source-scan'
 import {
   isApiErrorResponse,
   isApiSuccessResponse,
@@ -242,6 +243,53 @@ describe('D-OPEN-02 opening and initialization codes (domain-code drift guard)',
     for (const [dottedCode] of OPENING_DOMAIN_CODE_NORMALIZATION) {
       expect(arabicCopyForCode(dottedCode), dottedCode).toBeNull()
     }
+  })
+
+  it('reproduces the rule observed live on a running backend', () => {
+    // The Opening codes above are derived, not observed: provoking one needs an
+    // authenticated document-scoped account plus warehouse, capability and
+    // document setup. The normalization rule they rely on is the same single
+    // function for every domain error, and it WAS observed live on 2026-10-15
+    // against the running API on :5000 (backend build db0a372). Both samples
+    // below are the C# literal paired with the code that actually came over the
+    // wire; the second is deliberately a multi-segment camelCase one because it
+    // exercises the humps inside a segment, not just the dot.
+    //
+    //   POST /api/v1/auth/login                   -> 404 USERS_NOT_FOUND
+    //   POST /api/v1/admin/recovery/administrator -> 403 USERS_ADMINISTRATOR_RECOVERY_UNAVAILABLE
+    //
+    // Source: src/Domain/Users/UserErrors.cs:8 and :48.
+    const observed: ReadonlyArray<readonly [string, string]> = [
+      ['Users.NotFound', 'USERS_NOT_FOUND'],
+      ['Users.AdministratorRecoveryUnavailable', 'USERS_ADMINISTRATOR_RECOVERY_UNAVAILABLE'],
+    ]
+    for (const [csharpLiteral, wireCode] of observed) {
+      expect(normalizeWireErrorCode(csharpLiteral), csharpLiteral).toBe(wireCode)
+    }
+  })
+
+  it('rejects a dotted error key in production source, because the wire never carries one', () => {
+    // The deleted `shared/api/api-error.ts` was exactly this: a quoted
+    // dotted-lowercase error map, reachable only from its own test, whose keys
+    // could not match a normalized wire code. Twelve of its thirteen keys were
+    // also phantom codes the backend has never emitted in any form — they came
+    // from the provisional OpenAPI snapshot ADR-0001 retired.
+    //
+    // The scan is narrow on purpose: a quoted object key of two lowercase
+    // segments. Route paths, import specifiers and CSS classes do not take that
+    // shape, and any false positive names its file so it is easy to judge.
+    const dottedErrorKey = /['"][a-z][a-z0-9_]*\.[a-z][a-z0-9_]*['"]\s*:\s*['"]/u
+    const offenders = applicationSourceFiles().filter((file) =>
+      dottedErrorKey.test(readSource(file)),
+    )
+    expect(offenders.map(relativeToRepo)).toEqual([])
+  })
+
+  it('would catch a reintroduced dotted error key (non-vacuity)', () => {
+    const dottedErrorKey = /['"][a-z][a-z0-9_]*\.[a-z][a-z0-9_]*['"]\s*:\s*['"]/u
+    expect(dottedErrorKey.test("  'document.insufficient_stock': 'الرصيد غير كافٍ.'")).toBe(true)
+    // A UPPER_SNAKE key — the only shape the wire carries — must not match.
+    expect(dottedErrorKey.test('  DOCUMENT_INSUFFICIENT_STOCK: {')).toBe(false)
   })
 
   it('keeps every mapped code free of Latin characters', () => {
