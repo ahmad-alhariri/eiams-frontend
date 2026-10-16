@@ -163,6 +163,96 @@ const BACKEND_STATUS_CODES = [
   'REQUEST_FAILED',
 ] as const
 
+/**
+ * Domain codes are gated separately from the bare status codes above, because
+ * the failure they cause is silent: `ApiResults.CreateErrorResponse` runs every
+ * code through `NormalizeErrorCode`, so an unmapped domain code reaches the UI
+ * as the generic per-status Arabic fallback and nobody sees the specific
+ * message the backend meant to convey. This family is the D-OPEN-02 opening and
+ * warehouse-initialization surface; listing it here makes a C# rename or a
+ * dropped mapping fail the build instead of reaching a user.
+ */
+const BACKEND_OPENING_DOMAIN_CODES = [
+  'OPENING_DOCUMENTS_ALREADY_INITIALIZED',
+  'OPENING_DOCUMENTS_DUPLICATE_MATERIAL',
+  'OPENING_DOCUMENTS_CORRECTION_REQUIRES_ADJUSTMENT',
+  'OPENING_DOCUMENTS_WAREHOUSE_ALREADY_INITIALIZED',
+  'OPENING_DOCUMENTS_OPENING_AS_OF_DATE_REQUIRED',
+  'OPENING_DOCUMENTS_OPENING_CAPABILITY_NOT_GRANTED',
+  'OPENING_DOCUMENTS_OPENING_QUANTITY_MUST_BE_POSITIVE',
+  'OPENING_DOCUMENTS_USE_ZERO_STOCK_INITIALIZATION',
+  'OPENING_DOCUMENTS_REVERSAL_BLOCKED_BY_DOWNSTREAM',
+  'WAREHOUSE_INITIALIZATION_ALREADY_REVERSED',
+] as const
+
+/**
+ * The C# source writes these codes dotted-PascalCase, but the wire never
+ * carries that form. Pairing each one with the key this map must use proves the
+ * mapping key still follows the backend's own normalization rule rather than a
+ * locally reimplemented guess.
+ */
+const OPENING_DOMAIN_CODE_NORMALIZATION: ReadonlyArray<readonly [string, string]> = [
+  ['OpeningDocuments.AlreadyInitialized', 'OPENING_DOCUMENTS_ALREADY_INITIALIZED'],
+  ['OpeningDocuments.DuplicateMaterial', 'OPENING_DOCUMENTS_DUPLICATE_MATERIAL'],
+  [
+    'OpeningDocuments.CorrectionRequiresAdjustment',
+    'OPENING_DOCUMENTS_CORRECTION_REQUIRES_ADJUSTMENT',
+  ],
+  [
+    'OpeningDocuments.WarehouseAlreadyInitialized',
+    'OPENING_DOCUMENTS_WAREHOUSE_ALREADY_INITIALIZED',
+  ],
+  ['OpeningDocuments.OpeningAsOfDateRequired', 'OPENING_DOCUMENTS_OPENING_AS_OF_DATE_REQUIRED'],
+  [
+    'OpeningDocuments.OpeningCapabilityNotGranted',
+    'OPENING_DOCUMENTS_OPENING_CAPABILITY_NOT_GRANTED',
+  ],
+  [
+    'OpeningDocuments.OpeningQuantityMustBePositive',
+    'OPENING_DOCUMENTS_OPENING_QUANTITY_MUST_BE_POSITIVE',
+  ],
+  [
+    'OpeningDocuments.UseZeroStockInitialization',
+    'OPENING_DOCUMENTS_USE_ZERO_STOCK_INITIALIZATION',
+  ],
+  [
+    'OpeningDocuments.ReversalBlockedByDownstream',
+    'OPENING_DOCUMENTS_REVERSAL_BLOCKED_BY_DOWNSTREAM',
+  ],
+  ['WarehouseInitialization.AlreadyReversed', 'WAREHOUSE_INITIALIZATION_ALREADY_REVERSED'],
+]
+
+describe('D-OPEN-02 opening and initialization codes (domain-code drift guard)', () => {
+  it.each(BACKEND_OPENING_DOMAIN_CODES)('has Arabic copy for the backend code %s', (code) => {
+    const copy = arabicCopyForCode(code)
+    expect(copy, `no Arabic copy for backend code ${code}`).not.toBeNull()
+    expect(copy?.titleAr.trim().length ?? 0).toBeGreaterThan(0)
+  })
+
+  it.each(OPENING_DOMAIN_CODE_NORMALIZATION)(
+    'normalizes the C# code %s to the key this map uses',
+    (dottedCode, expectedKey) => {
+      expect(normalizeWireErrorCode(dottedCode), dottedCode).toBe(expectedKey)
+    },
+  )
+
+  it('speaks no dotted code, because the wire never carries one', () => {
+    // The defect this guard was written for: six Arabic messages landed in a
+    // module keyed on the C# spelling, so the live lookup could never match.
+    for (const [dottedCode] of OPENING_DOMAIN_CODE_NORMALIZATION) {
+      expect(arabicCopyForCode(dottedCode), dottedCode).toBeNull()
+    }
+  })
+
+  it('keeps every mapped code free of Latin characters', () => {
+    for (const code of BACKEND_OPENING_DOMAIN_CODES) {
+      const copy = arabicCopyForCode(code)
+      expect(copy?.titleAr, code).not.toMatch(/[A-Za-z]/u)
+      expect(copy?.detailAr ?? '', code).not.toMatch(/[A-Za-z]/u)
+    }
+  })
+})
+
 describe('Arabic error copy (frontend-owned, D-OAS-01 inverted)', () => {
   it.each(BACKEND_STATUS_CODES)('has Arabic copy for the backend code %s', (code) => {
     const copy = arabicCopyForCode(code)
