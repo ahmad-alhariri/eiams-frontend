@@ -127,8 +127,13 @@ import {
  * Then +1 again for `src/modules/opening/opening-initialization.ts`, the pure
  * D-OPEN-02 rule that decides whether a warehouse's reported initialization
  * state blocks a new Opening draft.
+ *
+ * Then -1 for `src/shared/api/api-error.ts`, deleted: a second error-copy table
+ * keyed on dotted codes the wire never carries, whose only importer was its own
+ * test. `shared/services/api-error.ts` and `shared/api/error-copy-ar.ts` are
+ * the live pair.
  */
-const SCANNED_FILE_COUNT = 391
+const SCANNED_FILE_COUNT = 390
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.
