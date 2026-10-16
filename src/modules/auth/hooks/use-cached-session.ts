@@ -18,7 +18,7 @@ import type { SessionResponse } from '@/modules/auth/types/session.types'
  * need it, and `usePermission` is itself imported by the guards — reading the
  * session from there would make the two modules import each other. Four
  * byte-identical private copies of this function existed before it was
- * consolidated here; `src/test/design-token-literals.test.ts` fails the build if
+ * consolidated here; `src/test/session-read-path.test.ts` fails the build if
  * another one appears.
  */
 export function useCachedSession(): SessionResponse | undefined {
