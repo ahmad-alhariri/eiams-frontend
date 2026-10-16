@@ -230,10 +230,7 @@ function readOpeningField(
   key: 'openingAsOfDate' | 'openingIsZeroStock',
 ): string | null | boolean | undefined {
   return (document as unknown as Record<string, unknown>)[key] as
-    | string
-    | null
-    | boolean
-    | undefined
+    string | null | boolean | undefined
 }
 
 export function toWireDetails(document: WarehouseDocument): WarehouseDocumentDetails {

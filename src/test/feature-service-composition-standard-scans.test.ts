@@ -43,8 +43,15 @@ const HOOK_FILES = moduleHookFiles()
  * `src/modules/organization/hooks/use-organization-mutations.ts`. Its keys are
  * built through the same `queryKeys.scoped` factory as its siblings, so scan 1
  * below is expected to stay green.
+ *
+ * 44 → 45 for `src/modules/auth/hooks/use-cached-session.ts`, which consolidates
+ * the four byte-identical private session observers that had been copied into
+ * `route-guards.tsx`, `use-permission.ts`, `sidebar.tsx` and
+ * `session-user-menu.tsx`. It reads a query key and holds no query keys of its
+ * own, so scan 1 stays green; it is an observer with `enabled: false`, which is
+ * the same posture as every other hook in this set.
  */
-const EXPECTED_HOOK_FILES = 44
+const EXPECTED_HOOK_FILES = 45
 
 // ---------------------------------------------------------------------------
 // Scan 1 — query keys must come from a factory

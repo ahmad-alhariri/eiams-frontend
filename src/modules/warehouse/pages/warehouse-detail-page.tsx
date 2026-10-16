@@ -11,7 +11,10 @@ import { WarehouseFormDialog } from '@/modules/warehouse/components/warehouse-fo
 import { WarehouseInitializationBadge } from '@/modules/warehouse/components/warehouse-initialization-badge'
 import { InitializeWarehouseZeroStockDialog } from '@/modules/warehouse/components/initialize-warehouse-zero-stock-dialog'
 import { useUpdateWarehouseMutation } from '@/modules/warehouse/hooks/use-warehouse-mutations'
-import { useWarehouseInitializationStateQuery, useWarehouseQuery } from '@/modules/warehouse/hooks/use-warehouse-queries'
+import {
+  useWarehouseInitializationStateQuery,
+  useWarehouseQuery,
+} from '@/modules/warehouse/hooks/use-warehouse-queries'
 import {
   toUpdateWarehouseRequest,
   type WarehouseFormValues,
@@ -174,9 +177,8 @@ function WarehouseDetailPage() {
           ) : null}
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          التهيئة برصيد صفري تسجّل المستودع كغير قابل للافتتاح الاعتيادي. إن
-          كان المستودع يحوي مخزوناً فعلياً، استخدم نموذج الرصيد الافتتاحي
-          داخله بدلاً من ذلك.
+          التهيئة برصيد صفري تسجّل المستودع كغير قابل للافتتاح الاعتيادي. إن كان المستودع يحوي
+          مخزوناً فعلياً، استخدم نموذج الرصيد الافتتاحي داخله بدلاً من ذلك.
         </p>
       </ContentCard>
       <WarehouseCapabilitiesOverview warehouseId={warehouse.id} />

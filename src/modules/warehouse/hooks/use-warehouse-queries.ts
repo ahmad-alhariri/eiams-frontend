@@ -101,10 +101,15 @@ export function useWarehouseInitializationStateQuery(warehouseId: string | undef
       scope === undefined || warehouseId === undefined
         ? queryKeys.public(WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'initialization')
         : [
-            ...queryKeys.scoped(scope, WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'initialization'),
+            ...queryKeys.scoped(
+              scope,
+              WAREHOUSE_RESOURCE,
+              'warehouses',
+              warehouseId,
+              'initialization',
+            ),
           ],
-    queryFn: ({ signal }) =>
-      warehouseService.getInitializationState(warehouseId ?? '', { signal }),
+    queryFn: ({ signal }) => warehouseService.getInitializationState(warehouseId ?? '', { signal }),
     enabled: scope !== undefined && warehouseId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })

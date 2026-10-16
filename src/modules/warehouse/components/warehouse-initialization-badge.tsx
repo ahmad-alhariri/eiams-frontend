@@ -1,26 +1,21 @@
-import type { WarehouseInitializationStatus } from '@/modules/warehouse/types/warehouse.api-types'
+import { StatusBadge } from '@/shared/feedback/status-badge'
 import { cn } from '@/shared/utils/class-names'
+
+import type { WarehouseInitializationStatus } from '@/modules/warehouse/types/warehouse.api-types'
 
 /**
  * Read-only badge showing a warehouse's per-D-OPEN-02 initialization state
- * (PRD §6.2, §6.4, §6.10). Three wire strings — NotInitialized, Initialized,
- * ZeroStock, Reversed — each render an Arabic chip with a stable color so
- * the user can tell at a glance whether the warehouse is ready for Opening.
+ * (PRD §6.2, §6.4, §6.10). Four wire strings — NotInitialized, Initialized,
+ * ZeroStock, Reversed — each render an Arabic chip so the user can tell at a
+ * glance whether the warehouse is ready for Opening.
+ *
+ * The Arabic labels and the colour family both come from the shared
+ * `StatusBadge` registry under the `warehouse-initialization` entity. This
+ * component owns no tone map of its own: `docs/design-tokens.md` forbids a
+ * feature component from maintaining its own status-color switch statement,
+ * and a private palette here is how the four literal Tailwind colours drifted
+ * in. The cut-off date is module-specific presentation, so it stays here.
  */
-const LABELS_AR: Readonly<Record<WarehouseInitializationStatus, string>> = {
-  NotInitialized: 'غير مهيأ',
-  Initialized: 'مهيأ (بحركة)',
-  ZeroStock: 'مهيأ (بدون حركة)',
-  Reversed: 'معكوس',
-}
-
-const TONES: Readonly<Record<WarehouseInitializationStatus, string>> = {
-  NotInitialized: 'border-amber-300 bg-amber-50 text-amber-900',
-  Initialized: 'border-emerald-300 bg-emerald-50 text-emerald-900',
-  ZeroStock: 'border-sky-300 bg-sky-50 text-sky-900',
-  Reversed: 'border-rose-300 bg-rose-50 text-rose-900',
-}
-
 export function WarehouseInitializationBadge({
   status,
   asOfDate,
@@ -30,8 +25,9 @@ export function WarehouseInitializationBadge({
   asOfDate?: string | null | undefined
   className?: string
 }): React.ReactElement | null {
-  // The labels are Arabic-locked at the wire; i18n is intentionally
-  // not consulted here so the badge is identical across every surface.
+  // The status string is Arabic-labelled at the registry, so i18n is
+  // intentionally not consulted here and the badge reads identically on every
+  // surface. An absent or unknown status renders nothing rather than guessing.
   if (status === undefined || status === null) {
     return null
   }
@@ -40,14 +36,10 @@ export function WarehouseInitializationBadge({
       data-slot="warehouse-initialization-badge"
       data-testid="warehouse-initialization-badge"
       data-status={status}
-      className={cn(
-        'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium',
-        TONES[status],
-        className,
-      )}
+      className={cn('inline-flex items-center gap-1 text-xs font-medium', className)}
       dir="rtl"
     >
-      <span>{LABELS_AR[status]}</span>
+      <StatusBadge entity="warehouse-initialization" status={status} />
       {asOfDate !== undefined && asOfDate !== null ? (
         <span className="opacity-70">· {asOfDate}</span>
       ) : null}

@@ -1,13 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { NavLink } from 'react-router'
 
+import { useCachedSession } from '@/modules/auth/hooks/use-cached-session'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { cn } from '@/shared/utils/class-names'
 import { useUiStore } from '@/shared/store/ui.store'
 import { toSessionScopeLabel } from '@/modules/auth/services/session-display'
-import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   SIDEBAR_NAV_GROUPS,
   filterSidebarNav,
@@ -104,12 +102,7 @@ function SidebarNavGroupBlock({
 function SidebarScopeIndicator({ collapsed }: { collapsed: boolean }) {
   // This is a cache observer only. Authentication hydration owns fetching and
   // replacement of the authoritative session query.
-  const { data: session } = useQuery<SessionResponse>({
-    queryKey: authSessionQueryKey,
-    queryFn: () => Promise.reject(new Error('Session hydration is owned by the application root.')),
-    enabled: false,
-    staleTime: Number.POSITIVE_INFINITY,
-  })
+  const session = useCachedSession()
   const scopeName = toSessionScopeLabel(session?.activeScope)
   const accessibleLabel =
     scopeName === undefined ? 'نطاق العمل غير محدد' : `نطاق العمل الحالي: ${scopeName}`

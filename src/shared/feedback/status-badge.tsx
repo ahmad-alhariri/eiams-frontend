@@ -9,9 +9,18 @@ type CustodyStatusValue = 'Active' | 'Closed'
 type InventoryCountStatusValue = 'Planned' | 'InProgress' | 'Completed' | 'Closed'
 type RecordStatusValue = 'Active' | 'Inactive'
 type UserAccountStatusValue = 'Active' | 'Suspended'
+type WarehouseInitializationStatusValue =
+  'NotInitialized' | 'Initialized' | 'ZeroStock' | 'Reversed'
 
 type StatusEntity =
-  'document' | 'adjustment' | 'asset' | 'custody' | 'inventory-count' | 'record' | 'user'
+  | 'document'
+  | 'adjustment'
+  | 'asset'
+  | 'custody'
+  | 'inventory-count'
+  | 'record'
+  | 'user'
+  | 'warehouse-initialization'
 
 type StatusValue =
   | DocumentStatusValue
@@ -21,6 +30,7 @@ type StatusValue =
   | InventoryCountStatusValue
   | RecordStatusValue
   | UserAccountStatusValue
+  | WarehouseInitializationStatusValue
 
 type StatusMeta = {
   label: string
@@ -70,6 +80,16 @@ const STATUS_REGISTRY: Record<StatusEntity, Record<string, StatusMeta>> = {
     Active: { label: 'نشط', variant: 'success' },
     Suspended: { label: 'موقوف', variant: 'critical' },
   } satisfies Record<UserAccountStatusValue, StatusMeta>,
+  // D-OPEN-02 warehouse initialization state (PRD §6.2, §6.4, §6.10, §6.12).
+  // Lives here rather than in the warehouse module because
+  // `docs/design-tokens.md` forbids a feature component owning its own
+  // status-color switch; the module badge delegates instead.
+  'warehouse-initialization': {
+    NotInitialized: { label: 'غير مهيأ', variant: 'warning' },
+    Initialized: { label: 'مهيأ (بحركة)', variant: 'success' },
+    ZeroStock: { label: 'مهيأ (بدون حركة)', variant: 'default' },
+    Reversed: REVERSED_ENTRY,
+  } satisfies Record<WarehouseInitializationStatusValue, StatusMeta>,
 }
 
 const UNKNOWN_LABEL = 'غير معروف'

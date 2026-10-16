@@ -617,9 +617,7 @@ export function DocumentDetailBody({
             // represents is independent of the posting timestamp; surface
             // it next to the posting date so reports do not conflate the
             // physical inventory measurement with the system posting time.
-            <DetailField label="تاريخ الرصيد الافتتاحي">
-              {document.openingAsOfDate}
-            </DetailField>
+            <DetailField label="تاريخ الرصيد الافتتاحي">{document.openingAsOfDate}</DetailField>
           ) : null}
           {document.documentType === 'Opening' && document.openingIsZeroStock ? (
             <DetailField label="نوع التهيئة">
@@ -722,18 +720,14 @@ export function DocumentDetailBody({
             data-testid="opening-reverse-blocked"
             role="alert"
             dir="rtl"
-            className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-900"
+            className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
           >
             <p className="font-medium">
               لا يمكن عكس سند الفتح: توجد حركات لاحقة أو سجلات عهدة مرتبطة به.
             </p>
             <p className="mt-1 text-xs">
-              أصدر مستند تسوية تعويضي عبر
-              {' '}
-              <Link
-                to={ROUTE_PATHS.adjustmentNew}
-                className="underline"
-              >
+              أصدر مستند تسوية تعويضي عبر{' '}
+              <Link to={ROUTE_PATHS.adjustmentNew} className="underline">
                 نموذج التسوية
               </Link>
               .

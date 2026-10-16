@@ -309,7 +309,7 @@ export default function OpeningDocumentFormPage() {
               className={
                 capabilityGate.status === 'blocked'
                   ? 'rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive'
-                  : 'rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900'
+                  : 'rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-foreground'
               }
             >
               <p>{capabilityGate.messageAr}</p>

@@ -124,10 +124,9 @@ function ZeroStockDialogBody({
       <DialogHeader>
         <DialogTitle>تهيئة المستودع برصيد صفري</DialogTitle>
         <DialogDescription>
-          هذه العملية تسجّل المستودع «{warehouseName}» كمهيّأ ابتداءً من تاريخ
-          القطع المُدخل، دون إنشاء مستند أو حركات مخزون. لا يمكن التراجع عنها
-          عبر هذا الحوار؛ إن أردت تهيئة بحركة فعلية، استخدم نموذج الرصيد
-          الافتتاحي داخل المستودع.
+          هذه العملية تسجّل المستودع «{warehouseName}» كمهيّأ ابتداءً من تاريخ القطع المُدخل، دون
+          إنشاء مستند أو حركات مخزون. لا يمكن التراجع عنها عبر هذا الحوار؛ إن أردت تهيئة بحركة
+          فعلية، استخدم نموذج الرصيد الافتتاحي داخل المستودع.
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-2">
@@ -147,14 +146,13 @@ function ZeroStockDialogBody({
           aria-invalid={!isDateValid}
         />
         {!isDateValid ? (
-          <p className="text-xs text-rose-700" role="alert">
+          <p className="text-xs text-destructive" role="alert">
             أدخل تاريخ القطع بصيغة YYYY-MM-DD.
           </p>
         ) : null}
         {!isWarehouseScope ? (
-          <p className="text-xs text-amber-700" role="alert">
-            هذا الإجراء متاح فقط لنطاق المستودع. سترفض الواجهة الخلفية الطلب
-            حتى لو أُرسل يدوياً.
+          <p className="text-xs text-warning" role="alert">
+            هذا الإجراء متاح فقط لنطاق المستودع. سترفض الواجهة الخلفية الطلب حتى لو أُرسل يدوياً.
           </p>
         ) : null}
       </div>

@@ -107,10 +107,7 @@ describe('InitializeWarehouseZeroStockDialog', () => {
   it('surfaces the 409 (already-initialized) error from the server', async () => {
     server.use(
       http.post(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/initialization`, () =>
-        okJson(
-          { code: 'OpeningDocuments.WarehouseAlreadyInitialized' },
-          { status: 409 },
-        ),
+        okJson({ code: 'OpeningDocuments.WarehouseAlreadyInitialized' }, { status: 409 }),
       ),
     )
 

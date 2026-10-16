@@ -1,10 +1,9 @@
-import { useQuery } from '@tanstack/react-query'
 import { IconChevronDown, IconLogout, IconSettings, IconUserCircle } from '@tabler/icons-react'
 import { useNavigate } from 'react-router'
 
 import { ROUTE_PATHS } from '@/config/routes'
+import { useCachedSession } from '@/modules/auth/hooks/use-cached-session'
 import { useLogoutMutation } from '@/modules/auth/hooks/use-logout-mutation'
-import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,24 +17,6 @@ import {
   toSessionUserDisplayName,
   toSessionUserInitials,
 } from '@/modules/auth/services/session-display'
-import type { SessionResponse } from '@/modules/auth/types/session.types'
-
-/**
- * Observes the single query-backed session projection without triggering a
- * second hydration request — the same cache-observer idiom as
- * `usePermission`/`useCachedSession`. The application root owns hydration;
- * this component only decides what the session menu may offer.
- */
-function useCachedSession(): SessionResponse | undefined {
-  const { data } = useQuery<SessionResponse>({
-    queryKey: authSessionQueryKey,
-    queryFn: () => Promise.reject(new Error('Session hydration is owned by the application root.')),
-    enabled: false,
-    staleTime: Number.POSITIVE_INFINITY,
-  })
-
-  return data
-}
 
 /**
  * Session user block and its menu (ui-design.md 4.2): avatar, name, the

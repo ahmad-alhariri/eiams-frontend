@@ -1,6 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
-import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { useCachedSession } from '@/modules/auth/hooks/use-cached-session'
 
 /**
  * Banner explaining that the active session scope grants read-only access to
@@ -11,16 +9,17 @@ import type { SessionResponse } from '@/modules/auth/types/session.types'
  * permission gate already hides every mutation button; this banner is the
  * user-facing explanation so the missing controls do not look like a bug.
  *
+ * The session is read through the exported `useCachedSession` observer rather
+ * than a private `useQuery`, so this surface cannot drift from the guards.
+ * Colors come from the documented `warning` token family
+ * (`docs/design-tokens.md` §2), matching the signed-original notice in
+ * `shared/documents/attachment-panel.tsx`.
+ *
  * Returns `null` when the active scope is Warehouse or when the session has
  * not yet loaded.
  */
 export function DocumentScopeReadOnlyBanner(): React.JSX.Element | null {
-  const { data: session } = useQuery<SessionResponse>({
-    queryKey: authSessionQueryKey,
-    queryFn: () => Promise.reject(new Error('Session hydration is owned by the application root.')),
-    enabled: false,
-    staleTime: Number.POSITIVE_INFINITY,
-  })
+  const session = useCachedSession()
 
   if (session === undefined) {
     return null
@@ -40,7 +39,7 @@ export function DocumentScopeReadOnlyBanner(): React.JSX.Element | null {
       data-slot="document-scope-read-only-banner"
       role="status"
       dir="rtl"
-      className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+      className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-foreground"
     >
       {messageAr}
     </div>
