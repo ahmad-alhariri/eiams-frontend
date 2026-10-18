@@ -4,11 +4,12 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   AttachmentPanel,
+  type AttachmentPanelPolicy,
   type AttachmentPanelProps,
   type PendingAttachmentUpload,
 } from '@/shared/documents/attachment-panel'
 import type { DocumentAttachmentResponse } from '@/shared/documents/types/document-wire.types'
-import { formatDate, formatFileSize } from '@/shared/utils/format'
+import { formatDate, formatDateTime, formatFileSize } from '@/shared/utils/format'
 
 /**
  * The wire attachment record: `{ id, attachmentType, originalFilename, mimeType,
@@ -331,5 +332,115 @@ describe('AttachmentPanel — signed-original gate status row', () => {
     const second = renderPanel({ documentStatus: 'Submitted' })
     expect(second.getByTestId('attachment-gate-missing')).toBeInTheDocument()
     second.unmount()
+  })
+})
+
+/**
+ * F-14: the panel renders the SERVER's attachment limits instead of a
+ * hard-coded 5 MB, and the signed-original gate can describe the attachment the
+ * server accepted without ever carrying its bytes.
+ */
+describe('AttachmentPanel — server-owned attachment limits (F-14)', () => {
+  const SERVER_MAX_SIZE_BYTES = 20 * 1024 * 1024
+  const SERVER_CONTENT_TYPES = ['image/jpeg', 'image/png', 'application/pdf'] as const
+
+  function policyWithLimits(overrides: Partial<AttachmentPanelPolicy> = {}): AttachmentPanelPolicy {
+    return {
+      signedOriginalSatisfied: false,
+      blockers: [],
+      maxSizeBytes: SERVER_MAX_SIZE_BYTES,
+      allowedContentTypes: SERVER_CONTENT_TYPES,
+      ...overrides,
+    }
+  }
+
+  function sectionElement(container: HTMLElement, kind: 'signed' | 'supporting'): HTMLElement {
+    const element = container.querySelector(
+      kind === 'signed'
+        ? '[data-testid="attachment-section-signed"]'
+        : '[data-testid="attachment-section-supporting"]',
+    )
+    if (element === null) {
+      throw new Error(`attachment section (${kind}) not found`)
+    }
+    return element as HTMLElement
+  }
+
+  it("renders the server's max size and allowed content types, not a hard-coded 5 MB", () => {
+    const { container } = renderPanel({ policy: policyWithLimits() })
+    const signed = sectionElement(container, 'signed')
+    const supporting = sectionElement(container, 'supporting')
+
+    // The Arabic type list comes from the server's `allowedContentTypes`.
+    expect(within(signed).getByText(/JPG \/ PNG \/ PDF/)).toBeInTheDocument()
+    expect(within(supporting).getByText(/JPG \/ PNG \/ PDF/)).toBeInTheDocument()
+    // The Arabic size label comes from the server's `maxSizeBytes` (20 MB).
+    expect(signed.textContent).toContain(formatFileSize(SERVER_MAX_SIZE_BYTES))
+    expect(supporting.textContent).toContain(formatFileSize(SERVER_MAX_SIZE_BYTES))
+    // The old hard-coded 5 MB must be gone from the section copy.
+    expect(signed.textContent).not.toContain(formatFileSize(5 * 1024 * 1024))
+    expect(supporting.textContent).not.toContain(formatFileSize(5 * 1024 * 1024))
+  })
+
+  it('falls back to number-free Arabic copy when the policy carries no limits', () => {
+    const { container } = renderPanel({
+      policy: { signedOriginalSatisfied: false, blockers: [] },
+    })
+
+    // Scope to the description paragraph: the dropzone keeps its own client
+    // hint below it, and that hint legitimately shows the client default size.
+    const signedDescription = within(sectionElement(container, 'signed')).getByText(
+      /وفق سياسة الخادم/,
+    )
+    const supportingDescription = within(sectionElement(container, 'supporting')).getByText(
+      /وفق سياسة الخادم/,
+    )
+
+    expect(signedDescription).toHaveTextContent('نسخة واحدة فقط — وفق سياسة الخادم')
+    expect(supportingDescription).toHaveTextContent('ملفات إضافية — وفق سياسة الخادم')
+    // Never a hard-coded number the server did not send (F-14).
+    expect(signedDescription.textContent).not.toMatch(/[0-9٠-٩]/)
+    expect(supportingDescription.textContent).not.toMatch(/[0-9٠-٩]/)
+  })
+
+  it('renders the satisfying signed-original metadata without any file bytes', () => {
+    const metadata = {
+      attachmentId: 'att-satisfier-1',
+      filename: 'signed-original.pdf',
+      mimeType: 'application/pdf',
+      size: 123456,
+      uploadedAtUtc: '2026-08-10T09:30:00.000Z',
+      uploadedBy: 'user-42',
+      checksum: 'sha256:abc123def456',
+    }
+    renderPanel({
+      policy: policyWithLimits({
+        signedOriginalSatisfied: true,
+        satisfyingSignedOriginal: metadata,
+      }),
+    })
+
+    const summary = screen.getByTestId('signed-original-satisfier')
+    expect(within(summary).getByText('معرّف المرفق')).toBeInTheDocument()
+    expect(within(summary).getByText('att-satisfier-1')).toBeInTheDocument()
+    expect(within(summary).getByText('signed-original.pdf')).toBeInTheDocument()
+    expect(within(summary).getByText('application/pdf')).toBeInTheDocument()
+    expect(within(summary).getByText(formatFileSize(metadata.size))).toBeInTheDocument()
+    expect(within(summary).getByText(formatDateTime(metadata.uploadedAtUtc))).toBeInTheDocument()
+    expect(within(summary).getByText('user-42')).toBeInTheDocument()
+    expect(within(summary).getByText('sha256:abc123def456')).toBeInTheDocument()
+
+    // Never the bytes: the summary is identity + size + checksum, never a
+    // data URL, base64 blob or download handle.
+    expect(summary.innerHTML).not.toContain('data:')
+    expect(summary.textContent).not.toContain('base64')
+    expect(summary.querySelector('a')).toBeNull()
+    expect(summary.querySelector('img')).toBeNull()
+  })
+
+  it('renders no satisfier summary when the policy carries none', () => {
+    renderPanel({ policy: policyWithLimits({ signedOriginalSatisfied: false }) })
+
+    expect(screen.queryByTestId('signed-original-satisfier')).not.toBeInTheDocument()
   })
 })

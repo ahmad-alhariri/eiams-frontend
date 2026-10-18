@@ -10,21 +10,25 @@ import {
 import { useId } from 'react'
 
 import {
+  attachmentSignedDescriptionAr,
+  attachmentSupportingDescriptionAr,
   policyBlockerMessageAr,
   SIGNED_GATE_MOOT_STATUSES,
+  type AttachmentLimits,
 } from '@/shared/documents/document-policy-gates'
 import type { AttachmentType } from '@/shared/documents/document-attachment-service'
 import type {
   DocumentAttachmentResponse,
   DocumentStatus,
+  SignedOriginalAttachmentMetadata,
 } from '@/shared/documents/types/document-wire.types'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
-import { DROPZONE_MAX_SIZE_BYTES, FileDropzone } from '@/shared/feedback/file-dropzone'
+import { DROPZONE_ACCEPT, FileDropzone } from '@/shared/feedback/file-dropzone'
 import { useConfirm } from '@/shared/hooks/use-confirm'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/utils/class-names'
-import { formatDate, formatFileSize } from '@/shared/utils/format'
+import { formatDate, formatDateTime, formatFileSize } from '@/shared/utils/format'
 
 /**
  * Policy slice consumed by the panel; the server evaluation is authoritative
@@ -39,6 +43,15 @@ import { formatDate, formatFileSize } from '@/shared/utils/format'
 export type AttachmentPanelPolicy = {
   signedOriginalSatisfied: boolean
   blockers?: readonly { readonly code: string }[]
+  /** Server's max upload size in bytes (F-14); absent on older cached policies. */
+  maxSizeBytes?: number | null
+  /** Server-allowed MIME types (F-14); absent on older cached policies. */
+  allowedContentTypes?: readonly string[] | null
+  /**
+   * Metadata of the active SignedOriginal attachment that satisfies the gate
+   * (identity + size + checksum, never the bytes). Rendered as a summary.
+   */
+  satisfyingSignedOriginal?: SignedOriginalAttachmentMetadata | null
 }
 
 /** A file chosen by the user whose upload mutation the parent still owns. */
@@ -155,6 +168,65 @@ function GateStatusRow({
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * The MIME→extension accept map for a server-supplied content-type list, or
+ * `undefined` to keep `FileDropzone`'s own default. Unknown types keep an empty
+ * extension list so the native picker still accepts them by MIME.
+ */
+function acceptForContentTypes(
+  contentTypes: readonly string[] | null | undefined,
+): Record<string, string[]> | undefined {
+  if (contentTypes === null || contentTypes === undefined || contentTypes.length === 0) {
+    return undefined
+  }
+  const accept: Record<string, string[]> = {}
+  for (const type of contentTypes) {
+    accept[type] = DROPZONE_ACCEPT[type] ?? []
+  }
+  return accept
+}
+
+/**
+ * Server metadata for the active SignedOriginal attachment that satisfies the
+ * posting gate (D-ATT-01). Renders identity, size and checksum only — never the
+ * file bytes — so the panel can state WHAT the server accepted without
+ * pretending to hold it.
+ */
+function SignedOriginalSatisfierSummary({
+  metadata,
+}: {
+  metadata: SignedOriginalAttachmentMetadata
+}) {
+  const fields: ReadonlyArray<{ label: string; value: string; ltr?: boolean }> = [
+    { label: 'معرّف المرفق', value: metadata.attachmentId, ltr: true },
+    { label: 'اسم الملف', value: metadata.filename },
+    { label: 'نوع الملف', value: metadata.mimeType, ltr: true },
+    { label: 'الحجم', value: formatFileSize(metadata.size) },
+    { label: 'تاريخ الرفع', value: formatDateTime(metadata.uploadedAtUtc) },
+    { label: 'رفعه', value: metadata.uploadedBy, ltr: true },
+    { label: 'بصمة التحقق', value: metadata.checksum, ltr: true },
+  ]
+  return (
+    <dl
+      data-slot="signed-original-satisfier"
+      data-testid="signed-original-satisfier"
+      className="grid grid-cols-1 gap-2 rounded-lg border border-border bg-ivory/50 p-3 sm:grid-cols-2"
+    >
+      {fields.map((field) => (
+        <div key={field.label} className="flex min-w-0 flex-col gap-0.5">
+          <dt className="text-xs text-muted-foreground">{field.label}</dt>
+          <dd
+            className="truncate text-sm text-foreground"
+            {...(field.ltr === true ? { dir: 'ltr' as const } : {})}
+          >
+            {field.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 
@@ -292,6 +364,8 @@ function AttachmentSection({
   title,
   description,
   maxFiles,
+  maxSizeBytes,
+  accept,
   attachments,
   pendingOfType,
   isUploading,
@@ -307,6 +381,8 @@ function AttachmentSection({
   title: string
   description: string
   maxFiles: number
+  maxSizeBytes?: number | undefined
+  accept?: Record<string, string[]> | undefined
   attachments: readonly DocumentAttachmentResponse[]
   pendingOfType: readonly PendingAttachmentUpload[]
   isUploading: boolean
@@ -340,6 +416,11 @@ function AttachmentSection({
           maxFiles={maxFiles}
           disabled={disabled || isUploading}
           onFilesChange={onFilesChange}
+          // The server's own limit wins when provided so the client-side UX gate
+          // matches the authoritative server; an absent value keeps the
+          // dropzone's default (the client hint only, the server still rejects).
+          {...(maxSizeBytes === undefined ? {} : { maxSizeBytes })}
+          {...(accept === undefined ? {} : { accept })}
         />
       )}
       <ul className="flex flex-col gap-2">
@@ -432,6 +513,18 @@ function AttachmentPanel({
     onUpload(files.slice(0, supportingMaxFiles), 'Supporting')
   }
 
+  // F-14: the panel renders the SERVER's attachment limits (max size + allowed
+  // content types) instead of a hard-coded 5 MB, falling back to generic Arabic
+  // when the policy is absent. The dropzone client gate follows the server value
+  // when present; the server response stays the authoritative rejection.
+  const limits: AttachmentLimits = {
+    maxSizeBytes: policy?.maxSizeBytes ?? null,
+    allowedContentTypes: policy?.allowedContentTypes ?? null,
+  }
+  const dropzoneAccept = acceptForContentTypes(policy?.allowedContentTypes)
+  const dropzoneMaxSizeBytes = policy?.maxSizeBytes ?? undefined
+  const satisfier = policy?.satisfyingSignedOriginal ?? null
+
   return (
     <div
       data-slot="attachment-panel"
@@ -444,11 +537,15 @@ function AttachmentPanel({
         documentStatus={documentStatus}
       />
 
+      {satisfier === null ? null : <SignedOriginalSatisfierSummary metadata={satisfier} />}
+
       <AttachmentSection
         titleId={signedTitleId}
         title="النسخة الأصلية الموقعة"
-        description={`نسخة واحدة فقط — ${formatFileSize(DROPZONE_MAX_SIZE_BYTES)} كحد أقصى (JPG / PNG / PDF)`}
+        description={attachmentSignedDescriptionAr(limits)}
         maxFiles={1}
+        maxSizeBytes={dropzoneMaxSizeBytes}
+        accept={dropzoneAccept}
         attachments={signedAttachments}
         pendingOfType={pendingSigned}
         isUploading={isUploading}
@@ -464,8 +561,10 @@ function AttachmentPanel({
       <AttachmentSection
         titleId={supportingTitleId}
         title="ملفات داعمة"
-        description={`ملفات إضافية (JPG / PNG / PDF) — حتى ${formatFileSize(DROPZONE_MAX_SIZE_BYTES)} للملف الواحد`}
+        description={attachmentSupportingDescriptionAr(limits)}
         maxFiles={supportingMaxFiles}
+        maxSizeBytes={dropzoneMaxSizeBytes}
+        accept={dropzoneAccept}
         attachments={supportingAttachments}
         pendingOfType={pendingSupporting}
         isUploading={isUploading}
