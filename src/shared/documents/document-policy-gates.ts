@@ -11,7 +11,7 @@ import type {
   DocumentStatus,
   DocumentType,
 } from '@/shared/documents/types/document-wire.types'
-import { formatNumber } from '@/shared/utils/format'
+import { formatFileSize, formatNumber } from '@/shared/utils/format'
 import { isSignedOriginalBlockerCode } from '@/shared/documents/policy-blocker-codes'
 
 /**
@@ -65,39 +65,64 @@ export type DocumentPreflight = {
 }
 
 /**
- * Arabic for one server policy sentence, resolved by CODE.
- *
- * The live policy projection carries English prose (`DocumentPolicyBlocker.Message`,
- * `DocumentPolicyAdvisory.Message`, `DocumentActionAvailabilityResponse.Reason`) —
- * there is no `messageAr` / `reasonAr` field, and the repository's governed
- * decision (`docs/backend-contract-reconciliation.md` §5, `error-copy-ar.ts`) is
- * that user-facing Arabic is owned by the frontend and keyed by code.
- *
- * When the code is unmapped this returns `null` rather than the server's English
- * string: an Arabic-first UI must not silently switch language, and an absent
- * reason renders exactly as it did before the wire correction (no text), while a
- * mapped code renders the governed Arabic sentence.
+ * Arabic script guard. The one rule that keeps an Arabic-first screen from
+ * switching language: a server-supplied sentence is trusted only when it
+ * actually carries Arabic script. A blank string, `null`, or a Latin-only
+ * string is refused so the governed code lookup speaks instead.
  */
-function policyMessageAr(code: string | null): string | null {
+const ARABIC_SCRIPT_PATTERN = /[\u0600-\u06FF]/u
+
+function carriesArabicScript(text: string | null | undefined): text is string {
+  return typeof text === 'string' && text.trim().length > 0 && ARABIC_SCRIPT_PATTERN.test(text)
+}
+
+/**
+ * Arabic for one server policy sentence (F-15).
+ *
+ * PREFER THE SERVER'S OWN SENTENCE. The live policy projection fills
+ * `DocumentActionAvailabilityResponse.Reason`, `DocumentPolicyBlocker.Message`
+ * and `DocumentPolicyAdvisory.Message` from the backend's Arabic `PolicyReasonAr`,
+ * so a live response already carries the reason. D-ATT-01 puts the server in
+ * charge of the reason — it must never be invented by the client — and reading it
+ * here makes the screen correct for ANY current or future server code without a
+ * frontend edit.
+ *
+ * FALL BACK TO THE GOVERNED CODE TABLE. When the server sent no sentence — or one
+ * with no Arabic script, the only way an English string could arrive — the
+ * frontend-owned `error-copy-ar.ts` entry for the code speaks instead
+ * (`docs/backend-contract-reconciliation.md` §5).
+ *
+ * NEVER LEAK ENGLISH. A code the copy table has not heard of, paired with a
+ * non-Arabic server string, resolves to `null` rather than the server's text, so
+ * the sentence renders exactly as it did before the wire correction (no text)
+ * instead of switching the UI into English.
+ */
+function policyMessageAr(code: string | null, serverText?: string | null): string | null {
+  if (carriesArabicScript(serverText)) {
+    return serverText.trim()
+  }
   const copy = arabicCopyForCode(normalizeWireErrorCode(code))
   return copy === null ? null : copy.titleAr
 }
 
-/** Arabic text for a policy blocker, or `null` when its code is unmapped. */
-export function policyBlockerMessageAr(blocker: { readonly code: string }): string | null {
-  return policyMessageAr(blocker.code)
+/** Arabic text for a policy blocker: the server's own sentence, else its code. */
+export function policyBlockerMessageAr(blocker: {
+  readonly code: string
+  readonly message?: string | null
+}): string | null {
+  return policyMessageAr(blocker.code, blocker.message)
 }
 
-/** Arabic text for a policy advisory, or `null` when its code is unmapped. */
+/** Arabic text for a policy advisory: the server's own sentence, else its code. */
 export function policyAdvisoryMessageAr(advisory: DocumentPolicyAdvisory): string | null {
-  return policyMessageAr(advisory.code)
+  return policyMessageAr(advisory.code, advisory.message)
 }
 
-/** Arabic text for a disabled action's reason, or `null` when its code is unmapped. */
+/** Arabic text for a disabled action's reason: the server's own sentence, else its code. */
 export function actionAvailabilityReasonAr(
   availability: DocumentActionAvailability,
 ): string | null {
-  return policyMessageAr(availability.reasonCode)
+  return policyMessageAr(availability.reasonCode, availability.reason)
 }
 
 /**
@@ -410,4 +435,87 @@ export function evaluateActionDecision(
     return { presentation: 'Disabled', reasonAr: actionAvailabilityReasonAr(availability) }
   }
   return { presentation: 'Enabled', reasonAr: null }
+}
+
+// ---------------------------------------------------------------------------
+// Attachment limits (F-14 / D-ATT-01)
+// ---------------------------------------------------------------------------
+
+/**
+ * The server-owned attachment limits the panel renders. Both members are read
+ * from `DocumentPolicy`; both are optional because a cached policy written
+ * before the backend added them can still reach the panel.
+ */
+export interface AttachmentLimits {
+  readonly maxSizeBytes?: number | null
+  readonly allowedContentTypes?: readonly string[] | null
+}
+
+/**
+ * Human Arabic labels for the MIME types the attachment endpoint accepts.
+ *
+ * Mirrors `DROPZONE_ACCEPT`'s known set. An unknown type falls back to its raw
+ * MIME string rather than being dropped, so a server that adds a type this
+ * build has never seen still surfaces it instead of silently hiding a limit.
+ */
+const CONTENT_TYPE_LABELS_AR: Readonly<Record<string, string>> = {
+  'image/jpeg': 'JPG',
+  'image/png': 'PNG',
+  'application/pdf': 'PDF',
+}
+
+/** Arabic list of the server-allowed content types, or `null` when unset. */
+export function attachmentContentTypesLabelAr(
+  contentTypes: readonly string[] | null | undefined,
+): string | null {
+  if (contentTypes === null || contentTypes === undefined || contentTypes.length === 0) {
+    return null
+  }
+  return contentTypes.map((type) => CONTENT_TYPE_LABELS_AR[type] ?? type).join(' / ')
+}
+
+/** Arabic size label for the server's max upload size, or `null` when unset. */
+export function attachmentMaxSizeLabelAr(maxSizeBytes: number | null | undefined): string | null {
+  return maxSizeBytes === null || maxSizeBytes === undefined ? null : formatFileSize(maxSizeBytes)
+}
+
+/**
+ * The generic Arabic fallback used when the server sent no explicit limit. It
+ * deliberately carries NO number: the panel must never print a hard-coded
+ * "-5 MB" that the server does not back (F-14). The server's own response
+ * (413/415/422) is the authoritative rejection, so "per server policy" is the
+ * honest statement.
+ */
+const ATTACHMENT_LIMIT_FALLBACK_AR = 'وفق سياسة الخادم'
+
+/** The signed-original section description, built from the server's limits. */
+export function attachmentSignedDescriptionAr(limits: AttachmentLimits): string {
+  const size = attachmentMaxSizeLabelAr(limits.maxSizeBytes)
+  const types = attachmentContentTypesLabelAr(limits.allowedContentTypes)
+  if (size !== null && types !== null) {
+    return `نسخة واحدة فقط — ${size} كحد أقصى (${types})`
+  }
+  if (size !== null) {
+    return `نسخة واحدة فقط — ${size} كحد أقصى`
+  }
+  if (types !== null) {
+    return `نسخة واحدة فقط (${types})`
+  }
+  return `نسخة واحدة فقط — ${ATTACHMENT_LIMIT_FALLBACK_AR}`
+}
+
+/** The supporting-files section description, built from the server's limits. */
+export function attachmentSupportingDescriptionAr(limits: AttachmentLimits): string {
+  const size = attachmentMaxSizeLabelAr(limits.maxSizeBytes)
+  const types = attachmentContentTypesLabelAr(limits.allowedContentTypes)
+  if (size !== null && types !== null) {
+    return `ملفات إضافية (${types}) — حتى ${size} للملف الواحد`
+  }
+  if (size !== null) {
+    return `ملفات إضافية — حتى ${size} للملف الواحد`
+  }
+  if (types !== null) {
+    return `ملفات إضافية (${types})`
+  }
+  return `ملفات إضافية — ${ATTACHMENT_LIMIT_FALLBACK_AR}`
 }

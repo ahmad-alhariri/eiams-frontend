@@ -364,3 +364,177 @@ describe('LifecycleActionBar', () => {
     expect(screen.getByRole('button', { name: 'ترحيل' })).toBeInTheDocument()
   })
 })
+
+/**
+ * F-15: a Disabled action's reason must be readable in the body, not only in
+ * the hover-only `title`. Two rules keep it honest — no duplicate of a sentence
+ * the blocker alert already renders, and one note per distinct reason.
+ */
+describe('LifecycleActionBar — disabled action reasons (F-15)', () => {
+  /** A second governed code, distinct from the signed-copy one. */
+  const NOT_EDITABLE_CODE = 'WAREHOUSE_DOCUMENTS_NOT_EDITABLE'
+  const NOT_EDITABLE_AR = 'لا يمكن تعديل المستند إلا في حالة المسودة.'
+
+  it('states a Disabled reason visibly in the body in addition to the title', () => {
+    renderBar({
+      policy: makePolicy([
+        availability({
+          action: 'Post',
+          allowed: false,
+          presentation: 'Disabled',
+          reason: 'Insufficient quantity to cover the issue lines.',
+          reasonCode: SIGNED_COPY_REQUIRED_CODE,
+        }),
+      ]),
+    })
+
+    const postButton = screen.getByRole('button', { name: 'ترحيل' })
+    expect(postButton).toBeDisabled()
+    // The hover tooltip stays …
+    expect(postButton).toHaveAttribute('title', SIGNED_COPY_REQUIRED_AR)
+    // … and the same sentence is now rendered in the body, so a touch or
+    // keyboard user who cannot hover still reads WHY the action is blocked.
+    const note = document.querySelector('[data-slot="disabled-action-reason"]')
+    expect(note).not.toBeNull()
+    expect(note).toHaveTextContent(SIGNED_COPY_REQUIRED_AR)
+  })
+
+  it('renders no reason note when every presented action is Enabled', () => {
+    renderBar({
+      policy: makePolicy([availability({ action: 'Submit', confirmationRequired: true })]),
+    })
+
+    expect(document.querySelector('[data-slot="disabled-action-reasons"]')).toBeNull()
+    expect(document.querySelector('[data-slot="disabled-action-reason"]')).toBeNull()
+  })
+
+  it('renders no note and no English when a Disabled reason code is unmapped', () => {
+    renderBar({
+      policy: makePolicy([
+        availability({
+          action: 'Post',
+          allowed: false,
+          presentation: 'Disabled',
+          reason: 'Insufficient quantity to cover the issue lines.',
+          reasonCode: 'A_CODE_NOBODY_TRANSLATED',
+        }),
+      ]),
+    })
+
+    expect(screen.getByRole('button', { name: 'ترحيل' })).toBeDisabled()
+    expect(document.querySelector('[data-slot="disabled-action-reason"]')).toBeNull()
+    expect(screen.queryByText('Insufficient quantity to cover the issue lines.')).toBeNull()
+  })
+
+  it('does not repeat a reason the blocker alert already renders', () => {
+    renderBar({
+      policy: makePolicy(
+        [
+          availability({
+            action: 'Post',
+            allowed: false,
+            presentation: 'Disabled',
+            reasonCode: SIGNED_COPY_REQUIRED_CODE,
+          }),
+        ],
+        {
+          blockers: [
+            {
+              action: 'Post',
+              code: SIGNED_COPY_REQUIRED_CODE,
+              message: 'The signed copy of the document is required before posting.',
+            },
+          ],
+        },
+      ),
+    })
+
+    // The alert owns the sentence; the bar must not print it twice.
+    expect(screen.getAllByText(SIGNED_COPY_REQUIRED_AR)).toHaveLength(1)
+    expect(document.querySelector('[data-slot="disabled-action-reason"]')).toBeNull()
+  })
+
+  it('shows one note per distinct reason across several Disabled actions', () => {
+    renderBar({
+      policy: makePolicy([
+        availability({
+          action: 'Post',
+          allowed: false,
+          presentation: 'Disabled',
+          reasonCode: SIGNED_COPY_REQUIRED_CODE,
+        }),
+        availability({
+          action: 'Reverse',
+          allowed: false,
+          presentation: 'Disabled',
+          reasonCode: SIGNED_COPY_REQUIRED_CODE,
+        }),
+        availability({
+          action: 'Cancel',
+          allowed: false,
+          presentation: 'Disabled',
+          reasonCode: NOT_EDITABLE_CODE,
+        }),
+      ]),
+    })
+
+    const notes = document.querySelectorAll('[data-slot="disabled-action-reason"]')
+    expect(notes).toHaveLength(2)
+    expect(screen.getByText(SIGNED_COPY_REQUIRED_AR)).toBeInTheDocument()
+    expect(screen.getByText(NOT_EDITABLE_AR)).toBeInTheDocument()
+  })
+
+  it('shows the server-supplied Arabic reason for a state-blocked action', () => {
+    // The bug F-15 fixes: the server sends an Arabic `reason`, but the bar used
+    // to ignore it and the code lookup was unmapped, so nothing rendered.
+    const reasonAr = 'حالة الوثيقة الحالية لا تسمح بهذا الإجراء.'
+    renderBar({
+      policy: makePolicy([
+        availability({
+          action: 'Post',
+          allowed: false,
+          presentation: 'Disabled',
+          reasonCode: 'STATE_NOT_ALLOWED',
+          reason: reasonAr,
+        }),
+      ]),
+    })
+
+    const postButton = screen.getByRole('button', { name: 'ترحيل' })
+    expect(postButton).toBeDisabled()
+    expect(postButton).toHaveAttribute('title', reasonAr)
+    const notes = document.querySelectorAll('[data-slot="disabled-action-reason"]')
+    expect(notes).toHaveLength(1)
+    expect(notes[0]).toHaveTextContent(reasonAr)
+  })
+
+  it('does not repeat a server-supplied reason the blocker alert already renders', () => {
+    const reasonAr = 'لا تُتيح حالة الوثيقة ولا صلاحياتك تنفيذ هذا الإجراء.'
+    renderBar({
+      policy: makePolicy(
+        [
+          availability({
+            action: 'Post',
+            allowed: false,
+            presentation: 'Disabled',
+            reasonCode: 'STATE_OR_PERMISSION_NOT_ALLOWED',
+            reason: reasonAr,
+          }),
+        ],
+        {
+          blockers: [
+            {
+              action: 'Post',
+              code: 'STATE_OR_PERMISSION_NOT_ALLOWED',
+              message: reasonAr,
+            },
+          ],
+        },
+      ),
+    })
+
+    // The alert owns the sentence; the bar must not print it twice.
+    expect(screen.getAllByText(reasonAr)).toHaveLength(1)
+    expect(document.querySelector('[data-slot="disabled-action-reason"]')).toBeNull()
+  })
+})

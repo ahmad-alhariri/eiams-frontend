@@ -452,6 +452,30 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'لا يمكن تعديل المستند إلا في حالة المسودة.',
     detailAr: null,
   },
+  // --- Document policy action-presentation codes (F-15). `GetPolicy` fills each
+  // action's `reasonCode` (and each blocker's `code`) from the policy's own
+  // vocabulary; these three bare codes are the common "the state or your
+  // permissions do not allow this action" outcomes. `PolicyReasonAr` already
+  // carries the matching Arabic on the wire, but a response without it (or a
+  // future code the server stops spelling) must still resolve here — without
+  // these entries the disabled-action reason list stayed empty even though the
+  // server had said why.
+  STATE_NOT_ALLOWED: {
+    titleAr: 'حالة الوثيقة الحالية لا تسمح بهذا الإجراء.',
+    detailAr: null,
+  },
+  STATE_OR_PERMISSION_NOT_ALLOWED: {
+    titleAr: 'لا تُتيح حالة الوثيقة ولا صلاحياتك تنفيذ هذا الإجراء.',
+    detailAr: null,
+  },
+  DOCUMENT_NOT_FOUND: {
+    titleAr: 'الوثيقة غير موجودة ضمن نطاق صلاحيتك.',
+    detailAr: null,
+  },
+  PERMISSION_DENIED: {
+    titleAr: 'ليس لديك صلاحية تنفيذ هذا الإجراء على هذه الوثيقة.',
+    detailAr: null,
+  },
   WAREHOUSE_DOCUMENTS_SIGNED_COPY_REQUIRED: {
     titleAr: 'يجب إرفاق النسخة الموقعة قبل الترحيل.',
     detailAr: null,
@@ -479,6 +503,11 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
   WAREHOUSE_DOCUMENTS_REVERSAL_LINES_IMMUTABLE: {
     titleAr: 'بنود سند التراجع غير قابلة للتعديل.',
     detailAr: null,
+  },
+  WAREHOUSE_DOCUMENTS_RECEIVING_REVERSAL_BLOCKED_BY_DOWNSTREAM: {
+    titleAr:
+      'لا يمكن عكس سند الاستلام: توجد كميات صُرفت أو حُوّلت أو عُدّلت لاحقاً وتعتمد على هذا السند.',
+    detailAr: 'صحّح الفرق عبر مستند تسوية تعويضي بدلاً من عكس سند الاستلام.',
   },
   DOCUMENT_ATTACHMENTS_SIGNED_ORIGINAL_ALREADY_EXISTS: {
     titleAr: 'يوجد بالفعل مرفق نسخة موقعة نشطة لهذا المستند.',

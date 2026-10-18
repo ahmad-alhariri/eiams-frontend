@@ -131,6 +131,34 @@ function LifecycleActionBar({
       return [{ availability, action }]
     })
 
+  // F-15: a Disabled action's reason used to live ONLY in the button `title`
+  // (hover-only, invisible to touch and keyboard. It is now stated in the body
+  // too. Two deliberate rules keep that honest:
+  //  - a reason the blocker alert already renders is NOT repeated (e24-t07: the
+  //    same sentence must not appear twice on one screen);
+  //  - identical reasons are shown once, so a terminal document with four
+  //    Disabled transitions does not print the same line four times.
+  const blockerMessagesAr = new Set(
+    policy.blockers
+      .map((blocker) => policyBlockerMessageAr(blocker))
+      .filter((messageAr): messageAr is string => messageAr !== null),
+  )
+  const disabledReasonsAr: string[] = []
+  for (const entry of presented) {
+    if (entry.availability.presentation !== 'Disabled') {
+      continue
+    }
+    const reasonAr = actionAvailabilityReasonAr(entry.availability)
+    if (
+      reasonAr === null ||
+      blockerMessagesAr.has(reasonAr) ||
+      disabledReasonsAr.includes(reasonAr)
+    ) {
+      continue
+    }
+    disabledReasonsAr.push(reasonAr)
+  }
+
   const handleClick = (entry: ActionableAvailability) => {
     if (!entry.availability.confirmationRequired) {
       void onExecute(entry.action, undefined)
@@ -223,6 +251,24 @@ function LifecycleActionBar({
           )
         })}
       </div>
+      {disabledReasonsAr.length > 0 ? (
+        <ul
+          data-slot="disabled-action-reasons"
+          className="flex flex-col gap-1"
+          aria-label="أسباب تعذّر تنفيذ الإجراءات"
+        >
+          {disabledReasonsAr.map((reasonAr) => (
+            <li
+              key={reasonAr}
+              data-slot="disabled-action-reason"
+              className="flex items-start gap-2 text-xs text-muted-foreground"
+            >
+              <IconInfoCircle aria-hidden className="mt-0.5 shrink-0" />
+              <span>{reasonAr}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {element}
     </div>
   )

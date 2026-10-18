@@ -517,7 +517,9 @@ describe('action presentation follows the contract decision table', () => {
   it('disables Post on a Submitted document whose signed original is unmet', () => {
     const decision = evaluateActionDecision(missingOriginalPolicy(), 'Post', allow)
     expect(decision.presentation).toBe('Disabled')
-    expect(decision.reasonAr).toBe('يجب إرفاق النسخة الموقعة قبل الترحيل.')
+    // F-15: the server's own Arabic `reason` (mirrored by the fixture from
+    // `PolicyReasonAr`) is preferred over the governed code copy.
+    expect(decision.reasonAr).toBe('يجب إرفاق النسخة الموقعة من المستند قبل الرصد.')
   })
 
   it('renders no reason at all when the server reason code has no governed copy', () => {
