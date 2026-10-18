@@ -1,4 +1,5 @@
 import type { ApiTransport } from '@/shared/api/api-transport'
+import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import { apiTransport } from '@/shared/api/transport'
 import type { ApiPage } from '@/shared/api/api-contracts'
 import type {
@@ -18,6 +19,27 @@ const STOCK_MOVEMENT_PATH = '/inventory/movements/{movementId}'
 
 function pathWithId(path: string, parameter: string, id: string): string {
   return path.replace(parameter, encodeURIComponent(id))
+}
+
+/**
+ * Sends a list query through the ONE shared pagination clamp.
+ *
+ * `listBalances` / `listMovements` used to forward their query object
+ * verbatim, and the issue-balance hook built `{ page: 0, pageSize: 1 }` — so
+ * the live read went out as `?page=0`, which the backend's
+ * `PaginationQueryParameters.Page` (`[Range(1, 21474836)]`) rejects with 400
+ * `REQUEST_VALIDATION_FAILED`. Clamping in the shared service means no call
+ * site can express an out-of-range page at all; the remaining filters pass
+ * through unchanged.
+ */
+function withWirePagination<TQuery extends { readonly page?: number; readonly pageSize?: number }>(
+  query: TQuery,
+): Record<string, string | number | boolean | undefined> {
+  const { page, pageSize, ...filters } = query
+  return {
+    ...toWireOneBasedPaginationParams({ page, pageSize }),
+    ...(filters as Record<string, string | number | boolean | undefined>),
+  }
 }
 
 function normalizePage<T>(apiPage: ApiPage<T>): { items: ReadonlyArray<T>; meta: PageMeta } {
@@ -50,7 +72,7 @@ export function createInventoryService(transport: ApiTransport): InventoryServic
       const page = await transport.requestPage<InventoryBalance>({
         path: INVENTORY_BALANCES_PATH,
         method: 'GET',
-        query: query as Record<string, string | number | boolean | undefined>,
+        query: withWirePagination(query),
       })
       return normalizePage(page) as InventoryBalancePage
     },
@@ -65,7 +87,7 @@ export function createInventoryService(transport: ApiTransport): InventoryServic
       const page = await transport.requestPage<StockMovement>({
         path: STOCK_MOVEMENTS_PATH,
         method: 'GET',
-        query: query as Record<string, string | number | boolean | undefined>,
+        query: withWirePagination(query),
       })
       return normalizePage(page) as StockMovementPage
     },

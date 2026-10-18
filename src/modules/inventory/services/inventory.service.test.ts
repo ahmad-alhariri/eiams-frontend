@@ -110,6 +110,32 @@ describe('InventoryService', () => {
     ])
   })
 
+  it('clamps a zero-based page before the wire so the list reads never send page=0 (F-05)', async () => {
+    const service = setupService()
+    const requestedQueries: Record<string, string>[] = []
+
+    server.use(
+      http.get(`${API_BASE_URL}/inventory/balances`, ({ request }) => {
+        requestedQueries.push(Object.fromEntries(new URL(request.url).searchParams))
+        return okPageJson([])
+      }),
+      http.get(`${API_BASE_URL}/inventory/movements`, ({ request }) => {
+        requestedQueries.push(Object.fromEntries(new URL(request.url).searchParams))
+        return okPageJson([])
+      }),
+    )
+
+    // `[Range(1, …)]` on the wire Page: a zero-based page must floor to 1 and a
+    // page size of 0 must floor to 1 rather than reaching the server.
+    await service.listBalances({ page: 0, pageSize: 25 })
+    await service.listMovements({ page: 0, pageSize: 0 })
+
+    expect(requestedQueries).toEqual([
+      { page: '1', pageSize: '25' },
+      { page: '1', pageSize: '1' },
+    ])
+  })
+
   it('encodes balance and movement identifiers and returns contract responses unchanged', async () => {
     const service = setupService()
     const balance = wireInventoryBalance()

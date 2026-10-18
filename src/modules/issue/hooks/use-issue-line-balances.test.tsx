@@ -102,6 +102,10 @@ describe('useIssueLineBalances', () => {
     expect(result.current.balanceByMaterialId.get(paper.material.id)).toBe(12)
     // Exactly one query per distinct material.
     expect(requestedQueries).toHaveLength(2)
+    // F-05: one-based on the wire — `page: 0` was rejected by the backend's
+    // `[Range(1, …)]` Page validator, so the balance lookup 400'd.
+    expect(requestedQueries.every((search) => search.includes('page=1'))).toBe(true)
+    expect(requestedQueries.some((search) => search.includes('page=0'))).toBe(false)
   })
 
   it('deduplicates repeated materials into a single lookup', async () => {

@@ -83,7 +83,9 @@ export function useIssueLineBalances(
         ? []
         : distinctMaterialIds.map((materialId) => {
             const listQuery: ListInventoryBalancesQuery = {
-              page: 0,
+              // ONE-based on the wire (F-05): a zero-based `page: 0` was
+              // rejected by the backend's `[Range(1, …)]` Page validator.
+              page: 1,
               pageSize: 1,
               warehouseId,
               materialId,
