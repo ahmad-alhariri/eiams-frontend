@@ -4,6 +4,7 @@ import { Link, matchPath, useLocation, useParams } from 'react-router'
 import { FormProvider, useForm } from 'react-hook-form'
 
 import { ROUTE_METADATA, ROUTE_PATHS, type RouteKey } from '@/config/routes'
+import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
 import { normalizeApiError } from '@/shared/services/api-error'
 import {
   DOCUMENT_TYPE_LABELS_AR,
@@ -416,13 +417,15 @@ export interface DocumentDetailBodyProps extends DocumentDetailPageProps {
   petalSlot?: ReactNode
   policy: DocumentPolicy | null
   /**
-   * D-OPEN-02 (PRD §6.12): when the routed page's `useReverseDocumentMutation`
-   * returns the OpeningDocuments.ReversalBlockedByDownstream error, the body
-   * renders a dedicated Arabic alert with a CTA to the Adjustment workflow.
-   * The body has no access to the mutation hook (which lives in the routed
-   * page), so the page threads the derived boolean here.
+   * D-OPEN-02 (PRD §6.12) / G-1: when the routed page's
+   * `useReverseDocumentMutation` fails with a "reversal blocked by downstream"
+   * error — `OpeningDocuments.ReversalBlockedByDownstream` or the Receiving
+   * `WarehouseDocuments.ReceivingReversalBlockedByDownstream` — the body renders
+   * a dedicated Arabic alert with a CTA to the Adjustment workflow. The body
+   * has no access to the mutation hook (which lives in the routed page), so the
+   * page threads the normalized error code here.
    */
-  isOpeningReverseBlockedByDownstream?: boolean | undefined
+  reverseBlockedByDownstreamCode?: string | null | undefined
   /**
    * Present only when the policy read itself FAILED and no policy is available
    * (e24-t09 / SAD.md §"Resilience", D-AUD-02 rule 6). `policy: null` alone
@@ -449,13 +452,13 @@ export function DocumentDetailBody({
   detailRouteKey,
   document,
   isActionPermitted,
-  isOpeningReverseBlockedByDownstream,
   linesSlot,
   listRouteKey,
   onExecuteAction,
   petalSlot,
   policy,
   policyFailure,
+  reverseBlockedByDownstreamCode,
   timelineSlot,
 }: DocumentDetailBodyProps) {
   const [busyAction, setBusyAction] = useState<string | null>(null)
@@ -530,6 +533,9 @@ export function DocumentDetailBody({
       : {
           signedOriginalSatisfied: policy.signedOriginalSatisfied,
           blockers: policy.blockers,
+          maxSizeBytes: policy.maxSizeBytes ?? null,
+          allowedContentTypes: policy.allowedContentTypes ?? null,
+          satisfyingSignedOriginal: policy.satisfyingSignedOriginal ?? null,
         }
   // Defence-in-depth gate: the routed page wires the session predicate; the
   // body defaults to the bar's backwards-compatible "render every presented
@@ -558,6 +564,19 @@ export function DocumentDetailBody({
   // explains why the document cannot be edited once it leaves Draft. `null`
   // for a mutable Draft — the note only renders for read-only statuses.
   const readOnlyReasonAr = documentReadOnlyReasonAr(document.documentStatus)
+
+  // G-1 / D-OPEN-02: the reversal-blocked alert speaks the governed Arabic for
+  // the exact normalized code, so a Receiving document blocked by downstream
+  // usage gets its own sentence instead of the Opening one. An unmapped code
+  // falls back to the historical Opening sentence, preserving the pre-existing
+  // presentation for standalone compositions.
+  const reverseBlockedCopy =
+    reverseBlockedByDownstreamCode === null || reverseBlockedByDownstreamCode === undefined
+      ? null
+      : (arabicCopyForCode(reverseBlockedByDownstreamCode) ?? {
+          titleAr: 'لا يمكن عكس سند الفتح: توجد حركات لاحقة أو سجلات عهدة مرتبطة به.',
+          detailAr: 'أصدر مستند تسوية تعويضي بدلاً من عكس سند الفتح.',
+        })
 
   const backLabel = `العودة إلى ${ROUTE_METADATA[listRouteKey].labelAr}`
 
@@ -714,7 +733,7 @@ export function DocumentDetailBody({
             عرض للقراءة فقط — {readOnlyReasonAr}
           </p>
         ) : null}
-        {isOpeningReverseBlockedByDownstream === true ? (
+        {reverseBlockedCopy === null ? null : (
           <div
             data-slot="opening-reverse-blocked"
             data-testid="opening-reverse-blocked"
@@ -722,18 +741,19 @@ export function DocumentDetailBody({
             dir="rtl"
             className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
           >
-            <p className="font-medium">
-              لا يمكن عكس سند الفتح: توجد حركات لاحقة أو سجلات عهدة مرتبطة به.
-            </p>
+            <p className="font-medium">{reverseBlockedCopy.titleAr}</p>
+            {reverseBlockedCopy.detailAr === null ? null : (
+              <p className="mt-1 text-xs">{reverseBlockedCopy.detailAr}</p>
+            )}
             <p className="mt-1 text-xs">
-              أصدر مستند تسوية تعويضي عبر{' '}
+              عبر{' '}
               <Link to={ROUTE_PATHS.adjustmentNew} className="underline">
                 نموذج التسوية
               </Link>
               .
             </p>
           </div>
-        ) : null}
+        )}
         {timelineSlot}
       </ContentCard>
     </div>
@@ -818,16 +838,20 @@ function DocumentDetailPage({
   const cancelMutation = useCancelDocumentMutation(documentId ?? null)
   const reverseMutation = useReverseDocumentMutation(documentId ?? null)
 
-  // D-OPEN-02 (PRD §6.12): the server refuses reversal of a posted Opening
-  // document when downstream stock or asset history depends on it. The
-  // error envelope carries OpeningDocuments.ReversalBlockedByDownstream
-  // (the wire code is normalized to OPENING_DOCUMENTS_REVERSAL_BLOCKED_BY_DOWNSTREAM
-  // by `normalizeWireErrorCode` in @/shared/services/api-error before the
-  // page reads it). Surface the dependent counts in Arabic with a CTA that
-  // points to the Adjustment workflow (the only documented post-posting
-  // correction path, per CONFLICT-104).
-  const isReverseBlockedByDownstream =
-    readApiErrorCode(reverseMutation.error) === 'OPENING_DOCUMENTS_REVERSAL_BLOCKED_BY_DOWNSTREAM'
+  // D-OPEN-02 (PRD §6.12) / G-1: the server refuses reversal of a posted
+  // Opening document when downstream stock or asset history depends on it, and
+  // refuses reversal of a posted RECEIVING document when received goods were
+  // later issued, transferred out, or adjusted downstream. The error envelope
+  // carries `OpeningDocuments.ReversalBlockedByDownstream` or
+  // `WarehouseDocuments.ReceivingReversalBlockedByDownstream` (both normalized
+  // to UPPER_SNAKE by `normalizeWireErrorCode` before the page reads them).
+  // Surface the Arabic (governed copy table) with a CTA that points to the
+  // Adjustment workflow (the only documented post-posting correction path, per
+  // CONFLICT-104).
+  const reverseErrorCode = readApiErrorCode(reverseMutation.error)
+  const reverseBlockedByDownstreamCode = REVERSAL_BLOCKED_BY_DOWNSTREAM_CODES.has(reverseErrorCode)
+    ? reverseErrorCode
+    : null
 
   // One retry-safe idempotency key per user-approved action execution: created
   // on first execution, kept on failure so a retry of the same action reuses
@@ -970,7 +994,7 @@ function DocumentDetailPage({
         detailRouteKey={routeEntry.detailRouteKey}
         document={detailQuery.data}
         isActionPermitted={(action) => policyGate.decision(action).presentation !== 'Hidden'}
-        isOpeningReverseBlockedByDownstream={isReverseBlockedByDownstream}
+        reverseBlockedByDownstreamCode={reverseBlockedByDownstreamCode}
         listRouteKey={routeEntry.listRouteKey}
         policy={policyQuery.data ?? null}
         policyFailure={policyFailure}
@@ -1001,12 +1025,17 @@ function DocumentDetailPage({
 
 export { DocumentDetailPage }
 
-// D-OPEN-02 (PRD §6.12): the server refuses reversal of a posted Opening
-// document when downstream stock or asset history depends on it. The
-// error envelope carries OpeningDocuments.ReversalBlockedByDownstream;
-// surface the dependent counts in Arabic with a CTA that points to
-// the Adjustment workflow (the only documented post-posting correction
-// path, per CONFLICT-104).
+// D-OPEN-02 (PRD §6.12) / G-1: the server refuses reversal of a posted
+// document when downstream history depends on it. Both the Opening and the
+// Receiving guards produce a conflict whose code, once normalized by
+// `normalizeWireErrorCode`, is one of these. The page shows the SAME Arabic
+// alert (governed copy, keyed by code) and Adjustment CTA for either; the
+// sentence differs because `arabicCopyForCode` resolves each code itself.
+const REVERSAL_BLOCKED_BY_DOWNSTREAM_CODES: ReadonlySet<string> = new Set([
+  'OPENING_DOCUMENTS_REVERSAL_BLOCKED_BY_DOWNSTREAM',
+  'WAREHOUSE_DOCUMENTS_RECEIVING_REVERSAL_BLOCKED_BY_DOWNSTREAM',
+])
+
 function readApiErrorCode(error: unknown): string {
   if (error === null || error === undefined) {
     return ''
