@@ -38,7 +38,12 @@ export function useScopedWarehouseSelector(
         return []
       }
       const listQuery: ListWarehousesQuery = {
-        page: 0,
+        // `page` is ONE-based on both sides: `useServerPagination`/DataTable are
+        // one-based and so is the wire (`PaginationQueryParameters.Page` is
+        // `Range(1, …)`). A zero-based `page: 0` here sent `page=0`, which the
+        // backend rejects with 400 on every selector load (F-05). The service
+        // clamps too, but the honest value is 1.
+        page: 1,
         pageSize: Math.max(1, maxResults),
         ...(query.trim() === '' ? {} : { search: query.trim() }),
       }

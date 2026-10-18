@@ -1,5 +1,6 @@
 import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
 import { withSignal } from '@/shared/api/api-transport'
+import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import { apiTransport } from '@/shared/api/transport'
 import type {
   Warehouse,
@@ -68,6 +69,28 @@ function toQueryString(
   return result
 }
 
+/**
+ * Splits the pagination fields off a list query and sends them through the ONE
+ * shared clamp, so a caller that holds a zero-based index (or an over-large
+ * page) can never put `page=0` / `pageSize=200` on the wire.
+ *
+ * The backend binds `PaginationQueryParameters.Page` as `[Range(1, 21474836)]`
+ * and rejects `page=0` with 400 `REQUEST_VALIDATION_FAILED`, which is why the
+ * clamp lives here rather than at each call site. The remaining filter fields
+ * pass through verbatim (`undefined` dropped). Field order is preserved
+ * (page, pageSize, then the declared filters) so the request URL stays stable
+ * for the suites that pin it.
+ */
+function withWirePagination<TQuery extends { readonly page?: number; readonly pageSize?: number }>(
+  query: TQuery,
+): Record<string, string | number | boolean> {
+  const { page, pageSize, ...filters } = query
+  return toQueryString({
+    ...toWireOneBasedPaginationParams({ page, pageSize }),
+    ...(filters as Record<string, string | number | boolean | undefined>),
+  })
+}
+
 export interface WarehouseService {
   listWarehouses: (
     query: ListWarehousesQuery,
@@ -124,7 +147,7 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
       return transport.requestPage<Warehouse>({
         path: WAREHOUSES_PATH,
         method: 'GET',
-        query: toQueryString(query as Record<string, string | number | boolean | undefined>),
+        query: withWirePagination(query),
         ...withSignal(context),
       })
     },
@@ -221,7 +244,7 @@ export function createWarehouseService(transport: ApiTransport): WarehouseServic
       return transport.requestPage<WarehouseMaterialSetting>({
         path: pathWithId(WAREHOUSE_MATERIAL_SETTINGS_LIST_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
-        query: toQueryString(query as Record<string, string | number | boolean | undefined>),
+        query: withWirePagination(query),
         ...withSignal(context),
       })
     },

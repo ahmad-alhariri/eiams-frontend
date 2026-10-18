@@ -45,9 +45,12 @@ describe('useScopedWarehouseSelector', () => {
       name: 'المستودع الأرشيفي',
       status: 'Inactive',
     })
+    let receivedPage: string | null = null
     server.use(
       http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
-        const search = new URL(request.url).searchParams.get('search') ?? ''
+        const url = new URL(request.url)
+        receivedPage = url.searchParams.get('page')
+        const search = url.searchParams.get('search') ?? ''
         const items = search === '' ? [central, archive] : [central]
         return okPageJson(items)
       }),
@@ -71,6 +74,10 @@ describe('useScopedWarehouseSelector', () => {
       payload: archive,
       disabled: true,
     })
+    // F-05: the selector's list read is ONE-based on the wire; `page: 0` was
+    // rejected by the backend's `[Range(1, …)]` Page validator with 400 on
+    // every load.
+    expect(receivedPage).toBe('1')
   })
 
   it('passes the server-side search query to the list endpoint', async () => {
