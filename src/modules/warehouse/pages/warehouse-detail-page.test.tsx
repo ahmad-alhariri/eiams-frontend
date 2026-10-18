@@ -78,12 +78,16 @@ describe('WarehouseDetailPage', () => {
       operations: ['Receiving', 'Issue'],
       status: 'Active',
     })
+    let receivedSitesPage: string | null = null
     server.use(
       http.get(`${API_BASE_URL}/warehouses/${warehouse.id}`, () => okJson(warehouse)),
       http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/capabilities`, () =>
         okPageJson([capability], { page: 1, pageSize: 50, totalCount: 1, totalPages: 1 }),
       ),
-      http.get(`${API_BASE_URL}/sites`, () => okPageJson([site])),
+      http.get(`${API_BASE_URL}/sites`, ({ request }) => {
+        receivedSitesPage = new URL(request.url).searchParams.get('page')
+        return okPageJson([site])
+      }),
       http.get(`${API_BASE_URL}/warehouses/${warehouse.id}/material-settings`, () =>
         okPageJson([], { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 }),
       ),
@@ -112,6 +116,8 @@ describe('WarehouseDetailPage', () => {
     expect(screen.getByText('استلام')).toBeInTheDocument()
     expect(screen.getByText('صرف')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'تعديل المستودع' })).not.toBeInTheDocument()
+    // F-05 regression guard: the site-name join issues a one-based list read.
+    expect(receivedSitesPage).toBe('1')
   })
 
   it('shows a dash for the location when the site is not in the sites list', async () => {

@@ -91,6 +91,30 @@ describe('WarehouseService', () => {
     ])
   })
 
+  it('clamps a zero-based page and an over-large page size before the wire (F-05)', async () => {
+    const service = setupService()
+    const requestedUrls: string[] = []
+
+    server.use(
+      http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
+        requestedUrls.push(new URL(request.url).search)
+        return okPageJson([])
+      }),
+      http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/material-settings`, ({ request }) => {
+        requestedUrls.push(new URL(request.url).search)
+        return okPageJson([])
+      }),
+    )
+
+    // The backend binds `PaginationQueryParameters.Page` as `[Range(1, …)]` and
+    // rejects page=0 with 400, so the shared clamp must floor it to 1 and cap an
+    // over-large page size at the wire maximum (100).
+    await service.listWarehouses({ page: 0, pageSize: 500 })
+    await service.listWarehouseMaterialSettings(WAREHOUSE_ID, { page: 0, pageSize: 0 })
+
+    expect(requestedUrls).toEqual(['?page=1&pageSize=100', '?page=1&pageSize=1'])
+  })
+
   it('reads a warehouse through the flat wire shape: id/siteId/name, no nameAr or nested site', async () => {
     const service = setupService()
     const warehouse = wireWarehouse({ rowVersion: 4 })

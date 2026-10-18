@@ -34,7 +34,8 @@ function WarehouseDetailPage() {
   const navigate = useNavigate()
   const { has } = usePermission()
   const warehouseQuery = useWarehouseQuery(warehouseId)
-  const sitesQuery = useSitesQuery({ page: 0, pageSize: 200 })
+  // One-based: org.service clamps a page below 1, and 1 is the honest value.
+  const sitesQuery = useSitesQuery({ page: 1, pageSize: 200 })
   const initializationQuery = useWarehouseInitializationStateQuery(warehouseId)
   const updateMutation = useUpdateWarehouseMutation()
   const submitFeedback = useSubmitFeedback()

@@ -68,7 +68,9 @@ function WarehousesListPage() {
     [currentPage, pageSize, search, siteId, status],
   )
   const warehousesQuery = useWarehousesQuery(warehousesQueryInput)
-  const sitesQuery = useSitesQuery({ page: 0, pageSize: 200 })
+  // One-based like every other list read (org.service clamps anyway, so this is
+  // the honest value rather than a lying zero).
+  const sitesQuery = useSitesQuery({ page: 1, pageSize: 200 })
   const createMutation = useCreateWarehouseMutation()
   const updateMutation = useUpdateWarehouseMutation()
   const submitFeedback = useSubmitFeedback()

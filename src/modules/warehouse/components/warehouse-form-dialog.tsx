@@ -60,9 +60,11 @@ export function WarehouseFormDialog({
     resolver: zodResolver(warehouseFormSchema(isCreate)),
     defaultValues: emptyWarehouseFormValues(),
   })
-  const sitesQuery = useSitesQuery({ page: 0, pageSize: 200 }, { enabled: open })
+  // One-based on both reads: org.service clamps a page below 1, and 1 is the
+  // honest value the contract's `[Range(1, …)]` Page validator accepts.
+  const sitesQuery = useSitesQuery({ page: 1, pageSize: 200 }, { enabled: open })
   const organizationalUnitsQuery = useOrganizationalUnitsQuery(
-    { page: 0, pageSize: 200 },
+    { page: 1, pageSize: 200 },
     { enabled: open },
   )
 

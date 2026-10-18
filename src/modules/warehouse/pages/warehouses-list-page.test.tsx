@@ -59,6 +59,7 @@ describe('WarehousesListPage', () => {
     const site = createSite()
     let receivedPage: string | null = null
     let receivedPageSize: string | null = null
+    let receivedSitesPage: string | null = null
 
     server.use(
       http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
@@ -67,7 +68,10 @@ describe('WarehousesListPage', () => {
         receivedPageSize = url.searchParams.get('pageSize')
         return okPageJson([warehouse], { page: 1, pageSize: 10, totalCount: 11, totalPages: 2 })
       }),
-      http.get(`${API_BASE_URL}/sites`, () => okPageJson([site])),
+      http.get(`${API_BASE_URL}/sites`, ({ request }) => {
+        receivedSitesPage = new URL(request.url).searchParams.get('page')
+        return okPageJson([site])
+      }),
     )
 
     render(<WarehousesListPage />, { wrapper: createWrapper() })
@@ -98,6 +102,9 @@ describe('WarehousesListPage', () => {
     // (eiams-frontend-kfh0); the `currentPage - 1` is gone.
     expect(receivedPage).toBe('1')
     expect(receivedPageSize).toBe('10')
+    // Regression guard: the filter's sites read is also one-based (the org
+    // service clamps a page below 1, and the page now sends 1 directly).
+    expect(receivedSitesPage).toBe('1')
   })
 
   it('falls back to a dash for a warehouse whose site is missing from the sites list', async () => {
