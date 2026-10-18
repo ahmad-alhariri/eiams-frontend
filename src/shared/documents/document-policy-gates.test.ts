@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  actionAvailabilityReasonAr,
   evaluateActionDecision,
   evaluateBalanceGate,
   evaluateCapabilityGate,
@@ -10,8 +11,10 @@ import {
   type DocumentPreflightInput,
   type PreflightLineShape,
 } from '@/shared/documents/document-policy-gates'
+import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
 import { wirePolicy } from '@/test/msw/document-wire-fixtures'
 import type {
+  DocumentActionAvailability,
   DocumentPolicy,
   DocumentPolicyBlocker,
 } from '@/shared/documents/types/document-wire.types'
@@ -344,14 +347,16 @@ describe('evaluateActionDecision', () => {
     })
   })
 
-  it('disables a policy-disabled action with the reason its code resolves to', () => {
-    // `document.submitted` is the harness's own spelling of the evaluation; the
-    // wire reason code is `WAREHOUSE_DOCUMENTS_NOT_EDITABLE`, and the Arabic
-    // sentence is resolved from that code — never from a server message field.
+  it('disables a policy-disabled action with the server-supplied reason (F-15)', () => {
+    // The harness fills `reason` with Arabic (mirroring the backend's
+    // `PolicyReasonAr`), and F-15 prefers that server sentence over the code
+    // copy. `reasonCode` still resolves through the wire map (`document.submitted`
+    // → `WAREHOUSE_DOCUMENTS_NOT_EDITABLE`) as the fallback when no Arabic
+    // sentence is present.
     const evaluated = policy({ status: 'Submitted' })
     expect(evaluateActionDecision(evaluated, 'Submit', permitted)).toEqual({
       presentation: 'Disabled',
-      reasonAr: 'لا يمكن تعديل المستند إلا في حالة المسودة.',
+      reasonAr: 'المستند مُرسل بالفعل.',
     })
   })
 
@@ -402,5 +407,100 @@ describe('evaluateActionDecision', () => {
       presentation: 'Disabled',
       reasonAr: null,
     })
+  })
+})
+
+/**
+ * F-15: the server already sends the reason in Arabic (`PolicyReasonAr`), and
+ * D-ATT-01 says the reason is the server's — never invented by the client. The
+ * resolver must therefore PREFER the server's own Arabic sentence, fall back to
+ * the governed code table when it carries none, and never render Latin prose.
+ */
+describe('actionAvailabilityReasonAr (F-15 server-provided reason)', () => {
+  const STATE_NOT_ALLOWED_AR = 'حالة الوثيقة الحالية لا تسمح بهذا الإجراء.'
+  const STATE_OR_PERMISSION_NOT_ALLOWED_AR = 'لا تُتيح حالة الوثيقة ولا صلاحياتك تنفيذ هذا الإجراء.'
+  // Matches the backend `PolicyReasonAr` sentence verbatim so the two catalogues
+  // agree byte-for-byte — the governed table is only read when the wire reason
+  // carries no Arabic, and then the fallback must say what the server says.
+  const PERMISSION_DENIED_AR = 'ليس لديك صلاحية تنفيذ هذا الإجراء على هذه الوثيقة.'
+  const DOCUMENT_NOT_FOUND_AR = 'الوثيقة غير موجودة ضمن نطاق صلاحيتك.'
+
+  function disabled(
+    overrides: Partial<DocumentActionAvailability> = {},
+  ): DocumentActionAvailability {
+    return {
+      action: 'Post',
+      allowed: false,
+      confirmationRequired: false,
+      presentation: 'Disabled',
+      reason: null,
+      reasonCode: null,
+      reasonRequired: false,
+      ...overrides,
+    }
+  }
+
+  it('returns the server-supplied Arabic reason for a state-blocked action', () => {
+    expect(
+      actionAvailabilityReasonAr(
+        disabled({ reasonCode: 'STATE_NOT_ALLOWED', reason: STATE_NOT_ALLOWED_AR }),
+      ),
+    ).toBe(STATE_NOT_ALLOWED_AR)
+  })
+
+  it('prefers the server sentence over the governed code copy when the two differ', () => {
+    // The server owns the reason; the copy table is only a fallback.
+    expect(
+      actionAvailabilityReasonAr(
+        disabled({ reasonCode: 'STATE_NOT_ALLOWED', reason: 'سبب من الخادم لهذا الإجراء.' }),
+      ),
+    ).toBe('سبب من الخادم لهذا الإجراء.')
+  })
+
+  it('falls back to the governed code copy for a Latin-only server reason', () => {
+    expect(
+      actionAvailabilityReasonAr(
+        disabled({ reasonCode: 'STATE_NOT_ALLOWED', reason: 'Not allowed in this state.' }),
+      ),
+    ).toBe(STATE_NOT_ALLOWED_AR)
+  })
+
+  it('returns null for a Latin-only reason whose code is unmapped', () => {
+    // English must never leak: with no Arabic sentence and no governed entry,
+    // the honest answer is no text rather than the server's prose.
+    expect(
+      actionAvailabilityReasonAr(
+        disabled({
+          reasonCode: 'SOME_CODE_NOBODY_HAS_TRANSLATED',
+          reason: 'Submit is not available in this state.',
+        }),
+      ),
+    ).toBeNull()
+  })
+
+  it('returns null when the reason carries no Arabic and the code is unmapped', () => {
+    expect(
+      actionAvailabilityReasonAr(
+        disabled({ reasonCode: 'SOME_CODE_NOBODY_HAS_TRANSLATED', reason: '   ' }),
+      ),
+    ).toBeNull()
+  })
+
+  it('still resolves the G-1 receiving reversal code through the copy table', () => {
+    expect(
+      actionAvailabilityReasonAr(
+        disabled({ reasonCode: 'WAREHOUSE_DOCUMENTS_RECEIVING_REVERSAL_BLOCKED_BY_DOWNSTREAM' }),
+      ),
+    ).toContain('عكس سند الاستلام')
+  })
+
+  it.each([
+    ['STATE_NOT_ALLOWED', STATE_NOT_ALLOWED_AR],
+    ['STATE_OR_PERMISSION_NOT_ALLOWED', STATE_OR_PERMISSION_NOT_ALLOWED_AR],
+    ['PERMISSION_DENIED', PERMISSION_DENIED_AR],
+    ['DOCUMENT_NOT_FOUND', DOCUMENT_NOT_FOUND_AR],
+  ])('arabicCopyForCode resolves the bare code %s', (code, expectedAr) => {
+    expect(arabicCopyForCode(code)).toEqual({ titleAr: expectedAr, detailAr: null })
+    expect(expectedAr).not.toMatch(/[A-Za-z]/u)
   })
 })

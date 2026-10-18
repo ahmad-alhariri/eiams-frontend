@@ -295,11 +295,10 @@ describe('useDocumentPolicyGate', () => {
 
     // Submitted policy: Submit is Disabled by the server, Post is Enabled.
     expect(result.current.decision('Submit').presentation).toBe('Disabled')
-    // The disabled reason is resolved from the wire reason CODE
-    // (`WAREHOUSE_DOCUMENTS_NOT_EDITABLE`), never from a server message field.
-    expect(result.current.decision('Submit').reasonAr).toBe(
-      'لا يمكن تعديل المستند إلا في حالة المسودة.',
-    )
+    // F-15: the server's own Arabic `reason` (mirrored by the fixture from
+    // `PolicyReasonAr`) is preferred; the wire reason CODE
+    // (`WAREHOUSE_DOCUMENTS_NOT_EDITABLE`) is only the fallback.
+    expect(result.current.decision('Submit').reasonAr).toBe('المستند مُرسل بالفعل.')
     expect(result.current.decision('Post').presentation).toBe('Enabled')
     expect(result.current.canSubmit).toBe(false)
     expect(result.current.canPost).toBe(true)
