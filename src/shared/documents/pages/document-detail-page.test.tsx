@@ -9,6 +9,8 @@ import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { VersionedDocumentActionRequest } from '@/shared/documents/types/document-wire.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
+  actionsForDocumentStatus,
+  createActionAvailability,
   createDocumentPolicy,
   createMaterial,
   createPolicyBlocker,
@@ -1072,6 +1074,100 @@ describe('DocumentDetailPage', () => {
     expect(alert.textContent).toContain('لا يمكن عكس سند الفتح')
     const adjustmentLink = within(alert).getByText('نموذج التسوية').closest('a')
     expect(adjustmentLink).not.toBeNull()
+  })
+
+  // G-1: the Receiving downstream guard must produce the SAME Adjustment CTA
+  // surface as Opening, resolving the Receiving-specific Arabic sentence from
+  // the governed copy table.
+  it('surfaces the Receiving reversal-blocked alert with the Adjustment CTA', async () => {
+    const warehouse = createWarehouse()
+    const receivingDocument = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Receiving',
+      documentStatus: 'Posted',
+      warehouse: { id: warehouse.id, displayName: warehouse.name },
+    })
+    server.use(
+      ...createWarehouseDocumentDetailHandler(receivingDocument),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(receivingDocument)),
+      ...createWarehouseDocumentPolicyHandler(receivingDocument),
+    )
+    server.use(
+      http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/reversals`, () =>
+        toWireErrorResponse(
+          {
+            code: 'WarehouseDocuments.ReceivingReversalBlockedByDownstream',
+            detailAr: 'downstream',
+            status: 409,
+          },
+          409,
+        ),
+      ),
+    )
+
+    render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/receiving/${DOCUMENT_ID}`),
+    })
+
+    await screen.findByText(receivingDocument.systemReferenceNumber, { exact: false })
+    fireEvent.click(screen.getByRole('button', { name: 'عكس' }))
+    const confirmDialog = await screen.findByRole('alertdialog', { name: 'تأكيد الإجراء' })
+    fireEvent.change(within(confirmDialog).getByLabelText('سبب الإجراء'), {
+      target: { value: 'تصحيح خطأ في الاستلام' },
+    })
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'عكس' }))
+
+    const alert = await screen.findByTestId('opening-reverse-blocked', {}, { timeout: 5000 })
+    expect(alert.textContent).toContain('لا يمكن عكس سند الاستلام')
+    // The Opening sentence must not leak into a Receiving block.
+    expect(alert.textContent).not.toContain('لا يمكن عكس سند الفتح')
+    const adjustmentLink = within(alert).getByText('نموذج التسوية').closest('a')
+    expect(adjustmentLink).not.toBeNull()
+    expect(adjustmentLink).toHaveAttribute('href', expect.stringContaining('adjustment'))
+  })
+
+  // G-1: when the server presents Reverse as Disabled for the Receiving
+  // downstream guard, the governed Arabic reason is readable in the body (F-15),
+  // not only in the hover title.
+  it('shows the Receiving downstream reason visibly on the Disabled Reverse action', async () => {
+    const warehouse = createWarehouse()
+    const blockedActions = actionsForDocumentStatus('Posted').map((availability) =>
+      availability.action === 'Reverse'
+        ? createActionAvailability('Reverse', {
+            allowed: false,
+            presentation: 'Disabled',
+            reasonCode: 'WAREHOUSE_DOCUMENTS_RECEIVING_REVERSAL_BLOCKED_BY_DOWNSTREAM',
+          })
+        : availability,
+    )
+    const receivingDocument = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Receiving',
+      documentStatus: 'Posted',
+      warehouse: { id: warehouse.id, displayName: warehouse.name },
+      policy: createDocumentPolicy({
+        documentId: DOCUMENT_ID,
+        documentStatus: 'Posted',
+        signedOriginalSatisfied: true,
+        blockers: [],
+        actions: blockedActions,
+      }),
+    })
+    server.use(
+      ...createWarehouseDocumentDetailHandler(receivingDocument),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(receivingDocument)),
+      ...createWarehouseDocumentPolicyHandler(receivingDocument),
+    )
+
+    render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/receiving/${DOCUMENT_ID}`),
+    })
+
+    await screen.findByText(receivingDocument.systemReferenceNumber, { exact: false })
+    const reverseButton = screen.getByRole('button', { name: 'عكس' })
+    expect(reverseButton).toBeDisabled()
+    expect(document.querySelector('[data-slot="disabled-action-reasons"]')).not.toBeNull()
+    expect(screen.getByText(/لا يمكن عكس سند الاستلام/)).toBeInTheDocument()
   })
 })
 
