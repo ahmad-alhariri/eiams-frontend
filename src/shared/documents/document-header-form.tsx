@@ -60,9 +60,11 @@ const PAPER_DOCUMENT_NUMBER_MAX_LENGTH = 15
  *
  * The `complete-draft` route carries the paper reference in NEITHER the command
  * nor its lines: `CompleteWarehouseDocumentDraftCommand` is `{ warehouseId,
- * documentType, lines, petals }`. The paper number/year are written by a separate
- * `PUT /{documentId}/paper-reference` call, which is why they remain editable on
- * the form after the draft exists.
+ * documentType, lines, petals, openingAsOfDate? }`. The paper number/year are
+ * written by a separate `PUT /{documentId}/paper-reference` call, which is why
+ * they remain editable on the form after the draft exists. The `openingAsOfDate`
+ * slot exists so an Opening draft carries its cut-off date on create itself
+ * (D-OPEN-02, PRD §6.4) — mapped through {@link PETAL_REQUEST_BY_TYPE}.
  */
 export const documentHeaderSchema = z.object({
   warehouseId: z.uuid('يجب اختيار مستودع صالح من القائمة.'),
@@ -123,6 +125,13 @@ const HEADER_VALUE_NAMES = [
   'header.paperDocumentYear',
 ] as const
 
+/**
+ * Document types whose type-specific data is managed by their own specialized
+ * unit and therefore takes no `petalSlot` in this shared section. `Opening`
+ * still CONTRIBUTES one request field — `openingAsOfDate` — through
+ * {@link PETAL_REQUEST_BY_TYPE}; the field is declared by the Opening page's
+ * own header extension and mapped there.
+ */
 const NO_PETAL_DOCUMENT_TYPES: ReadonlySet<DocumentType> = new Set<DocumentType>([
   'Adjustment',
   'Opening',
@@ -133,7 +142,8 @@ type DocumentPetalMap = {
   Receiving: { receivingInfo: ReceivingDraftDetails }
   Transfer: { transferInfo: TransferDraftDetails }
   Return: { returnInfo: ReturnDraftDetails }
-  Opening: Record<string, never>
+  /** D-OPEN-02 (PRD §6.4): the cut-off date the inventory represents. */
+  Opening: { openingAsOfDate: string }
   Adjustment: { adjustmentInfo: AdjustmentDraftDetails }
 }
 
@@ -398,7 +408,12 @@ export function DocumentHeaderSection({
 type PetalRequestPatch = Partial<
   Pick<
     CompleteDraftRequest,
-    'issueTo' | 'receivingInfo' | 'transferInfo' | 'returnInfo' | 'adjustmentInfo'
+    | 'issueTo'
+    | 'receivingInfo'
+    | 'transferInfo'
+    | 'returnInfo'
+    | 'adjustmentInfo'
+    | 'openingAsOfDate'
   >
 >
 
@@ -413,7 +428,11 @@ const PETAL_REQUEST_BY_TYPE: {
   Receiving: (petals) => ({ receivingInfo: petals.receivingInfo }),
   Transfer: (petals) => ({ transferInfo: petals.transferInfo }),
   Return: (petals) => ({ returnInfo: petals.returnInfo }),
-  Opening: () => ({}),
+  // D-OPEN-02 (PRD §6.4): the as-of date is the one Opening field the
+  // complete-draft command carries — the create INSERT must satisfy the
+  // `ck_warehouse_documents_opening_as_of_date_required` rule, so it may not
+  // be dropped on the floor like a petalless type.
+  Opening: (petals) => ({ openingAsOfDate: petals.openingAsOfDate }),
   Adjustment: (petals) => ({ adjustmentInfo: petals.adjustmentInfo }),
 }
 

@@ -214,7 +214,10 @@ export default function OpeningDocumentFormPage() {
           ...toCompleteDraftLines(values.lines),
           ...toCompleteDraftAssetLines(values.assetLines),
         ],
-        petals: {},
+        // D-OPEN-02 (PRD §6.4): the cut-off date must ride the create itself —
+        // the database CHECK rule rejects an Opening row without it at INSERT,
+        // and no separate endpoint exists to fix an Opening draft up afterwards.
+        petals: { openingAsOfDate: values.header.openingAsOfDate },
       })
       createMutation.mutate(
         {

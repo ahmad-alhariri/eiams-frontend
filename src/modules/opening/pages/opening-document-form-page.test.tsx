@@ -324,6 +324,43 @@ describe('OpeningDocumentFormPage', () => {
     expect(store[0]).toMatchObject({ paperDocumentNumber: '2024/151', paperDocumentYear: 2024 })
   }, 10_000)
 
+  // D-OPEN-02 (PRD §6.4): the cut-off date must leave the form on the
+  // `complete-draft` payload itself — the CREATE request carries
+  // `opening_as_of_date`, and there is no endpoint that can repair an Opening
+  // draft after creation.
+  it('sends header.openingAsOfDate on the complete-draft payload', async () => {
+    const store: WarehouseDocument[] = []
+    usePageHandlers(store, () => 'EIAMS-OPN-2024-0009')
+    const payloadBodies: unknown[] = []
+    server.use(
+      http.post(`${API_BASE_URL}/warehouse-documents/complete-draft`, async ({ request }) => {
+        payloadBodies.push(await request.json())
+        const created = createWarehouseDocument({
+          documentId: fixtureUuid(503),
+          documentStatus: 'Draft',
+          documentType: 'Opening',
+        })
+        store.push(created)
+        return apiJson(wireDocumentDetails(created), { status: 201 })
+      }),
+      paperReferenceHandler(store),
+    )
+
+    const user = userEvent.setup()
+    render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+    await fillValidForm(user)
+    await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
+
+    await waitFor(() => expect(screen.getByTestId('detail-stub')).toBeInTheDocument())
+    expect(payloadBodies).toHaveLength(1)
+    expect(payloadBodies[0]).toMatchObject({
+      documentType: 'Opening',
+      warehouseId: WAREHOUSE_ID,
+      openingAsOfDate: '2024-01-01',
+    })
+  }, 10_000)
+
   it('saves an asset-only Opening draft, sending only what the contract can carry', async () => {
     const store: WarehouseDocument[] = []
     usePageHandlers(store, () => 'EIAMS-OPN-2024-0005')
