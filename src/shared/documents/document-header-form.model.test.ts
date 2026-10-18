@@ -250,15 +250,19 @@ describe('buildCompleteDraftRequest', () => {
     expect('issueTo' in request).toBe(false)
   })
 
-  it('maps an Opening document to no petal field', () => {
-    const request = buildCompleteDraftRequest({
+  // D-OPEN-02 (PRD §6.4): Opening is no longer petalless on the wire — its one
+  // type-specific field rides the `complete-draft` create itself, because that
+  // INSERT must satisfy the `opening_as_of_date` database rule.
+  it('maps an Opening document to openingAsOfDate and nothing else', () => {
+    const request = buildCompleteDraftRequest<'Opening'>({
       documentType: 'Opening',
       header: validHeader(),
       lines: lines(),
-      petals: {},
+      petals: { openingAsOfDate: '2024-01-01' },
     })
 
     expect(request.documentType).toBe('Opening')
+    expect(request.openingAsOfDate).toBe('2024-01-01')
     expect('issueTo' in request).toBe(false)
     expect('receivingInfo' in request).toBe(false)
     expect('transferInfo' in request).toBe(false)
@@ -270,16 +274,40 @@ describe('buildCompleteDraftRequest', () => {
     // The live `complete-draft` command has no slot for the paper number/year:
     // a validated header field that reaches no server state would be a lie, so
     // it is written afterwards through `PUT /{id}/paper-reference`.
-    const request = buildCompleteDraftRequest({
+    const request = buildCompleteDraftRequest<'Opening'>({
       documentType: 'Opening',
       header: validHeader(),
       lines: [],
-      petals: {},
+      petals: { openingAsOfDate: '2024-01-01' },
     })
 
     expect(request.warehouseId).toBe(WAREHOUSE_ID)
     expect('paperDocumentNumber' in request).toBe(false)
     expect('paperDocumentYear' in request).toBe(false)
+  })
+
+  it('never adds an openingAsOfDate slot for non-Opening petal types', () => {
+    const receivingRequest = buildCompleteDraftRequest({
+      documentType: 'Receiving',
+      header: validHeader(),
+      lines: lines(),
+      petals: { receivingInfo: { supplierPartyId: WAREHOUSE_ID } },
+    })
+    expect('openingAsOfDate' in receivingRequest).toBe(false)
+
+    const issueRequest = buildCompleteDraftRequest({
+      documentType: 'Issue',
+      header: validHeader(),
+      lines: lines(),
+      petals: {
+        issueTo: {
+          issueReason: 'صرف داخلي',
+          recipientId: '44444444-4444-4444-8444-444444444444',
+          recipientType: 'OrganizationalUnit' as const,
+        },
+      },
+    })
+    expect('openingAsOfDate' in issueRequest).toBe(false)
   })
 
   it('passes asset-capture lines through untouched', () => {

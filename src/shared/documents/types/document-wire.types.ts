@@ -279,13 +279,43 @@ export interface DocumentPolicyAdvisory {
   readonly warehouseId: Uuid | null
 }
 
-/** `Application.WarehouseDocuments.GetPolicy.WarehouseDocumentPolicyResponse` */
+/**
+ * `Application.WarehouseDocuments.GetPolicy.SignedOriginalAttachmentResponse`.
+ *
+ * Identity and immutable metadata of the active SignedOriginal attachment that
+ * satisfies the posting gate (D-ATT-01). Deliberately carries NO file bytes —
+ * only the addressable identity, size and checksum. The UI renders this as a
+ * summary of what the server accepted, never as a download handle.
+ */
+export interface SignedOriginalAttachmentMetadata {
+  readonly attachmentId: Uuid
+  readonly filename: string
+  readonly mimeType: string
+  readonly size: number
+  readonly uploadedAtUtc: string
+  readonly uploadedBy: Uuid
+  readonly checksum: string
+}
+
+/**
+ * `Application.WarehouseDocuments.GetPolicy.WarehouseDocumentPolicyResponse`.
+ *
+ * `maxSizeBytes` / `allowedContentTypes` / `satisfyingSignedOriginal` are the
+ * server's authoritative attachment limits and gate metadata (the attachment
+ * panel renders them so it never hard-codes a 5 MB limit again). They are
+ * declared OPTIONAL because a cached response written before the backend added
+ * them can still be read by this build; when absent the UI falls back to
+ * generic Arabic copy with no number.
+ */
 export interface DocumentPolicy {
   readonly documentId: Uuid
   readonly status: DocumentStatus
   readonly rowVersion: number
   readonly evaluatedAtUtc: string
   readonly signedOriginalSatisfied: boolean
+  readonly satisfyingSignedOriginal?: SignedOriginalAttachmentMetadata | null
+  readonly maxSizeBytes?: number | null
+  readonly allowedContentTypes?: readonly string[] | null
   readonly actions: readonly DocumentActionAvailability[]
   readonly blockers: readonly DocumentPolicyBlocker[]
   readonly warnings: readonly DocumentPolicyAdvisory[]
@@ -390,6 +420,14 @@ export interface CompleteDraftRequest {
   readonly warehouseId: Uuid
   readonly documentType: DocumentType
   readonly lines: readonly CompleteDraftLine[]
+  /**
+   * Opening only: cut-off date the inventory physically represents
+   * (D-OPEN-02, PRD §6.4), `YYYY-MM-DD`. REQUIRED for `documentType:
+   * 'Opening'` — the create INSERT itself must carry `opening_as_of_date`,
+   * or the database CHECK constraint rejects the document — and forbidden
+   * for every other document type.
+   */
+  readonly openingAsOfDate?: string | null
   readonly receivingInfo?: ReceivingDraftDetails | null
   readonly issueTo?: IssueDraftDetails | null
   readonly transferInfo?: TransferDraftDetails | null
