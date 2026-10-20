@@ -77,7 +77,7 @@ describe('StockMovementsPage', () => {
     expect(screen.getByText(movement.postedBy)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'عرض تفاصيل حركة 00000000…' })).toHaveAttribute(
       'href',
-      `/inventory/movements/${movement.movementId}`,
+      `/inventory/movements/${movement.id}`,
     )
     expect(screen.queryByRole('button', { name: /إضافة|تعديل|حذف/ })).not.toBeInTheDocument()
     expect(requestQuery).toMatchObject({
@@ -122,7 +122,7 @@ describe('StockMovementsPage', () => {
     })
     await waitFor(() => {
       expect(requests.at(-1)?.['page']).toBe('1')
-      expect(requests.at(-1)?.['dateFrom']).toMatch(/^2026-08-01T.*Z$/)
+      expect(requests.at(-1)?.['fromUtc']).toMatch(/^2026-08-01T.*Z$/)
     })
 
     expect(screen.queryByRole('button', { name: 'مرجع المستند' })).not.toBeInTheDocument()

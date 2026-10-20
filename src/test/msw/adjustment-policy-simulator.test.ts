@@ -4,6 +4,7 @@ import {
   simulateAdjustmentDraftPolicy,
   SIGNED_ORIGINAL_MISSING_CODE,
   SIGNED_ORIGINAL_REQUIRED_AR,
+  SOFT_FREEZE_ADVISORY_AR,
   UNRELATED_BLOCKER_AR,
   UNRELATED_BLOCKER_CODE,
   type AdjustmentPolicyScenario,
@@ -47,7 +48,7 @@ const CASES: ReadonlyArray<{
     },
   },
   {
-    // (b) the soft freeze is an ADVISORY, so it must not block Post.
+    // (b) the soft freeze is a WARNING, so it must not block Post.
     state: 'ActiveSoftFreeze advisory',
     scenario: { simulateSoftFreeze: true },
     expected: {
@@ -73,8 +74,8 @@ const CASES: ReadonlyArray<{
   },
   {
     // (d) flags explicitly sent as `false` must behave exactly like no flags at
-    // all — the dev mock read these off a request body, where a client that
-    // always serialises its switches sends `false` rather than omitting them.
+    // all — a client that always serialises its switches sends `false` rather
+    // than omitting them.
     state: 'no scenario flags sent',
     scenario: { simulateEnabledWithBlocker: false, simulateSoftFreeze: false },
     expected: {
@@ -87,20 +88,19 @@ const CASES: ReadonlyArray<{
   },
 ]
 
-describe('adjustment draft policy simulator (EPIC G7 port from the dev mock)', () => {
+describe('adjustment draft policy simulator (wire DocumentPolicy states)', () => {
   it.each(CASES)('$state', ({ scenario, expected }) => {
     const policy = simulateAdjustmentDraftPolicy({
       documentId: DOCUMENT_ID,
-      evaluatedAt: EVALUATED_AT,
+      evaluatedAtUtc: EVALUATED_AT,
       warehouseId: WAREHOUSE_ID,
       ...(scenario === undefined ? {} : { scenario }),
     })
 
     expect(policy).toMatchObject({
       documentId: DOCUMENT_ID,
-      documentStatus: 'Draft',
-      evaluatedAt: EVALUATED_AT,
-      policyKind: 'Adjustment',
+      status: 'Draft',
+      evaluatedAtUtc: EVALUATED_AT,
       rowVersion: 0,
       signedOriginalSatisfied: expected.signedOriginalSatisfied,
     })
@@ -113,11 +113,15 @@ describe('adjustment draft policy simulator (EPIC G7 port from the dev mock)', (
       reasonRequired: false,
     })
     expect(policy.blockers.map((blocker) => blocker.code)).toEqual(expected.blockerCodes)
-    expect(policy.advisories.map((advisory) => advisory.code)).toEqual(expected.advisoryCodes)
+    expect(policy.warnings.map((advisory) => advisory.code)).toEqual(expected.advisoryCodes)
   })
 
   it('treats explicitly-false switches as no switches at all', () => {
-    const base = { documentId: DOCUMENT_ID, evaluatedAt: EVALUATED_AT, warehouseId: WAREHOUSE_ID }
+    const base = {
+      documentId: DOCUMENT_ID,
+      evaluatedAtUtc: EVALUATED_AT,
+      warehouseId: WAREHOUSE_ID,
+    }
 
     expect(
       simulateAdjustmentDraftPolicy({
@@ -130,7 +134,7 @@ describe('adjustment draft policy simulator (EPIC G7 port from the dev mock)', (
   it('is pure: the same input twice yields structurally equal, non-identical policies', () => {
     const input = {
       documentId: DOCUMENT_ID,
-      evaluatedAt: EVALUATED_AT,
+      evaluatedAtUtc: EVALUATED_AT,
       scenario: { simulateSoftFreeze: true },
       warehouseId: WAREHOUSE_ID,
     }
@@ -139,40 +143,38 @@ describe('adjustment draft policy simulator (EPIC G7 port from the dev mock)', (
 
     expect(second).toEqual(first)
     expect(second).not.toBe(first)
-    expect(first.advisories[0]).not.toBe(second.advisories[0])
+    expect(first.warnings[0]).not.toBe(second.warnings[0])
   })
 
   it('carries the signed-original reason code and Arabic copy on the blocked Post', () => {
     const policy = simulateAdjustmentDraftPolicy({
       documentId: DOCUMENT_ID,
-      evaluatedAt: EVALUATED_AT,
+      evaluatedAtUtc: EVALUATED_AT,
       warehouseId: WAREHOUSE_ID,
     })
 
     expect(policy.actions[0]).toMatchObject({
-      reasonAr: SIGNED_ORIGINAL_REQUIRED_AR,
+      reason: SIGNED_ORIGINAL_REQUIRED_AR,
       reasonCode: SIGNED_ORIGINAL_MISSING_CODE,
     })
     expect(policy.blockers[0]).toMatchObject({
       code: SIGNED_ORIGINAL_MISSING_CODE,
-      field: 'attachmentType',
-      messageAr: SIGNED_ORIGINAL_REQUIRED_AR,
+      message: SIGNED_ORIGINAL_REQUIRED_AR,
     })
   })
 
   it('scopes the soft-freeze advisory to the requested warehouse and keeps it non-blocking', () => {
     const policy = simulateAdjustmentDraftPolicy({
       documentId: DOCUMENT_ID,
-      evaluatedAt: EVALUATED_AT,
+      evaluatedAtUtc: EVALUATED_AT,
       warehouseId: WAREHOUSE_ID,
       scenario: { simulateSoftFreeze: true },
     })
 
-    expect(policy.advisories[0]).toMatchObject({
+    expect(policy.warnings[0]).toMatchObject({
       code: 'ActiveSoftFreeze',
-      countReference: 'EIAMS-CNT-2026-0114',
-      overlapState: 'Provisional',
-      severity: 'Warning',
+      message: SOFT_FREEZE_ADVISORY_AR,
+      countId: '523e4567-e89b-42d3-a456-4266141740c1',
       warehouseId: WAREHOUSE_ID,
     })
     expect(policy.actions[0]).toMatchObject({ allowed: false, presentation: 'Disabled' })
@@ -181,14 +183,14 @@ describe('adjustment draft policy simulator (EPIC G7 port from the dev mock)', (
   it('combines both opt-in switches into one policy when both are requested', () => {
     const policy = simulateAdjustmentDraftPolicy({
       documentId: DOCUMENT_ID,
-      evaluatedAt: EVALUATED_AT,
+      evaluatedAtUtc: EVALUATED_AT,
       warehouseId: WAREHOUSE_ID,
       scenario: { simulateEnabledWithBlocker: true, simulateSoftFreeze: true },
     })
 
     expect(policy.actions[0]).toMatchObject({ allowed: true, presentation: 'Enabled' })
     expect(policy.blockers.map((blocker) => blocker.code)).toEqual([UNRELATED_BLOCKER_CODE])
-    expect(policy.blockers[0]).toMatchObject({ field: null, messageAr: UNRELATED_BLOCKER_AR })
-    expect(policy.advisories.map((advisory) => advisory.code)).toEqual(['ActiveSoftFreeze'])
+    expect(policy.blockers[0]).toMatchObject({ message: UNRELATED_BLOCKER_AR })
+    expect(policy.warnings.map((advisory) => advisory.code)).toEqual(['ActiveSoftFreeze'])
   })
 })

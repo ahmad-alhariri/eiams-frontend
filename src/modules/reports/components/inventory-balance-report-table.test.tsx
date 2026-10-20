@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
-import { createInventoryBalance } from '@/test/msw/factories'
+import type { InventoryReportRow } from '@/modules/reports/types/reports.types'
 import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
@@ -21,6 +21,18 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 import { InventoryBalanceReportTable } from '@/modules/reports/components/inventory-balance-report-table'
 
 const API_BASE_URL = '/api/v1'
+
+function createReportRow(overrides: Partial<InventoryReportRow> = {}): InventoryReportRow {
+  return {
+    materialId: '11111111-1111-4111-8111-111111111111',
+    materialCode: 'IT-HW-PC-001',
+    materialNameAr: 'حاسوب مكتبي',
+    totalQuantity: 10,
+    warehouseCount: 2,
+    lastUpdatedUtc: '2026-08-21T10:00:00.000Z',
+    ...overrides,
+  }
+}
 
 function createWrapper() {
   const client = new QueryClient({
@@ -40,15 +52,11 @@ afterEach(() => {
 })
 
 describe('InventoryBalanceReportTable', () => {
-  it('renders Arabic headers and server rows with low-stock badges', async () => {
-    const balance = createInventoryBalance({
-      material: { id: '11111111-1111-4111-8111-111111111111', displayName: 'حاسوب مكتبي' },
-      warehouse: { id: '22222222-2222-4222-8222-222222222222', displayName: 'المستودع المركزي' },
-      lowStock: { state: 'Low', thresholdQuantity: 5 },
-    })
+  it('renders Arabic per-material summary headers and server rows', async () => {
+    const row = createReportRow()
     server.use(
       http.get(`${API_BASE_URL}/reports/inventory`, () =>
-        okPageJson([balance], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 }),
+        okPageJson([row], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 }),
       ),
     )
 
@@ -57,17 +65,18 @@ describe('InventoryBalanceReportTable', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'تقرير أرصدة المخزون' }),
     ).toBeInTheDocument()
-    expect(await screen.findByText('حاسوب مكتبي')).toBeInTheDocument()
-    expect(await screen.findByText('المستودع المركزي')).toBeInTheDocument()
+    expect(await screen.findByText(row.materialCode)).toBeInTheDocument()
+    expect(screen.getByText(row.materialNameAr)).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'عدد المستودعات' })).toBeInTheDocument()
   })
 
-  it('forwards only documented params, and resets pageIndex to 0 after a search change', async () => {
+  it('forwards the controller page parameter and resets it after a search change', async () => {
     const user = userEvent.setup()
     const requests: Record<string, string>[] = []
     server.use(
       http.get(`${API_BASE_URL}/reports/inventory`, ({ request }) => {
         requests.push(Object.fromEntries(new URL(request.url).searchParams))
-        return okPageJson([createInventoryBalance()], {
+        return okPageJson([createReportRow()], {
           page: 1,
           pageSize: 10,
           totalCount: 21,
@@ -80,7 +89,7 @@ describe('InventoryBalanceReportTable', () => {
     await screen.findByText('حاسوب مكتبي')
 
     await user.click(screen.getByRole('button', { name: 'الصفحة التالية' }))
-    await waitFor(() => expect(requests.at(-1)?.['pageIndex']).toBe('1'))
+    await waitFor(() => expect(requests.at(-1)?.['page']).toBe('2'))
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'بحث' }), {
       target: { value: 'حاسوب' },
@@ -88,11 +97,11 @@ describe('InventoryBalanceReportTable', () => {
 
     await waitFor(() => {
       const last = requests.at(-1)
-      expect(last).toMatchObject({ pageIndex: '0', search: 'حاسوب' })
+      expect(last).toMatchObject({ page: '1', search: 'حاسوب' })
     })
   })
 
-  it('renders an empty Arabic state when the server returns no balances', async () => {
+  it('renders an empty Arabic state when the server returns no rows', async () => {
     server.use(
       http.get(`${API_BASE_URL}/reports/inventory`, () =>
         okPageJson([], { page: 1, pageSize: 10, totalCount: 0, totalPages: 0 }),

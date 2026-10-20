@@ -88,9 +88,9 @@ describe('inventory query hooks', () => {
 
     server.use(
       http.get(`${API_BASE_URL}/inventory/balances`, () => okPageJson([balance])),
-      http.get(`${API_BASE_URL}/inventory/balances/${balance.balanceId}`, () => okJson(balance)),
+      http.get(`${API_BASE_URL}/inventory/balances/${balance.id}`, () => okJson(balance)),
       http.get(`${API_BASE_URL}/inventory/movements`, () => okPageJson([movement])),
-      http.get(`${API_BASE_URL}/inventory/movements/${movement.movementId}`, () =>
+      http.get(`${API_BASE_URL}/inventory/movements/${movement.id}`, () =>
         okJson(movement),
       ),
     )
@@ -100,13 +100,13 @@ describe('inventory query hooks', () => {
       () => useInventoryBalancesQuery({ warehouseId: balance.warehouseId }),
       { wrapper: listWrapper.Wrapper },
     )
-    const balanceDetail = renderHook(() => useInventoryBalanceQuery(balance.balanceId), {
+    const balanceDetail = renderHook(() => useInventoryBalanceQuery(balance.id), {
       wrapper: createWrapper().Wrapper,
     })
     const movementList = renderHook(() => useStockMovementsQuery({ movementType: 'Receipt' }), {
       wrapper: createWrapper().Wrapper,
     })
-    const movementDetail = renderHook(() => useStockMovementQuery(movement.movementId), {
+    const movementDetail = renderHook(() => useStockMovementQuery(movement.id), {
       wrapper: createWrapper().Wrapper,
     })
 

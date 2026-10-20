@@ -7,13 +7,14 @@ import { useAuditLogsQuery } from '@/modules/audit/hooks/use-audit-queries'
 import { getAuditActionDisplay } from '@/modules/audit/types/audit-display'
 import { InventoryLowStockBadge } from '@/modules/inventory/components/inventory-low-stock-badge'
 import { useInventoryBalancesQuery } from '@/modules/inventory/hooks/use-inventory-queries'
+import type { InventoryBalance } from '@/modules/inventory/types/inventory.api-types'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { pageRows } from '@/shared/utils/table-data'
 import { formatDateTime, formatNumber, formatUuid } from '@/shared/utils/format'
-import type { AuditLog, InventoryBalance } from '@/shared/types/generated/eiams-v1'
+import type { AuditLog } from '@/shared/types/generated/eiams-v1'
 
 const auditColumnHelper = createColumnHelper<typeof dataTableFeatures, AuditLog>()
 const balanceColumnHelper = createColumnHelper<typeof dataTableFeatures, InventoryBalance>()
@@ -152,7 +153,7 @@ function OperationalAlertsSection() {
 
   const queryInput = useMemo(
     () => ({
-      page: currentPage - 1,
+      page: currentPage,
       pageSize,
     }),
     [currentPage, pageSize],
@@ -164,11 +165,11 @@ function OperationalAlertsSection() {
   const columns = useMemo(
     () =>
       balanceColumnHelper.columns([
-        balanceColumnHelper.accessor((balance) => balance.warehouse.displayName, {
+        balanceColumnHelper.accessor((balance) => balance.warehouseName, {
           id: 'Warehouse',
           header: 'المستودع',
         }),
-        balanceColumnHelper.accessor((balance) => balance.material.displayName, {
+        balanceColumnHelper.accessor((balance) => balance.materialNameAr, {
           id: 'Material',
           header: 'المادة',
         }),

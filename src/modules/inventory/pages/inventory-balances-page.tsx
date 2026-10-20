@@ -139,12 +139,12 @@ function InventoryBalancesPage() {
   const columns = useMemo(
     () =>
       balanceColumnHelper.columns([
-        balanceColumnHelper.accessor((balance) => balance.warehouse.displayName, {
+        balanceColumnHelper.accessor((balance) => balance.warehouseName, {
           id: 'WarehouseDisplayName',
           header: 'المستودع',
           cell: ({ getValue }) => <span className="font-medium">{getValue()}</span>,
         }),
-        balanceColumnHelper.accessor((balance) => balance.material.displayName, {
+        balanceColumnHelper.accessor((balance) => balance.materialNameAr, {
           id: 'MaterialDisplayName',
           header: 'المادة',
           cell: ({ getValue }) => <span className="font-medium">{getValue()}</span>,
@@ -155,9 +155,9 @@ function InventoryBalancesPage() {
           cell: ({ getValue, row }) => (
             <Link
               dir="ltr"
-              aria-label={`عرض تفاصيل رصيد ${row.original.material.displayName} في ${row.original.warehouse.displayName}`}
+              aria-label={`عرض تفاصيل رصيد ${row.original.materialNameAr} في ${row.original.warehouseName}`}
               className="font-semibold text-foreground underline-offset-4 hover:underline"
-              to={ROUTE_PATHS.inventoryBalanceDetail.replace(':balanceId', row.original.balanceId)}
+              to={ROUTE_PATHS.inventoryBalanceDetail.replace(':balanceId', row.original.id)}
             >
               {formatNumber(getValue(), { maxFractionDigits: 3 })}
             </Link>
@@ -174,7 +174,7 @@ function InventoryBalancesPage() {
             />
           ),
         }),
-        balanceColumnHelper.accessor('lastUpdated', {
+        balanceColumnHelper.accessor('lastUpdatedUtc', {
           id: 'LastUpdated',
           header: 'آخر تحديث',
           cell: ({ getValue }) => formatDateTime(getValue()),

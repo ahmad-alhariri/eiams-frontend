@@ -1,19 +1,24 @@
 import { Badge, type BadgeProps } from '@/shared/ui/badge'
 import { formatNumber } from '@/shared/utils/format'
-import type { InventoryLowStockState } from '@/modules/inventory/types/inventory.api-types'
+import type { InventoryLowStockStateCode } from '@/modules/inventory/types/inventory.api-types'
 
+/**
+ * Keyed by the numeric wire code (0=Low … 3=Disabled) because the Minimal API
+ * path does not apply the MVC `JsonStringEnumConverter`; the canonical name is
+ * kept for the `data-low-stock-state` DOM attribute.
+ */
 const LOW_STOCK_META = {
-  Low: { label: 'منخفض', variant: 'critical' },
-  Sufficient: { label: 'الرصيد كافٍ', variant: 'success' },
-  NotConfigured: { label: 'حدّ التنبيه غير محدد', variant: 'outline' },
-  Disabled: { label: 'تنبيه الانخفاض معطّل', variant: 'ghost' },
+  0: { name: 'Low', label: 'منخفض', variant: 'critical' },
+  1: { name: 'Sufficient', label: 'الرصيد كافٍ', variant: 'success' },
+  2: { name: 'NotConfigured', label: 'حدّ التنبيه غير محدد', variant: 'outline' },
+  3: { name: 'Disabled', label: 'تنبيه الانخفاض معطّل', variant: 'ghost' },
 } as const satisfies Record<
-  InventoryLowStockState,
-  { label: string; variant: Exclude<BadgeProps['variant'], null | undefined> }
+  InventoryLowStockStateCode,
+  { name: string; label: string; variant: Exclude<BadgeProps['variant'], null | undefined> }
 >
 
 export interface InventoryLowStockBadgeProps {
-  state: InventoryLowStockState
+  state: InventoryLowStockStateCode
   /**
    * Server-computed threshold from `InventoryBalance.lowStock`. It is optional
    * so detail consumers that currently receive only a state stay compatible.
@@ -22,11 +27,11 @@ export interface InventoryLowStockBadgeProps {
 }
 
 function hasConfiguredThreshold(
-  state: InventoryLowStockState,
+  state: InventoryLowStockStateCode,
   thresholdQuantity: number | null | undefined,
 ): thresholdQuantity is number {
   return (
-    (state === 'Low' || state === 'Sufficient') &&
+    (state === 0 || state === 1) &&
     thresholdQuantity !== null &&
     thresholdQuantity !== undefined
   )
@@ -46,7 +51,7 @@ export function InventoryLowStockBadge({ state, thresholdQuantity }: InventoryLo
   return (
     <span
       data-slot="inventory-low-stock"
-      data-low-stock-state={state}
+      data-low-stock-state={meta.name}
       className="inline-flex flex-wrap items-center gap-2"
     >
       <Badge variant={meta.variant}>{meta.label}</Badge>

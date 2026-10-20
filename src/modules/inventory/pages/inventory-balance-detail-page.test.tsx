@@ -33,7 +33,7 @@ const BALANCE_ID = INVENTORY_BALANCE_ID
  * here. See that module's header for the full divergence note.
  */
 function createBalance(overrides: Parameters<typeof wireInventoryBalance>[0] = {}) {
-  return wireInventoryBalance({ balanceId: BALANCE_ID, ...overrides })
+  return wireInventoryBalance({ id: BALANCE_ID, ...overrides })
 }
 
 function LocationProbe() {
@@ -72,11 +72,11 @@ afterEach(() => {
 describe('InventoryBalanceDetailPage', () => {
   it('renders only the contract-backed balance projection in Arabic RTL', async () => {
     const balance = createBalance({
-      lowStock: { state: 'Low', thresholdQuantity: 2.125 },
+      lowStock: { state: 0, thresholdQuantity: 2.125 },
       quantity: 2.125,
     })
     server.use(
-      http.get(`${API_BASE_URL}/inventory/balances/${balance.balanceId}`, () => okJson(balance)),
+      http.get(`${API_BASE_URL}/inventory/balances/${balance.id}`, () => okJson(balance)),
     )
 
     render(<InventoryBalanceDetailPage />, { wrapper: PageWrapper })
@@ -84,8 +84,8 @@ describe('InventoryBalanceDetailPage', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'تفاصيل الرصيد' }),
     ).toBeInTheDocument()
-    expect(await screen.findByText(balance.warehouse.displayName)).toBeInTheDocument()
-    expect(screen.getByText(balance.material.displayName)).toBeInTheDocument()
+    expect(await screen.findByText(balance.warehouseName)).toBeInTheDocument()
+    expect(screen.getByText(balance.materialNameAr)).toBeInTheDocument()
     expect(screen.getAllByText('٢٫١٢٥')).toHaveLength(2)
     expect(screen.getByText('منخفض')).toBeInTheDocument()
     expect(screen.getByText('حدّ التنبيه')).toBeInTheDocument()
@@ -141,7 +141,7 @@ describe('InventoryBalanceDetailPage', () => {
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
     await waitFor(() => expect(attempts).toBe(2))
-    expect(await screen.findByText(balance.warehouse.displayName)).toBeInTheDocument()
+    expect(await screen.findByText(balance.warehouseName)).toBeInTheDocument()
   })
 
   it('does not request a balance when the route has no identifier', () => {

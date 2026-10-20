@@ -9,12 +9,6 @@
 
 export type Uuid = string
 
-export interface NamedReference {
-  readonly id: string
-  readonly displayName: string
-  readonly code?: string | null
-}
-
 export type MovementType =
   'Issue' | 'Opening' | 'Receipt' | 'TransferIn' | 'TransferOut' | 'AdjustmentIn' | 'AdjustmentOut'
 
@@ -34,10 +28,24 @@ export type StockMovementSortField =
   'PostedAt' | 'WarehouseDisplayName' | 'MaterialDisplayName' | 'MovementType' | 'QuantityDelta'
 
 /**
- * Server-computed low-stock projection (`LowStockState` in the backend). The
- * browser never compares quantities with thresholds itself.
+ * Low-stock FILTER vocabulary: the live API accepts the state NAME in the
+ * `lowStockState` query parameter (`?lowStockState=Low` → 200).
+ *
+ * The RESPONSE is different: `InventoryBalance.lowStock.state` is numeric (see
+ * `InventoryLowStockStateCode`). The browser never compares quantities with
+ * thresholds itself.
  */
 export type InventoryLowStockState = 'Low' | 'Sufficient' | 'NotConfigured' | 'Disabled'
+
+/**
+ * Numeric wire encoding of the server-computed low-stock state. Balance results
+ * leave the backend through a Minimal API `IResult`, which serializes with
+ * `Microsoft.AspNetCore.Http.Json.JsonOptions` — the MVC `JsonStringEnumConverter`
+ * is not registered there — so enums arrive as numbers. 0=Low / 1=Sufficient /
+ * 2=NotConfigured / 3=Disabled follows the backend `LowStockState` declaration
+ * order. Switching the wire to names would require an API version bump.
+ */
+export type InventoryLowStockStateCode = 0 | 1 | 2 | 3
 
 export interface PageMeta {
   readonly page: number
@@ -56,21 +64,18 @@ export interface PageMeta {
 // ---------------------------------------------------------------------------
 
 export interface InventoryBalance {
-  readonly balanceId: Uuid
+  readonly id: Uuid
   readonly warehouseId: Uuid
   readonly warehouseCode: string
   readonly warehouseName: string
-  readonly warehouse: NamedReference
   readonly materialId: Uuid
   readonly materialCode: string
   readonly materialNameAr: string
-  readonly material: NamedReference
   readonly quantity: number
-  readonly lastUpdated: string
   readonly lastUpdatedUtc: string
   readonly rowVersion: number
   readonly lowStock: {
-    state: InventoryLowStockState
+    state: InventoryLowStockStateCode
     thresholdQuantity: number | null
   }
 }
@@ -96,24 +101,19 @@ export interface ListInventoryBalancesQuery {
 // ---------------------------------------------------------------------------
 
 export interface StockMovement {
-  readonly movementId: Uuid
+  readonly id: Uuid
   readonly warehouseId: Uuid
   readonly warehouseCode: string
   readonly warehouseName: string
-  readonly warehouse: NamedReference
   readonly materialId: Uuid
   readonly materialCode: string
   readonly materialNameAr: string
-  readonly material: NamedReference
   readonly documentId: Uuid
   readonly documentReferenceNumber: string
-  readonly documentReference: string
-  readonly documentLineId: Uuid
   readonly lineId: Uuid
   readonly movementType: MovementType
   readonly quantityDelta: number
   readonly postedAtUtc: string
-  readonly postedAt: string
   readonly postedBy: Uuid
 }
 
@@ -132,4 +132,6 @@ export interface ListStockMovementsQuery {
   readonly movementType?: MovementType
   readonly sortBy?: StockMovementSortField
   readonly sortDirection?: SortDirection
+  readonly fromUtc?: string
+  readonly toUtc?: string
 }

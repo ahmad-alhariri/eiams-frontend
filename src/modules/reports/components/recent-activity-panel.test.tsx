@@ -71,7 +71,7 @@ describe('RecentActivityPanel', () => {
           success: true,
           data: [
             createInventoryBalance({
-              lowStock: { state: 'Low', thresholdQuantity: 5 },
+              lowStock: { state: 0, thresholdQuantity: 5 },
             }),
           ],
           pagination: {

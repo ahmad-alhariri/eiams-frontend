@@ -36,19 +36,21 @@ describe('cross-module scenario data', () => {
       [...scenario.ledgers.orderedLifecycleEvents].map((event) => event.occurredAt).sort(),
     )
     expect(scenario.documents.adjustment).toMatchObject({
-      documentId: scenario.adjustments.countVariance.documentId,
+      documentId: scenario.adjustments.countVariance.id,
       policy: expect.objectContaining({ policyKind: 'Adjustment' }),
     })
     expect(scenario.documents.disposal).toMatchObject({
-      documentId: scenario.adjustments.disposal.documentId,
+      documentId: scenario.adjustments.disposal.id,
       policy: expect.objectContaining({ policyKind: 'Disposal' }),
     })
     for (const document of [scenario.documents.adjustment, scenario.documents.disposal]) {
       const adjustment = Object.values({
         countVariance: scenario.adjustments.countVariance,
         disposal: scenario.adjustments.disposal,
-      }).find((candidate) => candidate.documentId === document.documentId)
-      expect(adjustment?.attachments).toEqual(document.attachments)
+      }).find((candidate) => candidate.id === document.documentId)
+      // The module's own read carries no attachments; it ties back to the
+      // document engine through the shared id and the reference number.
+      expect(adjustment?.systemReferenceNumber).toBe(document.systemReferenceNumber)
       expect(
         scenario.ledgers.lifecycleEvents[document.documentId]?.map((event) => event.eventType),
       ).toEqual(['Created', 'Posted'])
@@ -63,13 +65,13 @@ describe('cross-module scenario data', () => {
     const sourceAssetDelta = scenario.ledgers.stockMovements
       .filter(
         (movement) =>
-          movement.warehouse.id === sourceId && movement.material.id === assetMaterialId,
+          movement.warehouseId === sourceId && movement.materialId === assetMaterialId,
       )
       .reduce((total, movement) => total + movement.quantityDelta, 0)
     const sourceConsumableDelta = scenario.ledgers.stockMovements
       .filter(
         (movement) =>
-          movement.warehouse.id === sourceId && movement.material.id === consumableMaterialId,
+          movement.warehouseId === sourceId && movement.materialId === consumableMaterialId,
       )
       .reduce((total, movement) => total + movement.quantityDelta, 0)
 
@@ -78,11 +80,11 @@ describe('cross-module scenario data', () => {
     expect(scenario.ledgers.balances).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          warehouse: expect.objectContaining({ id: sourceId }),
+          warehouseId: sourceId,
           quantity: 2,
         }),
         expect.objectContaining({
-          warehouse: expect.objectContaining({ id: sourceId }),
+          warehouseId: sourceId,
           quantity: 9,
         }),
       ]),
@@ -90,7 +92,7 @@ describe('cross-module scenario data', () => {
     expect(
       scenario.ledgers.stockMovements.every((movement) => {
         const document = documentsById(scenario).get(movement.documentId)
-        return document?.lines.some((line) => line.lineId === movement.documentLineId) ?? false
+        return document?.lines.some((line) => line.lineId === movement.lineId) ?? false
       }),
     ).toBe(true)
     expect(
@@ -136,7 +138,7 @@ describe('cross-module scenario data', () => {
       expect.arrayContaining([
         expect.objectContaining({
           assetId: scenario.assets.disposed.assetId,
-          documentId: scenario.adjustments.disposal.documentId,
+          documentId: scenario.adjustments.disposal.id,
           eventType: 'Disposed',
         }),
       ]),
@@ -144,7 +146,11 @@ describe('cross-module scenario data', () => {
     expect(scenario.adjustments.disposal).toMatchObject({
       purpose: 'Disposal',
       status: 'Posted',
-      lines: [expect.objectContaining({ assetId: scenario.assets.disposed.assetId })],
+      lines: [
+        expect.objectContaining({
+          assets: [expect.objectContaining({ id: scenario.assets.disposed.assetId })],
+        }),
+      ],
     })
     expect(
       scenario.ledgers.assetMovements.every((movement) => {
@@ -167,7 +173,7 @@ describe('cross-module scenario data', () => {
     expect(scenario.ledgers.stockMovements).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          documentId: scenario.adjustments.countVariance.documentId,
+          documentId: scenario.adjustments.countVariance.id,
           movementType: 'AdjustmentIn',
           quantityDelta: 2,
         }),
@@ -176,7 +182,7 @@ describe('cross-module scenario data', () => {
     expect(scenario.ledgers.auditLogs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          entityId: scenario.adjustments.countVariance.adjustmentId,
+          entityId: scenario.adjustments.countVariance.id,
           entityType: 'InventoryAdjustment',
         }),
       ]),

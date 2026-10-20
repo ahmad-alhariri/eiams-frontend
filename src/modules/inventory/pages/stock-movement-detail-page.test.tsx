@@ -44,7 +44,7 @@ const MOVEMENT_ID = INVENTORY_MOVEMENT_ID
  * wire record with `postedBy: INVENTORY_POSTED_BY_ID`.
  */
 function createMovement(overrides: Partial<StockMovement> = {}): StockMovement {
-  return wireStockMovement({ movementId: MOVEMENT_ID, ...overrides })
+  return wireStockMovement({ id: MOVEMENT_ID, ...overrides })
 }
 
 function LocationProbe() {
@@ -84,7 +84,7 @@ describe('StockMovementDetailPage', () => {
   it('renders only immutable contract-backed provenance in Arabic RTL', async () => {
     const movement = createMovement({ quantityDelta: -2.125, movementType: 'AdjustmentOut' })
     server.use(
-      http.get(`${API_BASE_URL}/inventory/movements/${movement.movementId}`, () =>
+      http.get(`${API_BASE_URL}/inventory/movements/${movement.id}`, () =>
         okJson(movement),
       ),
     )
@@ -94,14 +94,14 @@ describe('StockMovementDetailPage', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'تفاصيل حركة المخزون' }),
     ).toBeInTheDocument()
-    expect(await screen.findByText(movement.warehouse.displayName)).toBeInTheDocument()
-    expect(screen.getByText(movement.material.displayName)).toBeInTheDocument()
+    expect(await screen.findByText(movement.warehouseName)).toBeInTheDocument()
+    expect(screen.getByText(movement.materialNameAr)).toBeInTheDocument()
     expect(screen.getByText('تسوية بالنقص')).toBeInTheDocument()
     expect(screen.getByText('-٢٫١٢٥')).toBeInTheDocument()
-    expect(screen.getByText(movement.documentReference)).toBeInTheDocument()
+    expect(screen.getByText(movement.documentReferenceNumber)).toBeInTheDocument()
     expect(screen.getByText(movement.documentId)).toBeInTheDocument()
-    expect(screen.getByText(movement.documentLineId)).toBeInTheDocument()
-    expect(screen.getByText(movement.movementId)).toBeInTheDocument()
+    expect(screen.getByText(movement.lineId)).toBeInTheDocument()
+    expect(screen.getByText(movement.id)).toBeInTheDocument()
     // `postedBy` is the UUID string the backend serves, so the read-only
     // "رُحّلت بواسطة" row renders it as a string child — never as an object.
     expect(screen.getByText(INVENTORY_POSTED_BY_ID)).toBeInTheDocument()
@@ -156,7 +156,7 @@ describe('StockMovementDetailPage', () => {
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
     await waitFor(() => expect(attempts).toBe(2))
-    expect(await screen.findByText(movement.warehouse.displayName)).toBeInTheDocument()
+    expect(await screen.findByText(movement.warehouseName)).toBeInTheDocument()
   })
 
   it('does not request a movement when the route has no identifier', () => {

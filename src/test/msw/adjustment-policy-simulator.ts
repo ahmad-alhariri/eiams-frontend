@@ -1,25 +1,20 @@
-import { createActionAvailability, createPolicyBlocker } from '@/test/msw/factories'
 import type {
-  ActionAvailability,
+  DocumentActionAvailability,
   DocumentPolicy,
-  OperationalAdvisory,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/shared/documents/types/document-wire.types'
 
 /**
  * The four policy states a Draft adjustment has to be able to present.
  *
- * These are CONTRACT-LEGAL states the UI must render but which the ordinary
- * "evaluate the policy" path can never produce, because in the ordinary path the
- * answer is always the same: no signed copy attached yet, therefore Post is
- * blocked. Both extra states existed only as inline object literals inside the
- * dev mock's `POST /adjustments` handler, so the moment that handler is deleted
- * the states disappear and nothing can exercise them. They are here as a pure
- * function so a test can ask for exactly one of the four and assert the whole
- * policy — actions, blockers, advisories, and the `signedOriginalSatisfied` flag
- * that the action bar is driven from.
- *
- * Ported by bead `eiams-frontend-79na` (EPIC G7) so G7.6 (`eiams-frontend-m4jm`)
- * cannot lose them.
+ * Adjustment responses embed no policy (D-INT-02): the shared document engine
+ * serves it from `GET /warehouse-documents/{documentId}/policy`, keyed by the
+ * adjustment's own id. These are CONTRACT-LEGAL states that read can answer
+ * with but which the ordinary "evaluate the policy" path never produces, because
+ * in the ordinary path the answer is always the same: no signed copy attached
+ * yet, therefore Post is blocked. They are here as a pure function so a test
+ * can ask for exactly one of the four and assert the whole wire policy —
+ * actions, blockers, warnings, and the `signedOriginalSatisfied` flag the
+ * action bar and attachment gate are driven from.
  */
 
 /** POLICY-BLOCKER code (frontend vocabulary) — NOT a wire error code. */
@@ -40,11 +35,15 @@ export const SIGNED_ORIGINAL_REQUIRED_AR = 'يلزم رفع النسخة الأ�
 /** Arabic copy for the unrelated business-policy blocker. */
 export const UNRELATED_BLOCKER_AR = 'تغيّرت قدرة المستودع، راجع سجل القدرات.'
 
+/** Arabic copy for the ActiveSoftFreeze warning. */
+export const SOFT_FREEZE_ADVISORY_AR = 'هناك جرد نشط يغطي نطاق هذا المستودع.'
+
 /**
- * Opt-in switches, read by the dev mock from the request body so a QA session
- * can reach a state on demand. Both default to `false`: an unflagged request
- * must produce exactly the default draft policy, or every existing caller of the
- * endpoint would change behaviour when this module was introduced.
+ * Opt-in switches, read by the test calling the policy read's fixture handler
+ * so a session can reach a state on demand. Both default to `false`: an
+ * unflagged request must produce exactly the default draft policy, or every
+ * existing caller of the endpoint would change behaviour when this module was
+ * introduced.
  */
 export interface AdjustmentPolicyScenario {
   /** Attach an `ActiveSoftFreeze` advisory (an open count overlaps this warehouse). */
@@ -56,86 +55,83 @@ export interface AdjustmentPolicyScenario {
 export interface AdjustmentDraftPolicyInput {
   readonly documentId: string
   /** Timestamp stamped on the policy; pass one explicitly to keep this pure. */
-  readonly evaluatedAt: string
+  readonly evaluatedAtUtc: string
   readonly warehouseId: string
   readonly scenario?: AdjustmentPolicyScenario
   /** Advisory payload; defaults describe one count covering this warehouse. */
-  readonly softFreezeAdvisory?: OperationalAdvisory
+  readonly softFreezeAdvisory?: { readonly code: string; readonly message: string; readonly countId: string | null; readonly warehouseId: string | null }
 }
 
-const DEFAULT_SOFT_FREEZE_ADVISORY = {
-  code: 'ActiveSoftFreeze',
-  countId: '523e4567-e89b-42d3-a456-4266141740c1',
-  countReference: 'EIAMS-CNT-2026-0114',
-  messageAr: 'هناك جرد نشط يغطي نطاق هذا المستودع.',
-  overlapState: 'Provisional',
-  scopeSummaryAr: 'المستودع المركزي',
-  severity: 'Warning',
-} satisfies OperationalAdvisory
+const SOFT_FREEZE_COUNT_ID = '523e4567-e89b-42d3-a456-4266141740c1'
 
 /**
- * The single `Post` row for a Draft adjustment's policy. A Draft adjustment is
- * never postable as it stands, and both non-default states differ from the
+ * The single `Post` row for a Draft adjustment's wire policy. A Draft adjustment
+ * is never postable as it stands, and both non-default states differ from the
  * default only in this one row plus the blockers list.
  */
-function postAvailability(signedOriginalSatisfied: boolean): ActionAvailability {
+function postAvailability(signedOriginalSatisfied: boolean): DocumentActionAvailability {
   return signedOriginalSatisfied
-    ? createActionAvailability('Post', {
+    ? {
+        action: 'Post',
         allowed: true,
         confirmationRequired: true,
+        reasonRequired: false,
         presentation: 'Enabled',
-      })
-    : createActionAvailability('Post', {
+        reasonCode: null,
+        reason: null,
+      }
+    : {
+        action: 'Post',
         allowed: false,
         confirmationRequired: true,
+        reasonRequired: false,
         presentation: 'Disabled',
-        reasonAr: SIGNED_ORIGINAL_REQUIRED_AR,
         reasonCode: SIGNED_ORIGINAL_MISSING_CODE,
-      })
+        reason: SIGNED_ORIGINAL_REQUIRED_AR,
+      }
 }
 
 /**
- * Builds the Draft adjustment policy for one of the four states:
+ * Builds the Draft adjustment wire policy for one of the four states:
  *
  *   (a) default                → Post Disabled, blocked by `document.signed_original_missing`
- *   (b) `simulateSoftFreeze`   → the default policy plus one `ActiveSoftFreeze` advisory
+ *   (b) `simulateSoftFreeze`   → the default policy plus one `ActiveSoftFreeze` warning
  *   (c) `simulateEnabledWithBlocker` → Post Enabled, and the only blocker is the
  *                                  UNRELATED `warehouse.capability_changed`
  *   (d) no scenario flags      → byte-identical to (a)
  *
  * (b) and (c) are independent switches, so both may be requested at once; the
- * policy then carries the Enabled Post, the unrelated blocker, and the advisory.
+ * policy then carries the Enabled Post, the unrelated blocker, and the warning.
  */
 export function simulateAdjustmentDraftPolicy(input: AdjustmentDraftPolicyInput): DocumentPolicy {
   const simulateSoftFreeze = input.scenario?.simulateSoftFreeze === true
   const simulateEnabledWithBlocker = input.scenario?.simulateEnabledWithBlocker === true
-  const advisory = input.softFreezeAdvisory ?? {
-    ...DEFAULT_SOFT_FREEZE_ADVISORY,
-    warehouseId: input.warehouseId,
-  }
 
   return {
-    actions: [postAvailability(simulateEnabledWithBlocker)],
-    advisories: simulateSoftFreeze ? [advisory] : [],
-    blockers: simulateEnabledWithBlocker
-      ? [
-          createPolicyBlocker({
-            code: UNRELATED_BLOCKER_CODE,
-            field: null,
-            messageAr: UNRELATED_BLOCKER_AR,
-          }),
-        ]
-      : [
-          createPolicyBlocker({
-            code: SIGNED_ORIGINAL_MISSING_CODE,
-            messageAr: SIGNED_ORIGINAL_REQUIRED_AR,
-          }),
-        ],
     documentId: input.documentId,
-    documentStatus: 'Draft',
-    evaluatedAt: input.evaluatedAt,
-    policyKind: 'Adjustment',
+    status: 'Draft',
     rowVersion: 0,
+    evaluatedAtUtc: input.evaluatedAtUtc,
     signedOriginalSatisfied: simulateEnabledWithBlocker,
+    actions: [postAvailability(simulateEnabledWithBlocker)],
+    warnings: simulateSoftFreeze
+      ? [
+          input.softFreezeAdvisory ?? {
+            code: 'ActiveSoftFreeze',
+            message: SOFT_FREEZE_ADVISORY_AR,
+            countId: SOFT_FREEZE_COUNT_ID,
+            warehouseId: input.warehouseId,
+          },
+        ]
+      : [],
+    blockers: simulateEnabledWithBlocker
+      ? [{ action: 'Post', code: UNRELATED_BLOCKER_CODE, message: UNRELATED_BLOCKER_AR }]
+      : [
+          {
+            action: 'Post',
+            code: SIGNED_ORIGINAL_MISSING_CODE,
+            message: SIGNED_ORIGINAL_REQUIRED_AR,
+          },
+        ],
   }
 }

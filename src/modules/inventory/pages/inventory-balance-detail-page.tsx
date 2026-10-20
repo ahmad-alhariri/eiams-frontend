@@ -86,7 +86,7 @@ function InventoryBalanceDetailPage() {
     <div dir="rtl" className="min-w-0">
       <PageHeader
         title="تفاصيل الرصيد"
-        subtitle={`${balance.warehouse.displayName} — ${balance.material.displayName}`}
+        subtitle={`${balance.warehouseName} — ${balance.materialNameAr}`}
         actions={
           <Button type="button" variant="outline" onClick={returnToBalances}>
             <IconArrowRight aria-hidden data-icon="inline-start" />
@@ -100,8 +100,8 @@ function InventoryBalanceDetailPage() {
         description="بيانات للقراءة فقط ضمن نطاق العمل الحالي، كما يعرضها الخادم."
       >
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-          <DetailField label="المستودع">{balance.warehouse.displayName}</DetailField>
-          <DetailField label="المادة">{balance.material.displayName}</DetailField>
+          <DetailField label="المستودع">{balance.warehouseName}</DetailField>
+          <DetailField label="المادة">{balance.materialNameAr}</DetailField>
           <DetailField label="الرصيد الحالي" ltr>
             {formatNumber(balance.quantity, { maxFractionDigits: 3 })}
           </DetailField>
@@ -113,9 +113,9 @@ function InventoryBalanceDetailPage() {
               ? '—'
               : formatNumber(balance.lowStock.thresholdQuantity, { maxFractionDigits: 3 })}
           </DetailField>
-          <DetailField label="آخر تحديث">{formatDateTime(balance.lastUpdated)}</DetailField>
+          <DetailField label="آخر تحديث">{formatDateTime(balance.lastUpdatedUtc)}</DetailField>
           <DetailField label="معرّف الرصيد" ltr>
-            {formatUuid(balance.balanceId)}
+            {formatUuid(balance.id)}
           </DetailField>
         </dl>
       </ContentCard>

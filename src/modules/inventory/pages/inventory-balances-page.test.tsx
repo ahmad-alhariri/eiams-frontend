@@ -43,18 +43,18 @@ afterEach(() => {
 describe('InventoryBalancesPage', () => {
   it('renders the server page with default contract sort, Arabic low-stock labels, and one-based pagination', async () => {
     const balances = [
-      createInventoryBalance({ lowStock: { state: 'Low', thresholdQuantity: 10 } }),
+      createInventoryBalance({ lowStock: { state: 0, thresholdQuantity: 10 } }),
       createInventoryBalance({
-        balanceId: '00000000-0000-4000-8000-000000000041',
-        lowStock: { state: 'Sufficient', thresholdQuantity: 5 },
+        id: '00000000-0000-4000-8000-000000000041',
+        lowStock: { state: 1, thresholdQuantity: 5 },
       }),
       createInventoryBalance({
-        balanceId: '00000000-0000-4000-8000-000000000042',
-        lowStock: { state: 'NotConfigured', thresholdQuantity: null },
+        id: '00000000-0000-4000-8000-000000000042',
+        lowStock: { state: 2, thresholdQuantity: null },
       }),
       createInventoryBalance({
-        balanceId: '00000000-0000-4000-8000-000000000043',
-        lowStock: { state: 'Disabled', thresholdQuantity: null },
+        id: '00000000-0000-4000-8000-000000000043',
+        lowStock: { state: 3, thresholdQuantity: null },
       }),
     ]
     let initialQuery: Record<string, string> | undefined
@@ -79,7 +79,7 @@ describe('InventoryBalancesPage', () => {
     expect(screen.getByText('تنبيه الانخفاض معطّل')).toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: /عرض تفاصيل رصيد حاسوب مكتبي/ })[0]).toHaveAttribute(
       'href',
-      `/inventory/balances/${balances[0]?.balanceId}`,
+      `/inventory/balances/${balances[0]?.id}`,
     )
     expect(screen.getByLabelText('حدّ التنبيه: ١٠')).toBeInTheDocument()
     expect(screen.getByLabelText('حدّ التنبيه: ٥')).toBeInTheDocument()
