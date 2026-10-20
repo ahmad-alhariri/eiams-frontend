@@ -142,6 +142,12 @@ function AsyncSelect<T>({
 
   const requestIdRef = useRef(0)
   const loadOptionsRef = useRef(loadOptions)
+  // True once the user touched the input (typed or changed its text). The
+  // publish below auto-opens the panel only after that: an untouched
+  // minQueryLength=0 control would otherwise pop the panel open on mount,
+  // which inerts the whole page behind it (Base UI aria-hidden) before any
+  // user interaction.
+  const interactedRef = useRef(false)
   // Set when the user selects an option so the label re-search that follows
   // (Base UI fills the input with the label) does not pop the panel open again.
   const selectionDismissedRef = useRef(false)
@@ -235,6 +241,9 @@ function AsyncSelect<T>({
         }
         setResult({ query, options: loaded.slice(0, maxResults), status: 'success' })
         retypingRef.current = false
+        if (!interactedRef.current) {
+          return
+        }
         if (!openRef.current && !selectionDismissedRef.current) {
           openRef.current = true
           setOpen(true)
@@ -247,6 +256,9 @@ function AsyncSelect<T>({
         }
         setResult({ query, options: [], status: 'error' })
         retypingRef.current = false
+        if (!interactedRef.current) {
+          return
+        }
         if (!openRef.current && !selectionDismissedRef.current) {
           openRef.current = true
           setOpen(true)
@@ -259,6 +271,7 @@ function AsyncSelect<T>({
     if (disabled || readOnly) {
       return
     }
+    interactedRef.current = true
     if (eventDetails.reason === 'item-press') {
       // Base UI fills the input with the selected label; the search effect
       // re-runs naturally with the label — no special casing needed.

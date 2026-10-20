@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { okJson } from '@/test/msw/envelope'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import { act, renderHook, screen, waitFor } from '@testing-library/react'
 import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
@@ -279,6 +279,41 @@ describe('useDocumentLifecycleAction family', () => {
     const cached = client.getQueryData<WarehouseDocument>(SCOPED_DOCUMENT_KEY)
     expect(cached?.documentStatus).toBe('Submitted')
     expect(cached?.rowVersion).toBe(3)
+  })
+
+  it('does not report a business 409 as a concurrent edit or blame another user', async () => {
+    const { toastWrapper } = createHarness()
+    server.use(
+      http.post(
+        `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/cancel`,
+        () =>
+          apiJson(
+            {
+              code: 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+              detailAr: 'تعذر تنفيذ الإجراء: حالة السند لا تسمح بالإلغاء.',
+            },
+            { status: 409 },
+          ),
+      ),
+    )
+
+    const { result } = renderHook(() => useCancelDocumentMutation(DOCUMENT_ID), {
+      wrapper: toastWrapper,
+    })
+
+    act(() => {
+      result.current.mutate({ rowVersion: 1, reason: 'سبب الإلغاء', idempotencyKey: 'cancel-key-2' })
+    })
+
+    await waitFor(() => expect(result.current.error).not.toBeNull())
+    // A state 409 is still a conflict on the wire, but nothing this client holds
+    // is stale, so `isConflict` must stay false and the concurrent-edit guidance
+    // ("a user edited this document") must never appear.
+    expect(result.current.isConflict).toBe(false)
+    await waitFor(() =>
+      expect(screen.getAllByText('لا يمكن نقل المستند إلى هذه الحالة.').length).toBeGreaterThan(0),
+    )
+    expect(screen.queryByText(/أعد تحميل البيانات/)).not.toBeInTheDocument()
   })
 
   it('sends the caller idempotency key in the Idempotency-Key header', async () => {

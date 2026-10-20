@@ -1,18 +1,51 @@
 import type { operations } from '@/shared/types/generated/eiams-v1'
 
 /**
- * Contract-derived query and request shapes for the inventory-count module
- * (e20-t01). The v1 contract narrows the freeze policy to `SoftFreeze` only
- * — PRD §12.6 mentions HardFreeze/NoFreeze, but the generated type is the
- * source of truth; wider policies are a backend contract change first.
+ * Contract-derived query/plan types for the inventory-count module
+ * (e20-t01). The list/read query filters and the plan-create request still
+ * come from the snapshot because the live controller matches them.
+ *
+ * The actuals batch is handwritten: it is the body of `PUT
+ * /inventory-counts/{countId}/actuals` (RESOLUTION-025), whose shape is
+ * `(actuals: [{ lineId, actualQuantity }], expectedRowVersion)` — the
+ * aggregate count row version, no per-line rowVersion. The batch is
+ * all-or-nothing and the live response is `ApiResponse<EmptyResponse>`,
+ * so the service refetches after a successful PUT (see `count.service.ts`).
  */
 export type ListInventoryCountsQuery = NonNullable<
   operations['listInventoryCounts']['parameters']['query']
 >
 export type InventoryCountPlanRequest =
   operations['planInventoryCount']['requestBody']['content']['application/json']
-export type UpdateCountLinesRequest =
-  operations['updateInventoryCountLines']['requestBody']['content']['application/json']
+
+/**
+ * Handwritten request body for `PUT /inventory-counts/{countId}/actuals`
+ * (D-INT-02). Verified against
+ * `Web.Api.Controllers.InventoryCounts.RecordInventoryCountActualsController-RequestBody`
+ * on 2026-10-20.
+ *
+ * Per RESOLUTION-025 (C:\EIAMS-SYSTEM\docs\integration\conflict-resolution.md:3220,
+ * CONFLICT-020 in conflict-register.md:1563-1631): each entry carries the line
+ * id and the exact actual quantity only. The aggregate `expectedRowVersion`
+ * is the COUNT row version, not per-line. The batch is all-or-nothing; the
+ * controller rejects duplicate lineIds, lines outside the count, missing or
+ * invalid actuals, and stale aggregate versions with a 409.
+ */
+export interface UpdateCountLinesRequest {
+  readonly actuals: ReadonlyArray<{
+    readonly lineId: string
+    readonly actualQuantity: number
+  }>
+  readonly expectedRowVersion: number
+}
+
+/**
+ * Live `200` body of `PUT /inventory-counts/{countId}/actuals`. The controller
+ * resolves with `ApiResponse<EmptyResponse>` (an empty `{}`); the service
+ * refetches the count and lines after a successful save rather than reading
+ * data from the PUT response.
+ */
+export type EmptyResponse = Record<string, never>
 
 /**
  * Arabic labels for the inventory-count lifecycle

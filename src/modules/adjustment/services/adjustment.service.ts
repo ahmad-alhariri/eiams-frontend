@@ -3,20 +3,17 @@ import { apiTransport } from '@/shared/api/transport'
 
 import type {
   AdjustmentDraftRequest,
+  AdjustmentDetail,
+  AdjustmentListItem,
+  AdjustmentUpdateRequest,
   ListAdjustmentsQuery,
   ListDisposalEligibleAssetsQuery,
-  UpdateAdjustmentRequest,
 } from '@/modules/adjustment/types/adjustment.types'
 import { toWirePaginationParams } from '@/shared/api/pagination'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
-import type {
-  AdjustmentPostResult,
-  AdjustmentReverseResult,
-  AssetPage,
-  InventoryAdjustment,
-  InventoryAdjustmentPage,
-  paths,
-} from '@/shared/types/generated/eiams-v1'
+import type { ApiPage, ResourceIdResponse } from '@/shared/api/api-contracts'
+import type { PostDocumentResponse } from '@/shared/documents/types/document-wire.types'
+import type { AssetPage, paths } from '@/shared/types/generated/eiams-v1'
 
 const ADJUSTMENTS_PATH = '/adjustments' satisfies keyof paths
 const ADJUSTMENT_PATH = '/adjustments/{adjustmentId}' satisfies keyof paths
@@ -52,115 +49,99 @@ function toDisposalEligibleParams(query: Readonly<ListDisposalEligibleAssetsQuer
 }
 
 export interface AdjustmentService {
-  listAdjustments: (query: Readonly<ListAdjustmentsQuery>) => Promise<InventoryAdjustmentPage>
-  getAdjustment: (adjustmentId: string) => Promise<InventoryAdjustment>
-  createAdjustment: (request: Readonly<AdjustmentDraftRequest>) => Promise<InventoryAdjustment>
+  listAdjustments: (query: Readonly<ListAdjustmentsQuery>) => Promise<ApiPage<AdjustmentListItem>>
+  getAdjustment: (adjustmentId: string) => Promise<AdjustmentDetail>
+  createAdjustment: (request: Readonly<AdjustmentDraftRequest>) => Promise<AdjustmentDetail>
   updateAdjustment: (
     adjustmentId: string,
-    request: Readonly<UpdateAdjustmentRequest>,
-  ) => Promise<InventoryAdjustment>
-  /** Posts the draft; requires an Idempotency-Key for retry-safe execution. */
+    request: Readonly<AdjustmentUpdateRequest>,
+  ) => Promise<AdjustmentDetail>
+  /**
+   * Posts the draft; requires an Idempotency-Key for retry-safe execution.
+   * Returns the shared engine's `{ documentId, warnings }` projection.
+   */
   postAdjustment: (
     adjustmentId: string,
     rowVersion: number,
     idempotencyKey: string,
-  ) => Promise<AdjustmentPostResult>
+  ) => Promise<PostDocumentResponse>
   /**
    * Reverses a posted ordinary adjustment through a compensating document;
    * requires an Idempotency-Key. The server rejects reversal for disposal.
+   * Returns the compensating document's id only (201 `{ id }`).
    */
   reverseAdjustment: (
     adjustmentId: string,
     rowVersion: number,
     reason: string,
     idempotencyKey: string,
-  ) => Promise<AdjustmentReverseResult>
+  ) => Promise<ResourceIdResponse>
   listDisposalEligibleAssets: (
     query: Readonly<ListDisposalEligibleAssetsQuery>,
   ) => Promise<AssetPage>
 }
 
+
+
 /**
- * Contract-backed adjustment transport (e21-t01). Adjustments own the
+ * Contract-backed adjustment transport (D-INT-02). Adjustments own the
  * `/adjustments` endpoint family and are NOT served by the shared document
  * engine: docs/adjustment-workflow-decision.md establishes every adjustment
  * (disposal included) as a manager-owned exception whose only lifecycle is
- * Draft → Posted → Reversed. The API remains authoritative for policy
- * evaluation, posting eligibility (the SignedOriginal gate included),
- * optimistic-concurrency conflicts, and the terminal non-reversible disposal
- * state.
+ * Draft → Posted → Reversed. The API remains authoritative: policy and the
+ * SignedOriginal gate are read through the shared document engine under the
+ * SAME document id (the adjustment's `id`), posting eligibility, optimistic-
+ * concurrency conflicts, and the terminal non-reversible disposal state.
  */
 export function createAdjustmentService(transport: ApiTransport): AdjustmentService {
   return {
     async listAdjustments(query) {
-      const page = await transport.requestPage<InventoryAdjustment>({
+      return transport.requestPage<AdjustmentListItem>({
         path: ADJUSTMENTS_PATH,
         method: 'GET',
         query: toListParams(query),
       })
-      // The generated `InventoryAdjustmentPage` described a body the backend
-      // never sends on its own. Rebuild the documented view-model from the
-      // normalized `ApiPage` so the declared type and the runtime value agree.
-      return {
-        items: page.items,
-        meta: {
-          pageIndex: page.page - 1,
-          page: page.page,
-          pageSize: page.pageSize,
-          itemCount: page.totalItems,
-          totalItems: page.totalItems,
-          totalCount: page.totalItems,
-          totalPages: page.totalPages,
-          hasNextPage: page.hasNextPage,
-          hasPreviousPage: page.hasPreviousPage,
-        },
-      } as InventoryAdjustmentPage
     },
 
     async getAdjustment(adjustmentId) {
-      const response = await transport.request<InventoryAdjustment>({
+      return transport.request<AdjustmentDetail>({
         path: pathWithAdjustmentId(ADJUSTMENT_PATH, adjustmentId),
         method: 'GET',
       })
-      return response
     },
 
     async createAdjustment(request) {
-      const response = await transport.request<InventoryAdjustment>({
+      return transport.request<AdjustmentDetail>({
         path: ADJUSTMENTS_PATH,
         method: 'POST',
         body: request,
       })
-      return response
     },
 
     async updateAdjustment(adjustmentId, request) {
-      const response = await transport.request<InventoryAdjustment>({
+      return transport.request<AdjustmentDetail>({
         path: pathWithAdjustmentId(ADJUSTMENT_PATH, adjustmentId),
         method: 'PUT',
         body: request,
       })
-      return response
     },
 
     async postAdjustment(adjustmentId, rowVersion, idempotencyKey) {
-      const response = await transport.request<AdjustmentPostResult>({
+      return transport.request<PostDocumentResponse>({
         path: pathWithAdjustmentId(ADJUSTMENT_POST_PATH, adjustmentId),
         method: 'POST',
         body: { rowVersion },
         headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
       })
-      return response
     },
 
     async reverseAdjustment(adjustmentId, rowVersion, reason, idempotencyKey) {
-      const response = await transport.request<AdjustmentReverseResult>({
+      return transport.request<ResourceIdResponse>({
         path: pathWithAdjustmentId(ADJUSTMENT_REVERSE_PATH, adjustmentId),
         method: 'POST',
         body: { reason, rowVersion },
         headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
       })
-      return response
     },
 
     async listDisposalEligibleAssets(query) {

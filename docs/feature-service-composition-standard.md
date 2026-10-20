@@ -102,7 +102,13 @@ is presented or form field errors are mapped. On a contract `409`, use
 `isConflictError(error)` only to select the feature's documented recovery:
 discard stale transient UI and refetch its authoritative detail/policy/history
 keys. A 409 can also be a state or idempotency conflict, so no generic helper
-may assume a particular recovery or retry it automatically.
+may assume a particular recovery or retry it automatically. Where the recovery
+copy names ANOTHER USER as the writer, use `isConcurrencyConflict(error)`
+instead: it narrows the 409 to the optimistic-concurrency codes, which the API
+emits ending in `VERSION_MISMATCH` (`*_ROW_VERSION_MISMATCH`,
+`MATERIALS_CATALOG_VERSION_MISMATCH`), leaving every business or idempotency 409
+to the normal error path. `isConflictError` stays the right choice where the
+recovery refetches without claiming who wrote the row.
 
 ## Retry-sensitive mutations and row versions
 

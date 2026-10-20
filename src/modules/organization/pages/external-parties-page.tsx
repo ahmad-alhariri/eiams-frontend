@@ -17,7 +17,7 @@ import {
 } from '@/modules/organization/schemas/external-party.schemas'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
-import { isConflictError } from '@/shared/services/mutation-safety'
+import { isConcurrencyConflict } from '@/shared/services/mutation-safety'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
@@ -108,10 +108,11 @@ function ExternalPartiesPage() {
         // Not routed through `submitFeedback`, because that helper prints the
         // generic 409 guidance ("refresh the page") before the caller can see
         // the error — and a refresh is precisely what discards the row version
-        // this dialog is holding. `EXTERNAL_PARTIES_ROW_VERSION_MISMATCH` is
-        // the one failure here the screen can act on, so it gets the recovery
-        // dialog instead.
-        if (isConflictError(error)) {
+        // this dialog is holding. A CONCURRENT-EDIT 409 is the one failure here
+        // the screen can act on, so it gets the recovery dialog instead; a
+        // business 409 reports a rejected write with no stale row, so it falls
+        // through to the same Arabic toast every other failure gets.
+        if (isConcurrencyConflict(error)) {
           setConflictActive(true)
           return
         }
@@ -146,7 +147,10 @@ function ExternalPartiesPage() {
     const nextStatus = statusTarget.status === 'Active' ? 'Inactive' : 'Active'
 
     // The status command carries the same version guard as the update, so it
-    // can 409 for the same reason and is handled the same way.
+    // can 409 for the same reason and is handled the same way. Every other
+    // failure — a business 409 included — is already reported by `submitFeedback`
+    // with the same Arabic toast `reportApiError` produces, so the bare `return`
+    // below suppresses no feedback; it only skips the success toast.
     try {
       await submitFeedback(async () => {
         await statusMutation.mutateAsync({
@@ -156,12 +160,11 @@ function ExternalPartiesPage() {
         })
       })
     } catch (error: unknown) {
-      if (isConflictError(error)) {
+      if (isConcurrencyConflict(error)) {
         // Close the confirm first: two stacked modals is one too many, and the
         // conflict dialog supersedes it.
         setStatusTarget(null)
         setConflictActive(true)
-        return
       }
       return
     }

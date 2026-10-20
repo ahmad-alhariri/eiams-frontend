@@ -9,9 +9,10 @@ import { toast } from '@/shared/ui/toast-manager'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import type {
   DocumentPolicy,
-  InventoryAdjustment,
   ProblemDetails,
+  WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
+import type { AdjustmentDetail } from '@/modules/adjustment/types/adjustment.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   createActionAvailability,
@@ -143,6 +144,7 @@ function renderDocumentDetail(client: QueryClient) {
 
 function renderAdjustmentDetail(client: QueryClient) {
   client.setQueryData(authSessionQueryKey, sessionWith(ADJUSTMENT_CODES))
+  wireAdjustmentReads()
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[`/adjustments/${ADJUSTMENT_ID}`]}>
@@ -185,52 +187,70 @@ function draftPolicy(): DocumentPolicy {
   })
 }
 
-function adjustmentFixture(overrides: Partial<InventoryAdjustment> = {}): InventoryAdjustment {
+function adjustmentFixture(): AdjustmentDetail {
   return {
-    adjustmentId: ADJUSTMENT_ID,
-    attachments: [],
-    countReference: null,
-    createdAt: '2026-08-26T08:00:00.000Z',
-    createdBy: { id: fixtureUuid(909), displayName: 'مدير المستودع' },
-    documentId: '00000000-0000-4000-8000-0000000009a2',
-    documentReference: 'EIAMS-ADJ-DRAFT-9001',
-    lines: [
-      {
-        adjustmentLineId: '00000000-0000-4000-8000-0000000009a3',
-        material: { id: fixtureUuid(910), displayName: 'حبر طابعة' },
-        quantityDelta: -2,
-        reason: 'عجز مؤكد بمراجعة اللجنة',
-      },
-    ],
-    policy: {
-      actions: [
-        {
-          action: 'Post',
-          allowed: true,
-          confirmationRequired: false,
-          presentation: 'Enabled',
-          reasonAr: null,
-          reasonCode: null,
-          reasonRequired: false,
-        },
-      ],
-      advisories: [],
-      blockers: [],
-      documentId: '00000000-0000-4000-8000-0000000009a2',
-      documentStatus: 'Draft',
-      evaluatedAt: '2026-08-26T08:05:00.000Z',
-      policyKind: 'Adjustment',
-      rowVersion: 1,
-      signedOriginalSatisfied: true,
-    },
-    postedAt: null,
+    id: ADJUSTMENT_ID,
+    warehouseId: fixtureUuid(911),
+    warehouseCode: 'WH-01',
+    warehouseName: 'المستودع المركزي',
+    countId: null,
     purpose: 'DirectCorrection',
     reason: 'تسوية عجز إدخال بعد جرد المستودع المركزي',
-    rowVersion: 1,
+    systemReferenceNumber: 'EIAMS-ADJ-DRAFT-9001',
+    createdAtUtc: '2026-08-26T08:00:00.000Z',
+    postedAtUtc: null,
+    // The module's lifecycle and wire documentStatus share the vocabulary.
     status: 'Draft',
-    warehouse: { id: fixtureUuid(911), displayName: 'المستودع المركزي' },
-    ...overrides,
+    documentStatus: 'Draft',
+    rowVersion: 1,
+    lines: [
+      {
+        lineId: '00000000-0000-4000-8000-0000000009a3',
+        materialId: fixtureUuid(910),
+        materialCode: 'IT-CON-INK-9A1',
+        materialNameAr: 'حبر طابعة',
+        quantity: -2,
+        difference: -2,
+        reason: 'عجز مؤكد بمراجعة اللجنة',
+        assets: [],
+      },
+    ],
   }
+}
+
+/**
+ * The rewired detail page fetches policy and attachments from the shared
+ * document engine keyed by the adjustment's OWN id (there is no separate
+ * documentId), so every adjustment render needs these two reads registered.
+ * The signing gate is satisfied so the Post action presents as enabled.
+ */
+function adjustmentWireDocument(): WarehouseDocument {
+  return createWarehouseDocument({
+    documentId: ADJUSTMENT_ID,
+    documentStatus: 'Draft',
+    documentType: 'Adjustment',
+    rowVersion: 1,
+    policy: createDocumentPolicy({
+      documentId: ADJUSTMENT_ID,
+      documentStatus: 'Draft',
+      rowVersion: 1,
+      policyKind: 'Adjustment',
+      signedOriginalSatisfied: true,
+      actions: [createActionAvailability('Post')],
+    }),
+  })
+}
+
+function wireAdjustmentReads() {
+  const document = adjustmentWireDocument()
+  server.use(
+    http.get(`${API_BASE_URL}/warehouse-documents/${ADJUSTMENT_ID}`, () =>
+      okJson(wireDocumentDetails(document)),
+    ),
+    http.get(`${API_BASE_URL}/warehouse-documents/${ADJUSTMENT_ID}/policy`, () =>
+      okJson(toWirePolicy(document)),
+    ),
+  )
 }
 
 /** 409 problem carrying the contract's Arabic conflict sentence. */
@@ -366,7 +386,7 @@ describe('F-2 — an adjustment retry reuses one idempotency key; a new action m
           committed = true
           return HttpResponse.error()
         }
-        return okJson({ adjustmentId: ADJUSTMENT_ID, postedAt: null })
+        return okJson({ documentId: ADJUSTMENT_ID, warnings: [] })
       }),
     )
 
@@ -405,7 +425,7 @@ describe('F-2 — an adjustment retry reuses one idempotency key; a new action m
         if (postCalls === 1) {
           return toWireErrorResponse(adjustmentConflictProblem(), 409)
         }
-        return okJson({ adjustmentId: ADJUSTMENT_ID, postedAt: null })
+        return okJson({ documentId: ADJUSTMENT_ID, warnings: [] })
       }),
     )
 

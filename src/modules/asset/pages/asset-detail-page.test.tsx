@@ -7,10 +7,10 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  createAssetCustody,
   createAsset as createAssetFixture,
   fixtureUuid,
 } from '@/test/msw/factories'
+import type { AssetCustodyTimelineRow } from '@/modules/asset/services/asset.service'
 import { server } from '@/test/msw/server'
 import { createQueryClient } from '@/shared/services/query.client'
 import { formatDateTime } from '@/shared/utils/format'
@@ -27,6 +27,28 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   }),
 }))
 
+/**
+ * Live wire for `GET /assets/{assetId}/custody-timeline` (D-INT-02): holds
+ * the typed fields only. Holder display name lives in the sibling counterpart
+ * lookup and is not part of the timeline row.
+ */
+function buildTimelineEntry(overrides: Partial<AssetCustodyTimelineRow> = {}): AssetCustodyTimelineRow {
+  return {
+    assetId: ASSET_ID,
+    custodyId: fixtureUuid(51),
+    custodyKind: 'Operational',
+    fromUtc: '2026-08-24T08:00:00.000Z',
+    holderId: fixtureUuid(20),
+    holderType: 'OrganizationalUnit',
+    issueDocumentId: fixtureUuid(20),
+    returnDocumentId: null,
+    rowVersion: 1,
+    status: 'Active',
+    toUtc: null,
+    ...overrides,
+  }
+}
+
 function useDetailHandlers() {
   server.use(
     http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
@@ -42,24 +64,8 @@ function useDetailHandlers() {
         }),
       ),
     ),
-    http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () =>
-      okJson([
-        createAssetCustody({
-          custodyId: fixtureUuid(51),
-          assetId: ASSET_ID,
-          assetNumber: 'AST-2024-C01',
-          custodyKind: 'Operational',
-          status: 'Active',
-          holder: {
-            displayName: 'مديرية المعلوماتية',
-            id: fixtureUuid(20),
-            secondaryLabelAr: null,
-            status: 'Active' as const,
-            type: 'OrganizationalUnit' as const,
-          },
-          fromTs: '2026-08-24T08:00:00.000Z',
-        }),
-      ]),
+    http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () =>
+      okJson([buildTimelineEntry()]),
     ),
   )
 }
@@ -103,7 +109,7 @@ describe('AssetDetailPage (e18-t03)', () => {
     useDetailHandlers()
     renderPage()
 
-    expect(await screen.findByText(/الحائز: مديرية المعلوماتية/)).toBeInTheDocument()
+    expect(await screen.findByText(/الحائز: OrganizationalUnit/)).toBeInTheDocument()
     expect(screen.getByText('حفظ تشغيلي')).toBeInTheDocument()
     expect(screen.getByText('نشطة')).toBeInTheDocument()
   })
@@ -119,7 +125,7 @@ describe('AssetDetailPage (e18-t03)', () => {
           }),
         ),
       ),
-      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () => okJson([])),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () => okJson([])),
     )
     renderPage()
 
@@ -127,12 +133,13 @@ describe('AssetDetailPage (e18-t03)', () => {
   })
 
   // e24-t08: this page is the second surface rendering the same append-only
-  // custody data as /assets/:assetId/custody. It rendered `fromTs` as a raw ISO
-  // string and never rendered `toTs`, so the two surfaces of one immutable
-  // ledger disagreed. Browser QA on the dev mock caught the raw ISO string.
+  // custody data as /assets/:assetId/custody-timeline. Live row uses
+  // `fromUtc` / `toUtc` (D-INT-02). It rendered `fromTs` as a raw ISO string
+  // and never rendered `toTs`, so the two surfaces of one immutable ledger
+  // disagreed. Browser QA on the dev mock caught the raw ISO string.
   it('formats custody timestamps and shows a closed row end time', async () => {
-    const fromTs = '2026-08-24T08:00:00.000Z'
-    const toTs = '2026-09-02T11:30:00.000Z'
+    const fromUtc = '2026-08-24T08:00:00.000Z'
+    const toUtc = '2026-09-02T11:30:00.000Z'
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
         okJson(
@@ -143,36 +150,26 @@ describe('AssetDetailPage (e18-t03)', () => {
           }),
         ),
       ),
-      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () =>
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () =>
         okJson([
-          createAssetCustody({
+          buildTimelineEntry({
             custodyId: fixtureUuid(52),
-            assetId: ASSET_ID,
-            assetNumber: 'AST-2024-C01',
-            custodyKind: 'Operational',
             status: 'Closed',
-            holder: {
-              displayName: 'مديرية المعلوماتية',
-              id: fixtureUuid(20),
-              secondaryLabelAr: null,
-              status: 'Active' as const,
-              type: 'OrganizationalUnit' as const,
-            },
-            fromTs,
-            toTs,
+            fromUtc,
+            toUtc,
           }),
         ]),
       ),
     )
     renderPage()
 
-    await screen.findByText(/الحائز: مديرية المعلوماتية/)
+    await screen.findByText(/الحائز: OrganizationalUnit/)
 
-    expect(screen.getByText(formatDateTime(fromTs))).toBeInTheDocument()
+    expect(screen.getByText(formatDateTime(fromUtc))).toBeInTheDocument()
     expect(screen.getByText('نهاية العهدة:')).toBeInTheDocument()
-    expect(screen.getByText(formatDateTime(toTs))).toBeInTheDocument()
-    expect(document.body.textContent).not.toContain(fromTs)
-    expect(document.body.textContent).not.toContain(toTs)
+    expect(screen.getByText(formatDateTime(toUtc))).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain(fromUtc)
+    expect(document.body.textContent).not.toContain(toUtc)
   })
 
   it('omits the end time for an open custody row', async () => {
@@ -186,30 +183,20 @@ describe('AssetDetailPage (e18-t03)', () => {
           }),
         ),
       ),
-      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () =>
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () =>
         okJson([
-          createAssetCustody({
+          buildTimelineEntry({
             custodyId: fixtureUuid(53),
-            assetId: ASSET_ID,
-            assetNumber: 'AST-2024-C01',
-            custodyKind: 'Operational',
             status: 'Active',
-            holder: {
-              displayName: 'مديرية المعلوماتية',
-              id: fixtureUuid(20),
-              secondaryLabelAr: null,
-              status: 'Active' as const,
-              type: 'OrganizationalUnit' as const,
-            },
-            fromTs: '2026-08-24T08:00:00.000Z',
-            toTs: null,
+            fromUtc: '2026-08-24T08:00:00.000Z',
+            toUtc: null,
           }),
         ]),
       ),
     )
     renderPage()
 
-    await screen.findByText(/الحائز: مديرية المعلوماتية/)
+    await screen.findByText(/الحائز: OrganizationalUnit/)
     expect(screen.queryByText('نهاية العهدة:')).not.toBeInTheDocument()
   })
 
@@ -232,27 +219,17 @@ describe('AssetDetailPage (e18-t03)', () => {
           }),
         ),
       ),
-      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () => {
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () => {
         custodyRequests += 1
         if (custodyShouldFail) {
           return new HttpResponse(null, { status: 500 })
         }
         return okJson([
-          createAssetCustody({
+          buildTimelineEntry({
             custodyId: fixtureUuid(54),
-            assetId: ASSET_ID,
-            assetNumber: 'AST-2024-C01',
-            custodyKind: 'Operational',
             status: 'Active',
-            holder: {
-              displayName: 'مديرية المعلوماتية',
-              id: fixtureUuid(20),
-              secondaryLabelAr: null,
-              status: 'Active' as const,
-              type: 'OrganizationalUnit' as const,
-            },
-            fromTs: '2026-08-24T08:00:00.000Z',
-            toTs: null,
+            fromUtc: '2026-08-24T08:00:00.000Z',
+            toUtc: null,
           }),
         ])
       }),
@@ -271,7 +248,7 @@ describe('AssetDetailPage (e18-t03)', () => {
     custodyShouldFail = false
     fireEvent.click(within(error).getByRole('button', { name: 'إعادة المحاولة' }))
 
-    expect(await screen.findByText(/الحائز: مديرية المعلوماتية/)).toBeInTheDocument()
+    expect(await screen.findByText(/الحائز: OrganizationalUnit/)).toBeInTheDocument()
     expect(screen.queryByText('تعذّر تحميل سجل العهدة')).not.toBeInTheDocument()
     expect(custodyRequests).toBeGreaterThan(1)
   })
@@ -279,7 +256,7 @@ describe('AssetDetailPage (e18-t03)', () => {
   it('uses the shared retry Button, not a hand-rolled element, for the asset read failure', async () => {
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () => new HttpResponse(null, { status: 500 })),
-      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody`, () => okJson([])),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () => okJson([])),
     )
     const { container } = renderPage(createDeterministicClient())
 

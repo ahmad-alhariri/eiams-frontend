@@ -210,6 +210,38 @@ describe('catalog mutation hooks', () => {
     expect(MATERIAL_UPDATE_CONFLICT_COPY.slot).toBe('material-conflict-dialog')
   })
 
+  it('rethrows a business 409 so the caller reports it instead of showing the reload dialog', async () => {
+    const client = createQueryClient()
+    const material = makeMaterial()
+
+    server.use(
+      http.put(`${API_BASE_URL}/catalog/materials/${material.id}`, () =>
+        errJson(409, {
+          code: 'MATERIALS_CATALOG_VERSION_ALREADY_APPLIED',
+          message: 'conflict',
+        }),
+      ),
+    )
+
+    function QueryWrapper({ children }: PropsWithChildren) {
+      return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    }
+
+    const { result } = renderHook(() => useMaterialUpdateWithConflict({}), {
+      wrapper: QueryWrapper,
+    })
+
+    // A 409 on the wire, but not an optimistic-concurrency one: nothing the
+    // screen holds is stale, so `capture` must decline and the write's failure
+    // must reach the caller's own Arabic feedback.
+    await expect(
+      result.current.submit({ materialId: material.id, request: MATERIAL_REQUEST }),
+    ).rejects.toThrow()
+
+    await waitFor(() => expect(result.current.dialog).toBeNull())
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('rethrows a non-409 failure so the caller keeps its own Arabic feedback', async () => {
     const client = createQueryClient()
     const material = makeMaterial()

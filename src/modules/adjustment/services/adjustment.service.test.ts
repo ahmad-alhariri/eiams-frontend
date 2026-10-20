@@ -107,7 +107,7 @@ describe('createAdjustmentService (e21-t01)', () => {
   })
 
   it('fetches one adjustment by id', async () => {
-    const adjustment = { adjustmentId: ADJUSTMENT_ID, status: 'Draft' }
+    const adjustment = { id: ADJUSTMENT_ID, status: 'Draft', lines: [] }
     mockedRequest.mockReturnValue(envelope(adjustment))
     const service = createAdjustmentService(testTransport)
 
@@ -125,7 +125,7 @@ describe('createAdjustmentService (e21-t01)', () => {
       rowVersion: 0,
       lines: [],
     } satisfies AdjustmentDraftRequest
-    mockedRequest.mockReturnValue(envelope({ adjustmentId: ADJUSTMENT_ID, status: 'Draft' }))
+    mockedRequest.mockReturnValue(envelope({ id: ADJUSTMENT_ID, status: 'Draft', lines: [] }))
     const service = createAdjustmentService(testTransport)
 
     const result = await service.createAdjustment(draft)
@@ -138,15 +138,15 @@ describe('createAdjustmentService (e21-t01)', () => {
     expect(result.status).toBe('Draft')
   })
 
-  it('updates a mutable draft through PUT', async () => {
+  it('updates a mutable draft through PUT with only the mutable fields', async () => {
     const request = {
-      warehouseId: ADJUSTMENT_ID,
-      purpose: 'DirectCorrection' as const,
-      reason: 'سبب معدّل',
+      // Purpose and countId are immutable after create — the update body
+      // carries only the rowVersion, the optional reason, and the lines.
       rowVersion: 3,
+      reason: 'سبب معدّل',
       lines: [],
     }
-    mockedRequest.mockReturnValue(envelope({ adjustmentId: ADJUSTMENT_ID, rowVersion: 4 }))
+    mockedRequest.mockReturnValue(envelope({ id: ADJUSTMENT_ID, rowVersion: 4, lines: [] }))
     const service = createAdjustmentService(testTransport)
 
     await service.updateAdjustment(ADJUSTMENT_ID, request)
@@ -160,7 +160,7 @@ describe('createAdjustmentService (e21-t01)', () => {
 
   it('posts a draft idempotently with the Idempotency-Key header', async () => {
     mockedRequest.mockReturnValue(
-      envelope({ adjustment: { adjustmentId: ADJUSTMENT_ID }, stockMovements: [] }),
+      envelope({ documentId: '523e4567-e89b-42d3-a456-426614174005', warnings: [] }),
     )
     const service = createAdjustmentService(testTransport)
 
@@ -175,13 +175,7 @@ describe('createAdjustmentService (e21-t01)', () => {
   })
 
   it('reverses a posted adjustment with a reason and an Idempotency-Key header', async () => {
-    mockedRequest.mockReturnValue(
-      envelope({
-        originalAdjustment: { adjustmentId: ADJUSTMENT_ID },
-        compensatingAdjustment: { adjustmentId: 'comp-1' },
-        lifecycleEvent: { eventId: 'evt-1' },
-      }),
-    )
+    mockedRequest.mockReturnValue(envelope({ id: '523e4567-e89b-42d3-a456-426614174005' }))
     const service = createAdjustmentService(testTransport)
 
     const result = await service.reverseAdjustment(ADJUSTMENT_ID, 8, 'خطأ في الترحيل', 'idem-rev-1')
@@ -192,7 +186,7 @@ describe('createAdjustmentService (e21-t01)', () => {
       data: { reason: 'خطأ في الترحيل', rowVersion: 8 },
       headers: { 'Idempotency-Key': 'idem-rev-1' },
     })
-    expect(result.compensatingAdjustment).toBeDefined()
+    expect(result.id).toBe('523e4567-e89b-42d3-a456-426614174005')
   })
 
   it('lists disposal-eligible assets with search and warehouse params', async () => {

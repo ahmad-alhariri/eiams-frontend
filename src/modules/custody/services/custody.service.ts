@@ -2,28 +2,48 @@
 import { apiTransport } from '@/shared/api/transport'
 
 import type {
-  CustodyMutationRequest,
+  AssignAssetCustodyRequest,
+  CustodyAssignmentCreated,
   ListCustodiesQuery,
+  TransferCustodyRequest,
 } from '@/modules/custody/types/custody.types'
-import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import type { Custody, CustodyPage, paths } from '@/shared/types/generated/eiams-v1'
 
 const CUSTODIES_PATH = '/custodies' satisfies keyof paths
-const CUSTODY_ASSIGN_PATH = '/custodies/assign' satisfies keyof paths
+const CUSTODY_ASSIGN_PATH = '/assets/{assetId}/custody-assignment'
 const CUSTODY_TRANSFER_PATH = '/custodies/{custodyId}/transfer' satisfies keyof paths
 
 function pathWithId(path: string, placeholder: string, value: string): string {
   return path.replace(placeholder, encodeURIComponent(value))
 }
 
-/** Contract-shaped custody transport (e19-t01). Read-only list plus the two idempotent mutations. */
+/**
+ * Contract-shaped custody transport (e19-t01). Read-only list plus the two
+ * idempotent mutations.
+ *
+ * `assignCustody` lives at `POST /assets/{assetId}/custody-assignment` in the
+ * live API (verified 2026-10-20). The previous `POST /custodies/assign` does
+ * not exist; the snapshot shape `CustodyMutationRequest` is not what the live
+ * controller accepts (the asset id is in the path, not the body).
+ *
+ * `transferCustody` stays at `POST /custodies/{custodyId}/transfer`; its live
+ * request body (`TransferCustodyRequest`) differs from the assign body and is
+ * its own handwritten type.
+ *
+ * The assign controller does NOT accept an `Idempotency-Key` header — verified
+ * against `src/Web.Api/Controllers/Custodies/AssignAssetCustodyController.cs` on
+ * 2026-10-20; the transfer controller does not declare one either. No header
+ * is forwarded for either call.
+ */
 export interface CustodyService {
   listCustodies: (query: ListCustodiesQuery) => Promise<CustodyPage>
-  assignCustody: (request: CustodyMutationRequest, idempotencyKey: string) => Promise<Custody>
+  assignCustody: (
+    assetId: string,
+    request: AssignAssetCustodyRequest,
+  ) => Promise<CustodyAssignmentCreated>
   transferCustody: (
     custodyId: string,
-    request: CustodyMutationRequest,
-    idempotencyKey: string,
+    request: TransferCustodyRequest,
   ) => Promise<Custody>
 }
 
@@ -50,21 +70,19 @@ export function createCustodyService(transport: ApiTransport): CustodyService {
         },
       } as CustodyPage
     },
-    async assignCustody(request, idempotencyKey) {
-      const response = await transport.request<Custody>({
-        path: CUSTODY_ASSIGN_PATH,
+    async assignCustody(assetId, request) {
+      const response = await transport.request<CustodyAssignmentCreated>({
+        path: pathWithId(CUSTODY_ASSIGN_PATH, '{assetId}', assetId),
         method: 'POST',
         body: request,
-        headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
       })
       return response
     },
-    async transferCustody(custodyId, request, idempotencyKey) {
+    async transferCustody(custodyId, request) {
       const response = await transport.request<Custody>({
         path: pathWithId(CUSTODY_TRANSFER_PATH, '{custodyId}', custodyId),
         method: 'POST',
         body: request,
-        headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
       })
       return response
     },

@@ -43,7 +43,11 @@ function seedCustodyEndpoints() {
     http.get(`${API_BASE_URL}/custodies`, () =>
       okPageJson([row], { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 }),
     ),
-    http.post(`${API_BASE_URL}/custodies/assign`, () => okJson(row)),
+    // Live `POST /assets/{assetId}/custody-assignment` answers 201
+    // `ApiResponse<ResourceIdResponse>` — `{ id }` only, never the full row.
+    http.post(`${API_BASE_URL}/assets/${ASSET_ID}/custody-assignment`, () =>
+      okJson({ id: CUSTODY_ID }),
+    ),
   )
 
   return row
@@ -152,13 +156,11 @@ describe('custody row cache key (e24-t10 review)', () => {
 
     await act(async () => {
       await result.current.assign.mutateAsync({
+        assetId: ASSET_ID,
         request: {
-          assetId: ASSET_ID,
-          custodyKind: 'Operational',
-          holderType: 'OrganizationalUnit',
-          holderId: fixtureUuid(21),
-        } as never,
-        idempotencyKey: 'idempotency-custody-row',
+          employeeId: fixtureUuid(21),
+          expectedCustodyRowVersion: 1,
+        },
       })
     })
 

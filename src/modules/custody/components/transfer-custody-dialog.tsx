@@ -9,9 +9,7 @@ import {
   transferCustodySchema,
   type TransferCustodyFormValues,
 } from '@/modules/custody/schemas/transfer-custody.schema'
-import type { CustodyMutationRequest } from '@/modules/custody/types/custody.types'
-import { createIdempotencyKey } from '@/shared/services/mutation-safety'
-import type { AssetCustody } from '@/shared/types/generated/eiams-v1'
+import type { TransferCustodyRequest } from '@/modules/custody/types/custody.types'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -24,14 +22,25 @@ import {
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 
+/**
+ * Minimal row shape the transfer dialog needs from the custody list.
+ */
+interface TransferCustodyRow {
+  readonly custodyId: string
+  readonly custodyKind: 'Operational' | 'Personal'
+  readonly rowVersion: number
+  readonly assetNumber: string
+}
+
 export interface TransferCustodyDialogProps {
-  custody: AssetCustody
+  custody: TransferCustodyRow
 }
 
 /**
  * Custody responsibility transfer (e19-t05 / PRD §12.8 step 2 variant):
  * closes the current row and opens a new one for the chosen holder via the
- * idempotent transfer mutation. Composed on the custody detail page.
+ * live `POST /custodies/{custodyId}/transfer`. Composed on the custody detail
+ * page.
  */
 export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
   const [open, setOpen] = useState(false)
@@ -52,22 +61,21 @@ export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
   }, [open])
 
   const submit = methods.handleSubmit((values) => {
-    const request: CustodyMutationRequest = {
+    // Live wire for `POST /custodies/{custodyId}/transfer`:
+    //   { subjectType, newHolderType, newHolderId, newCustodyKind, expectedRowVersion, note? }
+    const request: TransferCustodyRequest = {
       subjectType: 'Asset',
-      assetId: custody.assetId,
-      custodyKind: custody.custodyKind,
-      effectiveAt: new Date().toISOString(),
-      holderId: values.holderId,
-      holderType: 'Employee',
-      issueDocumentId: custody.issueDocumentId,
-      reason:
+      newHolderType: 'Employee',
+      newHolderId: values.holderId,
+      newCustodyKind: custody.custodyKind,
+      expectedRowVersion: custody.rowVersion,
+      note:
         values.reason !== undefined && values.reason !== ''
           ? `${values.reason} (${values.holderDisplayName})`
           : `مبادلة مسؤولية إلى ${values.holderDisplayName}`,
-      rowVersion: custody.rowVersion,
     }
     transferMutation.mutate(
-      { custodyId: custody.custodyId, request, idempotencyKey: createIdempotencyKey() },
+      { custodyId: custody.custodyId, request },
       { onSuccess: () => setOpen(false) },
     )
   })

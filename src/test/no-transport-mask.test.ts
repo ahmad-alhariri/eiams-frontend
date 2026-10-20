@@ -116,7 +116,28 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // Then +1 for `opening-initialization.ts`, the D-OPEN-02 initialization rule.
     // Then -1 for the deleted `shared/api/api-error.ts`, a dead second
     // error-copy table keyed on codes the wire never carries.
-    assertScannedFiles(PRODUCTION_FILES, 390)
+    // Re-measured at 395 for the Return-module surface added by
+    // `return-workflow-frontend-fixes`: the four application files under
+    // `src/modules/custody/` (`hooks/use-return-eligible-items.ts`,
+    // `components/return-original-issue-selector.tsx`,
+    // `components/return-line-asset-selector.tsx`,
+    // `pages/return-document-form-page.tsx`). None introduce a `{} as any`,
+    // a `client as unknown as ApiTransport` cast, or a `transport as any`,
+    // so every banned-pattern assertion below stays green.
+    // Then +1 at 396 for `src/shared/api/openapi-drift.ts`, the pure
+    // endpoint-discovery and drift-comparison module behind the contract-drift
+    // gate; its two `*.test.ts` companions are not application source and do not
+    // move this count. It introduces none of the three banned shapes.
+    // Re-measured at 398 by `mutable-draft-window` (D-REV-01): +2 for the two
+    // application files that un-dead-end a server-created DRAFT document -
+    // `src/shared/documents/draft-paper-reference-editor.tsx` and
+    // `src/shared/documents/use-document-paper-reference.ts`. The editor is a
+    // pure RHF + Zod form backed by TanStack Query; the hook wraps the existing
+    // `updatePaperReference` transport exactly the way the other document
+    // mutations do. Neither introduces any of the three banned shapes
+    // (`{} as any`, `client as unknown as ApiTransport`, `transport as any`),
+    // so every banned-pattern assertion below stays green.
+    assertScannedFiles(PRODUCTION_FILES, 398)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

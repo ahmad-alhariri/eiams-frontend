@@ -9,10 +9,10 @@ import { describe, expect, it, vi } from 'vitest'
 import AdjustmentsListPage from './adjustments-list-page'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
+import type { AdjustmentListItem } from '@/modules/adjustment/types/adjustment.types'
 import type {
   AdjustmentPurpose,
   AdjustmentStatus,
-  InventoryAdjustment,
 } from '@/shared/types/generated/eiams-v1'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
@@ -47,60 +47,43 @@ const ADJUSTMENT_ID = '423e4567-e89b-42d3-a456-426614174004'
 const WAREHOUSE_ID = '823e4567-e89b-42d3-a456-426614174008'
 
 function adjustmentFixture(overrides: {
-  adjustmentId?: string
-  documentReference?: string
+  id?: string
+  systemReferenceNumber?: string
   purpose?: AdjustmentPurpose
   status?: AdjustmentStatus
-}): InventoryAdjustment {
+}): AdjustmentListItem {
   const purpose = overrides.purpose ?? 'DirectCorrection'
+  const status = overrides.status ?? 'Draft'
   return {
-    adjustmentId: overrides.adjustmentId ?? ADJUSTMENT_ID,
-    documentReference:
-      overrides.documentReference ??
+    id: overrides.id ?? ADJUSTMENT_ID,
+    warehouseId: WAREHOUSE_ID,
+    warehouseCode: 'WH-01',
+    warehouseName: 'المستودع المركزي',
+    countId: purpose === 'CountVariance' ? '623e4567-e89b-42d3-a456-426614174006' : null,
+    purpose,
+    // The wire documentStatus shares the shared document engine's vocabulary.
+    documentStatus: status,
+    status,
+    reason: 'تسوية عجز إدخال بعد جلسة الجرد الشهري للمستودع المركزي',
+    systemReferenceNumber:
+      overrides.systemReferenceNumber ??
       (purpose === 'CountVariance'
         ? 'EIAMS-ADJ-2026-0002'
         : purpose === 'Disposal'
           ? 'EIAMS-ADJ-2026-0003'
           : 'EIAMS-ADJ-2026-0001'),
-    createdAt: '2026-08-25T08:00:00.000Z',
-    createdBy: { id: fixtureUserId(), displayName: 'مدير المستودع' },
-    documentId: '523e4567-e89b-42d3-a456-426614174005',
-    countReference: purpose === 'CountVariance' ? ('EIAMS-CNT-2026-0007' as string | null) : null,
-    lines: [
-      {
-        adjustmentLineId: '623e4567-e89b-42d3-a456-426614174006',
-        material: { id: '723e4567-e89b-42d3-a456-426614174007', displayName: 'حاسوب مكتبي' },
-        quantityDelta: -2,
-        reason: 'تسوية عجز إدخال',
-      },
-    ],
-    policy: {
-      actions: [],
-      advisories: [],
-      blockers: [],
-      documentId: '523e4567-e89b-42d3-a456-426614174005',
-      documentStatus: 'Draft',
-      evaluatedAt: '2026-08-25T08:00:00.000Z',
-      policyKind: purpose === 'Disposal' ? 'Disposal' : 'Adjustment',
-      rowVersion: 1,
-      signedOriginalSatisfied: false,
-    },
-    postedAt: null,
-    purpose,
-    reason: 'تسوية عجز إدخال بعد جلسة الجرد الشهري للمستودع المركزي',
+    lineCount: 1,
+    totalDifference: -2,
+    createdAtUtc: '2026-08-25T08:00:00.000Z',
+    // Server rows carry the wire timestamps verbatim.
+    postedAtUtc: status === 'Draft' ? null : '2026-08-25T09:00:00.000Z',
     rowVersion: 2,
-    status: overrides.status ?? 'Draft',
-    warehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي' },
   }
-}
-
-function fixtureUserId(): string {
-  return '923e4567-e89b-42d3-a456-426614174009'
 }
 
 let capturedListUrl: URL | null = null
 
-function useAdjustmentsHandler(items: readonly InventoryAdjustment[]) {
+function useAdjustmentsHandler(items: readonly AdjustmentListItem[]) {
   capturedListUrl = null
   server.use(
     http.get(`${API_BASE_URL}/adjustments`, ({ request }) => {
@@ -135,12 +118,12 @@ describe('AdjustmentsListPage (e21-t02)', () => {
     useAdjustmentsHandler([
       adjustmentFixture({}),
       adjustmentFixture({
-        adjustmentId: '443e4567-e89b-42d3-a456-426614174044',
+        id: '443e4567-e89b-42d3-a456-426614174044',
         purpose: 'Disposal',
         status: 'Posted',
       }),
       adjustmentFixture({
-        adjustmentId: '453e4567-e89b-42d3-a456-426614174045',
+        id: '453e4567-e89b-42d3-a456-426614174045',
         purpose: 'CountVariance',
         status: 'Posted',
       }),

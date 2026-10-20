@@ -22,8 +22,8 @@ const FIRST_PAGE_SIZE = 25
 const TOTAL_LINES = 205
 
 interface SavedBody {
-  countRowVersion: number
-  lines: unknown[]
+  expectedRowVersion: number
+  actuals: unknown[]
 }
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
@@ -78,6 +78,11 @@ beforeEach(() => {
  * Server-paged handler over a mutable store: the count-lines read is 0-based
  * on pageIndex/pageSize, and a successful PUT is reflected in later reads so
  * the post-save reseed is observable.
+ *
+ * RESOLUTION-025: the save is `PUT /api/v1/inventory-counts/{countId}/actuals`
+ * with `{ actuals: [{ lineId, actualQuantity }], expectedRowVersion }`. The
+ * wire answers `ApiResponse<EmptyResponse>` (200 + empty body), so the handler
+ * returns `apiJson({})` instead of a paginated read.
  */
 function usePagedLinesHandlers(seed: readonly TestLine[]) {
   const store: TestLine[] = seed.map((entry) => ({ ...entry }))
@@ -97,28 +102,21 @@ function usePagedLinesHandlers(seed: readonly TestLine[]) {
         totalPages: Math.max(1, Math.ceil(store.length / pageSize)),
       })
     }),
-    http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, async ({ request }) => {
+    http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, async ({ request }) => {
       savedBody = (await request.json()) as SavedBody
-      for (const saved of savedBody.lines as {
-        countLineId: string
+      for (const saved of savedBody.actuals as {
+        lineId: string
         actualQuantity: number
-        reason?: string
       }[]) {
-        const target = store.find((entry) => entry.countLineId === saved.countLineId)
+        const target = store.find((entry) => entry.countLineId === saved.lineId)
         if (target === undefined) {
           continue
         }
         target.actualQuantity = saved.actualQuantity
         target.difference = saved.actualQuantity - target.snapshotQuantity
-        target.reason = saved.reason ?? null
         target.rowVersion += 1
       }
-      return okPageJson([], {
-        page: 1,
-        pageSize: FIRST_PAGE_SIZE,
-        totalCount: store.length,
-        totalPages: 1,
-      })
+      return apiJson({})
     }),
     // The workspace observes the count header as well as its lines, so the
     // conflict-recovery path can reload the session rowVersion
@@ -183,10 +181,10 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
       { timeout: 8000 },
     )
 
-    expect(savedBody?.countRowVersion).toBe(1)
-    expect(savedBody?.lines).toHaveLength(1)
-    const first = savedBody?.lines?.[0] as { countLineId: string; actualQuantity: number }
-    expect(first.countLineId).toBe('L1')
+    expect(savedBody?.expectedRowVersion).toBe(1)
+    expect(savedBody?.actuals).toHaveLength(1)
+    const first = savedBody?.actuals?.[0] as { lineId: string; actualQuantity: number }
+    expect(first.lineId).toBe('L1')
     expect(first.actualQuantity).toBe(23)
   }, 30000)
 
@@ -221,8 +219,8 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
       },
       { timeout: 8000 },
     )
-    const first = savedBody?.lines?.[0] as { countLineId: string; actualQuantity: number }
-    expect(first.countLineId).toBe('A1')
+    const first = savedBody?.actuals?.[0] as { lineId: string; actualQuantity: number }
+    expect(first.lineId).toBe('A1')
     expect(first.actualQuantity).toBe(0)
   }, 30000)
 
@@ -256,8 +254,8 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
       },
       { timeout: 8000 },
     )
-    expect(savedBody?.lines).toHaveLength(1)
-    expect((savedBody?.lines?.[0] as { countLineId: string }).countLineId).toBe('L26')
+    expect(savedBody?.actuals).toHaveLength(1)
+    expect((savedBody?.actuals?.[0] as { lineId: string }).lineId).toBe('L26')
   }, 40000)
 
   it('accepts a zero actual quantity and blocks a variance without a reason', async () => {
@@ -277,7 +275,7 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
       },
       { timeout: 8000 },
     )
-    expect((savedBody?.lines?.[0] as { actualQuantity: number }).actualQuantity).toBe(0)
+    expect((savedBody?.actuals?.[0] as { actualQuantity: number }).actualQuantity).toBe(0)
   }, 30000)
 
   it('saves a variance whose reason is still blank (the reason is the review gate)', async () => {
@@ -299,9 +297,13 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
       },
       { timeout: 8000 },
     )
-    const saved = savedBody?.lines?.[0] as { actualQuantity: number; reason?: string }
+    const saved = savedBody?.actuals?.[0] as { lineId: string; actualQuantity: number }
     expect(saved.actualQuantity).toBe(20)
-    expect(saved.reason).toBeUndefined()
+    expect(saved.lineId).toBe('L1')
+    // Variance reason is collected at the review gate (RESOLUTION-025), not on
+    // the actuals save; the wire never carries a per-line `reason` here.
+    expect(saved).not.toHaveProperty('reason')
+    expect(savedBody?.expectedRowVersion).toBe(1)
   }, 30000)
 
   it('sends a typed variance reason alongside the quantity', async () => {
@@ -322,7 +324,10 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
       },
       { timeout: 8000 },
     )
-    expect((savedBody?.lines?.[0] as { reason?: string }).reason).toBe('تالف أثناء النقل')
+    // Variance reason stays in the form draft; it is not on the actuals wire
+    // (RESOLUTION-025). The save rejects the absence with a review-gate message
+    // only when the operator clicks complete.
+    expect((savedBody?.actuals?.[0] as { reason?: string }).reason).toBeUndefined()
   }, 30000)
 
   it('guards page navigation when the current page has unsaved drafts (hbfu)', async () => {
@@ -465,7 +470,7 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
           warehouse: { id: 'w1', displayName: 'مستودع' },
         }),
       ),
-      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () => {
+      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () => {
         attemptLog.push(Date.now())
         // A conflict means the server rejected the save against its own current
         // state, which in practice means its rows have moved on. The fixture
@@ -651,7 +656,7 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
     await waitFor(() => {
       expect(savedBody).toBeDefined()
     })
-    expect(savedBody?.lines).toHaveLength(1)
+    expect(savedBody?.actuals).toHaveLength(1)
 
     // The blocked entry must survive the reseed, stay dirty, and keep being
     // reported as unsent.
@@ -672,7 +677,7 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
     await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '23')
     // A non-conflict failure, so the inline (non-dialog) branch is the one shown.
     server.use(
-      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
+      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () =>
         errJson(500, { code: 'x', message: 'boom' }),
       ),
     )

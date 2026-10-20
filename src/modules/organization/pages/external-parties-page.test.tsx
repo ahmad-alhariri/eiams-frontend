@@ -165,6 +165,41 @@ describe('ExternalPartiesPage', () => {
     )
   })
 
+  it('reports a business 409 through the Arabic toast and not the recovery dialog', async () => {
+    permissions.canManage = true
+    const user = userEvent.setup()
+    const party = createExternalParty({ nameAr: 'جهة مرفوضة', rowVersion: 3 })
+
+    server.use(
+      http.get(`${API_BASE_URL}/external-parties`, () => okPageJson([party])),
+      http.put(`${API_BASE_URL}/external-parties/${party.id}/status`, () =>
+        errJson(409, {
+          code: 'CUSTODIES_CANNOT_REVERSE_CHANGED_CUSTODY',
+          message: 'Custody changed after the original operation.',
+        }),
+      ),
+    )
+
+    render(<ExternalPartiesPage />, { wrapper: retryFreeWrapper })
+
+    await user.click(await screen.findByRole('button', { name: `تعطيل ${party.nameAr}` }))
+    await user.click(await screen.findByRole('button', { name: 'تعطيل الجهة' }))
+
+    // A 409 the server raises about the record's own state, not about a version
+    // this screen is holding: the reload dialog would claim another user edited
+    // the row, so the failure must stay on the ordinary Arabic error path.
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(
+          'تغيّرت حالة العهدة بعد العملية الأصلية، لذلك لا يمكن عكس السند.',
+        ).length,
+      ).toBeGreaterThan(0),
+    )
+    expect(
+      screen.queryByRole('alertdialog', { name: 'تغيّرت البيانات لدى خادم' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('sends only the permitted create body and keeps the version guard on update', async () => {
     permissions.canManage = true
     const user = userEvent.setup()

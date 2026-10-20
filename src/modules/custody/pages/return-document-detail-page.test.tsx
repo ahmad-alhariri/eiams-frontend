@@ -1,14 +1,18 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
+import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
+import { environment } from '@/config/env'
 import {
   createWarehouseDocumentDetailHandler,
   createWarehouseDocumentHistoryHandler,
   createWarehouseDocumentPolicyHandler,
+  toWireDetails,
 } from '@/test/msw/warehouse-document-handlers'
+import { errJson, okJson } from '@/test/msw/envelope'
 import {
   createDocumentPolicy,
   createWarehouseDocument,
@@ -46,6 +50,8 @@ function renderPage() {
 }
 
 describe('ReturnDocumentDetailPage (e19-t07)', () => {
+  const ISSUE_DOCUMENT_ID = '66666666-6666-4666-8666-666666666666'
+
   it('renders the read-only ReturnInfo petal from the shared detail shell', async () => {
     const returnDocument = createWarehouseDocument({
       documentId: DOCUMENT_ID,
@@ -53,14 +59,42 @@ describe('ReturnDocumentDetailPage (e19-t07)', () => {
       documentStatus: 'Draft',
       returnInfo: {
         assetIds: ['77777777-7777-4777-8777-777777777777'],
-        originalIssueDocumentId: '66666666-6666-4666-8666-666666666666',
+        originalIssueDocumentId: ISSUE_DOCUMENT_ID,
         originalIssueReference: 'ISSUE-2026-0001',
         returnReason: 'عودة المواد بعد انتهاء الحاجة',
       },
       policy: createDocumentPolicy({ documentId: DOCUMENT_ID }),
     })
+    // The detail projection carries the original issue only as its id, so the
+    // page resolves the human-readable reference from the issue's own detail
+    // read (one extra GET, same shared query hooks — no wire change).
+    const issueDocument = createWarehouseDocument({
+      documentId: ISSUE_DOCUMENT_ID,
+      documentType: 'Issue',
+      documentStatus: 'Posted',
+      systemReferenceNumber: 'DMS-ISS-2026-000032',
+      paperDocumentNumber: 'E2E-ISS-182557',
+      paperDocumentYear: 2026,
+    })
     server.use(
-      ...createWarehouseDocumentDetailHandler(returnDocument),
+      // ONE combined detail handler (id → document): a second same-pattern
+      // handler does not fall through on an id mismatch, so two registered
+      // detail handlers would 404 each other's documents.
+      http.get(`${environment.apiBaseUrl}/warehouse-documents/:documentId`, async ({ params }) => {
+        const documentId = String(params['documentId'])
+        if (documentId === ISSUE_DOCUMENT_ID) {
+          return okJson(toWireDetails(issueDocument))
+        }
+        if (documentId === DOCUMENT_ID) {
+          return okJson(toWireDetails(returnDocument))
+        }
+        // The MSW envelope discipline forbids a bare `HttpResponse.json` body,
+        // so the not-found path returns the wire error envelope `errJson` ships.
+        return errJson(404, {
+          code: 'WAREHOUSE_DOCUMENT_NOT_FOUND',
+          message: 'The requested warehouse document does not exist.',
+        })
+      }),
       ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(returnDocument)),
       ...createWarehouseDocumentPolicyHandler(returnDocument),
     )
@@ -78,8 +112,40 @@ describe('ReturnDocumentDetailPage (e19-t07)', () => {
     expect(screen.getByText('سبب الإرجاع')).toBeInTheDocument()
     expect(screen.queryByText('ISSUE-2026-0001')).not.toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '66666666-6666-4666-8666-666666666666' }),
-    ).toHaveAttribute('href', '/documents/issue/66666666-6666-4666-8666-666666666666')
+      await screen.findByRole('link', { name: 'DMS-ISS-2026-000032 (E2E-ISS-182557/2026)' }),
+    ).toHaveAttribute('href', `/documents/issue/${ISSUE_DOCUMENT_ID}`)
     expect(screen.queryByRole('link', { name: '77777777-7777-4777-8777-777777777777' })).toBeNull()
+  })
+
+  it('keeps the raw issue id as the link label when its own detail read is unavailable', async () => {
+    const returnDocument = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Return',
+      documentStatus: 'Draft',
+      returnInfo: {
+        assetIds: [],
+        originalIssueDocumentId: ISSUE_DOCUMENT_ID,
+        originalIssueReference: 'ISSUE-2026-0001',
+        returnReason: 'عودة المواد بعد انتهاء الحاجة',
+      },
+      policy: createDocumentPolicy({ documentId: DOCUMENT_ID }),
+    })
+    server.use(
+      // Serves the RETURN document only — the ISSUE id falls to the 404, so the
+      // issue read fails and the page degrades to the only reference it truly
+      // has: the id itself.
+      ...createWarehouseDocumentDetailHandler(returnDocument),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(returnDocument)),
+      ...createWarehouseDocumentPolicyHandler(returnDocument),
+    )
+
+    renderPage()
+
+    await waitFor(() =>
+      expect(screen.getByText('عودة المواد بعد انتهاء الحاجة')).toBeInTheDocument(),
+    )
+    expect(
+      screen.getByRole('link', { name: ISSUE_DOCUMENT_ID }),
+    ).toHaveAttribute('href', `/documents/issue/${ISSUE_DOCUMENT_ID}`)
   })
 })

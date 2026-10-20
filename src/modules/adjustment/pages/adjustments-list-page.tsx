@@ -5,6 +5,7 @@ import { Link } from 'react-router'
 import {
   ADJUSTMENT_PURPOSE_LABELS_AR,
   ADJUSTMENT_STATUS_LABELS_AR,
+  type AdjustmentListItem,
   type ListAdjustmentsQuery,
 } from '@/modules/adjustment/types/adjustment.types'
 import { useAdjustmentsListQuery } from '@/modules/adjustment/hooks/use-adjustment-queries'
@@ -22,7 +23,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type {
   AdjustmentPurpose,
   AdjustmentStatus,
-  InventoryAdjustment,
 } from '@/shared/types/generated/eiams-v1'
 import { formatDateTime } from '@/shared/utils/format'
 
@@ -31,10 +31,10 @@ import { formatDateTime } from '@/shared/utils/format'
  * active scope, filterable by purpose, lifecycle status, and warehouse — all
  * resolved server-side through the `/adjustments` contract (D-ADJ-01).
  */
-const columnHelper = createColumnHelper<typeof dataTableFeatures, InventoryAdjustment>()
+const columnHelper = createColumnHelper<typeof dataTableFeatures, AdjustmentListItem>()
 
-type PurposeValue = InventoryAdjustment['purpose']
-type StatusValue = InventoryAdjustment['status']
+type PurposeValue = AdjustmentPurpose
+type StatusValue = AdjustmentStatus
 
 const REASON_PREVIEW_LENGTH = 40
 
@@ -94,13 +94,13 @@ export default function AdjustmentsListPage() {
   const columns = useMemo(
     () =>
       columnHelper.columns([
-        columnHelper.accessor('documentReference', {
-          id: 'documentReference',
+        columnHelper.accessor('systemReferenceNumber', {
+          id: 'systemReferenceNumber',
           header: 'رقم السند',
           cell: ({ getValue, row }) => (
             <Link
               className="font-mono text-sm font-semibold text-foreground underline-offset-4 hover:underline"
-              to={ROUTE_PATHS.adjustmentDetail.replace(':adjustmentId', row.original.adjustmentId)}
+              to={ROUTE_PATHS.adjustmentDetail.replace(':adjustmentId', row.original.id)}
             >
               <span dir="ltr">{getValue()}</span>
             </Link>
@@ -116,19 +116,21 @@ export default function AdjustmentsListPage() {
           header: 'الحالة',
           cell: ({ getValue }) => <StatusBadge entity="adjustment" status={getValue()} />,
         }),
-        columnHelper.accessor((row) => row.warehouse.displayName, {
-          id: 'warehouse',
+        columnHelper.accessor('warehouseName', {
+          id: 'warehouseName',
           header: 'المستودع',
         }),
-        columnHelper.accessor('countReference', {
-          id: 'countReference',
-          header: 'مرجع الجرد',
-          cell: ({ getValue }) =>
-            getValue() === null || getValue() === undefined ? (
-              '—'
-            ) : (
-              <span dir="ltr">{getValue()}</span>
-            ),
+        columnHelper.accessor((row) => row.lineCount, {
+          id: 'lineCount',
+          header: 'عدد البنود',
+          cell: ({ getValue }) => <span dir="ltr">{getValue()}</span>,
+        }),
+        columnHelper.accessor('totalDifference', {
+          id: 'totalDifference',
+          header: 'إجمالي الفرق',
+          cell: ({ getValue }) => (
+            <span dir="ltr">{getValue() > 0 ? `+${getValue()}` : getValue()}</span>
+          ),
         }),
         columnHelper.accessor('reason', {
           id: 'reason',
@@ -139,11 +141,10 @@ export default function AdjustmentsListPage() {
             </span>
           ),
         }),
-        columnHelper.accessor('createdAt', {
-          id: 'createdAt',
+        columnHelper.accessor('createdAtUtc', {
+          id: 'createdAtUtc',
           header: 'تاريخ الإنشاء',
-          cell: ({ getValue }) =>
-            getValue() === undefined ? '—' : formatDateTime(getValue() as string),
+          cell: ({ getValue }) => formatDateTime(getValue()),
         }),
       ]),
     [],
@@ -248,8 +249,8 @@ export default function AdjustmentsListPage() {
           }
           page={pagination.page}
           pageSize={pagination.pageSize}
-          totalCount={adjustmentsQuery.data?.meta.totalItems}
-          totalPages={Math.max(adjustmentsQuery.data?.meta.totalPages ?? 1, 1)}
+          totalCount={adjustmentsQuery.data?.totalItems}
+          totalPages={Math.max(adjustmentsQuery.data?.totalPages ?? 1, 1)}
           onPageChange={pagination.setPage}
           onPageSizeChange={pagination.setPageSize}
         />

@@ -17,7 +17,7 @@ import {
   type UpdateMaterialUnitConversionRequest,
   type UpdateUnitOfMeasureRequest,
 } from '@/modules/catalog/types/catalog.types'
-import { isConflictError } from '@/shared/services/mutation-safety'
+import { isConcurrencyConflict } from '@/shared/services/mutation-safety'
 import { queryKeys } from '@/shared/services/query-keys'
 import {
   ConflictRecoveryDialog,
@@ -280,13 +280,14 @@ export interface MaterialUpdateConflictApi {
   /** True while the recovery dialog is showing. */
   readonly isActive: boolean
   /**
-   * Classifies a failed material write. Returns true when the failure was a 409
-   * and the recovery dialog is now showing — in that case the caller has NOTHING
-   * left to do, and in particular must not raise the generic error toast: the
-   * dialog IS the whole response to a 409.
+   * Classifies a failed material write. Returns true when the failure was a
+   * CONCURRENT-EDIT 409 and the recovery dialog is now showing — in that case the
+   * caller has NOTHING left to do, and in particular must not raise the generic
+   * error toast: the dialog IS the whole response to that conflict.
    *
-   * Returns false for every other failure, which keeps the caller's usual
-   * Arabic toast and inline field-error mapping intact.
+   * Returns false for every other failure, including a 409 that reports a state
+   * or idempotency conflict, which keeps the caller's usual Arabic toast and
+   * inline field-error mapping intact.
    */
   readonly capture: (error: unknown) => boolean
   /** Render once, at the page root. `null` while no conflict is active. */
@@ -296,9 +297,11 @@ export interface MaterialUpdateConflictApi {
 /**
  * Binds one material update to the shared neutral recovery dialog.
  *
- * `isConflictError` is applied HERE, at the hook boundary, rather than in the
- * page: a service is forbidden to normalize errors and a page should not each
- * re-derive the contract's 409 recogniser.
+ * `isConcurrencyConflict` is applied HERE, at the hook boundary, rather than in
+ * the page: a service is forbidden to normalize errors and a page should not each
+ * re-derive the contract's 409 recogniser. Only a CONCURRENT-EDIT 409 is
+ * captured: a business 409 reports a rejected write, and swallowing it behind a
+ * recovery dialog would tell the operator their material merely changed.
  *
  * `onRecover` is what "load the server's version" means for this screen —
  * usually refetching the material — and it is left to the caller because the
@@ -313,7 +316,7 @@ export function useMaterialUpdateConflict({
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const capture = useCallback((error: unknown) => {
-    if (!isConflictError(error)) return false
+    if (!isConcurrencyConflict(error)) return false
     setIsActive(true)
     return true
   }, [])

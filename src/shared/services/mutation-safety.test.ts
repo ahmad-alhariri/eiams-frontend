@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   IDEMPOTENCY_KEY_HEADER,
   createIdempotencyKey,
+  isConcurrencyConflict,
   isConflictError,
   withIdempotencyKey,
   withRowVersion,
@@ -95,5 +96,50 @@ describe('mutation safety helpers', () => {
     // A 422 is not a conflict: the row did not change, the request was rejected.
     expect(isConflictError(responseError(wireError('UNPROCESSABLE_ENTITY'), 422))).toBe(false)
     expect(isConflictError(new Error('offline'))).toBe(false)
+  })
+
+  // The 409 status alone cannot tell a concurrent edit from a state conflict, so
+  // the classifier reads the wire code: the API's optimistic-concurrency codes all
+  // end with `VERSION_MISMATCH`, and no state/idempotency code does.
+  describe('isConcurrencyConflict', () => {
+    it.each([
+      'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
+      'CUSTODIES_ROW_VERSION_MISMATCH',
+      'INVENTORY_COUNTS_ROW_VERSION_MISMATCH',
+      'USERS_ROW_VERSION_MISMATCH',
+      'MATERIALS_CATALOG_VERSION_MISMATCH',
+    ])('reads %s as a concurrent edit', (code) => {
+      expect(isConcurrencyConflict(responseError(wireError(code), 409))).toBe(true)
+    })
+
+    it.each([
+      'CUSTODIES_CANNOT_REVERSE_CHANGED_CUSTODY',
+      'CUSTODIES_ACTIVE_CUSTODY_EXISTS',
+      'DISPOSALS_ALREADY_DISPOSED',
+      'INVENTORY_ADJUSTMENTS_ALREADY_EXISTS_FOR_COUNT',
+      'DOCUMENT_LINE_ASSET_SELECTIONS_ASSET_NOT_IN_STOCK',
+      'REQUEST_IDEMPOTENCY_MISMATCH',
+      'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+    ])('does not read the state/idempotency 409 %s as a concurrent edit', (code) => {
+      expect(isConflictError(responseError(wireError(code), 409))).toBe(true)
+      expect(isConcurrencyConflict(responseError(wireError(code), 409))).toBe(false)
+    })
+
+    it('is false for a status that is not a conflict at all', () => {
+      expect(isConcurrencyConflict(responseError(wireError('UNPROCESSABLE_ENTITY'), 422))).toBe(false)
+      expect(isConcurrencyConflict(new Error('offline'))).toBe(false)
+    })
+
+    // A 409 the envelope does not identify cannot be proven to be a state
+    // conflict, so it keeps the recoverable reading: refetching the
+    // authoritative row is harmless, claiming another user edited the document
+    // when they did not is not.
+    it('keeps the recoverable reading for a 409 with no usable code', () => {
+      expect(isConcurrencyConflict(responseError({ success: false, error: {} }, 409))).toBe(true)
+      expect(isConcurrencyConflict(responseError('Conflict', 409))).toBe(true)
+      expect(
+        isConcurrencyConflict(responseError(wireError('WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH'), 422)),
+      ).toBe(false)
+    })
   })
 })

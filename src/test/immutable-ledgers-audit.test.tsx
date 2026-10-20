@@ -102,7 +102,7 @@ const LEDGER_SERVICE_SOURCES: Readonly<Record<string, string>> = {
  *
  * Suffix form (`/movements`, not `/inventory/movements`) on purpose: handlers
  * build their paths from a prefix — `${API_BASE_URL}/inventory/movements`,
- * `${environment.apiBaseUrl}/assets/${assetId}/custody` — so only the tail is
+ * `${environment.apiBaseUrl}/assets/${assetId}/custody-timeline` — so only the tail is
  * common to all of them. A prefix-matching fragment set would silently skip
  * every handler that interpolates, which is most of them, and turn the scan
  * below into a pass over nothing.
@@ -111,7 +111,7 @@ const LEDGER_WIRE_FRAGMENTS = [
   '/balances',
   '/movements',
   '/assets/:assetId/movements',
-  '/assets/:assetId/custody',
+  '/assets/:assetId/custody-timeline',
   '/custodies',
   '/audit-logs',
 ] as const
@@ -141,7 +141,7 @@ const LEDGER_KEY_TOKENS = [
   'auditQueryKeys.log',
   "'/inventory/movements'",
   "'/assets/{assetId}/movements'",
-  "'/assets/{assetId}/custody'",
+  "'/assets/{assetId}/custody-timeline'",
   "'/audit-logs'",
 ] as const
 
@@ -368,7 +368,9 @@ describe('the cross-module ledger graph is consumable through the production ser
       http.get(`${API_BASE_URL}/assets/:assetId/movements`, () =>
         okPageJson(ledgers.assetMovements),
       ),
-      http.get(`${API_BASE_URL}/assets/:assetId/custody`, () => okJson(ledgers.custodies)),
+      http.get(`${API_BASE_URL}/assets/:assetId/custody-timeline`, () =>
+        okJson(ledgers.custodies),
+      ),
       http.get(`${API_BASE_URL}/audit-logs`, ({ request }) => {
         requested.push(new URL(request.url).searchParams.get('pageIndex') ?? '')
         return okPageJson(ledgers.auditLogs)
@@ -567,23 +569,37 @@ describe('AuditDetail read branches', () => {
 describe('the custody timeline surfaces a closed row end time', () => {
   const ASSET_ID = fixtureUuid(4401)
   const CLOSED_TO_TS = '2026-08-23T10:00:00.000Z'
-  const closed = createAssetCustody({
-    assetId: ASSET_ID,
-    assetNumber: 'AST-2026-2001',
-    custodyId: fixtureUuid(4402),
-    fromTs: '2026-08-21T10:00:00.000Z',
-    status: 'Closed',
-    toTs: CLOSED_TO_TS,
-  })
-  const active = createAssetCustody({
-    assetId: ASSET_ID,
-    assetNumber: 'AST-2026-2001',
-    custodyId: fixtureUuid(4403),
-    fromTs: '2026-08-24T10:00:00.000Z',
-    holder: { displayName: 'أحمد الخالد' },
-    status: 'Active',
-    toTs: null,
-  })
+  // Live wire uses `fromUtc`/`toUtc`; rename here so the page receives the
+  // shape it reads. The factory is reused for the holder/assetNumber fields.
+  const closed = {
+    ...createAssetCustody({
+      assetId: ASSET_ID,
+      assetNumber: 'AST-2026-2001',
+      custodyId: fixtureUuid(4402),
+      fromTs: '2026-08-21T10:00:00.000Z',
+      status: 'Closed',
+      toTs: CLOSED_TO_TS,
+    }),
+    fromUtc: '2026-08-21T10:00:00.000Z',
+    toUtc: CLOSED_TO_TS,
+    holderType: 'OrganizationalUnit',
+    holderId: fixtureUuid(20),
+  }
+  const active = {
+    ...createAssetCustody({
+      assetId: ASSET_ID,
+      assetNumber: 'AST-2026-2001',
+      custodyId: fixtureUuid(4403),
+      fromTs: '2026-08-24T10:00:00.000Z',
+      holder: { displayName: 'أحمد الخالد' },
+      status: 'Active',
+      toTs: null,
+    }),
+    fromUtc: '2026-08-24T10:00:00.000Z',
+    toUtc: null,
+    holderType: 'Employee',
+    holderId: fixtureUuid(20),
+  }
 
   function renderTimeline() {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -599,28 +615,35 @@ describe('the custody timeline surfaces a closed row end time', () => {
   }
 
   it('renders the closed row end time as an Arabic timestamp, never a raw ISO string', async () => {
-    server.use(http.get(`${API_BASE_URL}/assets/:assetId/custody`, () => okJson([closed, active])))
+    server.use(
+      http.get(`${API_BASE_URL}/assets/:assetId/custody-timeline`, () => okJson([closed, active])),
+    )
     renderTimeline()
 
-    expect(await screen.findByText('مديرية المعلوماتية')).toBeInTheDocument()
+    // Live row carries holderType + holderId; the page surfaces them as a typed
+    // id pair (D-INT-02). Counterpart display name is added back when the
+    // counterpart lookup pipeline is wired in.
+    expect(await screen.findByText(/OrganizationalUnit:/)).toBeInTheDocument()
     expect(screen.getByText(formatDateTime(CLOSED_TO_TS))).toBeInTheDocument()
     expect(screen.queryByText(CLOSED_TO_TS)).not.toBeInTheDocument()
-    expect(screen.getByText(formatDateTime(closed.fromTs))).toBeInTheDocument()
+    expect(screen.getByText(formatDateTime(closed.fromUtc))).toBeInTheDocument()
   })
 
   it('shows no end time for a still-open custody row', async () => {
-    server.use(http.get(`${API_BASE_URL}/assets/:assetId/custody`, () => okJson([closed, active])))
+    server.use(
+      http.get(`${API_BASE_URL}/assets/:assetId/custody-timeline`, () => okJson([closed, active])),
+    )
     renderTimeline()
 
-    const activeRow = (await screen.findByText('أحمد الخالد')).closest('tr')
+    const activeRow = (await screen.findByText(/Employee:/)).closest('tr')
     expect(activeRow?.textContent).toContain('—')
-    expect(activeRow?.textContent).not.toContain(formatDateTime(closed.toTs as string))
+    expect(activeRow?.textContent).not.toContain(formatDateTime(closed.toUtc as string))
   })
 
   it('exposes no mutation affordance and recovers with the shared button', async () => {
     let attempts = 0
     server.use(
-      http.get(`${API_BASE_URL}/assets/:assetId/custody`, () => {
+      http.get(`${API_BASE_URL}/assets/:assetId/custody-timeline`, () => {
         attempts += 1
         return attempts === 1 ? new HttpResponse(null, { status: 500 }) : okJson([closed, active])
       }),
@@ -636,7 +659,7 @@ describe('the custody timeline surfaces a closed row end time', () => {
       'button',
     )
     await user.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
-    expect(await screen.findByText('مديرية المعلوماتية')).toBeInTheDocument()
+    expect(await screen.findByText(/OrganizationalUnit:/)).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /تكليف|مبادلة|حفظ|تعديل|حذف/ }),
     ).not.toBeInTheDocument()

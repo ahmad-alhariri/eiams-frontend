@@ -8,7 +8,13 @@ import { describe, expect, it, vi } from 'vitest'
 import AdjustmentDetailPage from './adjustment-detail-page'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
-import type { InventoryAdjustment } from '@/shared/types/generated/eiams-v1'
+import type { AdjustmentDetail } from '@/modules/adjustment/types/adjustment.types'
+import type {
+  DocumentActionAvailability,
+  DocumentPolicy,
+  DocumentPolicyBlocker,
+  WarehouseDocumentDetails,
+} from '@/shared/documents/types/document-wire.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
@@ -25,6 +31,9 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 }))
 
 const ADJUSTMENT_ID = '423e4567-e89b-42d3-a456-426614174004'
+// On the server the adjustment's own id IS the document id the shared
+// document engine keys policy and attachments by.
+const DOCUMENT_ID = ADJUSTMENT_ID
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
@@ -35,61 +44,182 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   }
 }
 
-function draftFixture(): InventoryAdjustment {
+function postAvailability(signedOriginalSatisfied: boolean): DocumentActionAvailability {
   return {
-    adjustmentId: ADJUSTMENT_ID,
-    attachments: [],
-    countReference: null,
-    createdAt: '2026-08-26T08:00:00.000Z',
-    createdBy: { id: '923e4567-e89b-42d3-a456-426614174009', displayName: 'مدير المستودع' },
-    documentId: '523e4567-e89b-42d3-a456-426614174005',
-    documentReference: 'EIAMS-ADJ-DRAFT-0001',
-    lines: [
-      {
-        adjustmentLineId: '623e4567-e89b-42d3-a456-426614174006',
-        material: { id: '723e4567-e89b-42d3-a456-426614174007', displayName: 'حاسوب مكتبي' },
-        quantityDelta: -3,
-        reason: 'عجز مؤكد بمراجعة اللجنة',
-      },
-    ],
-    policy: {
-      actions: [
-        {
-          action: 'Post',
-          allowed: false,
-          confirmationRequired: true,
-          presentation: 'Disabled',
-          reasonAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
-          reasonCode: 'document.signed_original_missing',
-          reasonRequired: false,
-        },
-      ],
-      advisories: [],
-      blockers: [
-        {
-          code: 'document.signed_original_missing',
-          field: null,
-          messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
-        },
-      ],
-      documentId: '523e4567-e89b-42d3-a456-426614174005',
-      documentStatus: 'Draft',
-      evaluatedAt: '2026-08-26T08:05:00.000Z',
-      policyKind: 'Adjustment',
-      rowVersion: 2,
-      signedOriginalSatisfied: false,
-    },
-    postedAt: null,
-    purpose: 'DirectCorrection',
-    reason: 'تسوية عجز إدخال بعد جرد المستودع المركزي',
-    rowVersion: 2,
-    status: 'Draft',
-    warehouse: { id: '823e4567-e89b-42d3-a456-426614174008', displayName: 'المستودع المركزي' },
+    action: 'Post',
+    allowed: signedOriginalSatisfied,
+    confirmationRequired: false,
+    presentation: signedOriginalSatisfied ? 'Enabled' : 'Disabled',
+    reasonCode: signedOriginalSatisfied
+      ? null
+      : 'document.signed_original_missing',
+    reason: signedOriginalSatisfied ? null : 'يلزم رفع النسخة الموقعة من السند.',
+    reasonRequired: false,
   }
 }
 
-function useDetailHandler(adjustment: InventoryAdjustment) {
-  server.use(http.get(`*/api/v1/adjustments/${ADJUSTMENT_ID}`, () => okJson(adjustment)))
+const SIGNED_MISSING_BLOCKER: DocumentPolicyBlocker = {
+  action: 'Post',
+  code: 'document.signed_original_missing',
+  message: 'يلزم رفع النسخة الموقعة من السند قبل الترحيل.',
+}
+
+function wirePolicy(input: {
+  documentStatus: 'Draft' | 'Posted'
+  signedOriginalSatisfied: boolean
+}): DocumentPolicy {
+  return {
+    documentId: DOCUMENT_ID,
+    status: input.documentStatus,
+    rowVersion: 1,
+    evaluatedAtUtc: '2026-08-26T08:05:00.000Z',
+    signedOriginalSatisfied: input.signedOriginalSatisfied,
+    actions: input.documentStatus === 'Draft' ? [postAvailability(input.signedOriginalSatisfied)] : [],
+    blockers: input.signedOriginalSatisfied ? [] : [SIGNED_MISSING_BLOCKER],
+    warnings: [],
+  }
+}
+
+function wireDocumentDetail(input: {
+  documentStatus: 'Draft' | 'Posted'
+  withSignedOriginal: boolean
+}): WarehouseDocumentDetails {
+  return {
+    id: DOCUMENT_ID,
+    warehouseId: '823e4567-e89b-42d3-a456-426614174008',
+    warehouseCode: 'WH-01',
+    warehouseName: 'المستودع المركزي',
+    documentType: 'Adjustment',
+    paperDocumentNumber: null,
+    paperDocumentYear: null,
+    systemReferenceNumber: 'EIAMS-ADJ-DRAFT-0001',
+    signedCopyAttachmentId: null,
+    documentStatus: input.documentStatus,
+    createdAtUtc: '2026-08-26T08:00:00.000Z',
+    createdBy: '923e4567-e89b-42d3-a456-426614174009',
+    postedBy: null,
+    postedAtUtc: input.documentStatus === 'Posted' ? '2026-08-26T09:00:00.000Z' : null,
+    reversalOfDocumentId: null,
+    reversedByDocumentId: null,
+    rowVersion: 2,
+    receivingInfo: null,
+    issueTo: null,
+    transferInfo: null,
+    returnInfo: null,
+    inventoryAdjustment: null,
+    lines: [],
+    attachments: input.withSignedOriginal
+      ? [
+          {
+            id: '623e4567-e89b-42d3-a456-426614174006',
+            attachmentType: 'SignedOriginal',
+            originalFilename: 'الصل-الموقع.pdf',
+            mimeType: 'application/pdf',
+            fileSize: 2048,
+            uploadedAtUtc: '2026-08-26T08:04:00.000Z',
+          },
+        ]
+      : [],
+    openingAsOfDate: null,
+    openingIsZeroStock: false,
+  }
+}
+
+function draftFixture(input: {
+  purpose: 'DirectCorrection' | 'Disposal'
+  status: 'Draft' | 'Posted'
+  signedOriginalSatisfied: boolean
+}): AdjustmentDetail {
+  const isPosted = input.status === 'Posted'
+  const purpose = input.purpose
+  if (purpose === 'Disposal') {
+    return {
+      id: ADJUSTMENT_ID,
+      warehouseId: '823e4567-e89b-42d3-a456-426614174008',
+      warehouseCode: 'WH-01',
+      warehouseName: 'المستودع المركزي',
+      countId: null,
+      purpose,
+      status: input.status,
+      reason: 'تسوية عجز إدخال بعد جرد المستودع المركزي',
+      systemReferenceNumber: 'EIAMS-ADJ-DRAFT-0001',
+      documentStatus: input.status,
+      createdAtUtc: '2026-08-26T08:00:00.000Z',
+      postedAtUtc: isPosted ? '2026-08-26T09:00:00.000Z' : null,
+      rowVersion: 2,
+      lines: [
+        {
+          lineId: '623e4567-e89b-42d3-a456-426614174006',
+          materialId: '723e4567-e89b-42d3-a456-426614174007',
+          materialCode: 'MAT-ASSET-1',
+          materialNameAr: 'حاسوب مكتبي',
+          quantity: -1,
+          difference: -1,
+          reason: 'إعدام أصل تالف بموجب محضر اللجنة.',
+          assets: [
+            {
+              id: '833e4567-e89b-42d3-a456-426614174010',
+              assetNumber: 'AST-2026-1002',
+              serialNumber: null,
+            },
+          ],
+        },
+      ],
+    }
+  }
+  return {
+    id: ADJUSTMENT_ID,
+    warehouseId: '823e4567-e89b-42d3-a456-426614174008',
+    warehouseCode: 'WH-01',
+    warehouseName: 'المستودع المركزي',
+    countId: null,
+    purpose,
+    status: input.status,
+    reason: 'تسوية عجز إدخال بعد جرد المستودع المركزي',
+    systemReferenceNumber: 'EIAMS-ADJ-DRAFT-0001',
+    documentStatus: input.status,
+    createdAtUtc: '2026-08-26T08:00:00.000Z',
+    postedAtUtc: isPosted ? '2026-08-26T09:00:00.000Z' : null,
+    rowVersion: 2,
+    lines: [
+      {
+        lineId: '623e4567-e89b-42d3-a456-426614174006',
+        materialId: '723e4567-e89b-42d3-a456-426614174007',
+        materialCode: 'MAT-ASSET-1',
+        materialNameAr: 'حاسوب مكتبي',
+        quantity: 7,
+        difference: -3,
+        reason: 'عجز مؤكد بمراجعة اللجنة',
+        assets: [],
+      },
+    ],
+  }
+}
+
+function useDetailHandlers(input: {
+  adjustment: AdjustmentDetail
+  documentStatus: 'Draft' | 'Posted'
+  signedOriginalSatisfied: boolean
+}) {
+  server.use(
+    http.get(`*/api/v1/adjustments/${ADJUSTMENT_ID}`, () => okJson(input.adjustment)),
+    http.get(`*/api/v1/warehouse-documents/${DOCUMENT_ID}`, () =>
+      okJson(
+        wireDocumentDetail({
+          documentStatus: input.documentStatus,
+          withSignedOriginal: input.signedOriginalSatisfied,
+        }),
+      ),
+    ),
+    http.get(`*/api/v1/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
+      okJson(
+        wirePolicy({
+          documentStatus: input.documentStatus,
+          signedOriginalSatisfied: input.signedOriginalSatisfied,
+        }),
+      ),
+    ),
+  )
 }
 
 function renderPage(
@@ -115,8 +245,12 @@ function renderPage(
 }
 
 describe('AdjustmentDetailPage (e21-t07)', () => {
-  it('renders the server read model: header fields, signed lines, gate blocker', async () => {
-    useDetailHandler(draftFixture())
+  it('renders the server read model: header fields, signed lines, attachment row', async () => {
+    useDetailHandlers({
+      adjustment: draftFixture({ purpose: 'DirectCorrection', status: 'Draft', signedOriginalSatisfied: true }),
+      documentStatus: 'Draft',
+      signedOriginalSatisfied: true,
+    })
     renderPage()
 
     expect(
@@ -127,38 +261,37 @@ describe('AdjustmentDetailPage (e21-t07)', () => {
     expect(screen.getByText('حاسوب مكتبي')).toBeInTheDocument()
     expect(screen.getByText('-3')).toBeInTheDocument()
     expect(screen.getByText('عجز مؤكد بمراجعة اللجنة')).toBeInTheDocument()
-    // SignedOriginal blocker surfaced from the embedded policy.
-    expect(screen.getByText('يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.')).toBeInTheDocument()
+    expect(screen.getByText('المستودع المركزي')).toBeInTheDocument()
+    expect(screen.getByText('الصل-الموقع.pdf')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'ترحيل السند' })).toBeEnabled()
   })
 
-  it('shows the posting action to a manager on a Draft', async () => {
-    useDetailHandler(draftFixture())
+  it('shows the posting action disabled to a manager on a Draft whose signed original is missing', async () => {
+    useDetailHandlers({
+      adjustment: draftFixture({ purpose: 'DirectCorrection', status: 'Draft', signedOriginalSatisfied: false }),
+      documentStatus: 'Draft',
+      signedOriginalSatisfied: false,
+    })
     renderPage()
 
     await screen.findByRole('heading', { level: 1 })
     expect(screen.getByRole('button', { name: 'ترحيل السند' })).toBeDisabled()
+    // The SignedOriginal blocker is surfaced from the shared policy read.
+    expect(screen.getByText('يلزم رفع النسخة الموقعة من السند قبل الترحيل.')).toBeInTheDocument()
   })
 
   it('marks a posted disposal as terminal with no reversal affordance', async () => {
-    const disposal = {
-      ...draftFixture(),
-      purpose: 'Disposal' as const,
-      status: 'Posted' as const,
-      postedAt: '2026-08-26T09:00:00.000Z',
-      policy: {
-        ...draftFixture().policy,
-        actions: [],
-        blockers: [],
-        policyKind: 'Disposal' as const,
-        signedOriginalSatisfied: true,
-      },
-    }
-    useDetailHandler(disposal)
+    useDetailHandlers({
+      adjustment: draftFixture({ purpose: 'Disposal', status: 'Posted', signedOriginalSatisfied: true }),
+      documentStatus: 'Posted',
+      signedOriginalSatisfied: true,
+    })
     renderPage()
 
     await screen.findByRole('heading', { level: 1 })
     expect(screen.getByText('إعدام أصل')).toBeInTheDocument()
     expect(screen.getByText('سند إعدام مرحّل لا يقبل العكس')).toBeInTheDocument()
+    expect(screen.getByText(/AST-2026-1002/)).toBeInTheDocument()
     const table = screen.getByRole('table')
     expect(table.parentElement).toHaveClass('overflow-x-auto')
     expect(table.closest('[data-slot="content-card"]')?.parentElement).toHaveClass('grid-cols-1')

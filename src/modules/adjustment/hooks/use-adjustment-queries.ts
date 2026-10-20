@@ -4,9 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import type {
   AdjustmentDraftRequest,
+  AdjustmentUpdateRequest,
   ListAdjustmentsQuery,
   ListDisposalEligibleAssetsQuery,
-  UpdateAdjustmentRequest,
 } from '@/modules/adjustment/types/adjustment.types'
 import { adjustmentService } from '@/modules/adjustment/services/adjustment.service'
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -145,7 +145,7 @@ export function useCreateAdjustmentMutation() {
 export function useUpdateAdjustmentMutation(adjustmentId: string) {
   const invalidate = useAdjustmentInvalidation()
   return useMutation({
-    mutationFn: (request: UpdateAdjustmentRequest) =>
+    mutationFn: (request: AdjustmentUpdateRequest) =>
       adjustmentService.updateAdjustment(adjustmentId, request),
     onSuccess: invalidate,
   })

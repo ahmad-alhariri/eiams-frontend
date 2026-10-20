@@ -146,23 +146,24 @@ function CustodySection({ assetId }: { assetId: string }) {
               key={entry.custodyId}
               className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border p-3"
             >
+              {/* Live row has the status enum — Active | Closed — so the badge accepts it. */}
               <StatusBadge entity="custody" status={entry.status} />
               <span className="text-sm font-medium text-foreground">
                 {entry.custodyKind === 'Personal' ? 'حفظ شخصي' : 'حفظ تشغيلي'}
               </span>
-              <span className="text-sm text-muted-foreground">
-                الحائز: {entry.holder.displayName}
+              <span className="text-sm text-muted-foreground" dir="ltr">
+                الحائز: {entry.holderType}/{entry.holderId}
               </span>
               <span className="text-xs text-muted-foreground" dir="ltr">
-                {formatDateTime(entry.fromTs)}
+                {formatDateTime(entry.fromUtc)}
               </span>
               {/* e24-t08: a closed custody row's end time is the only record of
                   when the asset came back. The custody timeline page already
                   shows it; omitting it here made the two surfaces of the same
                   append-only data disagree. */}
-              {entry.status === 'Closed' && entry.toTs ? (
+              {entry.status === 'Closed' && entry.toUtc ? (
                 <span className="text-xs text-muted-foreground">
-                  نهاية العهدة: <span dir="ltr">{formatDateTime(entry.toTs)}</span>
+                  نهاية العهدة: <span dir="ltr">{formatDateTime(entry.toUtc)}</span>
                 </span>
               ) : null}
             </li>

@@ -104,18 +104,15 @@ describe('AssignCustodyDialog (e19-t03)', () => {
     expect(await screen.findByText('يجب اختيار الموظف المكلف.')).toBeInTheDocument()
   })
 
-  it('posts the idempotent assign mutation for a valid selection and closes', async () => {
+  it('posts the assign mutation to /assets/{assetId}/custody-assignment with the live wire', async () => {
     useEmployeeHandler()
     let postedBody: Record<string, unknown> | undefined
-    let idempotencyKey: string | undefined
+    let idempotencyKey: string | null = null
     server.use(
-      http.post(`${API_BASE_URL}/custodies/assign`, async ({ request }) => {
+      http.post(`${API_BASE_URL}/assets/${ASSET_ID}/custody-assignment`, async ({ request }) => {
         postedBody = (await request.json()) as Record<string, unknown>
-        idempotencyKey = request.headers.get('Idempotency-Key') ?? undefined
-        return apiJson(
-          { custodyId: fixtureUuid(60), status: 'Active', custodyKind: 'Personal' },
-          { status: 201 },
-        )
+        idempotencyKey = request.headers.get('Idempotency-Key')
+        return apiJson({ id: fixtureUuid(60) }, { status: 201 })
       }),
     )
 
@@ -125,24 +122,33 @@ describe('AssignCustodyDialog (e19-t03)', () => {
     await user.click(screen.getByRole('button', { name: 'تأكيد التكليف' }))
 
     await waitFor(() => expect(postedBody).toBeDefined())
+    // Live wire: { employeeId, expectedCustodyRowVersion, note? }. No
+    // subjectType, no custodyKind, no effectiveAt, no issueDocumentId, no
+    // holderType, no rowVersion. The asset id travels in the path.
     expect(postedBody).toMatchObject({
-      subjectType: 'Asset',
-      assetId: ASSET_ID,
-      custodyKind: 'Personal',
-      holderType: 'Employee',
-      rowVersion: 1,
+      employeeId: EMPLOYEE_ID,
+      expectedCustodyRowVersion: 1,
     })
-    expect(typeof idempotencyKey).toBe('string')
-    expect(idempotencyKey).not.toBe('')
+    expect(postedBody).not.toHaveProperty('subjectType')
+    expect(postedBody).not.toHaveProperty('custodyKind')
+    expect(postedBody).not.toHaveProperty('effectiveAt')
+    expect(postedBody).not.toHaveProperty('issueDocumentId')
+    expect(postedBody).not.toHaveProperty('holderType')
+    expect(postedBody).not.toHaveProperty('rowVersion')
+    expect(postedBody).not.toHaveProperty('assetId')
+    // The live controller does not accept Idempotency-Key — see
+    // src/Web.Api/Controllers/Custodies/AssignAssetCustodyController.cs,
+    // verified 2026-10-20.
+    expect(idempotencyKey).toBeNull()
   })
 
   it('accepts an optional reason and appends the employee name to it', async () => {
     useEmployeeHandler()
     let postedBody: Record<string, unknown> | undefined
     server.use(
-      http.post(`${API_BASE_URL}/custodies/assign`, async ({ request }) => {
+      http.post(`${API_BASE_URL}/assets/${ASSET_ID}/custody-assignment`, async ({ request }) => {
         postedBody = (await request.json()) as Record<string, unknown>
-        return apiJson({}, { status: 201 })
+        return apiJson({ id: fixtureUuid(60) }, { status: 201 })
       }),
     )
 
@@ -153,7 +159,7 @@ describe('AssignCustodyDialog (e19-t03)', () => {
     await user.click(screen.getByRole('button', { name: 'تأكيد التكليف' }))
 
     await waitFor(() => expect(postedBody).toBeDefined())
-    expect(String(postedBody?.['reason'])).toContain('طلب الإدارة')
+    expect(String(postedBody?.['note'])).toContain('طلب الإدارة')
   })
 
   it('rejects reasons longer than 300 characters', () => {

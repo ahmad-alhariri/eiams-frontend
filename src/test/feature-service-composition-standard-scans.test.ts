@@ -50,8 +50,21 @@ const HOOK_FILES = moduleHookFiles()
  * `session-user-menu.tsx`. It reads a query key and holds no query keys of its
  * own, so scan 1 stays green; it is an observer with `enabled: false`, which is
  * the same posture as every other hook in this set.
+ *
+ * 45 → 46 for `src/modules/custody/hooks/use-return-eligible-items.ts`
+ * (FIX-R2, return-workflow-frontend-fixes): scoped eligible-items read for the
+ * Return draft, keyed through `queryKeys.scoped` like its siblings, so scan 1
+ * stays green.
+ * 46 → 47 by `mutable-draft-window` (D-REV-01): +1 for
+ * `src/shared/documents/use-document-paper-reference.ts`, the TanStack Query
+ * mutation that writes the paper reference of an existing DRAFT through the
+ * existing `PUT /warehouse-documents/{id}/paper-reference` route and
+ * invalidates the detail branch on success. It is an `useMutation`, holds no
+ * query keys of its own, and is invalidated through the existing
+ * `useInvalidateDocumentDetail` hook, so scan 1 (hand-derived key prefix)
+ * stays green.
  */
-const EXPECTED_HOOK_FILES = 45
+const EXPECTED_HOOK_FILES = 47
 
 // ---------------------------------------------------------------------------
 // Scan 1 — query keys must come from a factory

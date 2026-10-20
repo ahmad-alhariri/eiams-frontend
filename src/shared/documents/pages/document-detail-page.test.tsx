@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiJson, okJson, toWireErrorResponse } from '@/test/msw/envelope'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { userEvent } from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -25,6 +26,7 @@ import {
 } from '@/test/msw/factories'
 import {
   applyDocumentAction,
+  createPaperReferenceHandler,
   createWarehouseDocumentActionHandler,
   createWarehouseDocumentDetailHandler,
   createWarehouseDocumentHistoryHandler,
@@ -1072,6 +1074,13 @@ describe('DocumentDetailPage', () => {
 
     const alert = await screen.findByTestId('opening-reverse-blocked', {}, { timeout: 5000 })
     expect(alert.textContent).toContain('لا يمكن عكس سند الفتح')
+    // The downstream guard is a STATE 409, not a stale row: this session's
+    // document is exactly as authoritative as it was, so the "تعديل متزامن على
+    // السند" dialog — which blames another user for the row moving — must stay
+    // closed and the guard's own Arabic alert be the whole response.
+    expect(
+      screen.queryByRole('alertdialog', { name: 'تعديل متزامن على السند' }),
+    ).not.toBeInTheDocument()
     const adjustmentLink = within(alert).getByText('نموذج التسوية').closest('a')
     expect(adjustmentLink).not.toBeNull()
   })
@@ -1168,6 +1177,89 @@ describe('DocumentDetailPage', () => {
     expect(reverseButton).toBeDisabled()
     expect(document.querySelector('[data-slot="disabled-action-reasons"]')).not.toBeNull()
     expect(screen.getByText(/لا يمكن عكس سند الاستلام/)).toBeInTheDocument()
+  })
+
+  it('renders an editable paper reference for a Draft of ANY type and saves it through the paper-reference route', async () => {
+    const draftDocument = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Return',
+      documentStatus: 'Draft',
+      rowVersion: 1,
+    })
+    const store = { documents: [draftDocument] }
+    let detailRequests = 0
+    server.use(
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () => {
+        detailRequests += 1
+        // The paper-reference write REPLACES the store slot, so the read must
+        // dereference the live slot — the captured closure object is stale.
+        return okJson(wireDocumentDetails(store.documents[0] ?? draftDocument))
+      }),
+      ...createPaperReferenceHandler({
+        initialDocument: draftDocument,
+        documentStore: () => store.documents,
+      }),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(draftDocument)),
+      ...createWarehouseDocumentPolicyHandler(draftDocument),
+    )
+
+    render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/return/${DOCUMENT_ID}`),
+    })
+
+    await screen.findByRole('heading', { level: 1, name: /EIAMS-DOC-2024-0001/ })
+
+    // The server-created draft (e.g. a reversal) can have its paper reference
+    // written on the page — the editable controls are present and pre-filled
+    // from the persisted value, without any extra route.
+    const numberInput = screen.getByLabelText('رقم المستند الورقي')
+    expect(numberInput).toHaveValue('2024/123')
+    expect(screen.getByLabelText('السنة الورقية')).toBeInTheDocument()
+
+    await userEvent.clear(numberInput)
+    await userEvent.type(numberInput, '2026/0451')
+    await userEvent.type(screen.getByLabelText('السنة الورقية'), '2026')
+    await userEvent.click(screen.getByRole('button', { name: 'حفظ الرقم الورقي' }))
+
+    // The write bumped the version guard and the following detail invalidation
+    // re-rendered the read-only spine from the server's answer.
+    await waitFor(() => {
+      expect(store.documents[0]?.rowVersion).toBe(2)
+      expect(detailRequests).toBeGreaterThan(1)
+      expect(screen.getByText('2026/0451')).toBeInTheDocument()
+    })
+  })
+
+  it('keeps the paper reference read-only outside the Draft mutable window', async () => {
+    const document = createWarehouseDocument({
+      documentId: DOCUMENT_ID,
+      documentType: 'Receiving',
+      documentStatus: 'Posted',
+      rowVersion: 2,
+      systemReferenceNumber: 'EIAMS-DOC-2026-0300',
+      paperDocumentNumber: '2026/0300',
+      paperDocumentYear: 2026,
+      policy: {
+        ...createSubmittedPostedPolicy('Posted'),
+        signedOriginalSatisfied: true,
+      },
+    })
+    server.use(
+      ...createWarehouseDocumentDetailHandler(document),
+      ...createWarehouseDocumentHistoryHandler(deriveLifecycleEvents(document)),
+      ...createWarehouseDocumentPolicyHandler(document),
+    )
+
+    render(<DocumentDetailPage />, {
+      wrapper: createWrapper(`/documents/receiving/${DOCUMENT_ID}`),
+    })
+
+    await screen.findByRole('heading', { level: 1, name: /EIAMS-DOC-2026-0300/ })
+
+    // No editable control exists; the spine keeps its plain text rows.
+    expect(screen.queryByLabelText('رقم المستند الورقي')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'حفظ الرقم الورقي' })).not.toBeInTheDocument()
+    expect(screen.getByText('2026/0300')).toBeInTheDocument()
   })
 })
 

@@ -44,18 +44,9 @@ function createClient() {
   return client
 }
 
-// Two distinct shapes, deliberately not shared: an MSW handler must serve the
-// WIRE envelope, while `setQueryData` seeds the SERVICE's view-model. Wrapping
-// one in the other silently produces an unusable cache entry or an empty page.
-function emptyWirePage(pageIndex: number, pageSize: number, totalItems: number) {
-  return okPageJson([], {
-    page: pageIndex + 1,
-    pageSize,
-    totalCount: totalItems,
-    totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
-  })
-}
-
+// Only the SERVICE view-model is seeded here now: the live save
+// (`PUT /actuals`) answers `ApiResponse<EmptyResponse>` (200 + empty body), so
+// no MSW shape is needed for the mutation handlers.
 /** The view-model `countService.listLines` resolves to. */
 function emptyViewPage(pageIndex: number, pageSize: number, totalItems: number) {
   return {
@@ -85,7 +76,9 @@ describe('useUpdateCountLinesMutation invalidation', () => {
       <button
         type="button"
         disabled={mutation.isPending}
-        onClick={() => mutation.mutate({ countRowVersion: 3, lines: [] })}
+        onClick={() =>
+          mutation.mutate({ actuals: [], expectedRowVersion: 3 })
+        }
       >
         حفظ
       </button>
@@ -93,9 +86,12 @@ describe('useUpdateCountLinesMutation invalidation', () => {
   }
 
   it('refreshes both the whole-session review and the paged entry read', async () => {
+    // RESOLUTION-025: the live save is PUT /inventory-counts/{countId}/actuals;
+    // it answers ApiResponse<EmptyResponse> (200 + empty body) and the hook
+    // invalidates the read keys itself.
     server.use(
-      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-        emptyWirePage(0, ALL_LINES_PAGE_SIZE, 0),
+      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () =>
+        apiJson({}),
       ),
     )
     const client = createClient()
@@ -130,8 +126,8 @@ describe('useUpdateCountLinesMutation invalidation', () => {
     // move to precise per-count invalidation is a deliberate, visible change
     // across all five count mutations at once.
     server.use(
-      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-        emptyWirePage(0, ALL_LINES_PAGE_SIZE, 0),
+      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () =>
+        apiJson({}),
       ),
     )
     const client = createClient()

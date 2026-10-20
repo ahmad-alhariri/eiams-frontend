@@ -1,13 +1,13 @@
-import { z } from 'zod'
+﻿import { z } from 'zod'
 
 import type { TransferInfo } from '@/shared/types/generated/eiams-v1'
 
 /**
- * 500-char cap on `transferReason` is presentation-level only — schema.md
+ * 500-char cap on `transferReason` is presentation-level only â€” schema.md
  * types it as an open text column; the cap matches sibling petals' VARCHAR
  * caps and keeps the reason box readable in the UI.
  */
-const TRANSFER_REASON_MAX_LENGTH = 500
+const TRANSFER_REASON_MAX_LENGTH = 200
 
 /**
  * TransferInfo petal schema (e17-t01 / contract `TransferInfo`): the
@@ -15,14 +15,14 @@ const TRANSFER_REASON_MAX_LENGTH = 500
  * (uuid), with a mandatory Arabic reason for the audit trail.
  */
 export const transferInfoSchema = z.object({
-  destinationWarehouseId: z.string().uuid('يجب اختيار مستودع الوجهة من القائمة.'),
+  destinationWarehouseId: z.string().uuid('ÙŠØ¬Ø¨ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø³ØªÙˆØ¯Ø¹ Ø§Ù„ÙˆØ¬Ù‡Ø© Ù…Ù† Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.'),
   transferReason: z
     .string()
     .trim()
-    .min(1, 'يجب إدخال سبب التحويل.')
+    .min(1, 'ÙŠØ¬Ø¨ Ø¥Ø¯Ø®Ø§Ù„ Ø³Ø¨Ø¨ Ø§Ù„ØªØ­ÙˆÙŠÙ„.')
     .max(
       TRANSFER_REASON_MAX_LENGTH,
-      `يجب ألا يتجاوز سبب التحويل ${TRANSFER_REASON_MAX_LENGTH} محرفاً.`,
+      `ÙŠØ¬Ø¨ Ø£Ù„Ø§ ÙŠØªØ¬Ø§ÙˆØ² Ø³Ø¨Ø¨ Ø§Ù„ØªØ­ÙˆÙŠÙ„ ${TRANSFER_REASON_MAX_LENGTH} Ù…Ø­Ø±ÙØ§Ù‹.`,
     ),
 })
 
@@ -30,7 +30,7 @@ export type TransferInfoFormValues = z.infer<typeof transferInfoSchema>
 
 /**
  * Seeds form values from a server record (edit mode). A missing petal defaults
- * to blank fields — a fresh transfer draft whose empty destination fails
+ * to blank fields â€” a fresh transfer draft whose empty destination fails
  * validation until the user picks a warehouse.
  */
 export function fromTransferInfo(info?: TransferInfo | null): TransferInfoFormValues {
@@ -51,7 +51,7 @@ export function fromTransferInfo(info?: TransferInfo | null): TransferInfoFormVa
  *
  * `destinationWarehouseName` handling (e17-t01 decision, mirrors e16-t01):
  * the dev mock persists `transferInfo` verbatim, so whatever the client sends
- * comes back — the UI must therefore always pass the selected option's name
+ * comes back â€” the UI must therefore always pass the selected option's name
  * here when one was chosen. The production server derives the name from
  * `destination_warehouse_id` on persistence, so the `''` default is a safe
  * placeholder whenever no option name exists.
@@ -97,3 +97,4 @@ export function buildTransferPetal(values: TransferPetalContainer['petal']): Tra
     values.destinationWarehouseName === '' ? undefined : values.destinationWarehouseName,
   )
 }
+

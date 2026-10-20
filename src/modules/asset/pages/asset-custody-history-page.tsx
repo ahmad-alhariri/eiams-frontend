@@ -3,8 +3,8 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { Link, useParams } from 'react-router'
 
 import { useAssetCustodyTimelineQuery } from '@/modules/asset/hooks/use-asset-queries'
+import type { AssetCustodyTimelineRow } from '@/modules/asset/services/asset.service'
 import { ROUTE_PATHS } from '@/config/routes'
-import type { AssetCustody } from '@/shared/types/generated/eiams-v1'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { StatusBadge } from '@/shared/feedback/status-badge'
@@ -21,8 +21,12 @@ import { formatDateTime } from '@/shared/utils/format'
  * closed — rendered read-only in reverse chronological order. Custody rows
  * are append-only server-side (CustodyHistory is immutable); this view never
  * mutates.
+ *
+ * The row type is the handwritten live wire (`AssetCustodyTimelineRow`); the
+ * previous generated `AssetCustody` carried an embedded holder object and the
+ * `fromTs` / `toTs` names, neither of which the live timeline response uses.
  */
-const columnHelper = createColumnHelper<typeof dataTableFeatures, AssetCustody>()
+const columnHelper = createColumnHelper<typeof dataTableFeatures, AssetCustodyTimelineRow>()
 
 export default function AssetCustodyHistoryPage() {
   const { assetId } = useParams<{ assetId: string }>()
@@ -30,36 +34,48 @@ export default function AssetCustodyHistoryPage() {
   const timeline = timelineQuery.data ?? []
 
   const sorted = useMemo(
-    () => [...timeline].sort((a, b) => (a.fromTs < b.fromTs ? 1 : a.fromTs > b.fromTs ? -1 : 0)),
+    () =>
+      [...timeline].sort((a, b) =>
+        a.fromUtc < b.fromUtc ? 1 : a.fromUtc > b.fromUtc ? -1 : 0,
+      ),
     [timeline],
   )
 
   const columns = useMemo(
     () =>
       columnHelper.columns([
-        columnHelper.accessor((row) => row.holder.displayName, {
+        // Live row carries `holderType` + `holderId` only — no display name. The
+        // counterpart lookup would be a separate request per row; for a
+        // read-only ledger the wire values (with a leading type label) are
+        // enough until the lookup pipeline is added.
+        columnHelper.accessor((row) => `${row.holderType}:${row.holderId}`, {
           id: 'holder',
           header: 'الحائز',
+          cell: ({ getValue }) => (
+            <span dir="ltr" className="font-mono text-xs">
+              {getValue()}
+            </span>
+          ),
         }),
         columnHelper.accessor('custodyKind', {
           id: 'custodyKind',
           header: 'نوع الحفظ',
           cell: ({ getValue }) => (getValue() === 'Personal' ? 'حفظ شخصي' : 'حفظ تشغيلي'),
         }),
-        columnHelper.accessor('fromTs', {
-          id: 'fromTs',
+        columnHelper.accessor('fromUtc', {
+          id: 'fromUtc',
           header: 'بداية العهدة',
           cell: ({ getValue }) => <span dir="ltr">{formatDateTime(getValue())}</span>,
         }),
         // Custody rows are append-only, so a closed row's end time is the only
         // record of when the asset came back: it must be readable, not inferred.
-        columnHelper.accessor('toTs', {
-          id: 'toTs',
+        columnHelper.accessor('toUtc', {
+          id: 'toUtc',
           header: 'نهاية العهدة',
           cell: ({ getValue, row }) => {
-            const toTs = getValue()
-            if (row.original.status !== 'Closed' || !toTs) return '—'
-            return <span dir="ltr">{formatDateTime(toTs)}</span>
+            const toUtc = getValue()
+            if (row.original.status !== 'Closed' || !toUtc) return '—'
+            return <span dir="ltr">{formatDateTime(toUtc)}</span>
           },
         }),
         columnHelper.accessor('status', {
