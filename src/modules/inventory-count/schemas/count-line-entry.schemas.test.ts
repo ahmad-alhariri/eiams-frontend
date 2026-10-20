@@ -142,7 +142,10 @@ describe('countDirtyLineIndexes', () => {
 })
 
 describe('planCountLineSaves', () => {
-  it('sends only changed rows with their server row version', () => {
+  it('sends only changed rows with their line id and exact actual; no per-line rowVersion', () => {
+    // RESOLUTION-025 / CONFLICT-020: the live `/actuals` wire carries line
+    // identity + the exact actual quantity only; the aggregate
+    // expectedRowVersion is supplied once at the batch level.
     const lines = [
       line({ countLineId: 'L1' }),
       line({ countLineId: 'L2', actualQuantity: 4, rowVersion: 9, difference: -6 }),
@@ -154,25 +157,34 @@ describe('planCountLineSaves', () => {
       ],
     })
 
-    expect(request.countRowVersion).toBe(7)
-    expect(request.lines).toEqual([
-      { countLineId: 'L1', actualQuantity: 3, rowVersion: 4, reason: 'نقص' },
+    expect(request.expectedRowVersion).toBe(7)
+    expect(request.actuals).toEqual([
+      { lineId: 'L1', actualQuantity: 3 },
     ])
     expect(blocked).toEqual([])
+    // Belt and braces: nothing in the batch carries a rowVersion (live wire
+    // forbids per-line rowVersion; it would 422 the controller).
+    for (const entry of request.actuals) {
+      expect(entry).not.toHaveProperty('rowVersion')
+    }
   })
 
-  it('omits an empty reason rather than sending a blank string', () => {
+  it('does not emit a per-line reason on the actuals wire', () => {
+    // Variance reasons are collected at the review step
+    // (count-variance-review), not on the actuals save. The wire has no
+    // `reason` field, so the planner must not invent one.
     const { request } = planCountLineSaves(1, [line()], {
       lines: [{ actualQuantity: '3', reason: '   ' }],
     })
-    expect(request.lines[0]).toEqual({ countLineId: 'L1', actualQuantity: 3, rowVersion: 4 })
+    expect(request.actuals[0]).toEqual({ lineId: 'L1', actualQuantity: 3 })
+    expect(request.actuals[0]).not.toHaveProperty('reason')
   })
 
   it('blocks, rather than silently drops, a changed row whose quantity is not usable yet', () => {
     const { request, blocked } = planCountLineSaves(1, [line()], {
       lines: [{ actualQuantity: '-1', reason: '' }],
     })
-    expect(request.lines).toEqual([])
+    expect(request.actuals).toEqual([])
     expect(blocked).toEqual([{ index: 0, kind: 'no-quantity' }])
   })
 
@@ -181,15 +193,15 @@ describe('planCountLineSaves', () => {
     const { request, blocked } = planCountLineSaves(1, lines, {
       lines: [{ actualQuantity: '', reason: 'تصحيح' }],
     })
-    expect(request.lines).toEqual([])
+    expect(request.actuals).toEqual([])
     expect(blocked).toEqual([{ index: 0, kind: 'no-quantity' }])
   })
 
-  // Replaces the previous case `defaults a missing line rowVersion to 0`. That
-  // behaviour sent a value the contract cannot accept:
-  // `UpdateCountLineInput.rowVersion` declares `"minimum": 1`, so a 0 could only
-  // ever draw a 422. The row is now reported as blocked instead.
-  it('blocks a line the server gave no rowVersion, instead of sending a contract-invalid 0', () => {
+  it('blocks a line the server gave no rowVersion, instead of sending one', () => {
+    // Per RESOLUTION-025 the planner still rejects a row whose server
+    // projection has no rowVersion: the save cannot prove it matches the
+    // operator's intent against a stable identity, and a missing id is
+    // exactly the case where the actuals controller would 422.
     const withoutRowVersion: InventoryCountLine = {
       countLineId: 'L9',
       material: { id: 'm9', displayName: 'مادة' },
@@ -200,11 +212,10 @@ describe('planCountLineSaves', () => {
     const { request, blocked } = planCountLineSaves(1, [withoutRowVersion], {
       lines: [{ actualQuantity: '3', reason: '' }],
     })
-    expect(request.lines).toEqual([])
+    expect(request.actuals).toEqual([])
     expect(blocked).toEqual([{ index: 0, kind: 'missing-row-version' }])
-    // Belt and braces: nothing in the batch may carry a sub-minimum version.
-    for (const entry of request.lines) {
-      expect(entry.rowVersion).toBeGreaterThanOrEqual(1)
+    for (const entry of request.actuals) {
+      expect(entry).not.toHaveProperty('rowVersion')
     }
   })
 
@@ -228,7 +239,7 @@ describe('planCountLineSaves', () => {
         { actualQuantity: '9', reason: '' }, // L3 changed, no version -> blocked
       ],
     })
-    expect(request.lines).toEqual([{ countLineId: 'L1', actualQuantity: 3, rowVersion: 4 }])
+    expect(request.actuals).toEqual([{ lineId: 'L1', actualQuantity: 3 }])
     expect(blocked).toEqual([
       { index: 1, kind: 'no-quantity' },
       { index: 2, kind: 'missing-row-version' },
@@ -240,7 +251,7 @@ describe('planCountLineSaves', () => {
     const { request, blocked } = planCountLineSaves(1, lines, {
       lines: [{ actualQuantity: '3', reason: '' }],
     })
-    expect(request.lines).toEqual([])
+    expect(request.actuals).toEqual([])
     expect(blocked).toEqual([])
   })
 })

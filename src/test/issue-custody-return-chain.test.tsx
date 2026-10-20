@@ -50,6 +50,30 @@ const returnedAsset = scenario.assets.returned
 const pendingAsset = scenario.assets.pending
 const returnedCustody = findCustody(returnedAsset.assetId)
 const pendingCustody = findCustody(pendingAsset.assetId)
+
+/**
+ * The custody-timeline handler must serve the live wire row
+ * (`AssetCustodyTimelineRow`: flat `holderType`/`holderId`, `fromUtc`/`toUtc`,
+ * no embedded holder object), while the scenario keeps the legacy generated
+ * shape — so the projection happens here, at the consumer of the scenario.
+ */
+function toCustodyTimelineRow(custody: AssetCustody) {
+  return {
+    custodyId: custody.custodyId,
+    assetId: custody.assetId,
+    holderType: custody.holder.type,
+    holderId: custody.holder.id,
+    custodyKind: custody.custodyKind,
+    issueDocumentId: custody.issueDocumentId,
+    returnDocumentId: custody.returnDocumentId ?? null,
+    status: custody.status,
+    fromUtc: custody.fromTs,
+    toUtc: custody.toTs ?? null,
+    rowVersion: custody.rowVersion,
+  }
+}
+
+const returnedTimelineRow = toCustodyTimelineRow(returnedCustody)
 const issueMovement = findStockMovement(issue, 'Issue')
 const returnMovement = findStockMovement(returnDocument, 'Receipt')
 const pendingFilters = {
@@ -81,6 +105,14 @@ describe('issue custody and return chain', () => {
     const assetMovementQueries: Record<string, string>[] = []
     const stockMovementQueries: Record<string, string>[] = []
     useScenarioHandlers(custodyListQueries, assetMovementQueries, stockMovementQueries)
+
+    // The shared scenario handlers predate the timeline rename, so the
+    // custody-timeline read is served here, in this file, on the live path.
+    server.use(
+      http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.assetId}/custody-timeline`, () =>
+        apiJson([returnedTimelineRow]),
+      ),
+    )
 
     const router = renderJourney(issueDetailPath())
 
@@ -151,7 +183,9 @@ describe('issue custody and return chain', () => {
     expect(returnHeading).toHaveTextContent('تفاصيل سند الإرجاع')
     expect(screen.getByText('إعادة الأصل بعد انتهاء المهمة')).toBeInTheDocument()
     expect(screen.getByText('سند-إرجاع-موقّع.pdf')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: issue.documentId })).toHaveAttribute(
+    expect(
+      screen.getByRole('link', { name: new RegExp(issue.systemReferenceNumber) }),
+    ).toHaveAttribute(
       'href',
       issueDetailPath(),
     )
@@ -165,7 +199,11 @@ describe('issue custody and return chain', () => {
     expect(
       await screen.findByRole('heading', { name: 'سجل العهدة غير القابل للتعديل' }),
     ).toBeInTheDocument()
-    const custodyRow = screen.getByText('مديرية المعلوماتية').closest('tr')
+    // The live timeline wire carries holderType + holderId only (no display
+    // name), rendered by the history page as a wire-value cell.
+    const custodyRow = screen
+      .getByText(`${returnedTimelineRow.holderType}:${returnedTimelineRow.holderId}`)
+      .closest('tr')
     expect(custodyRow).not.toBeNull()
     expect(within(custodyRow as HTMLElement).getByText('حفظ تشغيلي')).toBeInTheDocument()
     expect(within(custodyRow as HTMLElement).getByText('مغلقة')).toBeInTheDocument()
@@ -205,9 +243,8 @@ describe('issue custody and return chain', () => {
       serialNumber: `${returnedAsset.serialNumber}-WH`,
     }
     const warehouseCustody = {
-      ...returnedCustody,
-      holder: { ...returnedCustody.holder, displayName: 'مديرية المعلوماتية - نطاق المستودع' },
-      rowVersion: returnedCustody.rowVersion + 1,
+      ...returnedTimelineRow,
+      rowVersion: returnedTimelineRow.rowVersion + 1,
     }
     const warehousePending = {
       ...pendingCustody,
@@ -226,9 +263,9 @@ describe('issue custody and return chain', () => {
         requestCounts.asset += 1
         return apiJson(responseScope === 'enterprise' ? returnedAsset : warehouseAsset)
       }),
-      http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.assetId}/custody`, () => {
+      http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.assetId}/custody-timeline`, () => {
         requestCounts.custodyTimeline += 1
-        return apiJson([responseScope === 'enterprise' ? returnedCustody : warehouseCustody])
+        return apiJson([responseScope === 'enterprise' ? returnedTimelineRow : warehouseCustody])
       }),
       http.get(`${environment.apiBaseUrl}/custodies`, () => {
         requestCounts.custodyList += 1
@@ -250,7 +287,7 @@ describe('issue custody and return chain', () => {
     await waitFor(() => {
       expect(result.current.document).toEqual(issueWire)
       expect(result.current.asset).toEqual(returnedAsset)
-      expect(result.current.custodyTimeline).toEqual([returnedCustody])
+      expect(result.current.custodyTimeline).toEqual([returnedTimelineRow])
       expect(result.current.custodyList?.items).toEqual([pendingCustody])
     })
     expect(requestCounts).toEqual({ asset: 1, custodyList: 1, custodyTimeline: 1, document: 1 })
@@ -280,7 +317,7 @@ describe('issue custody and return chain', () => {
     ).toEqual(warehouseAsset)
     expect(
       client.getQueryData(assetQueryKeys.custody(enterpriseScope, returnedAsset.assetId)),
-    ).toEqual([returnedCustody])
+    ).toEqual([returnedTimelineRow])
     expect(
       client.getQueryData(assetQueryKeys.custody(warehouseScope, returnedAsset.assetId)),
     ).toEqual([warehouseCustody])
@@ -393,9 +430,11 @@ function useScenarioHandlers(
       )
       return asset === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(asset)
     }),
-    http.get(`${environment.apiBaseUrl}/assets/:assetId/custody`, ({ params }) =>
+    http.get(`${environment.apiBaseUrl}/assets/:assetId/custody-timeline`, ({ params }) =>
       apiJson(
-        scenario.ledgers.custodies.filter((custody) => custody.assetId === params['assetId']),
+        scenario.ledgers.custodies
+          .filter((custody) => custody.assetId === params['assetId'])
+          .map(toCustodyTimelineRow),
       ),
     ),
     http.get(`${environment.apiBaseUrl}/assets/:assetId/movements`, ({ params, request }) => {

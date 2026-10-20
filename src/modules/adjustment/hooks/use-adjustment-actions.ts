@@ -11,10 +11,8 @@ import {
   type IdempotencyKey,
 } from '@/shared/services/mutation-safety'
 import { toast } from '@/shared/ui/toast-manager'
-import type {
-  AdjustmentPostResult,
-  AdjustmentReverseResult,
-} from '@/shared/types/generated/eiams-v1'
+import type { PostDocumentResponse } from '@/shared/documents/types/document-wire.types'
+import type { ResourceIdResponse } from '@/shared/api/api-contracts'
 
 /**
  * Manager-owned adjustment posting flow (e21-t06). Mirrors the shared
@@ -72,7 +70,7 @@ export function usePostAdjustmentAction(adjustmentId: string | null) {
   // One retry-safe idempotency context for this action. Minted on the first
   // execution, kept across a failure, cleared only on success.
   const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
-  return useMutation<AdjustmentPostResult, Error, AdjustPostVariables>({
+  return useMutation<PostDocumentResponse, Error, AdjustPostVariables>({
     mutationFn: (variables) => {
       if (adjustmentId === null) {
         return Promise.reject(new Error('adjustmentId is required'))
@@ -126,7 +124,7 @@ export function usePostAdjustmentAction(adjustmentId: string | null) {
 export function useReverseAdjustmentAction(adjustmentId: string | null) {
   const invalidate = useInvalidateAdjustmentScope()
   const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
-  return useMutation<AdjustmentReverseResult, Error, AdjustReverseVariables>({
+  return useMutation<ResourceIdResponse, Error, AdjustReverseVariables>({
     mutationFn: (variables) => {
       if (adjustmentId === null) {
         return Promise.reject(new Error('adjustmentId is required'))

@@ -11,7 +11,7 @@ import type {
 } from '@/shared/documents/types/document-wire.types'
 import { normalizeApiError } from '@/shared/services/api-error'
 import {
-  isConflictError,
+  isConcurrencyConflict,
   withIdempotencyKey,
   type IdempotencyKey,
 } from '@/shared/services/mutation-safety'
@@ -59,7 +59,12 @@ export interface LifecycleActionMutationApi {
   isPending: boolean
   error: Error | null
   reset: () => void
-  /** True while the last failure was a 409 optimistic-concurrency conflict. */
+  /**
+   * True while the last failure was a 409 CONCURRENT EDIT — the row this client
+   * held was already written by another actor. A 409 that reports a state or
+   * idempotency conflict is false: nothing here is stale, and recovering by
+   * refetching would only hide the real cause.
+   */
   isConflict: boolean
 }
 
@@ -73,9 +78,10 @@ const SUCCESS_TOAST_TITLES_AR: Readonly<Record<LifecycleActionKind, string>> = {
 }
 
 /**
- * Guidance surfaced when the server rejects an action with a 409 (D-LIFE-01).
- * The full stale-cache recovery flow lands in t13; this toast is the interim
- * signal that the cached document is no longer authoritative.
+ * Guidance surfaced when the server rejects an action with a CONCURRENT-EDIT 409
+ * (D-LIFE-01) — and only then, because it names another user as the writer and a
+ * state or idempotency 409 names no writer at all. A business 409 keeps the
+ * governed copy for its own code instead.
  */
 const CONFLICT_GUIDANCE_AR = 'المستند عدّله مستخدم آخر. أعد تحميل البيانات'
 
@@ -154,7 +160,7 @@ function toLifecycleActionApi(
     isPending: mutation.isPending,
     error: mutation.error,
     reset: mutation.reset,
-    isConflict: mutation.error !== null && isConflictError(mutation.error),
+    isConflict: mutation.error !== null && isConcurrencyConflict(mutation.error),
   }
 }
 
@@ -199,7 +205,7 @@ function useDocumentLifecycleAction(kind: LifecycleActionKind, documentId: strin
     onError: (error) => {
       const apiError = normalizeApiError(error)
       const description =
-        apiError.detailAr ?? (isConflictError(error) ? CONFLICT_GUIDANCE_AR : undefined)
+        apiError.detailAr ?? (isConcurrencyConflict(error) ? CONFLICT_GUIDANCE_AR : undefined)
       toast.error({
         title: apiError.titleAr,
         ...(description === undefined ? {} : { description }),

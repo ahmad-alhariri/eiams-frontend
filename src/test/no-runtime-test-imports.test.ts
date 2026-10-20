@@ -132,8 +132,27 @@ import {
  * keyed on dotted codes the wire never carries, whose only importer was its own
  * test. `shared/services/api-error.ts` and `shared/api/error-copy-ar.ts` are
  * the live pair.
+ *
+ * Re-measured at 395 for the Return-module surface added by
+ * `return-workflow-frontend-fixes` (FIX-R2/FIX-R3/FIX-R6): the four
+ * application files under `src/modules/custody/` (`hooks/use-return-eligible-items.ts`,
+ * `components/return-original-issue-selector.tsx`,
+ * `components/return-line-asset-selector.tsx`, `pages/return-document-form-page.tsx`).
+ * Then +1 at 396 for `src/shared/api/openapi-drift.ts`, the pure endpoint-discovery
+ * and drift-comparison module behind the contract-drift gate. Its two suites
+ * (`openapi-drift.test.ts`, `openapi-drift.contract.test.ts`) live in `src/`
+ * but are `*.test.ts`, so this count does not include them. The module imports
+ * nothing from `@/test/**`, so the gate above stays green.
+ * Re-measured at 398 by `mutable-draft-window` (D-REV-01): the two application
+ * files that un-dead-end a server-created DRAFT document -
+ * `src/shared/documents/draft-paper-reference-editor.tsx` (the inline paper
+ * reference editor the shared detail page renders only for a Draft) and
+ * `src/shared/documents/use-document-paper-reference.ts` (the TanStack mutation
+ * that writes through the existing `PUT /warehouse-documents/{id}/paper-reference`
+ * transport, invalidating the detail branch on success). Neither reaches into
+ * `@/test/**`, so the no-offenders assertion below stays green.
  */
-const SCANNED_FILE_COUNT = 390
+const SCANNED_FILE_COUNT = 398
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

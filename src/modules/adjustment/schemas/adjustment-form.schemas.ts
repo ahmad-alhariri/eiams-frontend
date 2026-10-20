@@ -1,11 +1,11 @@
 import { z } from 'zod'
 
 import { ADJUSTMENT_PURPOSE_LABELS_AR } from '@/modules/adjustment/types/adjustment.types'
-import type { InventoryAdjustmentDraftRequest } from '@/shared/types/generated/eiams-v1'
+import type { AdjustmentDraftRequest } from '@/modules/adjustment/types/adjustment.types'
 
 /**
  * Form schemas for the new-adjustment draft page (e21-t04), shaped exactly
- * like `InventoryAdjustmentDraftRequest` (D-ADJ-01):
+ * like `AdjustmentDraftRequest` (D-ADJ-01):
  *
  * - `CountVariance` requires a count reference; the page locks both the
  *   purpose and the warehouse when launched from a count session (e21-t03).
@@ -96,7 +96,7 @@ export type AdjustmentFormValues = z.infer<typeof adjustmentFormSchema>
 /** Maps validated form values onto the exact contract request body. */
 export function toAdjustmentDraftRequest(
   values: AdjustmentFormValues,
-): InventoryAdjustmentDraftRequest {
+): AdjustmentDraftRequest {
   return {
     warehouseId: values.header.warehouseId,
     purpose: values.header.purpose,

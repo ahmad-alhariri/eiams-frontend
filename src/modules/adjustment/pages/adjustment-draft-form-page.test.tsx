@@ -180,42 +180,25 @@ function useCreateHandler() {
       capturedCreateBody = await request.json()
       return okJson(
         {
-          adjustmentId: '423e4567-e89b-42d3-a456-426614174004',
-          countReference: null,
-          createdAt: '2026-08-26T08:00:00.000Z',
-          createdBy: { id: fixtureUserId(), displayName: 'مدير المستودع' },
-          documentId: '523e4567-e89b-42d3-a456-426614174005',
-          documentReference: 'EIAMS-ADJ-DRAFT-0001',
-          lines: [],
-          policy: {
-            actions: [],
-            advisories: [],
-            blockers: [],
-            documentId: '523e4567-e89b-42d3-a456-426614174005',
-            documentStatus: 'Draft',
-            evaluatedAt: '2026-08-26T08:00:00.000Z',
-            policyKind: 'Adjustment',
-            rowVersion: 0,
-            signedOriginalSatisfied: false,
-          },
-          postedAt: null,
+          id: '423e4567-e89b-42d3-a456-426614174004',
+          warehouseId: WAREHOUSE_ID,
+          warehouseCode: 'WH-01',
+          warehouseName: 'المستودع المركزي',
+          countId: null,
           purpose: 'DirectCorrection',
-          reason: 'تصحيح',
-          rowVersion: 0,
           status: 'Draft',
-          warehouse: {
-            id: WAREHOUSE_ID,
-            displayName: 'المستودع المركزي',
-          },
+          reason: 'تصحيح خطأ إدخال',
+          systemReferenceNumber: 'EIAMS-ADJ-DRAFT-0001',
+          documentStatus: 'Draft',
+          createdAtUtc: '2026-08-26T08:00:00.000Z',
+          postedAtUtc: null,
+          rowVersion: 1,
+          lines: [],
         },
         { status: 201 },
       )
     }),
   )
-}
-
-function fixtureUserId(): string {
-  return '923e4567-e89b-42d3-a456-426614174009'
 }
 
 function renderForm(initialEntry = '/adjustments/new') {

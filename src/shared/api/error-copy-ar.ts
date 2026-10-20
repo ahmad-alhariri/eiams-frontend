@@ -573,6 +573,13 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
   CUSTODIES_HOLDER_NOT_FOUND: { titleAr: 'لم يتم العثور على الجهة المحددة.', detailAr: null },
   CUSTODIES_HOLDER_INACTIVE: { titleAr: 'الجهة المحددة غير نشطة.', detailAr: null },
   CUSTODIES_NO_ACTIVE_CUSTODY: { titleAr: 'لا توجد عهدة نشطة لهذه الوحدة.', detailAr: null },
+  // `CustodyErrors.CannotReverseChangedCustody`: a STATE conflict, not a stale
+  // row — the custody moved on after the original operation, so reversing it is
+  // refused. Naming another user's edit here would misattribute the cause.
+  CUSTODIES_CANNOT_REVERSE_CHANGED_CUSTODY: {
+    titleAr: 'تغيّرت حالة العهدة بعد العملية الأصلية، لذلك لا يمكن عكس السند.',
+    detailAr: 'راجع حركة الأصل بعد هذا السند قبل طلب العكس.',
+  },
   // Domain not-found codes the backend emits verbatim as `<Aggregate>.NotFound`,
   // normalized to UPPER_SNAKE by `ApiResults.NormalizeErrorCode`. These replaced the
   // fabricated generic `RESOURCE_NOT_FOUND` that fixtures used to assert, so a 404
@@ -598,6 +605,15 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'توجد سند تسوية مرتبط بهذه الجرد.',
     detailAr: null,
   },
+  // `InventoryAdjustmentErrors.CountVarianceMismatch` — CountVariance drafts freeze their lines,
+  // so a reason that is not the count line's variance reason would only surface as a 409 at
+  // posting and could then never be fixed. Creation-time classification (missing / extra /
+  // mismatched) is in the wire `details`; the copy must tell the user what to fix in each case.
+  INVENTORY_ADJUSTMENTS_COUNT_VARIANCE_MISMATCH: {
+    titleAr:
+      'بنود سند التسوية لا تطابق فروقات الجرد: بنود ناقصة — أنشئ بنداً لكل فرق جرد بنفس الكمية؛ بنود زائدة — احذفها لأن الجرد لا يفرّق فيها؛ بنود مختلفة — صحّح الفرق وانسخ سبب فرق سطر الجرد كما ورد حرفياً.',
+    detailAr: null,
+  },
   INVENTORY_COUNTS_POSTING_BLOCKED: {
     titleAr: 'لا يمكن ترحيل سند التسوية حالياً.',
     detailAr: null,
@@ -614,6 +630,14 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
   DISPOSALS_ASSET_ALREADY_DISPOSED: { titleAr: 'الأصل مستبعد مسبقاً.', detailAr: null },
   DISPOSALS_ASSET_STATE_CHANGED: {
     titleAr: 'تغيّرت حالة الأصل. حدّث الصفحة ثم أعد المحاولة.',
+    detailAr: null,
+  },
+  // `InventoryAdjustmentErrors.DisposalReversalNotAllowed` — a disposal document is terminal, so
+  // its Reverse is refused both as a policy blocker and as the 409 the reverse command itself
+  // returns (the command's message is English, so this entry is what speaks on that path). The
+  // policy screen prefers the backend's own Arabic sentence; this covers every other rendering.
+  DISPOSALS_REVERSAL_NOT_ALLOWED: {
+    titleAr: 'سند الإعدام نهائي ولا يمكن عكسه.',
     detailAr: null,
   },
   DOCUMENT_LINE_ASSET_SELECTIONS_ASSET_NOT_IN_STOCK: {

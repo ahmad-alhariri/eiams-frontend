@@ -100,11 +100,30 @@ describe('createAssetService (transport seam)', () => {
     await service.listAssetMovements('id/1', { pageIndex: 0, pageSize: 5 })
 
     expect(sentConfig(0)).toMatchObject({ url: '/assets/id%2F1', method: 'GET' })
-    expect(sentConfig(1)).toMatchObject({ url: '/assets/id%2F1/custody', method: 'GET' })
+    // GET /assets/{assetId}/custody is gone in the live API: replaced by
+    // GET /assets/{assetId}/custody-timeline (D-INT-02).
+    expect(sentConfig(1)).toMatchObject({
+      url: '/assets/id%2F1/custody-timeline',
+      method: 'GET',
+    })
     expect(sentConfig(2)).toMatchObject({
       url: '/assets/id%2F1/movements',
       method: 'GET',
       params: { pageIndex: 0, pageSize: 5 },
+    })
+  })
+
+  it('returns the live custody-timeline payload shape as an array of timeline rows', async () => {
+    mockedRequest.mockResolvedValue(envelope([]))
+
+    const service = createAssetService(testTransport)
+    const result = await service.getAssetCustodyTimeline('asset-1')
+
+    expect(Array.isArray(result)).toBe(true)
+    expect(result).toEqual([])
+    expect(sentConfig()).toMatchObject({
+      url: '/assets/asset-1/custody-timeline',
+      method: 'GET',
     })
   })
 })

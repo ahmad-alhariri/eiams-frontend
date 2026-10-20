@@ -5,14 +5,24 @@ import {
   useReverseAdjustmentAction,
 } from '@/modules/adjustment/hooks/use-adjustment-actions'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
+import {
+  actionAvailabilityReasonAr,
+  policyBlockerMessageAr,
+} from '@/shared/documents/document-policy-gates'
+import type {
+  DocumentActionAvailability,
+  DocumentPolicyAdvisory,
+  DocumentPolicyBlocker,
+} from '@/shared/documents/types/document-wire.types'
 import { Button } from '@/shared/ui/button'
 
 /**
- * Manager-owned adjustment action bar (e21-t06). Composes the server policy
- * (embedded `DocumentPolicy` on the read model) with the session permission
- * gate — the shared document LifecycleActionBar is NOT reused because
- * adjustments have no Submit/Reject/Revise/Cancel transitions (D-ADJ-01):
- * only Post (Draft) and Reverse (Posted, ordinary purposes) exist.
+ * Manager-owned adjustment action bar (e21-t06). Composes the server policy —
+ * the shared document engine's `GET /warehouse-documents/{documentId}/policy`
+ * read, keyed by the adjustment's own id — with the session permission gate.
+ * The shared document LifecycleActionBar is NOT reused because adjustments
+ * have no Submit/Reject/Revise/Cancel transitions (D-ADJ-01): only Post
+ * (Draft) and Reverse (Posted, ordinary purposes) exist.
  *
  * - Post renders only when the policy presents it AND the manager holds the
  *   posting permission; disabled with the server's Arabic reason while the
@@ -37,27 +47,15 @@ export function AdjustmentActionBar({
   /** Disposal adjustments are terminal — no reverse action, ever. */
   purpose: 'CountVariance' | 'DirectCorrection' | 'Disposal'
   rowVersion: number
-  /** Server-authored availability slice from the embedded DocumentPolicy. */
-  actions: ReadonlyArray<{
-    action: string
-    allowed: boolean
-    presentation: 'Hidden' | 'Disabled' | 'Enabled'
-    reasonAr?: string | null
-    reasonRequired?: boolean
-  }>
+  /** Server-authored availability slice from the shared document policy. */
+  actions: ReadonlyArray<DocumentActionAvailability>
   /** Server blockers (SignedOriginal etc.) echoed under the bar. */
-  blockers: ReadonlyArray<{ code: string; messageAr: string }>
+  blockers: ReadonlyArray<DocumentPolicyBlocker>
   /**
-   * Server policy advisories (e24-t07). Advisory codes are the ONLY codes in the
-   * v1 contract, so an ActiveSoftFreeze warning silently disappeared on the
-   * adjustment surface. They render as muted notes and never gate an action.
+   * Server policy advisories (e24-t07): the wire `warnings` slice. They
+   * render as muted notes and never gate an action.
    */
-  advisories: ReadonlyArray<{
-    code: string
-    messageAr: string
-    countReference?: string | null
-    scopeSummaryAr?: string | null
-  }>
+  advisories: ReadonlyArray<DocumentPolicyAdvisory>
 }) {
   const { has } = usePermission()
   const postAction = usePostAdjustmentAction(adjustmentId)
@@ -98,7 +96,7 @@ export function AdjustmentActionBar({
         <div role="alert" className="flex flex-col gap-1 rounded-md bg-destructive/5 px-3 py-2">
           {blockers.map((blocker) => (
             <p key={blocker.code} className="text-sm font-medium text-destructive">
-              {blocker.messageAr}
+              {policyBlockerMessageAr(blocker)}
             </p>
           ))}
         </div>
@@ -115,9 +113,7 @@ export function AdjustmentActionBar({
               data-slot="policy-advisory-row"
               className="text-sm text-muted-foreground"
             >
-              {advisory.messageAr}
-              {advisory.scopeSummaryAr ? ` — ${advisory.scopeSummaryAr}` : ''}
-              {advisory.countReference ? ` (مرجع: ${advisory.countReference})` : ''}
+              {advisory.message}
             </p>
           ))}
         </div>
@@ -130,7 +126,7 @@ export function AdjustmentActionBar({
             disabled={postAvailability?.allowed === false || postAction.isPending}
             title={
               postAvailability?.allowed === false
-                ? (postAvailability.reasonAr ?? undefined)
+                ? (actionAvailabilityReasonAr(postAvailability) ?? undefined)
                 : undefined
             }
             onClick={() => postAction.mutate({ rowVersion })}

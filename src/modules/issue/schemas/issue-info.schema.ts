@@ -38,11 +38,11 @@ export function recipientTypeLabelAr(recipientType: string): string {
 }
 
 /**
- * 500-char cap on `issueReason` is presentation-level only — schema.md types
+ * 200-char cap on `issueReason` is presentation-level only — schema.md types
  * it as an open text column; the cap matches sibling petals' VARCHAR caps and
  * keeps the reason box readable in the UI.
  */
-const ISSUE_REASON_MAX_LENGTH = 500
+export const ISSUE_REASON_MAX_LENGTH = 200
 
 export const issueInfoSchema = z.object({
   recipientType: z.enum(ISSUE_RECIPIENT_TYPES, 'يجب اختيار نوع الجهة المستلمة.'),

@@ -230,6 +230,38 @@ describe('QuantityLineEditor', () => {
     expect(screen.getByText('متر')).toBeInTheDocument()
   })
 
+  /**
+   * Regression guard (FIX-R2): the `includeAssetMaterials` flag must stay OFF
+   * by default for every type (Receiving/Opening/Issue/Transfer unchanged) and
+   * only expose Asset kinds for a caller that opts in — the Return page pairs
+   * it with the eligible-asset picker slot.
+   */
+  it('excludes Asset kinds by default and shows them only when opted in', async () => {
+    const user = userEvent.setup()
+    useCatalogHandlers()
+    const { host } = createTestHost()
+    const rendered = render(host(() => <QuantityLineEditor documentType="Issue" warehouseId={undefined} />))
+    await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
+    fireEvent.change(screen.getByPlaceholderText('ابحث عن مادة...'), { target: { value: 'قطعة' } })
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'قماش قطني' })).toBeInTheDocument(),
+    )
+    expect(screen.queryByRole('option', { name: 'حاسوب مكتبي' })).not.toBeInTheDocument()
+
+    rendered.rerender(
+      host(() => (
+        <QuantityLineEditor documentType="Return" warehouseId={undefined} includeAssetMaterials />
+      )),
+    )
+    // A DIFFERENT query: the editor is not remounted, so reseeding the same
+    // query would keep publishing the stale (Asset-free) result — the material
+    // filter swap reaches the option list only through a re-run search.
+    fireEvent.change(screen.getByPlaceholderText('ابحث عن مادة...'), { target: { value: 'قط' } })
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'حاسوب مكتبي' })).toBeInTheDocument(),
+    )
+  })
+
   it('derives the base-quantity preview and unit ids when an alternative unit is picked', async () => {
     const user = userEvent.setup()
     useCatalogHandlers()

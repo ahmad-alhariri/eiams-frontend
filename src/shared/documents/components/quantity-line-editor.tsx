@@ -70,6 +70,14 @@ export interface QuantityLineEditorProps {
    * that document type. Return `null` to render nothing for a line.
    */
   assetSlotForLine?: (index: number) => ReactNode
+  /**
+   * False by DEFAULT: Asset-kind materials stay excluded because
+   * Receiving/Opening capture asset lines in their own asset-capture editor
+   * (e12-t05). A caller that MOVES existing assets through quantity lines —
+   * the Return page (FIX-R2) — sets this to make Asset-kind materials
+   * searchable, then pairs it with an `assetSlotForLine` picker.
+   */
+  includeAssetMaterials?: boolean
 }
 
 /** Aggregate capability state for the currently selected quantity-line materials. */
@@ -503,10 +511,13 @@ function QuantityLineRow({
  * `documentLinesSchema` into their resolver and flatten the lines through
  * `toDocumentLineInputs` into `buildDraftRequest`.
  *
- * Asset-kind materials are excluded (the asset-line capture editor of e12-t05
- * owns those rows); the optional fields follow the per-type presets of
- * {@link QUANTITY_LINE_FEATURES_BY_TYPE}, and every value maps 1:1 to the
- * `DocumentLineInput` contract.
+ * Asset-kind materials are excluded by DEFAULT (the asset-line capture editor
+ * of e12-t05 owns those rows in Receiving/Opening); a caller opts in with
+ * `includeAssetMaterials`, and the Return page does — a Return moves EXISTING
+ * assets, so its Asset-kind lines pick them from `/returns/eligible-items`
+ * through the `assetSlotForLine` seam. The optional fields follow the per-type
+ * presets of {@link QUANTITY_LINE_FEATURES_BY_TYPE}, and every value maps 1:1
+ * to the `DocumentLineInput` contract.
  */
 export function QuantityLineEditor({
   documentType,
@@ -516,10 +527,11 @@ export function QuantityLineEditor({
   onCapabilityGateChange,
   balanceForLine,
   assetSlotForLine,
+  includeAssetMaterials = false,
 }: QuantityLineEditorProps) {
   const { control, formState } = useFormContext<DocumentLinesContainer>()
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
-  const materialSelector = useScopedMaterialSelector()
+  const materialSelector = useScopedMaterialSelector(includeAssetMaterials)
   const capabilityValidation = useWarehouseCapabilityValidation(warehouseId)
   const operation = capabilityOperationFor(documentType)
   const lines = useWatch({ control, name: 'lines' })

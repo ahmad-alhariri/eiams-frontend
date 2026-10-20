@@ -1,33 +1,42 @@
 import { Link, useParams } from 'react-router'
 
 import { AdjustmentActionBar } from '@/modules/adjustment/components/adjustment-action-bar'
+import { useAdjustmentDetailQuery } from '@/modules/adjustment/hooks/use-adjustment-queries'
 import {
   ADJUSTMENT_PURPOSE_LABELS_AR,
   isDisposalPurpose,
 } from '@/modules/adjustment/types/adjustment.types'
-import { useAdjustmentDetailQuery } from '@/modules/adjustment/hooks/use-adjustment-queries'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { AttachmentPanel } from '@/shared/documents/attachment-panel'
+import { useDocumentAttachmentManager } from '@/shared/documents/use-document-attachments'
+import { useDocumentPolicyQuery } from '@/shared/documents/use-document-queries'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
-import type { DocumentAttachmentResponse } from '@/shared/documents/types/document-wire.types'
 import { formatDateTime } from '@/shared/utils/format'
 
 /**
- * Adjustment detail page (e21-t07): server-authoritative read model with
- * the manager action bar (e21-t06) and the read-only attachment panel
- * showing the SignedOriginal posting gate (D-ATT-01 slice of the embedded
- * policy). Disposal adjustments render their terminal state explicitly —
+ * Adjustment detail page (e21-t07). The server-aware read model comes from the
+ * module's own `/adjustments/{id}` read; the attached policy and attachment
+ * read/write surface are the shared document engine's, keyed by the SAME
+ * document id (on the server an adjustment's `id` is the document id — the
+ * adjustment response embeds neither policy nor attachments, and none are
+ * invented here). The manager action bar (e21-t06) is driven by the shared
+ * policy read. Disposal adjustments render their terminal state explicitly —
  * no reversal affordance exists anywhere on this surface.
  */
 export default function AdjustmentDetailPage() {
   const { adjustmentId } = useParams<{ adjustmentId: string }>()
   const detailQuery = useAdjustmentDetailQuery(adjustmentId)
   const adjustment = detailQuery.data
+
+  // The adjustment's own id is the shared document engine's documentId.
+  const documentId = adjustment === undefined ? null : adjustment.id
+  const policyQuery = useDocumentPolicyQuery(documentId)
+  const attachmentManager = useDocumentAttachmentManager(documentId)
 
   if (detailQuery.isLoading) {
     return <LoadingSpinner label="جارٍ تحميل سند التسوية..." />
@@ -40,24 +49,18 @@ export default function AdjustmentDetailPage() {
       />
     )
   }
-
-  // Temporary projection seam. The adjustment module's own read still answers the
-  // provisional snapshot's `DocumentAttachment` (eiams-frontend-whhu.24 owns the
-  // rewiring); the shared attachment panel is on the real
-  // `DocumentAttachmentResponse`. This maps the five members the panel renders
-  // and drops the snapshot-only ones (checksum, documentId, uploader, downloadUrl)
-  // rather than widening the panel's prop type to accept a projection the live API
-  // does not serve.
-  const attachments: readonly DocumentAttachmentResponse[] = (adjustment.attachments ?? []).map(
-    (attachment) => ({
-      id: attachment.attachmentId,
-      attachmentType: attachment.attachmentType,
-      originalFilename: attachment.originalFilename,
-      mimeType: attachment.mimeType,
-      fileSize: attachment.fileSize,
-      uploadedAtUtc: attachment.uploadedAt,
-    }),
-  )
+  if (policyQuery.isPending) {
+    return <LoadingSpinner label="جارٍ تحميل سياسة الترحيل..." />
+  }
+  if (policyQuery.isError || policyQuery.data === undefined) {
+    return (
+      <ErrorState
+        title="تعذّر تحميل سياسة الترحيل"
+        description="تعذّر جلب تقييم الخادم لإمكانية ترحيل هذا السند. حاول مرة أخرى."
+      />
+    )
+  }
+  const policy = policyQuery.data
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -67,7 +70,7 @@ export default function AdjustmentDetailPage() {
             {ROUTE_METADATA.adjustmentDetail.labelAr}
             <span dir="ltr" className="font-english text-muted-foreground">
               {' '}
-              — {adjustment.documentReference}
+              — {adjustment.systemReferenceNumber}
             </span>
           </>
         }
@@ -90,17 +93,14 @@ export default function AdjustmentDetailPage() {
             <DetailField label="الغرض">
               {ADJUSTMENT_PURPOSE_LABELS_AR[adjustment.purpose]}
             </DetailField>
-            <DetailField label="المستودع">{adjustment.warehouse.displayName}</DetailField>
-            <DetailField label="مرجع الجرد" ltr>
-              {adjustment.countReference ?? '—'}
-            </DetailField>
+            <DetailField label="المستودع">{adjustment.warehouseName}</DetailField>
             <DetailField label="سبب التسوية">{adjustment.reason}</DetailField>
             <DetailField label="أُنشئ في" ltr>
-              {formatDateTime(adjustment.createdAt ?? '')}
+              {formatDateTime(adjustment.createdAtUtc)}
             </DetailField>
-            {adjustment.postedAt !== null && adjustment.postedAt !== undefined ? (
+            {adjustment.postedAtUtc !== null ? (
               <DetailField label="رُحِّل في" ltr>
-                {formatDateTime(adjustment.postedAt)}
+                {formatDateTime(adjustment.postedAtUtc)}
               </DetailField>
             ) : null}
             {isDisposalPurpose(adjustment.purpose) && adjustment.status === 'Posted' ? (
@@ -110,13 +110,13 @@ export default function AdjustmentDetailPage() {
         </ContentCard>
 
         <AdjustmentActionBar
-          adjustmentId={adjustment.adjustmentId}
+          adjustmentId={adjustment.id}
           status={adjustment.status}
           purpose={adjustment.purpose}
           rowVersion={adjustment.rowVersion}
-          actions={adjustment.policy.actions}
-          blockers={adjustment.policy.blockers}
-          advisories={adjustment.policy.advisories}
+          actions={policy.actions}
+          blockers={policy.blockers}
+          advisories={policy.warnings}
         />
 
         <ContentCard title="بنود الفروقات">
@@ -140,17 +140,21 @@ export default function AdjustmentDetailPage() {
                 </thead>
                 <tbody>
                   {adjustment.lines.map((line) => (
-                    <tr key={line.adjustmentLineId} data-slot="adjustment-line-row">
+                    <tr key={line.lineId} data-slot="adjustment-line-row">
                       <td className="px-3 py-2 font-medium text-foreground">
-                        {line.material.displayName}
-                        {line.assetNumber !== null && line.assetNumber !== undefined ? (
-                          <span className="ms-2 text-xs text-muted-foreground" dir="ltr">
-                            أصل: {line.assetNumber}
+                        {line.materialNameAr}
+                        {line.assets.map((asset) => (
+                          <span
+                            key={asset.id}
+                            className="ms-2 text-xs text-muted-foreground"
+                            dir="ltr"
+                          >
+                            أصل: {asset.assetNumber}
                           </span>
-                        ) : null}
+                        ))}
                       </td>
                       <td className="px-3 py-2 text-foreground" dir="ltr">
-                        {line.quantityDelta > 0 ? `+${line.quantityDelta}` : line.quantityDelta}
+                        {line.difference > 0 ? `+${line.difference}` : line.difference}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{line.reason}</td>
                     </tr>
@@ -166,17 +170,18 @@ export default function AdjustmentDetailPage() {
           description="النسخة الأصلية الموقعة شرط إلزامي للترحيل؛ يتحقق منها الخادم قبل قبول أي ترحيل."
         >
           <AttachmentPanel
-            attachments={attachments}
-            pendingUploads={[]}
-            onUpload={() => undefined}
-            onRemove={() => undefined}
-            onCancelPending={() => undefined}
-            isUploading={false}
-            readOnly
-            policy={{
-              signedOriginalSatisfied: adjustment.policy.signedOriginalSatisfied,
-              blockers: adjustment.policy.blockers,
-            }}
+            attachments={attachmentManager.attachments}
+            pendingUploads={attachmentManager.pendingUploads}
+            onUpload={attachmentManager.onUpload}
+            onRemove={attachmentManager.onRemove}
+            onCancelPending={attachmentManager.onCancelPending}
+            isUploading={attachmentManager.isUploading}
+            uploadError={attachmentManager.uploadError}
+            deleteError={attachmentManager.deleteError}
+            readOnly={attachmentManager.readOnly}
+            disabled={attachmentManager.disabled}
+            policy={policy}
+            documentStatus={adjustment.documentStatus}
           />
         </ContentCard>
       </div>

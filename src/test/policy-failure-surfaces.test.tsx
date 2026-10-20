@@ -9,7 +9,6 @@ import { LifecycleActionBar } from '@/shared/documents/lifecycle-action-bar'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createSessionRole, createSessionScope, createSessionUser } from '@/test/msw/factories'
 import { wirePolicy } from '@/test/msw/document-wire-fixtures'
-import { policyBlockerMessageAr } from '@/shared/documents/document-policy-gates'
 import { ACTIVE_SOFT_FREEZE_ADVISORY_CODE } from '@/shared/documents/policy-blocker-codes'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import type { DocumentPolicy } from '@/shared/documents/types/document-wire.types'
@@ -110,30 +109,11 @@ function blockedPolicy(): DocumentPolicy {
   })
 }
 
-/** One wire policy → the three prop slices `AdjustmentActionBar` still declares. */
 function adjustmentBarProps(policy: DocumentPolicy) {
   return {
-    actions: policy.actions.map((availability) => ({
-      action: availability.action,
-      allowed: availability.allowed,
-      presentation: availability.presentation,
-      reasonRequired: availability.reasonRequired,
-      // The adjustment bar still takes a pre-resolved Arabic reason; resolving it
-      // here from the same governed code the shared bar uses keeps the two
-      // surfaces reading one payload.
-      reasonAr: availability.reasonCode === null ? null : SIGNED_ORIGINAL_REASON_AR,
-    })),
-    blockers: policy.blockers.map((blocker) => ({
-      code: blocker.code,
-      // The adjustment bar echoes a resolved Arabic sentence; `null` means the
-      // code has no governed entry, and an unmapped blocker simply renders
-      // nothing rather than leaking the server's English prose.
-      messageAr: policyBlockerMessageAr(blocker) ?? '',
-    })),
-    advisories: policy.warnings.map((warning) => ({
-      code: warning.code,
-      messageAr: warning.message,
-    })),
+    actions: policy.actions,
+    blockers: policy.blockers,
+    advisories: policy.warnings,
   }
 }
 
@@ -295,13 +275,7 @@ describe('permission denial hides rather than disables', () => {
         status="Draft"
         purpose="DirectCorrection"
         rowVersion={1}
-        actions={wirePolicy({ documentId: DOCUMENT_ID, status: 'Submitted' }).actions.map(
-          (entry) => ({
-            action: entry.action,
-            allowed: entry.allowed,
-            presentation: entry.presentation,
-          }),
-        )}
+        actions={wirePolicy({ documentId: DOCUMENT_ID, status: 'Submitted' }).actions}
         blockers={[]}
         advisories={[]}
       />,

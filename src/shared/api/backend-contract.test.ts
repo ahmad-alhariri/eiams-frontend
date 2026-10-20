@@ -306,6 +306,52 @@ describe('D-OPEN-02 opening and initialization codes (domain-code drift guard)',
   })
 })
 
+/**
+ * The CountVariance adjustment surface. A mismatched line reason used to pass
+ * creation and die at POSTING with `COUNT_SOURCE_DRIFTED`, after which the
+ * immutable lines made the draft a dead end. The new early code needs copy the
+ * user can act on; this family fails the build if the C# code renames or the
+ * Arabic mapping drops.
+ */
+const BACKEND_ADJUSTMENT_DOMAIN_CODES = [
+  'INVENTORY_ADJUSTMENTS_COUNT_VARIANCE_MISMATCH',
+] as const
+
+const ADJUSTMENT_CODE_NORMALIZATION: ReadonlyArray<readonly [string, string]> = [
+  ['InventoryAdjustments.CountVarianceMismatch', 'INVENTORY_ADJUSTMENTS_COUNT_VARIANCE_MISMATCH'],
+]
+
+describe('CountVariance adjustment mismatch codes (domain-code drift guard)', () => {
+  it.each(BACKEND_ADJUSTMENT_DOMAIN_CODES)('has Arabic copy for the backend code %s', (code) => {
+    const copy = arabicCopyForCode(code)
+    expect(copy, `no Arabic copy for backend code ${code}`).not.toBeNull()
+    expect(copy?.titleAr.trim().length ?? 0).toBeGreaterThan(0)
+  })
+
+  // The backend classifies every disagreement at creation time as exactly one of
+  // missing / extra / mismatched (see `InventoryAdjustmentErrors.CountVarianceMismatch`),
+  // so the Arabic copy must keep stating all three situations for its three categories.
+  it('states the three mismatch situations in the Arabic copy', () => {
+    const copy = arabicCopyForCode('INVENTORY_ADJUSTMENTS_COUNT_VARIANCE_MISMATCH')
+    expect(copy?.titleAr).toContain('ناقصة')
+    expect(copy?.titleAr).toContain('زائدة')
+    expect(copy?.titleAr).toContain('مختلفة')
+  })
+
+  it.each(ADJUSTMENT_CODE_NORMALIZATION)(
+    'normalizes the C# code %s to the key this map uses',
+    (dottedCode, expectedKey) => {
+      expect(normalizeWireErrorCode(dottedCode), dottedCode).toBe(expectedKey)
+    },
+  )
+
+  it('keeps the mapped Arabic free of Latin characters', () => {
+    for (const code of BACKEND_ADJUSTMENT_DOMAIN_CODES) {
+      expect(arabicCopyForCode(code)?.titleAr, code).not.toMatch(/[A-Za-z]/u)
+    }
+  })
+})
+
 describe('Arabic error copy (frontend-owned, D-OAS-01 inverted)', () => {
   it.each(BACKEND_STATUS_CODES)('has Arabic copy for the backend code %s', (code) => {
     const copy = arabicCopyForCode(code)

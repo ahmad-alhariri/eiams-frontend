@@ -3,11 +3,13 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { Link } from 'react-router'
 
 import { useCustodiesQuery } from '@/modules/custody/hooks/use-custody-queries'
-import { AssignCustodyDialog } from '@/modules/custody/components/assign-custody-dialog'
+import {
+  AssignCustodyDialog,
+  type AssignCustodyRow,
+} from '@/modules/custody/components/assign-custody-dialog'
 import type { ListCustodiesQuery } from '@/modules/custody/types/custody.types'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import type { AssetCustody } from '@/shared/types/generated/eiams-v1'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
@@ -56,7 +58,7 @@ const columnHelper = createColumnHelper<typeof dataTableFeatures, PendingCustody
 export default function PendingCustodyListPage() {
   const { page, pageSize, setPage, setPageSize } = useServerPagination()
   const [search, setSearch] = useState('')
-  const [assigningRow, setAssigningRow] = useState<AssetCustody | null>(null)
+  const [assigningRow, setAssigningRow] = useState<AssignCustodyRow | null>(null)
   const { has } = usePermission()
 
   const filters = useMemo<ListCustodiesQuery>(
@@ -122,7 +124,7 @@ export default function PendingCustodyListPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setAssigningRow(row.original as AssetCustody)}
+                onClick={() => setAssigningRow(row.original)}
               >
                 تكليف موظف
               </Button>

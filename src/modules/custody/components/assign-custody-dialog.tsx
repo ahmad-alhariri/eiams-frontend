@@ -5,13 +5,10 @@ import { FormProvider, useForm } from 'react-hook-form'
 
 import { CounterpartSelectField } from '@/modules/custody/components/counterpart-select-field'
 import { useAssignCustodyMutation } from '@/modules/custody/hooks/use-custody-queries'
-import type { CustodyMutationRequest } from '@/modules/custody/types/custody.types'
 import {
   assignCustodySchema,
   type AssignCustodyFormValues,
 } from '@/modules/custody/schemas/assign-custody.schema'
-import { createIdempotencyKey } from '@/shared/services/mutation-safety'
-import type { AssetCustody } from '@/shared/types/generated/eiams-v1'
 import {
   Dialog,
   DialogContent,
@@ -23,8 +20,26 @@ import {
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 
+/**
+ * The minimal row shape the dialog needs from the pending list. Mirrors the
+ * shape of `AssetCustody` (the list-row carried by `useCustodiesQuery` for
+ * `subjectType === 'Asset'`) without dragging in the generated union — the
+ * list never includes the other subjects, so a static type is sufficient.
+ *
+ * Lives next to the dialog so the next assignment-dialog workstream (when
+ * this is replaced by the snapshot-as-source contract) does not need to
+ * search for it.
+ */
+export interface AssignCustodyRow {
+  readonly custodyId: string
+  readonly assetId: string
+  readonly assetNumber: string
+  readonly rowVersion: number
+  readonly issueDocumentId: string
+}
+
 export interface AssignCustodyDialogProps {
-  custody: AssetCustody | null
+  custody: AssignCustodyRow | null
   onClose: () => void
 }
 
@@ -55,22 +70,23 @@ export function AssignCustodyDialog({ custody, onClose }: AssignCustodyDialogPro
 
   const submit = methods.handleSubmit((values) => {
     if (custody === null) return
-    const request: CustodyMutationRequest = {
-      subjectType: 'Asset',
-      assetId: custody.assetId,
-      custodyKind: 'Personal',
-      effectiveAt: new Date().toISOString(),
-      holderId: values.holderId,
-      holderType: 'Employee',
-      issueDocumentId: custody.issueDocumentId,
-      reason:
-        values.reason !== undefined && values.reason !== ''
-          ? `${values.reason} (${values.holderDisplayName})`
-          : `تكليف شخصي إلى ${values.holderDisplayName}`,
-      rowVersion: custody.rowVersion,
-    }
+    // Live wire for `POST /assets/{assetId}/custody-assignment`:
+    //   { employeeId, expectedCustodyRowVersion, note? }
+    // `note` is omitted when the operator leaves the reason blank. The asset
+    // id is the path segment, not a body field.
+    const note =
+      values.reason !== undefined && values.reason !== ''
+        ? `${values.reason} (${values.holderDisplayName})`
+        : `تكليف شخصي إلى ${values.holderDisplayName}`
     assignMutation.mutate(
-      { request, idempotencyKey: createIdempotencyKey() },
+      {
+        assetId: custody.assetId,
+        request: {
+          employeeId: values.holderId,
+          expectedCustodyRowVersion: custody.rowVersion,
+          note,
+        },
+      },
       { onSuccess: onClose },
     )
   })

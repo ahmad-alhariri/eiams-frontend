@@ -5,15 +5,41 @@ import { apiTransport } from '@/shared/api/transport'
 import type { ListAssetMovementsQuery, ListAssetsQuery } from '@/modules/asset/types/asset.types'
 import type {
   Asset,
-  AssetCustody,
   AssetMovementPage,
   AssetPage,
   paths,
 } from '@/shared/types/generated/eiams-v1'
 
+/**
+ * Handwritten wire row for `GET /assets/{assetId}/custody-timeline`
+ * (D-INT-02). Verified against
+ * `Application.Custodies.GetTimeline.AssetCustodyTimelineResponse` on
+ * 2026-10-20. The previous generated `AssetCustody` carried an embedded
+ * `holder: CounterpartOption` and the field names `fromTs` / `toTs`;
+ * neither matches the live row.
+ *
+ * Kept inline next to the service so the consumer of `getAssetCustodyTimeline`
+ * has a single place to import from. `asset-custody-history-page.tsx` reads
+ * this type directly.
+ */
+export interface AssetCustodyTimelineRow {
+  readonly custodyId: string
+  readonly assetId: string
+  readonly holderType: string
+  readonly holderId: string
+  readonly custodyKind: string
+  readonly issueDocumentId: string
+  readonly returnDocumentId: string | null
+  /** Active or Closed; the ledger never produces other statuses. */
+  readonly status: 'Active' | 'Closed'
+  readonly fromUtc: string
+  readonly toUtc: string | null
+  readonly rowVersion: number
+}
+
 const ASSETS_PATH = '/assets' satisfies keyof paths
 const ASSET_PATH = '/assets/{assetId}' satisfies keyof paths
-const ASSET_CUSTODY_PATH = '/assets/{assetId}/custody' satisfies keyof paths
+const ASSET_CUSTODY_TIMELINE_PATH = '/assets/{assetId}/custody-timeline'
 const ASSET_MOVEMENTS_PATH = '/assets/{assetId}/movements' satisfies keyof paths
 
 function pathWithId(path: string, parameter: string, id: string): string {
@@ -23,8 +49,12 @@ function pathWithId(path: string, parameter: string, id: string): string {
 export interface AssetService {
   listAssets: (query: ListAssetsQuery) => Promise<AssetPage>
   getAsset: (assetId: string) => Promise<Asset>
-  /** Full custody timeline for one asset (active + historical rows). */
-  getAssetCustodyTimeline: (assetId: string) => Promise<readonly AssetCustody[]>
+  /**
+   * Full custody timeline for one asset (active + historical rows). Verified
+   * against the live `GET /api/v1/assets/{assetId}/custody-timeline`, whose
+   * payload is `ApiResponse<IReadOnlyList<AssetCustodyTimelineResponse>>`.
+   */
+  getAssetCustodyTimeline: (assetId: string) => Promise<readonly AssetCustodyTimelineRow[]>
   listAssetMovements: (
     assetId: string,
     query: ListAssetMovementsQuery,
@@ -73,8 +103,8 @@ export function createAssetService(transport: ApiTransport): AssetService {
       return response
     },
     async getAssetCustodyTimeline(assetId) {
-      const response = await transport.request<readonly AssetCustody[]>({
-        path: pathWithId(ASSET_CUSTODY_PATH, '{assetId}', assetId),
+      const response = await transport.request<readonly AssetCustodyTimelineRow[]>({
+        path: pathWithId(ASSET_CUSTODY_TIMELINE_PATH, '{assetId}', assetId),
         method: 'GET',
       })
       return response

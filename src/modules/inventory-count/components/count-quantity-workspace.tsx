@@ -169,7 +169,7 @@ export function CountQuantityWorkspace({
     () => planCountLineSaves(countRowVersion, items, { lines: drafts }),
     [countRowVersion, drafts, items],
   )
-  const sendableCount = savePlan.request.lines.length
+  const sendableCount = savePlan.request.actuals.length
   const blockedCount = savePlan.blocked.length
 
   /**
@@ -277,7 +277,7 @@ export function CountQuantityWorkspace({
       // "which of the operator's changes are not", so the batch and the warning
       // beside the save button can never disagree.
       const plan = planCountLineSaves(countRowVersion, items, values)
-      if (plan.request.lines.length === 0) {
+      if (plan.request.actuals.length === 0) {
         return
       }
       // Handled here rather than through `submitFeedback`, because a conflict

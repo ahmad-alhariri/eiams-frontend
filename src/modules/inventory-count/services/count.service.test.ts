@@ -108,20 +108,31 @@ describe('createCountService (e20-t01)', () => {
     })
   })
 
-  it('batches line updates through PUT', async () => {
-    mockedRequest.mockReturnValue(pagedEnvelope([]))
+  it('batches line actuals through PUT /actuals with the live wire shape', async () => {
+    // RESOLUTION-025: PUT /inventory-counts/{countId}/actuals carries ONLY
+    // `{ actuals: [{ lineId, actualQuantity }], expectedRowVersion }` — the
+    // aggregate count row version, no per-line rowVersion.
+    mockedRequest.mockReturnValue(envelope({}))
     const service = createCountService(testTransport)
 
     const request = {
-      countRowVersion: 4,
-      lines: [{ countLineId: VALID_UUID(), actualQuantity: 5, rowVersion: 2 }],
+      actuals: [{ lineId: VALID_UUID(), actualQuantity: 5 }],
+      expectedRowVersion: 4,
     }
-    await service.updateLines(COUNT_ID, request)
+    const result = await service.updateLines(COUNT_ID, request)
 
     expect(sentConfig()).toMatchObject({
-      url: `/inventory-counts/${COUNT_ID}/lines`,
-      data: request,
+      url: `/inventory-counts/${COUNT_ID}/actuals`,
+      method: 'PUT',
+      data: {
+        actuals: [{ lineId: request.actuals[0]!.lineId, actualQuantity: 5 }],
+        expectedRowVersion: 4,
+      },
     })
+    // Response body is `ApiResponse<EmptyResponse>` (200 + empty data); the
+    // service hands back an EmptyResponse so the hook refetches the count
+    // and lines instead of reading a page from this wire.
+    expect(result).toEqual({})
   })
 
   it('completes a count idempotently and closes with row version', async () => {

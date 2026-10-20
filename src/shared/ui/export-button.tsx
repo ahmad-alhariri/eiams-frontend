@@ -1,38 +1,28 @@
 /**
- * Export button with format dropdown (e23-t10, D-RPT-03 §3).
+ * Export button (e23-t10, D-RPT-03 §3).
  *
- * Renders a split button: the primary button triggers the default format
- * download; a chevron opens a popover to switch between PDF and CSV.
+ * Rendered structure while the backend export endpoints are pending: this
+ * component now returns null after the permission gate.
  *
- * Permission-gated per D-RPT-03 §2.2. Hidden when the caller lacks the
- * required permission.
+ * Why: the live backend serves no `/reports/something/export` or
+ * `/reports/exports/jobId` paths today (verified against
+ * `http://localhost:5000/swagger/v1/swagger.json` on 2026-10-20 — the only
+ * GET routes under `/reports/something` are
+ * `/reports/assets`, `/reports/count-adjustments`, `/reports/dashboard`,
+ * `/reports/documents` and `/reports/inventory`, and no path name mentions
+ * the word export). Hiding the action at every callsite means the UI never
+ * offers a download the server cannot fulfil. The client code in
+ * `reports-export.service.ts` and `use-export-report.ts` is left in place so
+ * it can be wired back in once the backend ships the five export endpoints.
  *
- * The export endpoint is called when the user triggers a download. The server
- * handles scope enforcement, audit logging, and PDF rendering. The client
- * never constructs the export file.
- *
- * Per D-RPT-03 §6.2: hidden when formal export is unavailable (backend
- * returns 501 Not Implemented). The button is always rendered; the mutation
- * error state reflects backend readiness.
+ * Removing the `ExportButton` import (and the icon set + `useState` from
+ * this file) would touch every report table, which is out of scope here; the
+ * gates below keep the component a no-op without dragging a re-render of the
+ * export hook into every page render.
  */
 
-import { useState } from 'react'
-
-import {
-  IconDownload,
-  IconFileTypePdf,
-  IconFileTypeCsv,
-  IconLoader2,
-  IconChevronDown,
-} from '@tabler/icons-react'
-
-import { Button } from '@/shared/ui/button'
-import { Popover, PopoverContent } from '@/shared/ui/popover'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import {
-  useExportReport,
-  type UseExportReportOptions,
-} from '@/modules/reports/hooks/use-export-report'
+import type { UseExportReportOptions } from '@/modules/reports/hooks/use-export-report'
 import type { PermissionCode } from '@/config/permissions'
 
 // ---------------------------------------------------------------------------
@@ -47,8 +37,8 @@ interface ExportButtonProps {
   /** Permission code required to export this report */
   requiredPermission: PermissionCode
   /**
-   * Filters forwarded to the export endpoint.
-   * MUST match the filters applied to the on-screen report (D-RPT-03 §2.1).
+   * Filters forwarded to the export endpoint. MUST match the filters applied
+   * to the on-screen report (D-RPT-03 §2.1).
    */
   filters?: UseExportReportOptions['filters']
   /** Button label; defaults to Arabic */
@@ -57,151 +47,25 @@ interface ExportButtonProps {
   className?: string
 }
 
-// ---------------------------------------------------------------------------
-// Format options
-// ---------------------------------------------------------------------------
-
-const FORMAT_OPTIONS: Array<{
-  format: ExportFormat
-  primaryLabel: string
-  menuLabel: string
-  icon: React.ReactNode
-}> = [
-  {
-    format: 'pdf',
-    primaryLabel: 'تصدير PDF',
-    menuLabel: 'PDF',
-    icon: <IconFileTypePdf className="size-4 text-destructive" aria-hidden />,
-  },
-  {
-    format: 'csv',
-    primaryLabel: 'تصدير CSV',
-    menuLabel: 'CSV',
-    icon: (
-      <IconFileTypeCsv className="size-4 text-[var(--chart-2,theme.colors.forest))]" aria-hidden />
-    ),
-  },
-]
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 const DEFAULT_LABEL = 'تصدير التقرير'
 
 /**
- * Export button with PDF/CSV format popover.
+ * Hidden while the backend export feature request is open. See file header.
  *
- * Hidden when `requiredPermission` is not held (D-RPT-03 §2.2).
- *
- * Usage:
- * ```
- * <ExportButton
- *   reportType="inventory"
- *   requiredPermission="inventory.view"
- *   filters={{ warehouseId }}
- * />
- * ```
+ * Kept as a real component (instead of deleting the file) so the report
+ * tables' `<ExportButton ... />` calls still type-check and so the same
+ * permission gate (`requiredPermission`) survives the eventual un-hide.
+ * Removing the callsite now would touch five report components for no reason.
  */
-export function ExportButton({
-  reportType,
-  requiredPermission,
-  filters,
-  label = DEFAULT_LABEL,
-  className,
-}: ExportButtonProps) {
+export function ExportButton(props: ExportButtonProps) {
+  // Suppress unused-parameter lint without breaking the existing call sites.
+  void props
+  void DEFAULT_LABEL
+
   const { has } = usePermission()
-  const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('pdf')
-  const [open, setOpen] = useState(false)
 
-  // Fix: pass `filters` as typed or undefined (not `{ dateFrom: string | undefined }`)
-  const resolvedFilters = (() => {
-    if (filters === undefined) return undefined
-    const { dateFrom, dateTo, warehouseId, siteId } = filters
-    return {
-      ...(dateFrom !== undefined ? { dateFrom } : {}),
-      ...(dateTo !== undefined ? { dateTo } : {}),
-      ...(warehouseId !== undefined ? { warehouseId } : {}),
-      ...(siteId !== undefined ? { siteId } : {}),
-    }
-  })()
-
-  const { exportReport, isPending, isError } = useExportReport({
-    reportType,
-    format: selectedFormat,
-    ...(resolvedFilters !== undefined ? { filters: resolvedFilters } : {}),
-  })
-
-  // Hidden when no permission (per D-RPT-03 §2.2)
-  if (!has(requiredPermission)) {
+  if (!has(props.requiredPermission)) {
     return null
   }
-
-  function handleFormatSelect(format: ExportFormat) {
-    setSelectedFormat(format)
-    setOpen(false)
-  }
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <div className="flex">
-        {/* Primary download button */}
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label={label}
-          disabled={isPending}
-          onClick={() => exportReport()}
-          className={className}
-        >
-          {isPending ? (
-            <IconLoader2 className="size-4 animate-spin" aria-hidden />
-          ) : (
-            <IconDownload className="size-4" aria-hidden />
-          )}
-        </Button>
-
-        {/* Format selector — opens popover on click */}
-        <Button
-          variant="outline"
-          size="icon"
-          disabled={isPending}
-          onClick={() => setOpen((v) => !v)}
-          aria-label={`${label} — تنسيقات`}
-          aria-expanded={open}
-          aria-haspopup="menu"
-          className="rounded-s-none"
-        >
-          <IconChevronDown className="size-4" aria-hidden />
-        </Button>
-
-        <PopoverContent align="end" className="flex min-w-32 flex-col gap-0.5 p-1.5" sideOffset={4}>
-          <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{label}</div>
-
-          {isError && (
-            <div className="px-2 py-1.5 text-xs text-destructive" role="alert">
-              فشل التصدير. الخادم لم يُنفِّذ هذا النوع بعد.
-            </div>
-          )}
-
-          {FORMAT_OPTIONS.map((option) => (
-            <button
-              key={option.format}
-              type="button"
-              onClick={() => handleFormatSelect(option.format)}
-              disabled={isPending}
-              aria-current={selectedFormat === option.format ? 'true' : undefined}
-              className="flex items-center gap-2 rounded-sm px-2 py-2 text-sm text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {option.icon}
-              <span className="flex-1 text-start">{option.menuLabel}</span>
-              {selectedFormat === option.format && isPending && (
-                <IconLoader2 className="size-3.5 animate-spin" aria-hidden />
-              )}
-            </button>
-          ))}
-        </PopoverContent>
-      </div>
-    </Popover>
-  )
+  return null
 }

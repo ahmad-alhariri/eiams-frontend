@@ -14,10 +14,10 @@ import {
 } from './use-adjustment-queries'
 import { createQueryClient } from '@/shared/services/query.client'
 import type {
+  AdjustmentDetail,
   AdjustmentPurpose,
-  AdjustmentStatus,
-  InventoryAdjustment,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/modules/adjustment/types/adjustment.types'
+import type { AdjustmentStatus } from '@/shared/types/generated/eiams-v1'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -45,45 +45,27 @@ function notFound() {
 }
 
 function adjustmentFixture(overrides: {
-  adjustmentId?: string
+  id?: string
   status?: AdjustmentStatus
   purpose?: AdjustmentPurpose
-}): InventoryAdjustment {
+}): AdjustmentDetail {
+  const status = overrides.status ?? 'Draft'
   return {
-    adjustmentId: overrides.adjustmentId ?? '423e4567-e89b-42d3-a456-426614174004',
-    countReference: null,
-    createdAt: '2026-08-26T08:00:00.000Z',
-    createdBy: { displayName: 'مدير المستودع', id: '923e4567-e89b-42d3-a456-426614174009' },
-    documentId: '523e4567-e89b-42d3-a456-426614174005',
-    documentReference: 'ADJ-2026-0001',
-    lines: [],
-    policy: {
-      actions: [
-        {
-          action: 'Post',
-          allowed: true,
-          confirmationRequired: true,
-          presentation: 'Enabled',
-          reasonAr: null,
-          reasonCode: null,
-          reasonRequired: false,
-        },
-      ],
-      advisories: [],
-      blockers: [],
-      documentId: '523e4567-e89b-42d3-a456-426614174005',
-      documentStatus: 'Draft',
-      evaluatedAt: '2026-08-26T08:00:00.000Z',
-      policyKind: 'Adjustment',
-      rowVersion: 1,
-      signedOriginalSatisfied: false,
-    },
-    postedAt: null,
+    id: overrides.id ?? '423e4567-e89b-42d3-a456-426614174004',
+    warehouseId: '823e4567-e89b-42d3-a456-426614174008',
+    warehouseCode: 'WH-01',
+    warehouseName: 'المستودع المركزي',
+    countId: null,
     purpose: overrides.purpose ?? 'DirectCorrection',
+    status,
     reason: 'تسوية خطأ إدخال',
+    systemReferenceNumber: 'ADJ-2026-0001',
+    // The wire documentStatus shares the shared document engine's vocabulary.
+    documentStatus: status,
+    createdAtUtc: '2026-08-26T08:00:00.000Z',
+    postedAtUtc: status === 'Draft' ? null : '2026-08-26T09:00:00.000Z',
     rowVersion: 2,
-    status: overrides.status ?? 'Draft',
-    warehouse: { displayName: 'المستودع المركزي', id: '823e4567-e89b-42d3-a456-426614174008' },
+    lines: [],
   }
 }
 
@@ -174,7 +156,7 @@ describe('useAdjustmentDetailQuery (e21-t07 seam)', () => {
     const { Wrapper } = createWrapper()
     const ok = renderHook(() => useAdjustmentDetailQuery(ADJUSTMENT_ID), { wrapper: Wrapper })
     await waitFor(() => expect(ok.result.current.isSuccess).toBe(true))
-    expect(ok.result.current.data?.documentReference).toBe('ADJ-2026-0001')
+    expect(ok.result.current.data?.systemReferenceNumber).toBe('ADJ-2026-0001')
 
     const missing = renderHook(() => useAdjustmentDetailQuery('missing-id'), { wrapper: Wrapper })
     // retry: 1 on the shared client delays the terminal error by ~1s.
@@ -192,12 +174,8 @@ describe('adjustment mutations (e21-t06 seams)', () => {
       http.post(`${API_BASE}/:adjustmentId/post`, ({ request }) => {
         postCalls += 1
         seenIdempotencyKey = request.headers.get('Idempotency-Key')
-        return okJson({
-          adjustment: adjustmentFixture({ status: 'Posted' }),
-          assetMovements: [],
-          lifecycleEvent: { eventId: 'evt-post' },
-          stockMovements: [],
-        })
+        // Wire body: the shared engine's post projection.
+        return okJson({ documentId: '5667e89b-42d3-a456-4266-140000000001', warnings: [] })
       }),
     )
 
@@ -235,11 +213,8 @@ describe('adjustment mutations (e21-t06 seams)', () => {
     server.use(
       http.post(`${API_BASE}/:adjustmentId/reverse`, async ({ request }) => {
         reverseBody = await request.json()
-        return okJson({
-          compensatingAdjustment: adjustmentFixture({ status: 'Posted' }),
-          lifecycleEvent: { eventId: 'evt-reverse' },
-          originalAdjustment: adjustmentFixture({ status: 'Reversed' }),
-        })
+        // Wire body: 201 `{ id }` of the compensating document.
+        return okJson({ id: '5667e89b-42d3-a456-4266-140000000002' })
       }),
     )
 

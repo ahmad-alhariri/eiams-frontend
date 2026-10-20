@@ -127,14 +127,6 @@ export default function TransferDocumentFormPage() {
     return null
   }, [balanceByMaterialId, materialIds, quantities])
 
-  /** PRD §12.4: asset-kind materials do not transfer in v1. */
-  const assetKindMessageAr = useMemo(() => {
-    for (let index = 0; index < lines.length; index += 1) {
-      if (lines[index]?.materialKind !== 'Asset') continue
-      return `البند ${index + 1}: لا يجوز تحويل الأصول في هذه النسخة؛ تُنقل الأصول عبر سند صرف واستلام.`
-    }
-    return null
-  }, [lines])
 
   // Fail CLOSED: an unverifiable source balance blocks persistence, but the
   // reason shown to the user is the failed read — never a fabricated shortfall
@@ -143,8 +135,7 @@ export default function TransferDocumentFormPage() {
     isSubmitting ||
     balancesLoading ||
     balancesFailed ||
-    overBalanceMessageAr !== null ||
-    assetKindMessageAr !== null
+    overBalanceMessageAr !== null
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -217,16 +208,9 @@ export default function TransferDocumentFormPage() {
             </p>
           ) : null}
           {balancesFailed ? <BalanceReadError onRetry={retryBalances} /> : null}
-          {assetKindMessageAr !== null ? (
-            <p role="alert" className="text-sm text-destructive">
-              {assetKindMessageAr}
-            </p>
-          ) : null}
-          {balancesLoading ? (
             <p className="text-sm text-muted-foreground" aria-live="polite">
               جارٍ التحقق من أرصدة المستودع المصدر للبنود المختارة...
             </p>
-          ) : null}
           {submitErrorMessage !== null ? (
             <p role="alert" className="text-sm text-destructive">
               {submitErrorMessage}
@@ -250,3 +234,5 @@ export default function TransferDocumentFormPage() {
     </div>
   )
 }
+
+

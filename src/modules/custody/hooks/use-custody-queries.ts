@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { assetQueryKeys } from '@/modules/asset/hooks/use-asset-queries'
 import type {
-  CustodyMutationRequest,
+  AssignAssetCustodyRequest,
   ListCustodiesQuery,
+  TransferCustodyRequest,
 } from '@/modules/custody/types/custody.types'
 import { custodyService } from '@/modules/custody/services/custody.service'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
@@ -60,36 +61,38 @@ function useCustodyInvalidation() {
 }
 
 /**
- * Idempotent personal-custody assignment (PRD §12.8). One idempotency key per
- * user action; the caller regenerates only when starting a distinct action.
+ * Personal custody assignment (PRD §12.8). The live controller answers with
+ * `{ id }` only — the new custody row's id, not the full row — so the caller
+ * invalidates the custody + asset query trees on success to refetch the
+ * refreshed list. The Idempotency-Key header is dropped because the live
+ * controller (AssignAssetCustodyController.cs) does not accept one.
  */
 export function useAssignCustodyMutation() {
   const invalidate = useCustodyInvalidation()
   return useMutation({
-    mutationFn: ({
-      request,
-      idempotencyKey,
-    }: {
-      request: CustodyMutationRequest
-      idempotencyKey: string
-    }) => custodyService.assignCustody(request, idempotencyKey),
-    onSuccess: () => invalidate(),
+    mutationFn: ({ assetId, request }: { assetId: string; request: AssignAssetCustodyRequest }) =>
+      custodyService.assignCustody(assetId, request),
+    onSuccess: (_data, variables) => {
+      // Keep the asset id adjacent to the request so the future telemetry
+      // path can pair it; today nothing here reads it because invalidation
+      // already covers every custody + asset key in the active scope.
+      void variables
+      invalidate()
+    },
   })
 }
 
-/** Idempotent responsibility transfer for an existing active custody row. */
+/** Responsibility transfer for an existing active custody row. */
 export function useTransferCustodyMutation() {
   const invalidate = useCustodyInvalidation()
   return useMutation({
     mutationFn: ({
       custodyId,
       request,
-      idempotencyKey,
     }: {
       custodyId: string
-      request: CustodyMutationRequest
-      idempotencyKey: string
-    }) => custodyService.transferCustody(custodyId, request, idempotencyKey),
-    onSuccess: () => invalidate(),
+      request: TransferCustodyRequest
+    }) => custodyService.transferCustody(custodyId, request),
+    onSuccess: invalidate,
   })
 }

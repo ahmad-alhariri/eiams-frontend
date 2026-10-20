@@ -72,7 +72,7 @@ describe('asset query hooks', () => {
     const row = createAsset({ assetId: '11111111-1111-4111-8111-111111111111' })
     server.use(
       http.get(`${API_BASE_URL}/assets/${row.assetId}`, () => okJson(row)),
-      http.get(`${API_BASE_URL}/assets/${row.assetId}/custody`, () =>
+      http.get(`${API_BASE_URL}/assets/${row.assetId}/custody-timeline`, () =>
         okJson([createAssetCustody({ assetId: row.assetId })]),
       ),
     )

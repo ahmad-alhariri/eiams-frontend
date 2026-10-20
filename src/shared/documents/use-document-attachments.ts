@@ -108,6 +108,10 @@ export function useDocumentAttachmentManager(documentId: string | null): Documen
    * a 403 or a network failure says nothing about document freshness, and
    * `docs/feature-service-composition-standard.md:87-91` forbids assuming a
    * cause a problem did not report.
+   *
+   * The broad `isConflictError` is deliberate here, unlike elsewhere: ANY 409
+   * means the cached document moved on, and this path refetches without ever
+   * claiming who changed it — so there is no concurrent-edit copy to mislead.
    */
   const recoverFromConflict = useCallback(
     (error: unknown) => {

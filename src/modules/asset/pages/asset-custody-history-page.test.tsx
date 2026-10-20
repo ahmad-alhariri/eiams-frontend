@@ -21,39 +21,37 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 function useCustodyTimelineHandler() {
   server.use(
-    http.get(`${API_BASE_URL}/assets/:assetId/custody`, () =>
+    // Live wire shape (D-INT-02): GET /assets/{assetId}/custody-timeline
+    // answers ApiResponse<IReadOnlyList<AssetCustodyTimelineResponse>>.
+    // The row carries holderType + holderId (no embedded display name) and
+    // uses `fromUtc` / `toUtc` rather than `fromTs` / `toTs`. The display
+    // name asserted in the body is overlaid by the page from the type+id pair
+    // until the counterpart lookup pipeline is added.
+    http.get(`${API_BASE_URL}/assets/:assetId/custody-timeline`, () =>
       okJson([
         {
           assetId: ASSET_ID,
-          assetNumber: 'AST-2024-C01',
           custodyId: fixtureUuid(61),
           custodyKind: 'Operational',
-          fromTs: '2026-07-01T08:00:00.000Z',
-          holder: {
-            displayName: 'مديرية النقل والحراسة',
-            id: fixtureUuid(21),
-            secondaryLabelAr: null,
-            status: 'Active' as const,
-            type: 'OrganizationalUnit' as const,
-          },
+          fromUtc: '2026-07-01T08:00:00.000Z',
+          toUtc: '2026-08-01T07:59:59.999Z',
+          holderId: fixtureUuid(21),
+          holderType: 'OrganizationalUnit',
           issueDocumentId: fixtureUuid(155),
+          returnDocumentId: null,
           rowVersion: 1,
           status: 'Closed',
         },
         {
           assetId: ASSET_ID,
-          assetNumber: 'AST-2024-C01',
           custodyId: fixtureUuid(62),
           custodyKind: 'Personal',
-          fromTs: '2026-08-01T08:00:00.000Z',
-          holder: {
-            displayName: 'أحمد الخالد',
-            id: fixtureUuid(15),
-            secondaryLabelAr: null,
-            status: 'Active' as const,
-            type: 'Employee' as const,
-          },
+          fromUtc: '2026-08-01T08:00:00.000Z',
+          toUtc: null,
+          holderId: fixtureUuid(15),
+          holderType: 'Employee',
           issueDocumentId: fixtureUuid(155),
+          returnDocumentId: null,
           rowVersion: 1,
           status: 'Active',
         },
@@ -80,12 +78,18 @@ describe('AssetCustodyHistoryPage (e19-t08)', () => {
     useCustodyTimelineHandler()
     renderPage()
 
-    expect(await screen.findByText('أحمد الخالد')).toBeInTheDocument()
+    // Live timeline row exposes holderType + holderId only (no embedded
+    // display name); the page surfaces both as a typed id pair until the
+    // counterpart lookup pipeline is added.
+    expect(await screen.findByText(/Employee:/)).toBeInTheDocument()
+    expect(screen.getByText(/OrganizationalUnit:/)).toBeInTheDocument()
     // Newest first: the Personal row (Aug) precedes the Operational row (Jul).
     const rows = screen.getAllByRole('row')
     const bodyText = rows.map((row) => row.textContent ?? '')
-    const personalIndex = bodyText.findIndex((text) => text.includes('أحمد الخالد'))
-    const operationalIndex = bodyText.findIndex((text) => text.includes('مديرية النقل والحراسة'))
+    const personalIndex = bodyText.findIndex((text) => text.includes('Employee:'))
+    const operationalIndex = bodyText.findIndex((text) =>
+      text.includes('OrganizationalUnit:'),
+    )
     expect(personalIndex).toBeGreaterThan(-1)
     expect(operationalIndex).toBeGreaterThan(-1)
     expect(personalIndex).toBeLessThan(operationalIndex)
@@ -97,7 +101,7 @@ describe('AssetCustodyHistoryPage (e19-t08)', () => {
     useCustodyTimelineHandler()
     renderPage()
 
-    await screen.findByText('أحمد الخالد')
+    await screen.findByText(/Employee:/)
     expect(screen.getByText(/للقراءة فقط ولا يجوز تعديله أو حذفه/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'تكليف موظف' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'مبادلة المسؤولية' })).toBeNull()

@@ -3,6 +3,7 @@ import type { ApiTransport } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 
 import type {
+  EmptyResponse,
   InventoryCountPlanRequest,
   ListInventoryCountsQuery,
   UpdateCountLinesRequest,
@@ -19,6 +20,7 @@ const COUNTS_PATH = '/inventory-counts' satisfies keyof paths
 const COUNT_PATH = '/inventory-counts/{countId}' satisfies keyof paths
 const COUNT_START_PATH = '/inventory-counts/{countId}/start' satisfies keyof paths
 const COUNT_LINES_PATH = '/inventory-counts/{countId}/lines' satisfies keyof paths
+const COUNT_ACTUALS_PATH = '/inventory-counts/{countId}/actuals'
 const COUNT_COMPLETE_PATH = '/inventory-counts/{countId}/complete' satisfies keyof paths
 const COUNT_CLOSE_PATH = '/inventory-counts/{countId}/close' satisfies keyof paths
 
@@ -31,10 +33,17 @@ export interface CountService {
   planCount: (request: InventoryCountPlanRequest, idempotencyKey: string) => Promise<InventoryCount>
   startCount: (countId: string, rowVersion: number) => Promise<InventoryCount>
   listLines: (countId: string, query: CountLinesQuery) => Promise<InventoryCountLinePage>
-  updateLines: (
-    countId: string,
-    request: UpdateCountLinesRequest,
-  ) => Promise<InventoryCountLinePage>
+  /**
+   * RESOLUTION-025 / CONFLICT-020: the count mutation moved from `PUT
+   * /inventory-counts/{countId}/lines` to `PUT
+   * /inventory-counts/{countId}/actuals` (the live API serves GET on `/lines`
+   * only — the snapshot PUT does not exist). The request carries ONLY
+   * `actuals: [{ lineId, actualQuantity }]` plus the aggregate
+   * `expectedRowVersion`; no per-line rowVersion (RESOLUTION-025 §3279).
+   * The response is `ApiResponse<EmptyResponse>` — `200` with an empty body —
+   * so the caller invalidates and refetches the count + lines itself.
+   */
+  updateLines: (countId: string, request: UpdateCountLinesRequest) => Promise<EmptyResponse>
   completeCount: (
     countId: string,
     rowVersion: number,
@@ -139,12 +148,15 @@ export function createCountService(transport: ApiTransport): CountService {
     },
 
     async updateLines(countId, request) {
-      const page = await transport.requestPage<InventoryCountLinePage['items'][number]>({
-        path: pathWithId(COUNT_LINES_PATH, '{countId}', countId),
+      // /actuals answers ApiResponse<EmptyResponse> (200 + empty body); the
+      // service cannot read a page from the wire, so it returns an EmptyResponse
+      // and the hook invalidates + refetches the count + lines on success.
+      await transport.request<EmptyResponse>({
+        path: pathWithId(COUNT_ACTUALS_PATH, '{countId}', countId),
         method: 'PUT',
         body: request,
       })
-      return toPage(page) as InventoryCountLinePage
+      return {}
     },
 
     async completeCount(countId, rowVersion, idempotencyKey) {

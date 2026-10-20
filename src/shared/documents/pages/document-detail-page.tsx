@@ -1,5 +1,5 @@
 import { IconAlertCircle, IconInfoCircle } from '@tabler/icons-react'
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, matchPath, useLocation, useParams } from 'react-router'
 import { FormProvider, useForm } from 'react-hook-form'
 
@@ -12,6 +12,7 @@ import {
   type DocumentHeaderContainer,
 } from '@/shared/documents/document-header-form'
 import { AttachmentPanel, type AttachmentPanelProps } from '@/shared/documents/attachment-panel'
+import { DraftPaperReferenceEditor } from '@/shared/documents/draft-paper-reference-editor'
 import { DocumentConflictDialog } from '@/shared/documents/document-conflict-dialog'
 import { documentReadOnlyReasonAr, isDocumentMutable } from '@/shared/documents/document-read-only'
 import { OPENING_TYPE_LABELS } from '@/shared/documents/schemas/document-lines.schemas'
@@ -41,7 +42,7 @@ import {
   useDocumentPolicyQuery,
 } from '@/shared/documents/use-document-queries'
 import { useDocumentPolicyGate } from '@/shared/documents/use-document-policy-gate'
-import { createIdempotencyKey, isConflictError } from '@/shared/services/mutation-safety'
+import { createIdempotencyKey, isConcurrencyConflict } from '@/shared/services/mutation-safety'
 import { EmptyState } from '@/shared/feedback/empty-state'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
@@ -108,6 +109,13 @@ export interface DocumentDetailPageProps {
     ((action: DocumentActionType, reason?: string) => void | Promise<void>) | undefined
   /** Type-specific petal editor (ReceivingInfo / IssueTo / TransferInfo / ReturnInfo). */
   petalSlot?: ReactNode
+  /**
+   * Editable paper reference (number + year) rendered instead of a second
+   * read-only surface when the document is a DRAFT. The routed page builds it
+   * from the DraftPaperReferenceEditor; standalone compositions that omit it
+   * keep the spine fully read-only.
+   */
+  paperReferenceEditor?: ReactNode
   /**
    * Lifecycle timeline slot. When omitted the routed page defaults it to the
    * real {@link DocumentTimelineSection} wired to the route's `:documentId`;
@@ -455,6 +463,7 @@ export function DocumentDetailBody({
   linesSlot,
   listRouteKey,
   onExecuteAction,
+  paperReferenceEditor,
   petalSlot,
   policy,
   policyFailure,
@@ -480,6 +489,21 @@ export function DocumentDetailBody({
       },
     },
   })
+  // The read-only spine renders from the seeded form state, which only ever
+  // reflects the FIRST detail answer. A refetch that changes the authoritative
+  // document — e.g. after the paper-reference write below — must re-seed it,
+  // or the page keeps showing the stale first answer forever.
+  useEffect(() => {
+    form.reset({
+      header: {
+        warehouseId: document.warehouseId,
+        paperDocumentNumber: document.paperDocumentNumber ?? '',
+        ...(document.paperDocumentYear === null
+          ? {}
+          : { paperDocumentYear: document.paperDocumentYear }),
+      },
+    })
+  }, [form, document])
 
   const fallbackExecute = useCallback((action: DocumentActionType) => {
     // Standalone compositions (gallery/tests) without a wired handler record
@@ -648,7 +672,11 @@ export function DocumentDetailBody({
 
       <ContentCard
         title="بيانات المستند"
-        description="رأس السند المشترك (المستودع، رقم السند الورقي وسنته) في وضع القراءة فقط."
+        description={
+          paperReferenceEditor === undefined
+            ? 'رأس السند المشترك (المستودع، رقم السند الورقي وسنته) في وضع القراءة فقط.'
+            : 'رأس السند المشترك؛ رقم المستند الورقي وسنته قابلة للتحرير لأن السند مسوّدة.'
+        }
       >
         <FormProvider {...form}>
           <DocumentHeaderSection
@@ -663,6 +691,7 @@ export function DocumentDetailBody({
             petalSlot={petalSlot}
           />
         </FormProvider>
+        {paperReferenceEditor}
       </ContentCard>
 
       <ContentCard
@@ -864,6 +893,17 @@ function DocumentDetailPage({
       if (document === undefined) {
         return Promise.resolve()
       }
+      if (action === 'Edit') {
+        // The lifecycle bar presents Edit for Drafts. The only spine field the
+        // detail surface can write for an existing draft is the paper
+        // reference (the office submits the lines/petal data at complete-draft
+        // time), so Edit focuses that editor instead of dead-ending.
+        window.document
+          .getElementById('draft-paper-reference-editor')
+          ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        window.document.getElementById('draft-paper-reference-number')?.focus()
+        return Promise.resolve()
+      }
       const lifecycleMutations: Partial<Record<DocumentActionType, LifecycleActionMutationApi>> = {
         Submit: submitMutation,
         Post: postMutation,
@@ -906,7 +946,11 @@ function DocumentDetailPage({
             delete idempotencyKeysRef.current[action]
           },
           (error: unknown) => {
-            if (isConflictError(error)) {
+            // Only a CONCURRENT-EDIT 409 opens the dialog: its copy blames another
+            // user for the stale row, which a state or idempotency 409 (e.g. the
+            // reversal-blocked guard below) does not report and must not imply.
+            // Those keep their own governed Arabic surface.
+            if (isConcurrencyConflict(error)) {
               reportConflict()
             }
             // Swallow: the mutation's `error` state already carries it.
@@ -998,6 +1042,19 @@ function DocumentDetailPage({
         listRouteKey={routeEntry.listRouteKey}
         policy={policyQuery.data ?? null}
         policyFailure={policyFailure}
+        // A Draft documents' spine is editable where the server allows it: the
+        // paper reference (number + year) via the dedicated `paper-reference`
+        // route. This is the one path that un-dead-ends a server-created
+        // reversal Draft, which carries no paper reference at all.
+        paperReferenceEditor={
+          detailQuery.data.documentStatus === 'Draft' ? (
+            <DraftPaperReferenceEditor
+              documentId={documentId}
+              document={detailQuery.data}
+              onConflict={reportConflict}
+            />
+          ) : null
+        }
         attachmentMutationProps={{
           pendingUploads: attachmentManager.pendingUploads,
           onUpload: attachmentManager.onUpload,

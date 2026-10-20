@@ -1,0 +1,87 @@
+name: API Contract Drift
+
+on:
+  schedule:
+    # 04:17 UTC daily. Off the hour so this does not pile onto every other
+    # repo's :00 cron minute.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-contract-drift
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: Live API vs frontend consumer baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Inert until the owner adds EIAMS_BACKEND_REPO_TOKEN (see
+    # contracts/openapi/README.md). Checking out the sibling backend repo needs a
+    # cross-repo token; without the secret this job must SKIP rather than fail, so
+    # a pull request is never red for a reason the frontend did not cause.
+    if: ${{ secrets.EIAMS_BACKEND_REPO_TOKEN != '' }}
+
+    steps:
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+
+      # setup-node resolves the pnpm store path when cache is enabled, so pnpm
+      # must be on PATH before this step executes.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.20.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          repository: tareq-11/EIAMS
+          path: .eiams-backend
+          ref: main
+          token: ${{ secrets.EIAMS_BACKEND_REPO_TOKEN }}
+
+      # Only `-f docker-compose.yml`: docker-compose.override.yml is
+      # Windows-specific (APPDATA volume mounts) and would break a Linux runner.
+      - name: Start backend API
+        working-directory: .eiams-backend
+        run: |
+          docker compose -f docker-compose.yml up -d --build postgres web-api
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:5000/swagger/v1/swagger.json -o /dev/null; then
+              echo "API is up"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "The API did not answer its swagger document within 5 minutes"
+          docker compose -f docker-compose.yml logs web-api
+          exit 1
+
+      - name: Run contract-drift gate
+        env:
+          EIMS_OPENAPI_URL: http://localhost:5000/swagger/v1/swagger.json
+        run: pnpm run contract:drift
+
+      - name: Backend API logs
+        if: failure()
+        working-directory: .eiams-backend
+        run: docker compose -f docker-compose.yml logs --tail 200
+
+      - name: Stop backend API
+        if: always()
+        working-directory: .eiams-backend
+        run: docker compose -f docker-compose.yml down -v

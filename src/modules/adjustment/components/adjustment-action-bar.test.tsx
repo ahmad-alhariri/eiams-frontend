@@ -1,13 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AdjustmentActionBar } from '@/modules/adjustment/components/adjustment-action-bar'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
+import { okJson } from '@/test/msw/envelope'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
+import type {
+  DocumentActionAvailability,
+  DocumentPolicyAdvisory,
+  DocumentPolicyBlocker,
+} from '@/shared/documents/types/document-wire.types'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 vi.mock('@/shared/ui/toast-manager', () => ({
@@ -25,52 +31,49 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
 
 const ADJUSTMENT_ID = '423e4567-e89b-42d3-a456-426614174004'
 
-const ENABLED_POST = [
+const ENABLED_POST: ReadonlyArray<DocumentActionAvailability> = [
   {
     action: 'Post',
     allowed: true,
-    presentation: 'Enabled' as const,
-    reasonAr: null,
+    confirmationRequired: false,
+    presentation: 'Enabled',
+    reasonCode: null,
+    reason: null,
     reasonRequired: false,
   },
 ]
-const BLOCKED_POST = [
+const BLOCKED_POST: ReadonlyArray<DocumentActionAvailability> = [
   {
     action: 'Post',
     allowed: false,
-    presentation: 'Disabled' as const,
-    reasonAr: 'يلزم رفع النسخة الموقعة.',
+    confirmationRequired: false,
+    presentation: 'Disabled',
+    reasonCode: 'document.signed_original_missing',
+    reason: 'يلزم رفع النسخة الموقعة.',
     reasonRequired: false,
   },
 ]
-const ENABLED_REVERSE = [
+const ENABLED_REVERSE: ReadonlyArray<DocumentActionAvailability> = [
   {
     action: 'Reverse',
     allowed: true,
-    presentation: 'Enabled' as const,
-    reasonAr: null,
+    confirmationRequired: false,
+    presentation: 'Enabled',
+    reasonCode: null,
+    reason: null,
     reasonRequired: true,
   },
 ]
 
 let capturedPostBody: unknown = null
-let postResponseStatus = 200
 
 function usePostHandler() {
   capturedPostBody = null
-  postResponseStatus = 200
   server.use(
     http.post(`*/api/v1/adjustments/${ADJUSTMENT_ID}/post`, async ({ request }) => {
       capturedPostBody = await request.json()
-      return HttpResponse.json(
-        {
-          adjustment: { adjustmentId: ADJUSTMENT_ID, status: 'Posted' },
-          assetMovements: [],
-          lifecycleEvent: { eventId: 'evt-1' },
-          stockMovements: [],
-        },
-        { status: postResponseStatus },
-      )
+      // Wire shape the backend serves: the shared engine's post projection.
+      return okJson({ documentId: ADJUSTMENT_ID, warnings: [] })
     }),
   )
 }
@@ -85,20 +88,9 @@ function Harness({
 }: {
   status: 'Draft' | 'Posted' | 'Reversed'
   purpose: 'CountVariance' | 'DirectCorrection' | 'Disposal'
-  actions: ReadonlyArray<{
-    action: string
-    allowed: boolean
-    presentation: 'Enabled' | 'Disabled' | 'Hidden'
-    reasonAr?: string | null
-    reasonRequired?: boolean
-  }>
-  blockers?: ReadonlyArray<{ code: string; messageAr: string }>
-  advisories?: ReadonlyArray<{
-    code: string
-    messageAr: string
-    countReference?: string | null
-    scopeSummaryAr?: string | null
-  }>
+  actions: ReadonlyArray<DocumentActionAvailability>
+  blockers?: ReadonlyArray<DocumentPolicyBlocker>
+  advisories?: ReadonlyArray<DocumentPolicyAdvisory>
   permissions?: string[]
 }) {
   const client = new QueryClient({
@@ -168,8 +160,9 @@ describe('AdjustmentActionBar (e21-t06)', () => {
         actions={BLOCKED_POST}
         blockers={[
           {
+            action: 'Post',
             code: 'document.signed_original_missing',
-            messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+            message: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
           },
         ]}
       />,

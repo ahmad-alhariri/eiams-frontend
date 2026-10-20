@@ -166,8 +166,9 @@ export interface CountLineSavePlan {
 }
 
 /**
- * Plans the batched `updateInventoryCountLines` payload for the current page,
- * and reports the changed rows it cannot carry.
+ * Plans the batched `PUT /inventory-counts/{countId}/actuals` payload (hbfu,
+ * RESOLUTION-025 / CONFLICT-020) for the current page, and reports the
+ * changed rows it cannot carry.
  *
  * Only rows the operator actually changed are considered, so a partially
  * entered page stays savable and resumable. A changed row that cannot be sent
@@ -178,13 +179,19 @@ export interface CountLineSavePlan {
  * The batch and the block list are produced together on purpose — "which rows
  * are in this save" and "which changed rows are not" must never disagree, and a
  * separate projection for each is how they did.
+ *
+ * The wire carries `{ actuals: [{ lineId, actualQuantity }], expectedRowVersion }`
+ * — aggregate count row version only. Per-line rowVersion is not in the
+ * payload because the live record does not carry one. A line without a
+ * server-supplied rowVersion is still blocked (we cannot prove a stable
+ * line id without it), but the per-line rowVersion is NEVER sent.
  */
 export function planCountLineSaves(
   countRowVersion: number,
   lines: readonly InventoryCountLine[],
   values: CountLineEntryFormValues,
 ): CountLineSavePlan {
-  const payload: NonNullable<UpdateCountLinesRequest['lines']>[number][] = []
+  const payload: UpdateCountLinesRequest['actuals'][number][] = []
   const blocked: CountLineSaveBlock[] = []
 
   for (const index of countDirtyLineIndexes(lines, values.lines)) {
@@ -198,23 +205,21 @@ export function planCountLineSaves(
       blocked.push({ index, kind: 'no-quantity' })
       continue
     }
-    // `InventoryCountLine.rowVersion` is optional in the contract, and
-    // `UpdateCountLineInput.rowVersion` has `"minimum": 1`. Sending the previous
-    // `?? 0` fallback therefore built a request that could only ever 422.
+    // `InventoryCountLine.rowVersion` is optional in the read projection; the
+    // live actuals wire carries no per-line rowVersion, but a missing one on
+    // the read side still means we cannot prove the operator's row matches a
+    // server row. Block rather than send.
     if (line.rowVersion === undefined) {
       blocked.push({ index, kind: 'missing-row-version' })
       continue
     }
-    const reason = draft.reason.trim()
     payload.push({
-      countLineId: line.countLineId,
+      lineId: line.countLineId,
       actualQuantity: entered.value,
-      rowVersion: line.rowVersion,
-      ...(reason === '' ? {} : { reason }),
     })
   }
 
-  return { request: { countRowVersion, lines: payload }, blocked }
+  return { request: { actuals: payload, expectedRowVersion: countRowVersion }, blocked }
 }
 
 /**

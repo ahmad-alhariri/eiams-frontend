@@ -6,6 +6,10 @@ vi.mock('@/shared/services/api.client', () => ({
 }))
 
 import { apiClient } from '@/shared/services/api.client'
+import type {
+  AssignAssetCustodyRequest,
+  TransferCustodyRequest,
+} from '@/modules/custody/types/custody.types'
 import { createCustodyService } from './custody.service'
 
 const mockedRequest = vi.mocked(apiClient.request)
@@ -54,20 +58,34 @@ const ASSET_ID = '11111111-1111-4111-8111-111111111111'
 
 const HOLDER_ID = '22222222-2222-4222-8222-222222222222'
 
-const ISSUE_DOC_ID = '33333333-3333-4333-8333-333333333333'
-
 const CUSTODY_ID = '44444444-4444-4444-8444-444444444444'
 
-const assignRequest = {
+/**
+ * Live wire body for `POST /assets/{assetId}/custody-assignment`. The
+ * snapshot `CustodyMutationRequest` does not match: the controller accepts
+ * `{ employeeId, expectedCustodyRowVersion, note? }` only — no subjectType,
+ * no custodyKind, no effectiveAt, no issueDocumentId, no holderType.
+ */
+const assignRequest: AssignAssetCustodyRequest = {
+  employeeId: HOLDER_ID,
+  expectedCustodyRowVersion: 1,
+  note: 'تكليف شخصي',
+}
+
+/**
+ * Live wire body for `POST /custodies/{custodyId}/transfer`. Distinct from
+ * the assign body — there is no `employeeId` here, only `newHolderId` plus
+ * `subjectType` / `newHolderType` / `newCustodyKind` / `expectedRowVersion` /
+ * `note?`.
+ */
+const transferRequest: TransferCustodyRequest = {
   subjectType: 'Asset',
-  assetId: ASSET_ID,
-  custodyKind: 'Personal',
-  effectiveAt: '2026-08-24T08:00:00.000Z',
-  holderId: HOLDER_ID,
-  holderType: 'Employee',
-  issueDocumentId: ISSUE_DOC_ID,
-  rowVersion: 1,
-} as const
+  newHolderType: 'Employee',
+  newHolderId: HOLDER_ID,
+  newCustodyKind: 'Operational',
+  expectedRowVersion: 2,
+  note: 'تحويل المسؤولية',
+}
 
 beforeEach(() => {
   mockedRequest.mockReset()
@@ -87,34 +105,70 @@ describe('custody.service (e19-t01)', () => {
     })
   })
 
-  it('posts assignments to /custodies/assign with the Idempotency-Key header', async () => {
-    mockedRequest.mockResolvedValue(envelope({}))
+  it('posts assignments to /assets/{assetId}/custody-assignment and returns the new custody id', async () => {
+    mockedRequest.mockResolvedValue(envelope({ id: 'NEW-CUSTODY-ID' }))
     const service = createCustodyService(testTransport)
 
-    await service.assignCustody(assignRequest, 'key-1')
+    const result = await service.assignCustody(ASSET_ID, assignRequest)
 
-    const { url: path, data: body } = sentConfig()
-    expect(path).toBe('/custodies/assign')
+    const { url: path, data: body, headers } = sentConfig()
+    expect(path).toBe(`/assets/${ASSET_ID}/custody-assignment`)
     expect(body).toEqual(assignRequest)
-    expect(sentConfig().headers).toMatchObject({ 'Idempotency-Key': 'key-1' })
+    // The live controller does not accept Idempotency-Key (verified against
+    // AssignAssetCustodyController.cs, 2026-10-20) so none must be sent.
+    expect(headers).toBeUndefined()
+    expect(result).toEqual({ id: 'NEW-CUSTODY-ID' })
   })
 
-  it('posts transfers to the encoded per-custody path with the idempotency header', async () => {
+  it('drops the note when blank instead of sending an empty string', async () => {
+    mockedRequest.mockResolvedValue(envelope({ id: 'NEW-CUSTODY-ID' }))
+    const service = createCustodyService(testTransport)
+
+    await service.assignCustody(ASSET_ID, {
+      employeeId: HOLDER_ID,
+      expectedCustodyRowVersion: 1,
+    })
+
+    const { data: body } = sentConfig()
+    expect(body).not.toHaveProperty('note')
+  })
+
+  it('does not include forbidden snapshot fields in the assign body', async () => {
+    // Belt and braces: the snapshot's CustodyMutationRequest carries subjectType,
+    // custodyKind, effectiveAt, issueDocumentId, holderType and AssetOnlyId.
+    // The live wire does not, and a stray assignment composed against the
+    // snapshot would 422 the controller.
+    mockedRequest.mockResolvedValue(envelope({ id: 'NEW-CUSTODY-ID' }))
+    const service = createCustodyService(testTransport)
+
+    await service.assignCustody(ASSET_ID, assignRequest)
+
+    const { data: body } = sentConfig()
+    expect(body).not.toHaveProperty('subjectType')
+    expect(body).not.toHaveProperty('custodyKind')
+    expect(body).not.toHaveProperty('effectiveAt')
+    expect(body).not.toHaveProperty('issueDocumentId')
+    expect(body).not.toHaveProperty('holderType')
+    expect(body).not.toHaveProperty('assetId')
+  })
+
+  it('posts transfers to the encoded per-custody path with the live transfer body', async () => {
     mockedRequest.mockResolvedValue(envelope({}))
     const service = createCustodyService(testTransport)
 
-    await service.transferCustody(CUSTODY_ID, assignRequest, 'key-2')
+    await service.transferCustody(CUSTODY_ID, transferRequest,)
 
-    const { url: path } = sentConfig()
+    const { url: path, data: body, headers } = sentConfig()
     expect(path).toBe(`/custodies/${CUSTODY_ID}/transfer`)
-    expect(sentConfig().headers).toMatchObject({ 'Idempotency-Key': 'key-2' })
+    expect(body).toEqual(transferRequest)
+    expect(headers).toBeUndefined()
   })
 
   it('encodes unsafe custody ids in the transfer path', async () => {
     mockedRequest.mockResolvedValue(envelope({}))
     const service = createCustodyService(testTransport)
 
-    await service.transferCustody('id/with slash', assignRequest, 'key-3')
+    await service.transferCustody('id/with slash', transferRequest,)
 
     expect(sentConfig().url).toBe('/custodies/id%2Fwith%20slash/transfer')
   })
