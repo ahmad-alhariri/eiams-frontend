@@ -5,25 +5,37 @@ import { InventoryLowStockBadge } from './inventory-low-stock-badge'
 
 describe('InventoryLowStockBadge', () => {
   it.each([
-    ['Low', 0, 'منخفض', 'حدّ التنبيه: ٠'],
-    ['Sufficient', 3.125, 'الرصيد كافٍ', 'حدّ التنبيه: ٣٫١٢٥'],
+    [0, 'Low', 0, 'منخفض', 'حدّ التنبيه: ٠'],
+    [1, 'Sufficient', 3.125, 'الرصيد كافٍ', 'حدّ التنبيه: ٣٫١٢٥'],
   ] as const)(
     'renders the server-provided configured threshold for %s',
-    (state, threshold, label, detail) => {
-      render(<InventoryLowStockBadge state={state} thresholdQuantity={threshold} />)
+    (state, name, threshold, label, detail) => {
+      const { container } = render(
+        <InventoryLowStockBadge state={state} thresholdQuantity={threshold} />,
+      )
 
       expect(screen.getByText(label)).toBeInTheDocument()
       expect(screen.getByLabelText(detail)).toBeInTheDocument()
+      expect(container.querySelector('[data-slot="inventory-low-stock"]')).toHaveAttribute(
+        'data-low-stock-state',
+        name,
+      )
     },
   )
 
   it.each([
-    ['NotConfigured', 'حدّ التنبيه غير محدد'],
-    ['Disabled', 'تنبيه الانخفاض معطّل'],
-  ] as const)('renders %s without inventing a null threshold', (state, label) => {
-    const { container } = render(<InventoryLowStockBadge state={state} thresholdQuantity={null} />)
+    [2, 'NotConfigured', 'حدّ التنبيه غير محدد'],
+    [3, 'Disabled', 'تنبيه الانخفاض معطّل'],
+  ] as const)('renders %s without inventing a null threshold', (state, name, label) => {
+    const { container } = render(
+      <InventoryLowStockBadge state={state} thresholdQuantity={null} />,
+    )
 
     expect(screen.getByText(label)).toBeInTheDocument()
+    expect(container.querySelector('[data-slot="inventory-low-stock"]')).toHaveAttribute(
+      'data-low-stock-state',
+      name,
+    )
     expect(container.querySelector('[data-slot="inventory-low-stock-threshold"]')).toBeNull()
   })
 })

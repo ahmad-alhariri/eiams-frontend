@@ -40,48 +40,33 @@ const MATERIAL_DISPLAY_NAME = 'حاسوب مكتبي'
  */
 const BALANCES: readonly InventoryBalance[] = [
   wireInventoryBalance({
-    balanceId: INVENTORY_BALANCE_ID,
-    lowStock: { state: 'Low', thresholdQuantity: 0 },
+    id: INVENTORY_BALANCE_ID,
+    lowStock: { state: 0, thresholdQuantity: 0 },
     quantity: 0,
   }),
   wireInventoryBalance({
-    balanceId: '00000000-0000-4000-8000-000000000141',
-    lowStock: { state: 'Sufficient', thresholdQuantity: 3 },
-    material: {
-      id: wireInventoryBalance().materialId,
-      displayName: 'طابعة مكتبية',
-      code: wireInventoryBalance().materialCode,
-    },
+    id: '00000000-0000-4000-8000-000000000141',
+    lowStock: { state: 1, thresholdQuantity: 3 },
     materialNameAr: 'طابعة مكتبية',
     quantity: 4,
   }),
   wireInventoryBalance({
-    balanceId: '00000000-0000-4000-8000-000000000142',
-    lowStock: { state: 'NotConfigured', thresholdQuantity: null },
-    material: {
-      id: wireInventoryBalance().materialId,
-      displayName: 'ورق طباعة',
-      code: wireInventoryBalance().materialCode,
-    },
+    id: '00000000-0000-4000-8000-000000000142',
+    lowStock: { state: 2, thresholdQuantity: null },
     materialNameAr: 'ورق طباعة',
     quantity: 12,
   }),
   wireInventoryBalance({
-    balanceId: '00000000-0000-4000-8000-000000000143',
-    lowStock: { state: 'Disabled', thresholdQuantity: null },
-    material: {
-      id: wireInventoryBalance().materialId,
-      displayName: 'حبر طابعة',
-      code: wireInventoryBalance().materialCode,
-    },
+    id: '00000000-0000-4000-8000-000000000143',
+    lowStock: { state: 3, thresholdQuantity: null },
     materialNameAr: 'حبر طابعة',
     quantity: 8,
   }),
 ]
 
 const MOVEMENT: StockMovement = wireStockMovement({
-  documentReference: 'ADJ-2026-0007',
-  movementId: INVENTORY_MOVEMENT_ID,
+  documentReferenceNumber: 'ADJ-2026-0007',
+  id: INVENTORY_MOVEMENT_ID,
   movementType: 'AdjustmentOut',
   quantityDelta: -2.125,
 })
@@ -137,7 +122,7 @@ describe('inventory explainability journey', () => {
         okPageJson(BALANCES, { page: 1, pageSize: 10, totalCount: BALANCES.length, totalPages: 1 }),
       ),
       http.get(`${API_BASE_URL}/inventory/balances/:balanceId`, ({ params }) => {
-        const balance = BALANCES.find((candidate) => candidate.balanceId === params['balanceId'])
+        const balance = BALANCES.find((candidate) => candidate.id === params['balanceId'])
         return balance
           ? okJson(balance)
           : errJson(404, {
@@ -150,7 +135,7 @@ describe('inventory explainability journey', () => {
         okPageJson([MOVEMENT], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 }),
       ),
       http.get(`${API_BASE_URL}/inventory/movements/:movementId`, ({ params }) =>
-        params['movementId'] === MOVEMENT.movementId
+        params['movementId'] === MOVEMENT.id
           ? okJson(MOVEMENT)
           : errJson(404, {
               code: 'INVENTORY_MOVEMENTS_NOT_FOUND',
@@ -199,16 +184,16 @@ describe('inventory explainability journey', () => {
     expect(await screen.findByText('تسوية بالنقص')).toBeInTheDocument()
 
     const movementLink = screen.getByRole('link', { name: /عرض تفاصيل حركة 00000000…/ })
-    expect(movementLink).toHaveAttribute('href', `/inventory/movements/${MOVEMENT.movementId}`)
+    expect(movementLink).toHaveAttribute('href', `/inventory/movements/${MOVEMENT.id}`)
     await user.click(movementLink)
 
     expect(await screen.findByRole('heading', { name: 'تفاصيل حركة المخزون' })).toBeInTheDocument()
-    expect(await screen.findByText(MOVEMENT.documentReference)).toBeInTheDocument()
+    expect(await screen.findByText(MOVEMENT.documentReferenceNumber)).toBeInTheDocument()
     expect(screen.getByText('تسوية بالنقص')).toBeInTheDocument()
     expect(screen.getByText('-٢٫١٢٥')).toBeInTheDocument()
     expect(screen.getByText(MOVEMENT.documentId)).toBeInTheDocument()
-    expect(screen.getByText(MOVEMENT.documentLineId)).toBeInTheDocument()
-    expect(screen.getByText(MOVEMENT.movementId)).toBeInTheDocument()
+    expect(screen.getByText(MOVEMENT.lineId)).toBeInTheDocument()
+    expect(screen.getByText(MOVEMENT.id)).toBeInTheDocument()
     // The posting user is a UUID string on the wire, so the detail page renders
     // it as a string child without tripping React's object-child guard.
     expect(screen.getByText(MOVEMENT.postedBy)).toBeInTheDocument()

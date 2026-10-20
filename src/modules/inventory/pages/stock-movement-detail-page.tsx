@@ -93,7 +93,7 @@ function StockMovementDetailPage() {
     <div dir="rtl" className="min-w-0">
       <PageHeader
         title="تفاصيل حركة المخزون"
-        subtitle={`${movement.warehouse.displayName} — ${movement.material.displayName}`}
+        subtitle={`${movement.warehouseName} — ${movement.materialNameAr}`}
         actions={
           <Button type="button" variant="outline" onClick={returnToMovements}>
             <IconArrowRight aria-hidden data-icon="inline-start" />
@@ -107,8 +107,8 @@ function StockMovementDetailPage() {
         description="بيانات للقراءة فقط ضمن نطاق العمل الحالي، كما يعرضها الخادم."
       >
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-          <DetailField label="المستودع">{movement.warehouse.displayName}</DetailField>
-          <DetailField label="المادة">{movement.material.displayName}</DetailField>
+          <DetailField label="المستودع">{movement.warehouseName}</DetailField>
+          <DetailField label="المادة">{movement.materialNameAr}</DetailField>
           <DetailField label="نوع الحركة">
             <Badge variant="outline">{stockMovementTypeLabelAr(movement.movementType)}</Badge>
           </DetailField>
@@ -123,19 +123,19 @@ function StockMovementDetailPage() {
               {formatSignedDelta(movement.quantityDelta)}
             </span>
           </DetailField>
-          <DetailField label="تاريخ الترحيل">{formatDateTime(movement.postedAt)}</DetailField>
+          <DetailField label="تاريخ الترحيل">{formatDateTime(movement.postedAtUtc)}</DetailField>
           <DetailField label="رُحّلت بواسطة">{movement.postedBy}</DetailField>
           <DetailField label="مرجع المستند" ltr>
-            <span className="break-all">{movement.documentReference ?? '—'}</span>
+            <span className="break-all">{movement.documentReferenceNumber ?? '—'}</span>
           </DetailField>
           <DetailField label="معرّف المستند" ltr>
             <span className="break-all">{movement.documentId}</span>
           </DetailField>
           <DetailField label="معرّف سطر المستند" ltr>
-            <span className="break-all">{movement.documentLineId}</span>
+            <span className="break-all">{movement.lineId}</span>
           </DetailField>
           <DetailField label="معرّف الحركة" ltr>
-            <span className="break-all">{movement.movementId}</span>
+            <span className="break-all">{movement.id}</span>
           </DetailField>
         </dl>
       </ContentCard>

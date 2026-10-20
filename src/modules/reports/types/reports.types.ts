@@ -1,4 +1,4 @@
-import type { operations } from '@/shared/types/generated/eiams-v1'
+import type { operations, PageMeta } from '@/shared/types/generated/eiams-v1'
 
 /**
  * Contract-derived query parameter types for the v1 reports endpoints
@@ -18,6 +18,26 @@ import type { operations } from '@/shared/types/generated/eiams-v1'
 export type ListInventoryReportQuery = NonNullable<
   operations['getInventoryReport']['parameters']['query']
 >
+
+/**
+ * `GET /reports/inventory` per-material summary row
+ * (`Application/Reports/Inventory/InventoryReportRow.cs`). The operation is a
+ * grouped summary, NOT a balance list, so it is declared here rather than
+ * borrowed from the inventory balance read contract.
+ */
+export interface InventoryReportRow {
+  readonly materialId: string
+  readonly materialCode: string
+  readonly materialNameAr: string
+  readonly totalQuantity: number
+  readonly warehouseCount: number
+  readonly lastUpdatedUtc: string
+}
+
+export interface InventoryReportPage {
+  readonly items: ReadonlyArray<InventoryReportRow>
+  readonly meta: PageMeta
+}
 
 /** Asset & custody report — `GET /reports/assets`. */
 export type ListAssetReportQuery = NonNullable<operations['getAssetReport']['parameters']['query']>

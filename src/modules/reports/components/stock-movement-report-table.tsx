@@ -73,13 +73,14 @@ function StockMovementReportTableImpl() {
 
   const query = useMemo<ListStockMovementsQuery>(
     () => ({
-      pageIndex: currentPage - 1,
+      // The live controller binds one-based `page` (PaginationQueryParameters).
+      page: currentPage,
       pageSize,
       ...(warehouseId === undefined ? {} : { warehouseId }),
       ...(materialId === undefined ? {} : { materialId }),
       ...(movementType === undefined ? {} : { movementType }),
-      ...(dateFrom === undefined ? {} : { dateFrom }),
-      ...(dateTo === undefined ? {} : { dateTo }),
+      ...(dateFrom === undefined ? {} : { fromUtc: dateFrom }),
+      ...(dateTo === undefined ? {} : { toUtc: dateTo }),
     }),
     [currentPage, dateFrom, dateTo, materialId, movementType, pageSize, warehouseId],
   )
@@ -127,29 +128,26 @@ function StockMovementReportTableImpl() {
   const columns = useMemo(
     () =>
       movementColumnHelper.columns([
-        movementColumnHelper.accessor('postedAt', {
+        movementColumnHelper.accessor('postedAtUtc', {
           id: 'PostedAt',
           header: 'تاريخ الترحيل',
           enableSorting: false,
           cell: ({ getValue, row }) => (
             <Link
-              to={ROUTE_PATHS.inventoryMovementDetail.replace(
-                ':movementId',
-                row.original.movementId,
-              )}
-              aria-label={`عرض تفاصيل حركة ${formatUuid(row.original.movementId)}`}
+              to={ROUTE_PATHS.inventoryMovementDetail.replace(':movementId', row.original.id)}
+              aria-label={`عرض تفاصيل حركة ${formatUuid(row.original.id)}`}
               className="font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <span dir="rtl">{formatDateTime(getValue())}</span>
             </Link>
           ),
         }),
-        movementColumnHelper.accessor((movement) => movement.warehouse.displayName, {
+        movementColumnHelper.accessor((movement) => movement.warehouseName, {
           id: 'Warehouse',
           header: 'المستودع',
           enableSorting: false,
         }),
-        movementColumnHelper.accessor((movement) => movement.material.displayName, {
+        movementColumnHelper.accessor((movement) => movement.materialNameAr, {
           id: 'Material',
           header: 'المادة',
           enableSorting: false,
@@ -179,7 +177,7 @@ function StockMovementReportTableImpl() {
             </span>
           ),
         }),
-        movementColumnHelper.accessor((row) => row.documentReference ?? '', {
+        movementColumnHelper.accessor((row) => row.documentReferenceNumber ?? '', {
           id: 'DocumentReference',
           header: 'السند',
           enableSorting: false,

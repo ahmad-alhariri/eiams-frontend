@@ -13,7 +13,6 @@ import type {
   DocumentPolicy,
   DocumentStatus,
   FieldError,
-  InventoryBalance,
   LifecycleActorSnapshot,
   LifecycleEventType,
   NamedReference,
@@ -52,15 +51,16 @@ import type {
   ExternalParty,
   Organization,
 } from '@/modules/organization/types/organization.api-types'
-// StockMovement follows the same rule: the live wire is `postedBy: Uuid` per
-// `Application/StockMovements/GetList/StockMovementResponse.cs`, NOT the
-// generated `postedBy: NamedReference`. The handwritten type lives next to the
-// service that reads it; using it here makes the factory mint the same shape
-// the page renders, so the eight `as unknown as StockMovement['postedBy']`
-// casts in `cross-module-scenarios.ts` go away. `InventoryBalance` is left on
-// the generated snapshot because the document / custody / chain suites still
-// read it there; that drift is filed against `eiams-frontend-tgl3`.
-import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
+// StockMovement and InventoryBalance follow the same rule: the live wire is
+// `postedBy: Uuid` per `Application/StockMovements/GetList/StockMovementResponse.cs`,
+// NOT the generated `postedBy: NamedReference`, and both inventory projections
+// are flat (no nested warehouse/material). The handwritten types live next to
+// the service that reads them; using them here makes the factories mint the
+// same shape the pages render.
+import type {
+  InventoryBalance,
+  StockMovement,
+} from '@/modules/inventory/types/inventory.api-types'
 // The catalog master-data records are minted against the HANDWRITTEN contracts,
 // not the frozen generated snapshot: the wire says `id` (never
 // `domainId`/`categoryId`/`familyId`/`unitId`), `name` (never `nameAr`), and
@@ -701,14 +701,18 @@ export function createInventoryBalance(
 ): InventoryBalance {
   return withOverrides(
     {
-      balanceId: fixtureUuid(40),
-      warehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
-      material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
+      id: fixtureUuid(40),
+      warehouseId: fixtureUuid(30),
+      warehouseCode: 'WH-CENTRAL',
+      warehouseName: 'المستودع المركزي',
+      materialId: fixtureUuid(24),
+      materialCode: 'IT-HW-PC-001',
+      materialNameAr: 'حاسوب مكتبي',
       quantity: 10,
-      lastUpdated: FIXTURE_TIMESTAMP,
+      lastUpdatedUtc: FIXTURE_TIMESTAMP,
       rowVersion: 1,
       lowStock: {
-        state: 'Sufficient',
+        state: 1,
         thresholdQuantity: 5,
       },
     },
@@ -827,11 +831,8 @@ export function createAssetMovement(
  * Immutable inventory-ledger read model. This is deliberately a standalone
  * projection: it does not derive a balance or mutate a warehouse document.
  *
- * `postedBy` is a UUID STRING on the wire (see the audit header in
- * `src/test/msw/inventory-wire-fixtures.ts`), not the nested `NamedReference`
- * the generated snapshot claims. This factory now mints the handwritten
- * shape, so the eight `as unknown as StockMovement['postedBy']` casts in
- * `cross-module-scenarios.ts` collapse to plain UUIDs.
+ * The wire record is flat and carries `postedBy` as a UUID STRING (see
+ * `src/test/msw/inventory-wire-fixtures.ts`), matching the consumer baseline.
  */
 export function createStockMovement(
   overrides: FixtureOverrides<StockMovement> = {},
@@ -840,25 +841,20 @@ export function createStockMovement(
   const materialId = fixtureUuid(24)
   return withOverrides(
     {
-      documentId: fixtureUuid(150),
-      documentLineId: fixtureUuid(160),
-      documentReference: 'EIAMS-RCV-2026-0001',
-      documentReferenceNumber: 'EIAMS-RCV-2026-0001',
-      lineId: fixtureUuid(160),
-      material: createNamedReference({ id: materialId, displayName: 'حاسوب مكتبي' }),
-      materialId,
-      materialCode: 'IT-HW-PC-001',
-      materialNameAr: 'حاسوب مكتبي',
-      movementId: fixtureUuid(70),
-      movementType: 'Receipt',
-      postedAt: FIXTURE_TIMESTAMP,
-      postedAtUtc: FIXTURE_TIMESTAMP,
-      postedBy: fixtureUuid(10),
-      quantityDelta: 5,
-      warehouse: createNamedReference({ id: warehouseId, displayName: 'المستودع المركزي' }),
+      id: fixtureUuid(70),
       warehouseId,
       warehouseCode: 'WH-CENTRAL',
       warehouseName: 'المستودع المركزي',
+      materialId,
+      materialCode: 'IT-HW-PC-001',
+      materialNameAr: 'حاسوب مكتبي',
+      documentId: fixtureUuid(150),
+      documentReferenceNumber: 'EIAMS-RCV-2026-0001',
+      lineId: fixtureUuid(160),
+      movementType: 'Receipt',
+      quantityDelta: 5,
+      postedAtUtc: FIXTURE_TIMESTAMP,
+      postedBy: fixtureUuid(10),
     },
     overrides,
   )

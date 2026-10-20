@@ -26,29 +26,19 @@ const WAREHOUSE_ID = fixtureUuid(30)
 const COMPUTER_MATERIAL_ID = fixtureUuid(24)
 const PAPER_MATERIAL_ID = fixtureUuid(27)
 
-function materialOf(materialId: string, displayName: string) {
-  return { id: materialId, displayName, code: 'IT-HW-PC-001' }
-}
-
 /**
- * A balance in the REAL wire shape (`inventory.api-types`), NOT the frozen
- * generated snapshot `createInventoryBalance` mints.
- *
- * `createInventoryBalance` carries none of the flat `materialId` / `warehouseId`
- * columns the backend projects, so a row built that way describes nothing
- * `inventoryService.listBalances` could return. `wireInventoryBalance` is the
- * same fixture the inventory service suite serves (see
- * `inventory-wire-fixtures.ts` for the DTO evidence), and the flat id is kept in
- * step with the nested reference a fixture can never disagree with.
+ * A balance in the REAL wire shape (`inventory.api-types`). `wireInventoryBalance`
+ * is the same fixture the inventory service suite serves (see
+ * `inventory-wire-fixtures.ts` for the DTO evidence).
  */
 function createBalance(overrides: Partial<InventoryBalance> = {}): InventoryBalance {
   return wireInventoryBalance({
     materialId: COMPUTER_MATERIAL_ID,
     materialCode: 'IT-HW-PC-001',
     materialNameAr: 'حاسوب مكتبي',
-    material: materialOf(COMPUTER_MATERIAL_ID, 'حاسوب مكتبي'),
     warehouseId: WAREHOUSE_ID,
-    warehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي', code: 'WH-CENTRAL' },
+    warehouseCode: 'WH-CENTRAL',
+    warehouseName: 'المستودع المركزي',
     ...overrides,
   })
 }
@@ -79,7 +69,6 @@ describe('useIssueLineBalances', () => {
     const paper = createBalance({
       materialId: PAPER_MATERIAL_ID,
       materialNameAr: 'ورق طباعة',
-      material: materialOf(PAPER_MATERIAL_ID, 'ورق طباعة'),
       quantity: 12,
     })
     const requestedQueries: string[] = []
@@ -93,13 +82,13 @@ describe('useIssueLineBalances', () => {
     )
 
     const { result } = renderHook(
-      () => useIssueLineBalances(WAREHOUSE_ID, [computers.material.id, paper.material.id]),
+      () => useIssueLineBalances(WAREHOUSE_ID, [computers.materialId, paper.materialId]),
       { wrapper: createWrapper() },
     )
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
-    expect(result.current.balanceByMaterialId.get(computers.material.id)).toBe(15)
-    expect(result.current.balanceByMaterialId.get(paper.material.id)).toBe(12)
+    expect(result.current.balanceByMaterialId.get(computers.materialId)).toBe(15)
+    expect(result.current.balanceByMaterialId.get(paper.materialId)).toBe(12)
     // Exactly one query per distinct material.
     expect(requestedQueries).toHaveLength(2)
     // F-05: one-based on the wire — `page: 0` was rejected by the backend's
@@ -236,12 +225,12 @@ describe('useIssueLineBalances', () => {
     )
 
     const { result } = renderHook(
-      () => useIssueLineBalances(WAREHOUSE_ID, [good.material.id, failingMaterialId]),
+      () => useIssueLineBalances(WAREHOUSE_ID, [good.materialId, failingMaterialId]),
       { wrapper: createWrapper(createDeterministicClient()) },
     )
 
     await waitFor(() => expect(result.current.isError).toBe(true))
-    expect(result.current.balanceByMaterialId.get(good.material.id)).toBe(7)
+    expect(result.current.balanceByMaterialId.get(good.materialId)).toBe(7)
     expect(result.current.balanceByMaterialId.has(failingMaterialId)).toBe(false)
   })
 
@@ -257,7 +246,6 @@ describe('useIssueLineBalances', () => {
                 quantity: 9,
                 materialId: fixtureUuid(26),
                 materialNameAr: 'حبر طابعة',
-                material: materialOf(fixtureUuid(26), 'حبر طابعة'),
               }),
             ])
           : new HttpResponse(null, { status: 500 })

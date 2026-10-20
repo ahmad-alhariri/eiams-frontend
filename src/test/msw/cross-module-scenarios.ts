@@ -1,18 +1,16 @@
 import type {
-  AdjustmentLine,
   Asset,
   AssetCustody,
   AssetMovement,
   AuditLog,
   AuditLogEntry,
   DocumentLifecycleEvent,
-  InventoryAdjustment,
-  InventoryBalance,
   InventoryCount,
   InventoryCountLine,
   NamedReference,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
+import type { AdjustmentDetail } from '@/modules/adjustment/types/adjustment.types'
 // `Warehouse` is typed against the handwritten contract, NOT the frozen generated
 // snapshot: the wire record serves `id` + `name` and a FLAT `siteId`, so the
 // generated `Warehouse` (whose `warehouseId`/`nameAr`/nested `site` fields this
@@ -23,9 +21,13 @@ import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
 // `id`, `baseUnitId`/`baseUnitSymbol` and `materialDomainId`/`materialDomainName`,
 // so only the handwritten contract describes a real material.
 import type { Material } from '@/modules/catalog/types/catalog.api-types'
-// StockMovement: handwritten wire shape — `postedBy: Uuid`, not the
-// generated `postedBy: NamedReference`. Mirrored in factories.ts.
-import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
+// StockMovement and InventoryBalance: handwritten wire shapes — flat
+// warehouse/material columns, `postedBy: Uuid`, `id` (not `movementId` /
+// `balanceId`). Mirrored in factories.ts.
+import type {
+  InventoryBalance,
+  StockMovement,
+} from '@/modules/inventory/types/inventory.api-types'
 import {
   createAsset,
   createAssetCustody,
@@ -75,8 +77,8 @@ export type CrossModuleScenario = Readonly<{
   adjustments: Readonly<{
     count: InventoryCount
     countLines: readonly InventoryCountLine[]
-    countVariance: InventoryAdjustment
-    disposal: InventoryAdjustment
+    countVariance: AdjustmentDetail
+    disposal: AdjustmentDetail
   }>
   assets: Readonly<{
     returned: Asset
@@ -190,7 +192,6 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     name: 'مستودع فرع حمص',
   })
   const sourceRef = reference(source.id, source.name, source.code)
-  const destinationRef = reference(destination.id, destination.name, destination.code)
   // Both warehouses inherit `siteId` from `createWarehouse` (`fixtureUuid(50)`,
   // the id `createSite` uses), so the documents' site reference is resolved from
   // that same seeded site rather than from a second, unrelated site id — the old
@@ -232,7 +233,6 @@ export function createCrossModuleScenario(): CrossModuleScenario {
   const adjustmentLineId = fixtureUuid(921)
   const countId = fixtureUuid(922)
   const countLineId = fixtureUuid(923)
-  const disposalAdjustmentId = fixtureUuid(924)
   const disposalDocumentId = fixtureUuid(925)
   const disposalLineId = fixtureUuid(926)
   const adjustmentDocumentLineId = fixtureUuid(928)
@@ -557,12 +557,9 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     status: 'Active',
   })
 
-  const adjustmentLine: AdjustmentLine = {
-    adjustmentLineId,
-    material: reference(consumableMaterial.id, consumableMaterial.nameAr, consumableMaterial.code),
-    quantityDelta: 2,
-    reason: 'زيادة مؤكدة بعد الجرد الفعلي',
-  }
+  // Engine-side countVariance line data: the wire delta the posted stock
+  // movement carries; the module-owned adjustment line below mirrors it.
+  const countAdjustmentDelta = 2
   const count: InventoryCount = {
     completedAt: '2026-08-24T11:00:00.000Z',
     countId,
@@ -591,199 +588,241 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       snapshotQuantity: 7,
     },
   ]
-  const countVariance: InventoryAdjustment = {
-    attachments: adjustmentDocument.attachments,
-    adjustmentId: fixtureUuid(927),
+  /**
+   * The module's OWN adjustment reads (D-INT-02): flat camelCase rows with no
+   * embedded policy/attachments. `id` is simultaneously the shared document
+   * engine's documentId, which is how policy and attachments stay reachable.
+   */
+  const countVariance: AdjustmentDetail = {
+    id: adjustmentDocumentId,
+    warehouseId: sourceRef.id,
+    warehouseCode: 'WH-01',
+    warehouseName: sourceRef.displayName,
     countId,
-    countReference: count.referenceNumber,
-    createdAt: '2026-08-24T11:30:00.000Z',
-    createdBy: managerRef,
-    documentId: adjustmentDocumentId,
-    documentReference: adjustmentDocument.systemReferenceNumber,
-    lines: [adjustmentLine],
-    policy: adjustmentDocument.policy,
-    postedAt: adjustmentDocument.postedAt ?? SCENARIO_TIMESTAMP,
     purpose: 'CountVariance',
-    reason: 'تسوية فرق الجرد رقم EIAMS-CNT-2026-0004',
-    rowVersion: 2,
     status: 'Posted',
-    warehouse: sourceRef,
-  }
-  const disposal: InventoryAdjustment = {
-    attachments: disposalDocument.attachments,
-    adjustmentId: disposalAdjustmentId,
-    createdAt: '2026-08-25T09:30:00.000Z',
-    createdBy: managerRef,
-    documentId: disposalDocumentId,
-    documentReference: disposalDocument.systemReferenceNumber,
+    reason: 'تسوية فرق الجرد رقم EIAMS-CNT-2026-0004',
+    systemReferenceNumber: adjustmentDocument.systemReferenceNumber,
+    documentStatus: 'Posted',
+    createdAtUtc: '2026-08-24T11:30:00.000Z',
+    postedAtUtc: adjustmentDocument.postedAt ?? SCENARIO_TIMESTAMP,
+    rowVersion: 2,
     lines: [
       {
-        adjustmentLineId: disposalLineId,
-        assetId: disposed.assetId,
-        assetNumber: disposed.assetNumber,
-        material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
-        quantityDelta: -1,
-        reason: 'إعدام أصل تالف بموجب محضر اللجنة.',
+        lineId: adjustmentLineId,
+        materialId: consumableMaterial.id,
+        materialCode: consumableMaterial.code,
+        materialNameAr: consumableMaterial.nameAr,
+        quantity: countAdjustmentDelta,
+        difference: countAdjustmentDelta,
+        reason: 'زيادة مؤكدة بعد الجرد الفعلي',
+        assets: [],
       },
     ],
-    policy: disposalDocument.policy,
-    postedAt: disposalDocument.postedAt ?? SCENARIO_TIMESTAMP,
+  }
+  const disposal: AdjustmentDetail = {
+    id: disposalDocumentId,
+    warehouseId: sourceRef.id,
+    warehouseCode: 'WH-01',
+    warehouseName: sourceRef.displayName,
+    countId: null,
     purpose: 'Disposal',
-    reason: 'إعدام الحاسوب المحمول التالف AST-2026-1002.',
-    rowVersion: 2,
     status: 'Posted',
-    warehouse: sourceRef,
+    reason: 'إعدام الحاسوب المحمول التالف AST-2026-1002.',
+    systemReferenceNumber: disposalDocument.systemReferenceNumber,
+    documentStatus: 'Posted',
+    createdAtUtc: '2026-08-25T09:30:00.000Z',
+    postedAtUtc: disposalDocument.postedAt ?? SCENARIO_TIMESTAMP,
+    rowVersion: 2,
+    lines: [
+      {
+        lineId: disposalLineId,
+        materialId: assetMaterial.id,
+        materialCode: assetMaterial.code,
+        materialNameAr: assetMaterial.nameAr,
+        quantity: -1,
+        difference: -1,
+        reason: 'إعدام أصل تالف بموجب محضر اللجنة.',
+        assets: [
+          {
+            id: disposed.assetId,
+            assetNumber: disposed.assetNumber,
+            serialNumber: disposed.serialNumber ?? null,
+          },
+        ],
+      },
+    ],
   }
 
   const stockMovements: readonly StockMovement[] = [
     createStockMovement({
       documentId: receivingId,
-      documentLineId: receivingLineId,
-      documentReference: receiving.systemReferenceNumber,
-      material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
-      movementId: fixtureUuid(940),
+      lineId: receivingLineId,
+      documentReferenceNumber: receiving.systemReferenceNumber,
+      materialId: assetMaterial.id,
+      materialCode: assetMaterial.code,
+      materialNameAr: assetMaterial.nameAr,
+      id: fixtureUuid(940),
       movementType: 'Receipt',
-      postedAt: receiving.postedAt ?? SCENARIO_TIMESTAMP,
+      postedAtUtc: receiving.postedAt ?? SCENARIO_TIMESTAMP,
       postedBy: managerRef.id,
       quantityDelta: 4,
-      warehouse: sourceRef,
+      warehouseId: source.id,
+      warehouseCode: source.code,
+      warehouseName: source.name,
     }),
     createStockMovement({
       documentId: openingId,
-      documentLineId: openingLineId,
-      documentReference: opening.systemReferenceNumber,
-      material: reference(
-        consumableMaterial.id,
-        consumableMaterial.nameAr,
-        consumableMaterial.code,
-      ),
-      movementId: fixtureUuid(941),
+      lineId: openingLineId,
+      documentReferenceNumber: opening.systemReferenceNumber,
+      materialId: consumableMaterial.id,
+      materialCode: consumableMaterial.code,
+      materialNameAr: consumableMaterial.nameAr,
+      id: fixtureUuid(941),
       movementType: 'Opening',
-      postedAt: opening.postedAt ?? SCENARIO_TIMESTAMP,
+      postedAtUtc: opening.postedAt ?? SCENARIO_TIMESTAMP,
       postedBy: managerRef.id,
       quantityDelta: 10,
-      warehouse: sourceRef,
+      warehouseId: source.id,
+      warehouseCode: source.code,
+      warehouseName: source.name,
     }),
     createStockMovement({
       documentId: issueId,
-      documentLineId: issueLineId,
-      documentReference: issue.systemReferenceNumber,
-      material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
-      movementId: fixtureUuid(942),
+      lineId: issueLineId,
+      documentReferenceNumber: issue.systemReferenceNumber,
+      materialId: assetMaterial.id,
+      materialCode: assetMaterial.code,
+      materialNameAr: assetMaterial.nameAr,
+      id: fixtureUuid(942),
       movementType: 'Issue',
-      postedAt: issue.postedAt ?? SCENARIO_TIMESTAMP,
+      postedAtUtc: issue.postedAt ?? SCENARIO_TIMESTAMP,
       postedBy: managerRef.id,
       quantityDelta: -2,
-      warehouse: sourceRef,
+      warehouseId: source.id,
+      warehouseCode: source.code,
+      warehouseName: source.name,
     }),
     createStockMovement({
       documentId: transferId,
-      documentLineId: transferLineId,
-      documentReference: transfer.systemReferenceNumber,
-      material: reference(
-        consumableMaterial.id,
-        consumableMaterial.nameAr,
-        consumableMaterial.code,
-      ),
-      movementId: fixtureUuid(943),
+      lineId: transferLineId,
+      documentReferenceNumber: transfer.systemReferenceNumber,
+      materialId: consumableMaterial.id,
+      materialCode: consumableMaterial.code,
+      materialNameAr: consumableMaterial.nameAr,
+      id: fixtureUuid(943),
       movementType: 'TransferOut',
-      postedAt: transfer.postedAt ?? SCENARIO_TIMESTAMP,
+      postedAtUtc: transfer.postedAt ?? SCENARIO_TIMESTAMP,
       postedBy: managerRef.id,
       quantityDelta: -3,
-      warehouse: sourceRef,
+      warehouseId: source.id,
+      warehouseCode: source.code,
+      warehouseName: source.name,
     }),
     createStockMovement({
       documentId: transferId,
-      documentLineId: transferLineId,
-      documentReference: transfer.systemReferenceNumber,
-      material: reference(
-        consumableMaterial.id,
-        consumableMaterial.nameAr,
-        consumableMaterial.code,
-      ),
-      movementId: fixtureUuid(944),
+      lineId: transferLineId,
+      documentReferenceNumber: transfer.systemReferenceNumber,
+      materialId: consumableMaterial.id,
+      materialCode: consumableMaterial.code,
+      materialNameAr: consumableMaterial.nameAr,
+      id: fixtureUuid(944),
       movementType: 'TransferIn',
-      postedAt: transfer.postedAt ?? SCENARIO_TIMESTAMP,
+      postedAtUtc: transfer.postedAt ?? SCENARIO_TIMESTAMP,
       postedBy: managerRef.id,
       quantityDelta: 3,
-      warehouse: destinationRef,
+      warehouseId: destination.id,
+      warehouseCode: destination.code,
+      warehouseName: destination.name,
     }),
     createStockMovement({
       documentId: returnId,
-      documentLineId: returnLineId,
-      documentReference: returnDocument.systemReferenceNumber,
-      material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
-      movementId: fixtureUuid(945),
+      lineId: returnLineId,
+      documentReferenceNumber: returnDocument.systemReferenceNumber,
+      materialId: assetMaterial.id,
+      materialCode: assetMaterial.code,
+      materialNameAr: assetMaterial.nameAr,
+      id: fixtureUuid(945),
       movementType: 'Receipt',
-      postedAt: returnDocument.postedAt ?? SCENARIO_TIMESTAMP,
+      postedAtUtc: returnDocument.postedAt ?? SCENARIO_TIMESTAMP,
       postedBy: managerRef.id,
       quantityDelta: 1,
-      warehouse: sourceRef,
+      warehouseId: source.id,
+      warehouseCode: source.code,
+      warehouseName: source.name,
     }),
     createStockMovement({
       documentId: adjustmentDocumentId,
-      documentLineId: adjustmentDocumentLineId,
-      documentReference: countVariance.documentReference,
-      material: reference(
-        consumableMaterial.id,
-        consumableMaterial.nameAr,
-        consumableMaterial.code,
-      ),
-      movementId: fixtureUuid(946),
+      lineId: adjustmentDocumentLineId,
+      documentReferenceNumber: countVariance.systemReferenceNumber,
+      materialId: consumableMaterial.id,
+      materialCode: consumableMaterial.code,
+      materialNameAr: consumableMaterial.nameAr,
+      id: fixtureUuid(946),
       movementType: 'AdjustmentIn',
-      postedAt: countVariance.postedAt ?? SCENARIO_TIMESTAMP,
+      postedAtUtc: countVariance.postedAtUtc ?? SCENARIO_TIMESTAMP,
       postedBy: managerRef.id,
-      quantityDelta: adjustmentLine.quantityDelta,
-      warehouse: sourceRef,
+      quantityDelta: countAdjustmentDelta,
+      warehouseId: source.id,
+      warehouseCode: source.code,
+      warehouseName: source.name,
     }),
     createStockMovement({
       documentId: disposalDocumentId,
-      documentLineId: disposalDocumentLineId,
-      documentReference: disposal.documentReference,
-      material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
-      movementId: fixtureUuid(948),
+      lineId: disposalDocumentLineId,
+      documentReferenceNumber: disposal.systemReferenceNumber,
+      materialId: assetMaterial.id,
+      materialCode: assetMaterial.code,
+      materialNameAr: assetMaterial.nameAr,
+      id: fixtureUuid(948),
       movementType: 'AdjustmentOut',
-      postedAt: disposal.postedAt ?? SCENARIO_TIMESTAMP,
+      postedAtUtc: disposal.postedAtUtc ?? SCENARIO_TIMESTAMP,
       postedBy: managerRef.id,
       quantityDelta: -1,
-      warehouse: sourceRef,
+      warehouseId: source.id,
+      warehouseCode: source.code,
+      warehouseName: source.name,
     }),
   ]
   const balances: readonly InventoryBalance[] = [
     createInventoryBalance({
-      balanceId: fixtureUuid(950),
-      lastUpdated: '2026-08-25T10:00:00.000Z',
-      lowStock: { state: 'Sufficient', thresholdQuantity: 1 },
-      material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
+      id: fixtureUuid(950),
+      lastUpdatedUtc: '2026-08-25T10:00:00.000Z',
+      lowStock: { state: 1, thresholdQuantity: 1 },
+      materialId: assetMaterial.id,
+      materialCode: assetMaterial.code,
+      materialNameAr: assetMaterial.nameAr,
       quantity: 2,
       rowVersion: 4,
-      warehouse: sourceRef,
+      warehouseId: source.id,
+      warehouseCode: source.code,
+      warehouseName: source.name,
     }),
     createInventoryBalance({
-      balanceId: fixtureUuid(951),
-      lastUpdated: countVariance.postedAt ?? SCENARIO_TIMESTAMP,
-      lowStock: { state: 'Sufficient', thresholdQuantity: 5 },
-      material: reference(
-        consumableMaterial.id,
-        consumableMaterial.nameAr,
-        consumableMaterial.code,
-      ),
+      id: fixtureUuid(951),
+      lastUpdatedUtc: countVariance.postedAtUtc ?? SCENARIO_TIMESTAMP,
+      lowStock: { state: 1, thresholdQuantity: 5 },
+      materialId: consumableMaterial.id,
+      materialCode: consumableMaterial.code,
+      materialNameAr: consumableMaterial.nameAr,
       quantity: 9,
       rowVersion: 3,
-      warehouse: sourceRef,
+      warehouseId: source.id,
+      warehouseCode: source.code,
+      warehouseName: source.name,
     }),
     createInventoryBalance({
-      balanceId: fixtureUuid(952),
-      lastUpdated: transfer.postedAt ?? SCENARIO_TIMESTAMP,
-      lowStock: { state: 'NotConfigured', thresholdQuantity: null },
-      material: reference(
-        consumableMaterial.id,
-        consumableMaterial.nameAr,
-        consumableMaterial.code,
-      ),
+      id: fixtureUuid(952),
+      lastUpdatedUtc: transfer.postedAt ?? SCENARIO_TIMESTAMP,
+      lowStock: { state: 2, thresholdQuantity: null },
+      materialId: consumableMaterial.id,
+      materialCode: consumableMaterial.code,
+      materialNameAr: consumableMaterial.nameAr,
       quantity: 3,
       rowVersion: 1,
-      warehouse: destinationRef,
+      warehouseId: destination.id,
+      warehouseCode: destination.code,
+      warehouseName: destination.name,
     }),
   ]
   const assetMovements: readonly AssetMovement[] = [
@@ -837,11 +876,11 @@ export function createCrossModuleScenario(): CrossModuleScenario {
       assetId: disposed.assetId,
       documentId: disposalDocumentId,
       documentLineId: disposalDocumentLineId,
-      documentReference: disposal.documentReference,
+      documentReference: disposal.systemReferenceNumber,
       eventType: 'Disposed',
       fromWarehouse: sourceRef,
       movementId: fixtureUuid(964),
-      occurredAt: disposal.postedAt ?? SCENARIO_TIMESTAMP,
+      occurredAt: disposal.postedAtUtc ?? SCENARIO_TIMESTAMP,
       occurredBy: managerRef,
     },
     {
@@ -907,8 +946,8 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     createAuditLog({
       action: 'Post',
       auditLogId: fixtureUuid(972),
-      entityDisplay: countVariance.documentReference,
-      entityId: countVariance.adjustmentId,
+      entityDisplay: countVariance.systemReferenceNumber,
+      entityId: countVariance.id,
       entityType: 'InventoryAdjustment',
       entries: [
         createAuditLogEntry({
@@ -918,15 +957,15 @@ export function createCrossModuleScenario(): CrossModuleScenario {
           oldValue: 'Draft',
         }),
       ],
-      occurredAt: countVariance.postedAt ?? SCENARIO_TIMESTAMP,
+      occurredAt: countVariance.postedAtUtc ?? SCENARIO_TIMESTAMP,
       occurredBy: managerRef,
       summaryAr: 'تم ترحيل تسوية فرق الجرد.',
     }),
     createAuditLog({
       action: 'Post',
       auditLogId: fixtureUuid(974),
-      entityDisplay: disposal.documentReference,
-      entityId: disposal.adjustmentId,
+      entityDisplay: disposal.systemReferenceNumber,
+      entityId: disposal.id,
       entityType: 'InventoryAdjustment',
       entries: [
         createAuditLogEntry({
@@ -937,7 +976,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
         }),
         redactedAuditEntry,
       ],
-      occurredAt: disposal.postedAt ?? SCENARIO_TIMESTAMP,
+      occurredAt: disposal.postedAtUtc ?? SCENARIO_TIMESTAMP,
       occurredBy: managerRef,
       summaryAr: 'تم ترحيل سند إعدام الأصل.',
     }),

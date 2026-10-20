@@ -55,16 +55,20 @@ describe('contract-derived MSW factories', () => {
   it('returns contract-shaped operational entities and problem details', () => {
     const material = createMaterial({ materialKind: 'Asset', requiresAssetNumber: true })
     const balance = createInventoryBalance({
-      material: { id: material.id, displayName: material.nameAr },
+      materialId: material.id,
+      materialNameAr: material.nameAr,
     })
-    const movement = createStockMovement({ material: balance.material })
+    const movement = createStockMovement({
+      materialId: balance.materialId,
+      materialNameAr: balance.materialNameAr,
+    })
     const problem = createProblemDetails({ status: 409, code: 'conflict.version' })
 
-    expect(balance.material.id).toBe(material.id)
-    expect(balance.lowStock).toEqual({ state: 'Sufficient', thresholdQuantity: 5 })
+    expect(balance.materialId).toBe(material.id)
+    expect(balance.lowStock).toEqual({ state: 1, thresholdQuantity: 5 })
     expect(movement).toMatchObject({
-      documentReference: 'EIAMS-RCV-2026-0001',
-      material: balance.material,
+      documentReferenceNumber: 'EIAMS-RCV-2026-0001',
+      materialId: balance.materialId,
       movementType: 'Receipt',
       quantityDelta: 5,
     })

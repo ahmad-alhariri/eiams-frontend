@@ -1,0 +1,1812 @@
+{
+  "endpoints": [
+    {
+      "path": "/adjustments/{adjustmentId}/post",
+      "method": "POST",
+      "sources": [
+        "src/modules/adjustment/services/adjustment.service.ts"
+      ],
+      "responseProperties": [
+        "documentId",
+        "warnings"
+      ]
+    },
+    {
+      "path": "/adjustments/{adjustmentId}/reverse",
+      "method": "POST",
+      "sources": [
+        "src/modules/adjustment/services/adjustment.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/adjustments/{adjustmentId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/adjustment/services/adjustment.service.ts"
+      ],
+      "responseProperties": [
+        "countId",
+        "createdAtUtc",
+        "documentStatus",
+        "id",
+        "lines",
+        "postedAtUtc",
+        "purpose",
+        "reason",
+        "rowVersion",
+        "status",
+        "systemReferenceNumber",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/adjustments/{adjustmentId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/adjustment/services/adjustment.service.ts"
+      ],
+      "responseProperties": [
+        "countId",
+        "createdAtUtc",
+        "documentStatus",
+        "id",
+        "lines",
+        "postedAtUtc",
+        "purpose",
+        "reason",
+        "rowVersion",
+        "status",
+        "systemReferenceNumber",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/adjustments/disposal-eligible-assets",
+      "method": "GET",
+      "sources": [
+        "src/modules/adjustment/services/adjustment.service.ts"
+      ],
+      "responseProperties": [
+        "assetNumber",
+        "currentStatus",
+        "id",
+        "materialCode",
+        "materialId",
+        "materialNameAr",
+        "rowVersion",
+        "serialNumber",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/adjustments",
+      "method": "GET",
+      "sources": [
+        "src/modules/adjustment/services/adjustment.service.ts"
+      ],
+      "responseProperties": [
+        "countId",
+        "createdAtUtc",
+        "documentStatus",
+        "id",
+        "lineCount",
+        "postedAtUtc",
+        "purpose",
+        "reason",
+        "rowVersion",
+        "status",
+        "systemReferenceNumber",
+        "totalDifference",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/adjustments",
+      "method": "POST",
+      "sources": [
+        "src/modules/adjustment/services/adjustment.service.ts"
+      ],
+      "responseProperties": [
+        "countId",
+        "createdAtUtc",
+        "documentStatus",
+        "id",
+        "lines",
+        "postedAtUtc",
+        "purpose",
+        "reason",
+        "rowVersion",
+        "status",
+        "systemReferenceNumber",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/admin/permissions",
+      "method": "GET",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": [
+        "allowedScopeTypes",
+        "code",
+        "description",
+        "descriptionAr",
+        "id",
+        "nameAr"
+      ]
+    },
+    {
+      "path": "/admin/roles/{roleId}/permissions",
+      "method": "PUT",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": [
+        "allowedScopeTypes",
+        "description",
+        "id",
+        "name",
+        "nameAr",
+        "permissionCodes",
+        "rowVersion"
+      ]
+    },
+    {
+      "path": "/admin/roles/{roleId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": [
+        "allowedScopeTypes",
+        "description",
+        "id",
+        "name",
+        "nameAr",
+        "permissionCodes",
+        "rowVersion"
+      ]
+    },
+    {
+      "path": "/admin/roles/{roleId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": [
+        "allowedScopeTypes",
+        "description",
+        "id",
+        "name",
+        "nameAr",
+        "permissionCodes",
+        "rowVersion"
+      ]
+    },
+    {
+      "path": "/admin/roles",
+      "method": "GET",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": [
+        "allowedScopeTypes",
+        "description",
+        "id",
+        "name",
+        "nameAr",
+        "permissionCodes",
+        "rowVersion"
+      ]
+    },
+    {
+      "path": "/admin/roles",
+      "method": "POST",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": [
+        "allowedScopeTypes",
+        "description",
+        "id",
+        "name",
+        "nameAr",
+        "permissionCodes",
+        "rowVersion"
+      ]
+    },
+    {
+      "path": "/admin/users/{userId}/role-scope",
+      "method": "GET",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": [
+        "id",
+        "roleId",
+        "roleName",
+        "rowVersion",
+        "scopeId",
+        "scopeType"
+      ]
+    },
+    {
+      "path": "/admin/users/{userId}/role-scope",
+      "method": "PUT",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": [
+        "id",
+        "roleId",
+        "roleName",
+        "rowVersion",
+        "scopeId",
+        "scopeType"
+      ]
+    },
+    {
+      "path": "/admin/users/{userId}/status",
+      "method": "PUT",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/admin/users/{userId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": [
+        "createdAtUtc",
+        "email",
+        "employeeId",
+        "employeeName",
+        "firstName",
+        "id",
+        "lastLoginUtc",
+        "lastName",
+        "rowVersion",
+        "status",
+        "username"
+      ]
+    },
+    {
+      "path": "/admin/users/{userId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/admin/users",
+      "method": "GET",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": [
+        "createdAtUtc",
+        "email",
+        "employeeId",
+        "employeeName",
+        "firstName",
+        "id",
+        "lastLoginUtc",
+        "lastName",
+        "roleId",
+        "roleName",
+        "rowVersion",
+        "scopeId",
+        "scopeType",
+        "status",
+        "username"
+      ]
+    },
+    {
+      "path": "/admin/users",
+      "method": "POST",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": [
+        "assignment",
+        "email",
+        "firstName",
+        "id",
+        "lastName",
+        "username"
+      ]
+    },
+    {
+      "path": "/assets/{assetId}/custody-assignment",
+      "method": "POST",
+      "sources": [
+        "src/modules/custody/services/custody.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/assets/{assetId}/custody-timeline",
+      "method": "GET",
+      "sources": [
+        "src/modules/asset/services/asset.service.ts"
+      ],
+      "responseProperties": [
+        "assetId",
+        "custodyId",
+        "custodyKind",
+        "fromUtc",
+        "holderId",
+        "holderType",
+        "issueDocumentId",
+        "returnDocumentId",
+        "rowVersion",
+        "status",
+        "toUtc"
+      ]
+    },
+    {
+      "path": "/assets/{assetId}/movements",
+      "method": "GET",
+      "sources": [
+        "src/modules/asset/services/asset.service.ts"
+      ],
+      "responseProperties": [
+        "assetId",
+        "documentId",
+        "documentReferenceNumber",
+        "documentType",
+        "id",
+        "movedAtUtc",
+        "movementType"
+      ]
+    },
+    {
+      "path": "/assets/{assetId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/asset/services/asset.service.ts"
+      ],
+      "responseProperties": [
+        "acquisitionDate",
+        "activeCustodyId",
+        "assetNumber",
+        "currentStatus",
+        "custodyKind",
+        "holderId",
+        "holderType",
+        "id",
+        "latestMovementAtUtc",
+        "latestMovementType",
+        "materialCode",
+        "materialId",
+        "materialNameAr",
+        "materialNameEn",
+        "receiptDocumentId",
+        "receiptDocumentReference",
+        "receiptLineId",
+        "rowVersion",
+        "serialNumber",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName",
+        "warrantyExpiry"
+      ]
+    },
+    {
+      "path": "/assets",
+      "method": "GET",
+      "sources": [
+        "src/modules/asset/services/asset.service.ts"
+      ],
+      "responseProperties": [
+        "acquisitionDate",
+        "activeCustodyId",
+        "assetNumber",
+        "currentStatus",
+        "holderId",
+        "holderType",
+        "id",
+        "materialCode",
+        "materialId",
+        "materialNameAr",
+        "rowVersion",
+        "serialNumber",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName",
+        "warrantyExpiry"
+      ]
+    },
+    {
+      "path": "/audit-logs/{auditLogId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/audit/services/audit.service.ts"
+      ],
+      "responseProperties": [
+        "action",
+        "actionDisplayAr",
+        "actionDisplayEn",
+        "aggregateId",
+        "aggregateType",
+        "commandName",
+        "createdAtUtc",
+        "entityId",
+        "entityType",
+        "entityTypeDisplayAr",
+        "entityTypeDisplayEn",
+        "entries",
+        "id",
+        "ipAddress",
+        "isSummaryRedacted",
+        "operationId",
+        "requestId",
+        "summary",
+        "summaryRedactionReason",
+        "userId"
+      ]
+    },
+    {
+      "path": "/audit-logs",
+      "method": "GET",
+      "sources": [
+        "src/modules/audit/services/audit.service.ts"
+      ],
+      "responseProperties": [
+        "action",
+        "actionDisplayAr",
+        "actionDisplayEn",
+        "aggregateId",
+        "aggregateType",
+        "commandName",
+        "createdAtUtc",
+        "entityId",
+        "entityType",
+        "entityTypeDisplayAr",
+        "entityTypeDisplayEn",
+        "id",
+        "operationId",
+        "requestId",
+        "userId"
+      ]
+    },
+    {
+      "path": "/auth/login",
+      "method": "POST",
+      "sources": [
+        "src/modules/auth/services/auth.service.ts"
+      ],
+      "responseProperties": [
+        "accessToken",
+        "expiresInSeconds",
+        "session"
+      ]
+    },
+    {
+      "path": "/auth/logout",
+      "method": "POST",
+      "sources": [
+        "src/modules/auth/services/auth.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/auth/session",
+      "method": "GET",
+      "sources": [
+        "src/modules/auth/services/auth.service.ts"
+      ],
+      "responseProperties": [
+        "activeScope",
+        "permissionCodes",
+        "role",
+        "user"
+      ]
+    },
+    {
+      "path": "/catalog/categories/{materialCategoryId}/parent",
+      "method": "PUT",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/catalog/categories/{materialCategoryId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "code",
+        "id",
+        "materialDomainId",
+        "name",
+        "parentCategoryId",
+        "status"
+      ]
+    },
+    {
+      "path": "/catalog/categories/{materialCategoryId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/catalog/categories",
+      "method": "GET",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "code",
+        "id",
+        "materialDomainId",
+        "name",
+        "parentCategoryId",
+        "status"
+      ]
+    },
+    {
+      "path": "/catalog/categories",
+      "method": "POST",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/catalog/domains/{materialDomainId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "code",
+        "id",
+        "name",
+        "status"
+      ]
+    },
+    {
+      "path": "/catalog/domains/{materialDomainId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/catalog/domains",
+      "method": "GET",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "code",
+        "id",
+        "name",
+        "status"
+      ]
+    },
+    {
+      "path": "/catalog/domains",
+      "method": "POST",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/catalog/families/{materialFamilyId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "categoryId",
+        "code",
+        "id",
+        "name",
+        "status"
+      ]
+    },
+    {
+      "path": "/catalog/families/{materialFamilyId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/catalog/families",
+      "method": "GET",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "categoryId",
+        "code",
+        "id",
+        "name",
+        "status"
+      ]
+    },
+    {
+      "path": "/catalog/families",
+      "method": "POST",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/catalog/materials/{materialId}/unit-conversions",
+      "method": "GET",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "factor",
+        "fromUnitId",
+        "id",
+        "materialId",
+        "toBaseUnitId"
+      ]
+    },
+    {
+      "path": "/catalog/materials/{materialId}/unit-conversions",
+      "method": "POST",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/catalog/materials/{materialId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "attributes",
+        "baseUnitId",
+        "baseUnitSymbol",
+        "catalogVersion",
+        "code",
+        "familyId",
+        "hasExpiry",
+        "id",
+        "materialDomainId",
+        "materialDomainName",
+        "materialKind",
+        "nameAr",
+        "nameEn",
+        "requiresAssetNumber",
+        "status",
+        "trackingType"
+      ]
+    },
+    {
+      "path": "/catalog/materials/{materialId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/catalog/materials",
+      "method": "GET",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "attributes",
+        "baseUnitId",
+        "baseUnitSymbol",
+        "catalogVersion",
+        "code",
+        "familyId",
+        "hasExpiry",
+        "id",
+        "materialDomainId",
+        "materialDomainName",
+        "materialKind",
+        "nameAr",
+        "nameEn",
+        "requiresAssetNumber",
+        "status",
+        "trackingType"
+      ]
+    },
+    {
+      "path": "/catalog/materials",
+      "method": "POST",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/catalog/units-of-measure/{unitId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "id",
+        "name",
+        "status",
+        "symbol",
+        "unitType"
+      ]
+    },
+    {
+      "path": "/catalog/units-of-measure/{unitId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/catalog/units-of-measure",
+      "method": "GET",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "id",
+        "name",
+        "status",
+        "symbol",
+        "unitType"
+      ]
+    },
+    {
+      "path": "/catalog/units-of-measure",
+      "method": "POST",
+      "sources": [
+        "src/modules/catalog/services/catalog.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/counterparts",
+      "method": "GET",
+      "sources": [
+        "src/modules/organization/services/counterpart-lookup.service.ts"
+      ],
+      "responseProperties": [
+        "displayName",
+        "id",
+        "secondaryLabelAr",
+        "status",
+        "type"
+      ]
+    },
+    {
+      "path": "/custodies/{custodyId}/transfer",
+      "method": "POST",
+      "sources": [
+        "src/modules/custody/services/custody.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/custodies",
+      "method": "GET",
+      "sources": [
+        "src/modules/custody/services/custody.service.ts"
+      ],
+      "responseProperties": [
+        "activeQuantity",
+        "assetNumber",
+        "custodyId",
+        "custodyKind",
+        "fromUtc",
+        "holderDisplayName",
+        "holderId",
+        "holderType",
+        "issueDocumentId",
+        "issuedQuantity",
+        "materialCode",
+        "materialId",
+        "materialKind",
+        "materialNameAr",
+        "materialNameEn",
+        "returnedQuantity",
+        "rowVersion",
+        "serialNumber",
+        "status",
+        "subjectId",
+        "subjectType",
+        "systemReferenceNumber",
+        "toUtc",
+        "trackingType",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/employees/{employeeId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "employeeNumber",
+        "fullName",
+        "id",
+        "jobTitle",
+        "orgUnitId",
+        "status"
+      ]
+    },
+    {
+      "path": "/employees/{employeeId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/employees",
+      "method": "GET",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "employeeNumber",
+        "fullName",
+        "id",
+        "jobTitle",
+        "orgUnitId",
+        "status"
+      ]
+    },
+    {
+      "path": "/employees",
+      "method": "POST",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/external-parties/{externalPartyId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "code",
+        "contactInfo",
+        "createdAtUtc",
+        "id",
+        "nameAr",
+        "notes",
+        "rowVersion",
+        "status",
+        "updatedAtUtc"
+      ]
+    },
+    {
+      "path": "/external-parties/{externalPartyId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/external-parties",
+      "method": "GET",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "code",
+        "contactInfo",
+        "createdAtUtc",
+        "id",
+        "nameAr",
+        "notes",
+        "rowVersion",
+        "status",
+        "updatedAtUtc"
+      ]
+    },
+    {
+      "path": "/external-parties",
+      "method": "POST",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/inventory-counts/{countId}/actuals",
+      "method": "PUT",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/inventory-counts/{countId}/close",
+      "method": "POST",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/inventory-counts/{countId}/complete",
+      "method": "POST",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/inventory-counts/{countId}/lines",
+      "method": "GET",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": [
+        "actualQuantity",
+        "assetId",
+        "difference",
+        "id",
+        "materialId",
+        "snapshotQuantity",
+        "varianceReason"
+      ]
+    },
+    {
+      "path": "/inventory-counts/{countId}/start",
+      "method": "POST",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/inventory-counts/{countId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": [
+        "abortedAtUtc",
+        "closedAtUtc",
+        "completedAtUtc",
+        "countType",
+        "freezePolicy",
+        "id",
+        "materialDomainId",
+        "plannedAtUtc",
+        "rowVersion",
+        "scopeType",
+        "startedAtUtc",
+        "status",
+        "summary",
+        "warehouseId"
+      ]
+    },
+    {
+      "path": "/inventory-counts",
+      "method": "GET",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": [
+        "abortedAtUtc",
+        "closedAtUtc",
+        "completedAtUtc",
+        "countType",
+        "freezePolicy",
+        "id",
+        "plannedAtUtc",
+        "rowVersion",
+        "scopeType",
+        "startedAtUtc",
+        "status",
+        "warehouseId"
+      ]
+    },
+    {
+      "path": "/inventory-counts",
+      "method": "POST",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/inventory/balances/{balanceId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/inventory/services/inventory.service.ts"
+      ],
+      "responseProperties": [
+        "id",
+        "lastUpdatedUtc",
+        "lowStock",
+        "materialCode",
+        "materialId",
+        "materialNameAr",
+        "quantity",
+        "rowVersion",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/inventory/balances",
+      "method": "GET",
+      "sources": [
+        "src/modules/inventory/services/inventory.service.ts"
+      ],
+      "responseProperties": [
+        "id",
+        "lastUpdatedUtc",
+        "lowStock",
+        "materialCode",
+        "materialId",
+        "materialNameAr",
+        "quantity",
+        "rowVersion",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/inventory/movements/{movementId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/inventory/services/inventory.service.ts"
+      ],
+      "responseProperties": [
+        "documentId",
+        "documentReferenceNumber",
+        "id",
+        "lineId",
+        "materialCode",
+        "materialId",
+        "materialNameAr",
+        "movementType",
+        "postedAtUtc",
+        "postedBy",
+        "quantityDelta",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/inventory/movements",
+      "method": "GET",
+      "sources": [
+        "src/modules/inventory/services/inventory.service.ts"
+      ],
+      "responseProperties": [
+        "documentId",
+        "documentReferenceNumber",
+        "id",
+        "lineId",
+        "materialCode",
+        "materialId",
+        "materialNameAr",
+        "movementType",
+        "postedAtUtc",
+        "postedBy",
+        "quantityDelta",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/organizational-units/{orgUnitId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "id",
+        "name",
+        "parentId",
+        "siteId",
+        "status",
+        "unitType"
+      ]
+    },
+    {
+      "path": "/organizational-units/{orgUnitId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/organizational-units",
+      "method": "GET",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "id",
+        "name",
+        "parentId",
+        "siteId",
+        "status",
+        "unitType"
+      ]
+    },
+    {
+      "path": "/organizational-units",
+      "method": "POST",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/organizations/{organizationId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "code",
+        "id",
+        "name",
+        "status"
+      ]
+    },
+    {
+      "path": "/organizations/{organizationId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/organizations",
+      "method": "GET",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "code",
+        "id",
+        "name",
+        "status"
+      ]
+    },
+    {
+      "path": "/organizations",
+      "method": "POST",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/receiving-infos/suppliers",
+      "method": "GET",
+      "sources": [
+        "src/modules/receiving/services/receiving.service.ts"
+      ],
+      "responseProperties": [
+        "code",
+        "id",
+        "nameAr"
+      ]
+    },
+    {
+      "path": "/reports/assets",
+      "method": "GET",
+      "sources": [
+        "src/modules/reports/services/reports.service.ts"
+      ],
+      "responseProperties": [
+        "assetCount",
+        "currentStatus",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/reports/count-adjustments",
+      "method": "GET",
+      "sources": [
+        "src/modules/reports/services/reports.service.ts"
+      ],
+      "responseProperties": [
+        "adjustmentCount",
+        "adjustmentDifference",
+        "closedCountCount",
+        "countCount",
+        "netVariance",
+        "postedAdjustmentCount",
+        "varianceLineCount",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/reports/dashboard",
+      "method": "GET",
+      "sources": [
+        "src/modules/reports/services/reports.service.ts"
+      ],
+      "responseProperties": [
+        "activeCustodyCount",
+        "activeInventoryCountCount",
+        "assetCount",
+        "generatedAtUtc",
+        "openDocumentCount",
+        "stockedMaterialCount",
+        "totalOnHandQuantity",
+        "warehouseCount"
+      ]
+    },
+    {
+      "path": "/reports/documents",
+      "method": "GET",
+      "sources": [
+        "src/modules/reports/services/reports.service.ts"
+      ],
+      "responseProperties": [
+        "documentCount",
+        "documentStatus",
+        "documentType",
+        "latestCreatedAtUtc",
+        "latestPostedAtUtc",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/reports/inventory",
+      "method": "GET",
+      "sources": [
+        "src/modules/reports/services/reports.service.ts"
+      ],
+      "responseProperties": [
+        "lastUpdatedUtc",
+        "materialCode",
+        "materialId",
+        "materialNameAr",
+        "totalQuantity",
+        "warehouseCount"
+      ]
+    },
+    {
+      "path": "/returns/eligible-items",
+      "method": "GET",
+      "sources": [
+        "src/modules/custody/services/return.service.ts"
+      ],
+      "responseProperties": [
+        "assetNumber",
+        "availableQuantity",
+        "issuedQuantity",
+        "materialCode",
+        "materialId",
+        "materialKind",
+        "materialNameAr",
+        "materialNameEn",
+        "serialNumber",
+        "subjectId",
+        "subjectType",
+        "trackingType"
+      ]
+    },
+    {
+      "path": "/sites/{siteId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "code",
+        "governorateCode",
+        "id",
+        "location",
+        "name",
+        "organizationId",
+        "status"
+      ]
+    },
+    {
+      "path": "/sites/{siteId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/sites",
+      "method": "GET",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "code",
+        "governorateCode",
+        "id",
+        "location",
+        "name",
+        "organizationId",
+        "status"
+      ]
+    },
+    {
+      "path": "/sites",
+      "method": "POST",
+      "sources": [
+        "src/modules/organization/services/organization.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/warehouse-capabilities/{capabilityId}/operations",
+      "method": "POST",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/warehouse-capabilities/{capabilityId}",
+      "method": "DELETE",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/warehouse-capabilities",
+      "method": "POST",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/warehouse-documents/{documentId}/attachments/{attachmentId}",
+      "method": "DELETE",
+      "sources": [
+        "src/shared/documents/document-attachment-service.ts"
+      ],
+      "responseProperties": [
+        "attachment",
+        "attachmentId",
+        "documentRowVersion",
+        "malwareScanClean",
+        "malwareScanPolicy",
+        "removed"
+      ]
+    },
+    {
+      "path": "/warehouse-documents/{documentId}/attachments",
+      "method": "POST",
+      "sources": [
+        "src/shared/documents/document-attachment-service.ts"
+      ],
+      "responseProperties": [
+        "attachment",
+        "attachmentId",
+        "documentRowVersion",
+        "malwareScanClean",
+        "malwareScanPolicy",
+        "removed"
+      ]
+    },
+    {
+      "path": "/warehouse-documents/{documentId}/cancel",
+      "method": null,
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/warehouse-documents/{documentId}/history",
+      "method": "GET",
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": [
+        "currentRowVersion",
+        "currentStatus",
+        "documentId",
+        "events"
+      ]
+    },
+    {
+      "path": "/warehouse-documents/{documentId}/paper-reference",
+      "method": "PUT",
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/warehouse-documents/{documentId}/policy",
+      "method": "GET",
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": [
+        "actions",
+        "allowedContentTypes",
+        "blockers",
+        "documentId",
+        "evaluatedAtUtc",
+        "maxSizeBytes",
+        "rowVersion",
+        "satisfyingSignedOriginal",
+        "signedOriginalSatisfied",
+        "status",
+        "warnings"
+      ]
+    },
+    {
+      "path": "/warehouse-documents/{documentId}/post",
+      "method": "POST",
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": [
+        "documentId",
+        "warnings"
+      ]
+    },
+    {
+      "path": "/warehouse-documents/{documentId}/reject",
+      "method": null,
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/warehouse-documents/{documentId}/return-to-draft",
+      "method": null,
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/warehouse-documents/{documentId}/reversals",
+      "method": "POST",
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/warehouse-documents/{documentId}/submit",
+      "method": null,
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/warehouse-documents/{documentId}",
+      "method": "GET",
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": [
+        "attachments",
+        "createdAtUtc",
+        "createdBy",
+        "documentStatus",
+        "documentType",
+        "id",
+        "inventoryAdjustment",
+        "issueTo",
+        "lines",
+        "paperDocumentNumber",
+        "paperDocumentYear",
+        "postedAtUtc",
+        "postedBy",
+        "receivingInfo",
+        "returnInfo",
+        "reversalOfDocumentId",
+        "reversedByDocumentId",
+        "rowVersion",
+        "signedCopyAttachmentId",
+        "systemReferenceNumber",
+        "transferInfo",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/warehouse-documents/complete-draft",
+      "method": "POST",
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": [
+        "attachments",
+        "createdAtUtc",
+        "createdBy",
+        "documentStatus",
+        "documentType",
+        "id",
+        "inventoryAdjustment",
+        "issueTo",
+        "lines",
+        "paperDocumentNumber",
+        "paperDocumentYear",
+        "postedAtUtc",
+        "postedBy",
+        "receivingInfo",
+        "returnInfo",
+        "reversalOfDocumentId",
+        "reversedByDocumentId",
+        "rowVersion",
+        "signedCopyAttachmentId",
+        "systemReferenceNumber",
+        "transferInfo",
+        "warehouseCode",
+        "warehouseId",
+        "warehouseName"
+      ]
+    },
+    {
+      "path": "/warehouse-documents",
+      "method": "GET",
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": [
+        "createdAtUtc",
+        "documentStatus",
+        "documentType",
+        "id",
+        "paperDocumentNumber",
+        "paperDocumentYear",
+        "postedAtUtc",
+        "reversalOfDocumentId",
+        "rowVersion",
+        "systemReferenceNumber",
+        "warehouseId"
+      ]
+    },
+    {
+      "path": "/warehouse-documents",
+      "method": "POST",
+      "sources": [
+        "src/shared/documents/document-transport.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/warehouse-material-settings/{settingId}/status",
+      "method": "PUT",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/warehouse-material-settings/{settingId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/warehouse-material-settings",
+      "method": "POST",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/warehouses/{warehouseId}/capabilities",
+      "method": "GET",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": [
+        "id",
+        "materialDomainCode",
+        "materialDomainId",
+        "materialDomainName",
+        "operations",
+        "status",
+        "warehouseId"
+      ]
+    },
+    {
+      "path": "/warehouses/{warehouseId}/initialization",
+      "method": "GET",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": [
+        "asOfDate",
+        "initializedAtUtc",
+        "initializedBy",
+        "isZeroStock",
+        "reversedAtUtc",
+        "reversedBy",
+        "sourceDocumentId",
+        "status",
+        "warehouseId"
+      ]
+    },
+    {
+      "path": "/warehouses/{warehouseId}/initialization",
+      "method": "POST",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/warehouses/{warehouseId}/material-settings",
+      "method": "GET",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": [
+        "id",
+        "materialCode",
+        "materialId",
+        "materialNameAr",
+        "maxQuantity",
+        "minQuantity",
+        "status",
+        "warehouseId"
+      ]
+    },
+    {
+      "path": "/warehouses/{warehouseId}",
+      "method": "GET",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": [
+        "canHoldStock",
+        "code",
+        "id",
+        "name",
+        "organizationalUnitId",
+        "rowVersion",
+        "siteId",
+        "status",
+        "warehouseType"
+      ]
+    },
+    {
+      "path": "/warehouses/{warehouseId}",
+      "method": "PUT",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/warehouses",
+      "method": "GET",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": [
+        "canHoldStock",
+        "code",
+        "id",
+        "name",
+        "organizationalUnitId",
+        "rowVersion",
+        "siteId",
+        "status",
+        "warehouseType"
+      ]
+    },
+    {
+      "path": "/warehouses",
+      "method": "POST",
+      "sources": [
+        "src/modules/warehouse/services/warehouse.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    }
+  ],
+  "knownDivergences": [
+    {
+      "path": "/reports/exports",
+      "method": null,
+      "source": "src/modules/reports/services/reports-export.service.ts",
+      "reason": "The frontend declares /reports/exports (EXPORT_JOB_PATH, src/modules/reports/services/reports-export.service.ts:95) and the report-table ExportButton still imports the hook, but the action is HIDDEN in the UI and the service is not called at runtime. The live API serves no such path under any method — the live swagger contains no path whose name mentions \"export\" (verified 2026-10-20). Restore when the backend export feature request lands."
+    }
+  ]
+}

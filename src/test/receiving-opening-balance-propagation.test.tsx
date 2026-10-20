@@ -17,8 +17,11 @@ import {
 import { documentQueryKeys, useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
-import type { InventoryBalance, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
-import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
+import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type {
+  InventoryBalance,
+  StockMovement,
+} from '@/modules/inventory/types/inventory.api-types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
@@ -144,7 +147,7 @@ describe('receiving and opening balance propagation', () => {
     const warehouseDocument = { ...receiving, rowVersion: receiving.rowVersion + 1 }
     const warehouseMovement = {
       ...receivingMovement,
-      documentReference: `${receivingMovement.documentReference}-WH`,
+      documentReferenceNumber: `${receivingMovement.documentReferenceNumber}-WH`,
     }
     const warehouseBalance = {
       ...receivingBalance,
@@ -162,13 +165,13 @@ describe('receiving and opening balance propagation', () => {
         )
       }),
       http.get(
-        `${environment.apiBaseUrl}/inventory/movements/${receivingMovement.movementId}`,
+        `${environment.apiBaseUrl}/inventory/movements/${receivingMovement.id}`,
         () => {
           requestCounts.movement += 1
           return apiJson(responseScope === 'enterprise' ? receivingMovement : warehouseMovement)
         },
       ),
-      http.get(`${environment.apiBaseUrl}/inventory/balances/${receivingBalance.balanceId}`, () => {
+      http.get(`${environment.apiBaseUrl}/inventory/balances/${receivingBalance.id}`, () => {
         requestCounts.balance += 1
         return apiJson(responseScope === 'enterprise' ? receivingBalance : warehouseBalance)
       }),
@@ -178,8 +181,8 @@ describe('receiving and opening balance propagation', () => {
     const { result, rerender } = renderHook(
       () => ({
         document: useDocumentDetailQuery(receiving.documentId).data,
-        movement: useStockMovementQuery(receivingMovement.movementId).data,
-        balance: useInventoryBalanceQuery(receivingBalance.balanceId).data,
+        movement: useStockMovementQuery(receivingMovement.id).data,
+        balance: useInventoryBalanceQuery(receivingBalance.id).data,
       }),
       { wrapper: createQueryWrapper(client) },
     )
@@ -209,19 +212,19 @@ describe('receiving and opening balance propagation', () => {
     ).toEqual(wireDocumentDetails(warehouseDocument))
     expect(
       client.getQueryData(
-        inventoryQueryKeys.movement(enterpriseScope, receivingMovement.movementId),
+        inventoryQueryKeys.movement(enterpriseScope, receivingMovement.id),
       ),
     ).toEqual(receivingMovement)
     expect(
       client.getQueryData(
-        inventoryQueryKeys.movement(warehouseScope, receivingMovement.movementId),
+        inventoryQueryKeys.movement(warehouseScope, receivingMovement.id),
       ),
     ).toEqual(warehouseMovement)
     expect(
-      client.getQueryData(inventoryQueryKeys.balance(enterpriseScope, receivingBalance.balanceId)),
+      client.getQueryData(inventoryQueryKeys.balance(enterpriseScope, receivingBalance.id)),
     ).toEqual(receivingBalance)
     expect(
-      client.getQueryData(inventoryQueryKeys.balance(warehouseScope, receivingBalance.balanceId)),
+      client.getQueryData(inventoryQueryKeys.balance(warehouseScope, receivingBalance.id)),
     ).toEqual(warehouseBalance)
   })
 })
@@ -310,7 +313,7 @@ function useScenarioHandlers(
       return okPageJson(movements, { page: 1, pageSize: 10 })
     }),
     http.get(`${environment.apiBaseUrl}/inventory/movements/:movementId`, ({ params }) => {
-      const movement = movements.find((candidate) => candidate.movementId === params['movementId'])
+      const movement = movements.find((candidate) => candidate.id === params['movementId'])
       return movement === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(movement)
     }),
     http.get(`${environment.apiBaseUrl}/inventory/balances`, ({ request }) => {
@@ -318,7 +321,7 @@ function useScenarioHandlers(
       return okPageJson(balances, { page: 1, pageSize: 10 })
     }),
     http.get(`${environment.apiBaseUrl}/inventory/balances/:balanceId`, ({ params }) => {
-      const balance = balances.find((candidate) => candidate.balanceId === params['balanceId'])
+      const balance = balances.find((candidate) => candidate.id === params['balanceId'])
       return balance === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(balance)
     }),
   )
@@ -328,7 +331,7 @@ function findMovement(document: WarehouseDocument): StockMovement {
   const lineId = document.lines[0]?.lineId
   const movement = scenario.ledgers.stockMovements.find(
     (candidate) =>
-      candidate.documentId === document.documentId && candidate.documentLineId === lineId,
+      candidate.documentId === document.documentId && candidate.lineId === lineId,
   )
   if (movement === undefined) {
     throw new Error(`Missing stock movement for document ${document.documentId}`)
@@ -340,8 +343,8 @@ function findSourceBalance(document: WarehouseDocument): InventoryBalance {
   const materialId = document.lines[0]?.material.materialId
   const balance = scenario.ledgers.balances.find(
     (candidate) =>
-      candidate.warehouse.id === scenario.warehouses.source.id &&
-      candidate.material.id === materialId,
+      candidate.warehouseId === scenario.warehouses.source.id &&
+      candidate.materialId === materialId,
   )
   if (balance === undefined) {
     throw new Error(`Missing inventory balance for document ${document.documentId}`)
@@ -358,11 +361,11 @@ function openingDetailPath() {
 }
 
 function movementDetailPath(movement: StockMovement) {
-  return ROUTE_PATHS.inventoryMovementDetail.replace(':movementId', movement.movementId)
+  return ROUTE_PATHS.inventoryMovementDetail.replace(':movementId', movement.id)
 }
 
 function balanceDetailPath(balance: InventoryBalance) {
-  return ROUTE_PATHS.inventoryBalanceDetail.replace(':balanceId', balance.balanceId)
+  return ROUTE_PATHS.inventoryBalanceDetail.replace(':balanceId', balance.id)
 }
 
 async function navigate(router: ReturnType<typeof createMemoryRouter>, path: string) {
@@ -379,15 +382,15 @@ async function expectMovementDetail(
   expect(await screen.findByRole('heading', { name: 'تفاصيل حركة المخزون' })).toBeInTheDocument()
   expect(screen.getByText(movementTypeLabel)).toBeInTheDocument()
   expect(screen.getByText(formattedDelta)).toBeInTheDocument()
-  expect(screen.getByText(movement.documentReference as string)).toBeInTheDocument()
+  expect(screen.getByText(movement.documentReferenceNumber)).toBeInTheDocument()
   expect(screen.getByText(movement.documentId)).toBeInTheDocument()
-  expect(screen.getByText(movement.documentLineId)).toBeInTheDocument()
-  expect(screen.getByText(movement.movementId)).toBeInTheDocument()
+  expect(screen.getByText(movement.lineId)).toBeInTheDocument()
+  expect(screen.getByText(movement.id)).toBeInTheDocument()
 }
 
 async function expectBalanceDetail(balance: InventoryBalance, formattedQuantity: string) {
   expect(await screen.findByRole('heading', { name: 'تفاصيل الرصيد' })).toBeInTheDocument()
-  expect(screen.getByText(balance.material.displayName)).toBeInTheDocument()
+  expect(screen.getByText(balance.materialNameAr)).toBeInTheDocument()
   expect(screen.getByText(formattedQuantity)).toBeInTheDocument()
-  expect(screen.getByText(balance.balanceId.slice(0, 8) + '…')).toBeInTheDocument()
+  expect(screen.getByText(balance.id.slice(0, 8) + '…')).toBeInTheDocument()
 }

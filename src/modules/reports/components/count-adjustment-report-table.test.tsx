@@ -101,12 +101,12 @@ describe('CountAdjustmentReportTable', () => {
     await screen.findByRole('heading', { level: 1, name: 'تقرير الجرد والتسويات' })
 
     const last = requests.at(-1) ?? {}
-    expect(last).toMatchObject({ pageIndex: '0', pageSize: '10' })
+    expect(last).toMatchObject({ page: '1', pageSize: '10' })
     // Date and warehouse filters must not be forwarded when the user has
     // not set them (no fabricated defaults, per D-RPT-01 §"Filters and pagination").
     expect(last).not.toHaveProperty('warehouseId')
-    expect(last).not.toHaveProperty('dateFrom')
-    expect(last).not.toHaveProperty('dateTo')
+    expect(last).not.toHaveProperty('fromUtc')
+    expect(last).not.toHaveProperty('toUtc')
   })
 
   it('renders the Arabic empty state when the server returns no adjustments', async () => {

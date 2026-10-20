@@ -6,12 +6,12 @@ import type {
   AssetPage,
   DashboardReport,
   InventoryAdjustmentPage,
-  InventoryBalancePage,
   WarehouseDocumentPage,
   paths,
 } from '@/shared/types/generated/eiams-v1'
 
 import type {
+  InventoryReportPage,
   ListAssetReportQuery,
   ListCountAdjustmentReportQuery,
   ListDashboardReportQuery,
@@ -38,10 +38,16 @@ type ReportQueryParams = Readonly<Record<string, string | number | boolean | und
  * `adjustment.service.ts` §`toListParams`: only declared parameters are
  * forwarded, never `undefined`, so `exactOptionalPropertyTypes` stays clean
  * and the wire request never leaks empty keys.
+ *
+ * The list controllers bind `PaginationQueryParameters.Page` (one-based), not
+ * `pageIndex`; the generated query types still say `pageIndex` (zero-based),
+ * so each builder translates it here. `GetCountAdjustmentsReportController`
+ * and `GetDocumentsReportController` bind `fromUtc`/`toUtc`, not
+ * `dateFrom`/`dateTo`.
  */
 function toInventoryReportParams(query: Readonly<ListInventoryReportQuery>): ReportQueryParams {
   return {
-    ...(query.pageIndex === undefined ? {} : { pageIndex: query.pageIndex }),
+    ...(query.pageIndex === undefined ? {} : { page: query.pageIndex + 1 }),
     ...(query.pageSize === undefined ? {} : { pageSize: query.pageSize }),
     ...(query.search === undefined ? {} : { search: query.search }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
@@ -50,7 +56,7 @@ function toInventoryReportParams(query: Readonly<ListInventoryReportQuery>): Rep
 
 function toAssetReportParams(query: Readonly<ListAssetReportQuery>): ReportQueryParams {
   return {
-    ...(query.pageIndex === undefined ? {} : { pageIndex: query.pageIndex }),
+    ...(query.pageIndex === undefined ? {} : { page: query.pageIndex + 1 }),
     ...(query.pageSize === undefined ? {} : { pageSize: query.pageSize }),
     ...(query.status === undefined ? {} : { status: query.status }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
@@ -61,11 +67,11 @@ function toCountAdjustmentReportParams(
   query: Readonly<ListCountAdjustmentReportQuery>,
 ): ReportQueryParams {
   return {
-    ...(query.pageIndex === undefined ? {} : { pageIndex: query.pageIndex }),
+    ...(query.pageIndex === undefined ? {} : { page: query.pageIndex + 1 }),
     ...(query.pageSize === undefined ? {} : { pageSize: query.pageSize }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
-    ...(query.dateFrom === undefined ? {} : { dateFrom: query.dateFrom }),
-    ...(query.dateTo === undefined ? {} : { dateTo: query.dateTo }),
+    ...(query.dateFrom === undefined ? {} : { fromUtc: query.dateFrom }),
+    ...(query.dateTo === undefined ? {} : { toUtc: query.dateTo }),
   }
 }
 
@@ -73,11 +79,11 @@ function toOperationalDocumentsReportParams(
   query: Readonly<ListOperationalDocumentsReportQuery>,
 ): ReportQueryParams {
   return {
-    ...(query.pageIndex === undefined ? {} : { pageIndex: query.pageIndex }),
+    ...(query.pageIndex === undefined ? {} : { page: query.pageIndex + 1 }),
     ...(query.pageSize === undefined ? {} : { pageSize: query.pageSize }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
-    ...(query.dateFrom === undefined ? {} : { dateFrom: query.dateFrom }),
-    ...(query.dateTo === undefined ? {} : { dateTo: query.dateTo }),
+    ...(query.dateFrom === undefined ? {} : { fromUtc: query.dateFrom }),
+    ...(query.dateTo === undefined ? {} : { toUtc: query.dateTo }),
   }
 }
 
@@ -106,9 +112,10 @@ function toDashboardReportParams(query: Readonly<ListDashboardReportQuery>): Rep
  * `page.meta.totalPages`), reconstructed from server-owned numbers rather than
  * from anything computed locally.
  *
- * `pageIndex` is reported zero-based because the reports query contract is
- * zero-based (the tables send `currentPage - 1`), while `ApiPage.page` is
- * 1-based per `docs/direct-backend-integration-plan.md` §5.2.
+ * `pageIndex` is reported zero-based because the reports view-model exposes a
+ * zero-based page index, while `ApiPage.page` is 1-based per
+ * `docs/direct-backend-integration-plan.md` §5.2 and the wire request uses
+ * `page`.
  */
 function toReportPage<TItem>(page: ApiPage<TItem>): {
   items: ReadonlyArray<TItem>
@@ -127,10 +134,10 @@ function toReportPage<TItem>(page: ApiPage<TItem>): {
 
 export interface ReportsService {
   /**
-   * Inventory balance report — server-owned projection; the response is
-   * authoritative for low-stock state and provenance (D-INV-READ-01).
+   * Inventory report — server-owned per-material summary; the response is
+   * authoritative for totals and provenance.
    */
-  getInventoryReport: (query: Readonly<ListInventoryReportQuery>) => Promise<InventoryBalancePage>
+  getInventoryReport: (query: Readonly<ListInventoryReportQuery>) => Promise<InventoryReportPage>
   /**
    * Asset & custody report — server-derived status; the client never infers
    * lifecycle from other records (D-RPT-01 §"Asset and custody reports").
@@ -173,7 +180,7 @@ export interface ReportsService {
 export function createReportsService(transport: ApiTransport): ReportsService {
   return {
     async getInventoryReport(query) {
-      const page = await transport.requestPage<InventoryBalancePage['items'][number]>({
+      const page = await transport.requestPage<InventoryReportPage['items'][number]>({
         path: REPORTS_INVENTORY_PATH,
         method: 'GET',
         query: toInventoryReportParams(query),

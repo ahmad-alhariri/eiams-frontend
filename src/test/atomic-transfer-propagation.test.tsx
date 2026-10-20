@@ -17,8 +17,10 @@ import {
 import { documentQueryKeys, useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
-import type { InventoryBalance } from '@/shared/types/generated/eiams-v1'
-import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
+import type {
+  InventoryBalance,
+  StockMovement,
+} from '@/modules/inventory/types/inventory.api-types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
@@ -92,16 +94,16 @@ describe('atomic transfer propagation', () => {
     expect(transferOut.documentId).toBe(transfer.documentId)
     expect(transferIn.documentId).toBe(transfer.documentId)
     expect(transfer.lines).toHaveLength(1)
-    expect(transferOut.documentLineId).toBe(transfer.lines[0]?.lineId)
-    expect(transferOut.documentLineId).toBe(transferIn.documentLineId)
-    expect(transferOut.material.id).toBe(transfer.lines[0]?.material.materialId)
-    expect(transferOut.material.id).toBe(transferIn.material.id)
-    expect(transferOut.postedAt).toBe(transfer.postedAt)
-    expect(transferOut.postedAt).toBe(transferIn.postedAt)
+    expect(transferOut.lineId).toBe(transfer.lines[0]?.lineId)
+    expect(transferOut.lineId).toBe(transferIn.lineId)
+    expect(transferOut.materialId).toBe(transfer.lines[0]?.material.materialId)
+    expect(transferOut.materialId).toBe(transferIn.materialId)
+    expect(transferOut.postedAtUtc).toBe(transfer.postedAt)
+    expect(transferOut.postedAtUtc).toBe(transferIn.postedAtUtc)
     expect(transferIn.quantityDelta).toBe(transfer.lines[0]?.quantity)
     expect(transferOut.quantityDelta).toBe(-transferIn.quantityDelta)
-    expect(transferOut.warehouse.id).toBe(scenario.warehouses.source.id)
-    expect(transferIn.warehouse.id).toBe(scenario.warehouses.destination.id)
+    expect(transferOut.warehouseId).toBe(scenario.warehouses.source.id)
+    expect(transferIn.warehouseId).toBe(scenario.warehouses.destination.id)
 
     await navigate(router, ROUTE_PATHS.inventoryMovements)
 
@@ -176,11 +178,11 @@ describe('atomic transfer propagation', () => {
     const siteTransferWire = wireDocumentDetails(siteTransfer)
     const siteTransferOut = {
       ...transferOut,
-      documentReference: `${transferOut.documentReference}-SITE`,
+      documentReferenceNumber: `${transferOut.documentReferenceNumber}-SITE`,
     }
     const siteTransferIn = {
       ...transferIn,
-      documentReference: `${transferIn.documentReference}-SITE`,
+      documentReferenceNumber: `${transferIn.documentReferenceNumber}-SITE`,
     }
     const siteSourceBalance = {
       ...sourceBalance,
@@ -206,20 +208,20 @@ describe('atomic transfer propagation', () => {
         requestCounts.document += 1
         return apiJson(responseScope === 'enterprise' ? transferWire : siteTransferWire)
       }),
-      http.get(`${environment.apiBaseUrl}/inventory/movements/${transferOut.movementId}`, () => {
+      http.get(`${environment.apiBaseUrl}/inventory/movements/${transferOut.id}`, () => {
         requestCounts.transferOut += 1
         return apiJson(responseScope === 'enterprise' ? transferOut : siteTransferOut)
       }),
-      http.get(`${environment.apiBaseUrl}/inventory/movements/${transferIn.movementId}`, () => {
+      http.get(`${environment.apiBaseUrl}/inventory/movements/${transferIn.id}`, () => {
         requestCounts.transferIn += 1
         return apiJson(responseScope === 'enterprise' ? transferIn : siteTransferIn)
       }),
-      http.get(`${environment.apiBaseUrl}/inventory/balances/${sourceBalance.balanceId}`, () => {
+      http.get(`${environment.apiBaseUrl}/inventory/balances/${sourceBalance.id}`, () => {
         requestCounts.sourceBalance += 1
         return apiJson(responseScope === 'enterprise' ? sourceBalance : siteSourceBalance)
       }),
       http.get(
-        `${environment.apiBaseUrl}/inventory/balances/${destinationBalance.balanceId}`,
+        `${environment.apiBaseUrl}/inventory/balances/${destinationBalance.id}`,
         () => {
           requestCounts.destinationBalance += 1
           return apiJson(
@@ -232,11 +234,11 @@ describe('atomic transfer propagation', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const { result, rerender } = renderHook(
       () => ({
-        destinationBalance: useInventoryBalanceQuery(destinationBalance.balanceId).data,
+        destinationBalance: useInventoryBalanceQuery(destinationBalance.id).data,
         document: useDocumentDetailQuery(transfer.documentId).data,
-        sourceBalance: useInventoryBalanceQuery(sourceBalance.balanceId).data,
-        transferIn: useStockMovementQuery(transferIn.movementId).data,
-        transferOut: useStockMovementQuery(transferOut.movementId).data,
+        sourceBalance: useInventoryBalanceQuery(sourceBalance.id).data,
+        transferIn: useStockMovementQuery(transferIn.id).data,
+        transferOut: useStockMovementQuery(transferOut.id).data,
       }),
       { wrapper: createQueryWrapper(client) },
     )
@@ -282,30 +284,30 @@ describe('atomic transfer propagation', () => {
       siteTransferWire,
     )
     expect(
-      client.getQueryData(inventoryQueryKeys.movement(enterpriseScope, transferOut.movementId)),
+      client.getQueryData(inventoryQueryKeys.movement(enterpriseScope, transferOut.id)),
     ).toEqual(transferOut)
     expect(
-      client.getQueryData(inventoryQueryKeys.movement(siteScope, transferOut.movementId)),
+      client.getQueryData(inventoryQueryKeys.movement(siteScope, transferOut.id)),
     ).toEqual(siteTransferOut)
     expect(
-      client.getQueryData(inventoryQueryKeys.movement(enterpriseScope, transferIn.movementId)),
+      client.getQueryData(inventoryQueryKeys.movement(enterpriseScope, transferIn.id)),
     ).toEqual(transferIn)
     expect(
-      client.getQueryData(inventoryQueryKeys.movement(siteScope, transferIn.movementId)),
+      client.getQueryData(inventoryQueryKeys.movement(siteScope, transferIn.id)),
     ).toEqual(siteTransferIn)
     expect(
-      client.getQueryData(inventoryQueryKeys.balance(enterpriseScope, sourceBalance.balanceId)),
+      client.getQueryData(inventoryQueryKeys.balance(enterpriseScope, sourceBalance.id)),
     ).toEqual(sourceBalance)
     expect(
-      client.getQueryData(inventoryQueryKeys.balance(siteScope, sourceBalance.balanceId)),
+      client.getQueryData(inventoryQueryKeys.balance(siteScope, sourceBalance.id)),
     ).toEqual(siteSourceBalance)
     expect(
       client.getQueryData(
-        inventoryQueryKeys.balance(enterpriseScope, destinationBalance.balanceId),
+        inventoryQueryKeys.balance(enterpriseScope, destinationBalance.id),
       ),
     ).toEqual(destinationBalance)
     expect(
-      client.getQueryData(inventoryQueryKeys.balance(siteScope, destinationBalance.balanceId)),
+      client.getQueryData(inventoryQueryKeys.balance(siteScope, destinationBalance.id)),
     ).toEqual(siteDestinationBalance)
   })
 })
@@ -383,7 +385,7 @@ function registerScenarioHandlers(
       return okPageJson(movements, { page: 1, pageSize: 10 })
     }),
     http.get(`${environment.apiBaseUrl}/inventory/movements/:movementId`, ({ params }) => {
-      const movement = movements.find((candidate) => candidate.movementId === params['movementId'])
+      const movement = movements.find((candidate) => candidate.id === params['movementId'])
       return movement === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(movement)
     }),
     http.get(`${environment.apiBaseUrl}/inventory/balances`, ({ request }) => {
@@ -391,7 +393,7 @@ function registerScenarioHandlers(
       return okPageJson(balances, { page: 1, pageSize: 10 })
     }),
     http.get(`${environment.apiBaseUrl}/inventory/balances/:balanceId`, ({ params }) => {
-      const balance = balances.find((candidate) => candidate.balanceId === params['balanceId'])
+      const balance = balances.find((candidate) => candidate.id === params['balanceId'])
       return balance === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(balance)
     }),
   )
@@ -411,7 +413,7 @@ function findTransferMovement(movementType: StockMovement['movementType']): Stoc
 function findTransferBalance(warehouseId: string): InventoryBalance {
   const materialId = transfer.lines[0]?.material.materialId
   const balance = scenario.ledgers.balances.find(
-    (candidate) => candidate.warehouse.id === warehouseId && candidate.material.id === materialId,
+    (candidate) => candidate.warehouseId === warehouseId && candidate.materialId === materialId,
   )
   if (balance === undefined) {
     throw new Error(`Missing transfer balance for warehouse ${warehouseId}`)
@@ -424,11 +426,11 @@ function transferDetailPath() {
 }
 
 function movementDetailPath(movement: StockMovement) {
-  return ROUTE_PATHS.inventoryMovementDetail.replace(':movementId', movement.movementId)
+  return ROUTE_PATHS.inventoryMovementDetail.replace(':movementId', movement.id)
 }
 
 function balanceDetailPath(balance: InventoryBalance) {
-  return ROUTE_PATHS.inventoryBalanceDetail.replace(':balanceId', balance.balanceId)
+  return ROUTE_PATHS.inventoryBalanceDetail.replace(':balanceId', balance.id)
 }
 
 async function navigate(router: ReturnType<typeof createMemoryRouter>, path: string) {
@@ -443,19 +445,19 @@ async function expectMovementDetail(
   formattedDelta: string,
 ) {
   expect(await screen.findByRole('heading', { name: 'تفاصيل حركة المخزون' })).toBeInTheDocument()
-  expect(screen.getByText(movement.warehouse.displayName)).toBeInTheDocument()
+  expect(screen.getByText(movement.warehouseName)).toBeInTheDocument()
   expect(screen.getByText(movementTypeLabel)).toBeInTheDocument()
   expect(screen.getByText(formattedDelta)).toBeInTheDocument()
-  expect(screen.getByText(movement.documentReference as string)).toBeInTheDocument()
+  expect(screen.getByText(movement.documentReferenceNumber)).toBeInTheDocument()
   expect(screen.getByText(movement.documentId)).toBeInTheDocument()
-  expect(screen.getByText(movement.documentLineId)).toBeInTheDocument()
-  expect(screen.getByText(movement.movementId)).toBeInTheDocument()
+  expect(screen.getByText(movement.lineId)).toBeInTheDocument()
+  expect(screen.getByText(movement.id)).toBeInTheDocument()
 }
 
 async function expectBalanceDetail(balance: InventoryBalance, formattedQuantity: string) {
   expect(await screen.findByRole('heading', { name: 'تفاصيل الرصيد' })).toBeInTheDocument()
-  expect(screen.getByText(balance.warehouse.displayName)).toBeInTheDocument()
-  expect(screen.getByText(balance.material.displayName)).toBeInTheDocument()
+  expect(screen.getByText(balance.warehouseName)).toBeInTheDocument()
+  expect(screen.getByText(balance.materialNameAr)).toBeInTheDocument()
   expect(screen.getByText(formattedQuantity)).toBeInTheDocument()
-  expect(screen.getByText(balance.balanceId.slice(0, 8) + '…')).toBeInTheDocument()
+  expect(screen.getByText(balance.id.slice(0, 8) + '…')).toBeInTheDocument()
 }

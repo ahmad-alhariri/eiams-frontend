@@ -22,30 +22,32 @@ import {
   useStockMovementsQuery,
 } from '@/modules/inventory/hooks/use-inventory-queries'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
-import type { Asset, AssetCustody, InventoryAdjustment } from '@/shared/types/generated/eiams-v1'
-import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
+import type {
+  AdjustmentDetail,
+  AdjustmentListItem,
+} from '@/modules/adjustment/types/adjustment.types'
+import type { Asset, AssetCustody } from '@/shared/types/generated/eiams-v1'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
-import { createDocumentPolicy, createSession } from '@/test/msw/factories'
+import {
+  toWireDetails,
+  toWirePolicy,
+} from '@/test/msw/warehouse-document-handlers'
+import { createDocumentPolicy, createPolicyBlocker, createActionAvailability, createSession } from '@/test/msw/factories'
+import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 /**
- * The adjustment service returns a typed envelope whose `stockMovements` is
- * the inventory module's handwritten `StockMovement` (verified against
- * `Application/StockMovements/GetList/StockMovementResponse.cs`: postedBy
- * is a UUID string, not the generated snapshot's `NamedReference`). The
- * generated snapshot's `AdjustmentPostResult` still carries the OLD shape,
- * so this test re-declares the response locally to use the handwritten
- * `StockMovement` — the only shape the page (`useAdjustmentActions`) actually
- * unmarshals.
+ * The real post body is the shared document engine's `{ documentId, warnings }`
+ * projection (the backend serves `PostDocumentCommand ->
+ * Application.WarehouseDocuments.Post.PostDocumentResponse` from
+ * `POST /adjustments/{id}/post`). The page reads nothing out of it; projections
+ * come from refetches. This type exists so the fixture cannot regress into the
+ * snapshot's phantom `AdjustmentPostResult`.
  */
-type AdjustmentPostResult = {
-  readonly adjustment: InventoryAdjustment
-  readonly stockMovements: readonly StockMovement[]
-  readonly assetMovements: ReadonlyArray<unknown>
-  readonly affectedAsset?: unknown
-  readonly closedCustodyId?: string
-  readonly lifecycleEvent: unknown
+type PostWireResult = {
+  readonly documentId: string
+  readonly warnings: readonly unknown[]
 }
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
@@ -125,51 +127,103 @@ function setupJourney(path: string, permissions = manager) {
   return { router, client, wrapper: Wrapper, user: userEvent.setup() }
 }
 
-function detailPath(value: InventoryAdjustment) {
-  return ROUTE_PATHS.adjustmentDetail.replace(':adjustmentId', value.adjustmentId)
+function detailPath(value: AdjustmentDetail) {
+  return ROUTE_PATHS.adjustmentDetail.replace(':adjustmentId', value.id)
 }
 
-function draftOf(value: InventoryAdjustment, signed = true): InventoryAdjustment {
+const SIGNED_MISSING_AR = 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.'
+
+/**
+ * List projection for the module's `/adjustments` read: the page renders this
+ * shape and nothing else.
+ */
+function listRowOf(value: AdjustmentDetail): AdjustmentListItem {
+  return {
+    id: value.id,
+    warehouseId: value.warehouseId,
+    warehouseCode: value.warehouseCode,
+    warehouseName: value.warehouseName,
+    countId: value.countId,
+    purpose: value.purpose,
+    status: value.status,
+    reason: value.reason,
+    systemReferenceNumber: value.systemReferenceNumber,
+    documentStatus: value.documentStatus,
+    lineCount: value.lines.length,
+    totalDifference: value.lines.reduce((total, line) => total + line.difference, 0),
+    createdAtUtc: value.createdAtUtc,
+    postedAtUtc: value.postedAtUtc,
+    rowVersion: value.rowVersion,
+  }
+}
+
+/** Draft read-model row for the module's own adjustment response. */
+function draftOf(value: AdjustmentDetail): AdjustmentDetail {
   return {
     ...value,
     status: 'Draft',
+    documentStatus: 'Draft',
+    postedAtUtc: null,
+    rowVersion: 1,
+  }
+}
+
+/**
+ * Draft engine-side projection of the adjustment document, for the wire reads
+ * the detail page mounts besides the module's own response
+ * (`GET /warehouse-documents/{id}` + `/policy`). The signed flag toggles the
+ * SignedOriginal attachment and the policy's gate, exactly as the server's own
+ * policy evaluation would report them.
+ */
+function draftDocumentOf(value: AdjustmentDetail, signed = true): WarehouseDocument {
+  const document =
+    value.purpose === 'Disposal' ? scenario.documents.disposal : scenario.documents.adjustment
+  return {
+    ...document,
+    documentStatus: 'Draft',
     postedAt: null,
     rowVersion: 1,
-    attachments: signed ? (value.attachments ?? []) : [],
+    attachments: signed ? [...document.attachments] : [],
     policy: createDocumentPolicy({
-      documentId: value.documentId,
+      documentId: document.documentId,
       documentStatus: 'Draft',
       rowVersion: 1,
-      policyKind: value.purpose === 'Disposal' ? 'Disposal' : 'Adjustment',
+      policyKind: 'Adjustment',
       signedOriginalSatisfied: signed,
       blockers: signed
         ? []
         : [
-            {
+            createPolicyBlocker({
               code: 'document.signed_original_missing',
-              messageAr: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
-            },
+              messageAr: SIGNED_MISSING_AR,
+            }),
           ],
       actions: [
-        {
-          action: 'Post',
+        createActionAvailability('Post', {
           allowed: signed,
           presentation: signed ? 'Enabled' : 'Disabled',
-          reasonRequired: false,
-          confirmationRequired: false,
-        },
+          reasonAr: signed ? null : SIGNED_MISSING_AR,
+          reasonCode: signed ? null : 'document.signed_original_missing',
+        }),
       ],
     }),
   }
 }
 
-function postResult(
-  value: InventoryAdjustment,
-  stockMovements: readonly StockMovement[],
-): AdjustmentPostResult {
-  const lifecycleEvent = scenario.ledgers.lifecycleEvents[value.documentId]?.at(-1)
-  if (!lifecycleEvent) throw new Error('Missing posted lifecycle fixture')
-  return { adjustment: value, stockMovements, assetMovements: [], lifecycleEvent }
+/** Registers the two wire reads the rewired detail page fetches. */
+function wireDocumentHandlers(document: WarehouseDocument) {
+  server.use(
+    http.get(`*/api/v1/warehouse-documents/${document.documentId}`, () =>
+      okJson(toWireDetails(document)),
+    ),
+    http.get(`*/api/v1/warehouse-documents/${document.documentId}/policy`, () =>
+      okJson(toWirePolicy(document)),
+    ),
+  )
+}
+
+function postResult(documentId: string): PostWireResult {
+  return { documentId, warnings: [] }
 }
 
 function countHandlers() {
@@ -197,11 +251,11 @@ describe('count adjustment and disposal chain', () => {
     countHandlers()
     const balance = scenario.ledgers.balances.find(
       (row) =>
-        row.material.id === scenario.catalog.consumableMaterial.id &&
-        row.warehouse.id === count.warehouse.id,
+        row.materialId === scenario.catalog.consumableMaterial.id &&
+        row.warehouseId === count.warehouse.id,
     )!
     const movement = scenario.ledgers.stockMovements.find(
-      (row) => row.documentId === adjustment.documentId,
+      (row) => row.documentId === adjustment.id,
     )!
     const draft = draftOf(adjustment)
     // Predetermined server responses, not a client-side ledger/transaction simulator.
@@ -213,16 +267,20 @@ describe('count adjustment and disposal chain', () => {
         creates.push(await request.json())
         return apiJson(draft, { status: 201 })
       }),
-      http.get('*/api/v1/adjustments', () => okPageJson([posted ? adjustment : draft])),
-      http.get(`*/api/v1/adjustments/${adjustment.adjustmentId}`, () =>
-        apiJson(posted ? adjustment : draft),
-      ),
-      http.post(`*/api/v1/adjustments/${adjustment.adjustmentId}/post`, async ({ request }) => {
+      http.get('*/api/v1/adjustments', () => okPageJson([listRowOf(posted ? adjustment : draft)])),
+      http.get(`*/api/v1/adjustments/${adjustment.id}`, () => apiJson(posted ? adjustment : draft)),
+      http.post(`*/api/v1/adjustments/${adjustment.id}/post`, async ({ request }) => {
         posts.push({ body: await request.json(), key: request.headers.get('Idempotency-Key') })
         posted = true
-        return apiJson(postResult(adjustment, [movement]))
+        return apiJson(postResult(adjustment.id))
       }),
-      http.get(`*/api/v1/inventory/balances/${balance.balanceId}`, () =>
+      http.get(`*/api/v1/warehouse-documents/${adjustment.id}`, () =>
+        okJson(toWireDetails(posted ? scenario.documents.adjustment : draftDocumentOf(draft))),
+      ),
+      http.get(`*/api/v1/warehouse-documents/${adjustment.id}/policy`, () =>
+        okJson(toWirePolicy(posted ? scenario.documents.adjustment : draftDocumentOf(draft))),
+      ),
+      http.get(`*/api/v1/inventory/balances/${balance.id}`, () =>
         apiJson(posted ? balance : { ...balance, quantity: 7 }),
       ),
       http.get('*/api/v1/inventory/movements', () => okPageJson(posted ? [movement] : [])),
@@ -230,8 +288,8 @@ describe('count adjustment and disposal chain', () => {
     const journey = setupJourney(ROUTE_PATHS.countDetail.replace(':countId', count.countId))
     const projections = renderHook(
       () => ({
-        balance: useInventoryBalanceQuery(balance.balanceId),
-        movements: useStockMovementsQuery({ documentId: adjustment.documentId }),
+        balance: useInventoryBalanceQuery(balance.id),
+        movements: useStockMovementsQuery({ documentId: adjustment.id }),
       }),
       { wrapper: journey.wrapper },
     )
@@ -262,10 +320,12 @@ describe('count adjustment and disposal chain', () => {
     expect(posts).toHaveLength(0)
     expect(projections.result.current.balance.data?.quantity).toBe(7)
     await journey.user.click(
-      await screen.findByRole('link', { name: adjustment.documentReference }),
+      await screen.findByRole('link', { name: adjustment.systemReferenceNumber }),
     )
-    expect(await screen.findByText(count.referenceNumber)).toBeInTheDocument()
-    expect(screen.getByText(adjustment.attachments![0]!.originalFilename)).toBeInTheDocument()
+    expect(await screen.findByText(new RegExp(count.referenceNumber))).toBeInTheDocument()
+    expect(
+      await screen.findByText(scenario.documents.adjustment.attachments[0]!.originalFilename),
+    ).toBeInTheDocument()
     await journey.user.click(screen.getByRole('button', { name: 'ترحيل السند' }))
     await waitFor(() => expect(projections.result.current.balance.data).toEqual(balance))
     await waitFor(() =>
@@ -276,23 +336,22 @@ describe('count adjustment and disposal chain', () => {
     expect(await screen.findByText('مرحّل')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /إرسال|ترحيل السند/ })).not.toBeInTheDocument()
     expect(movement).toMatchObject({
-      documentId: adjustment.documentId,
-      documentLineId: scenario.documents.adjustment.lines[0]!.lineId,
-      material: { id: adjustment.lines[0]!.material.id },
+      documentId: adjustment.id,
+      lineId: scenario.documents.adjustment.lines[0]!.lineId,
+      materialId: adjustment.lines[0]!.materialId,
       quantityDelta: 2,
       movementType: 'AdjustmentIn',
-      postedAt: adjustment.postedAt,
+      postedAtUtc: adjustment.postedAtUtc,
     })
     expect(screen.getByText('+2')).toBeInTheDocument()
   })
 
   it('blocks posting without a signed original, and hides it from keepers despite an enabled policy', async () => {
     const post = vi.fn()
+    wireDocumentHandlers(draftDocumentOf(adjustment, false))
     server.use(
-      http.get(`*/api/v1/adjustments/${adjustment.adjustmentId}`, () =>
-        apiJson(draftOf(adjustment, false)),
-      ),
-      http.post(`*/api/v1/adjustments/${adjustment.adjustmentId}/post`, post),
+      http.get(`*/api/v1/adjustments/${adjustment.id}`, () => apiJson(draftOf(adjustment))),
+      http.post(`*/api/v1/adjustments/${adjustment.id}/post`, post),
     )
     const journey = setupJourney(detailPath(adjustment))
     const button = await screen.findByRole('button', { name: 'ترحيل السند' })
@@ -302,11 +361,6 @@ describe('count adjustment and disposal chain', () => {
     ).toBeGreaterThan(0)
     await journey.user.click(button)
     expect(post).not.toHaveBeenCalled()
-    server.use(
-      http.get(`*/api/v1/adjustments/${adjustment.adjustmentId}`, () =>
-        apiJson(draftOf(adjustment)),
-      ),
-    )
     await act(async () => {
       journey.client.setQueryData(
         authSessionQueryKey,
@@ -353,26 +407,49 @@ describe('count adjustment and disposal chain', () => {
         derivedStatus: 'Disposed',
         rowVersion: originalAsset.rowVersion + 1,
       }
-      const postedAdjustment: InventoryAdjustment = {
+      const draft = draftOf({
         ...disposal,
-        lines: disposal.lines.map((line) => ({
-          ...line,
-          assetId: originalAsset.assetId,
-          assetNumber: originalAsset.assetNumber,
-        })),
-      }
+        lines: [
+          {
+            ...disposal.lines[0]!,
+            assets: [
+              {
+                id: originalAsset.assetId,
+                assetNumber: originalAsset.assetNumber,
+                serialNumber: originalAsset.serialNumber ?? null,
+              },
+            ],
+          },
+        ],
+      })
       const stockRows = issued
         ? []
-        : scenario.ledgers.stockMovements.filter((row) => row.documentId === disposal.documentId)
+        : scenario.ledgers.stockMovements.filter((row) => row.documentId === disposal.id)
       const balance = scenario.ledgers.balances.find(
-        (row) => row.material.id === originalAsset.material.id,
+        (row) => row.materialId === originalAsset.material.id,
       )!
       const activeCustody = scenario.ledgers.custodies.find(
         (row) => row.assetId === originalAsset.assetId && row.status === 'Active',
       )
       const closedCustodies: AssetCustody[] = activeCustody
-        ? [{ ...activeCustody, status: 'Closed', toTs: disposal.postedAt! }]
+        ? [{ ...activeCustody, status: 'Closed', toTs: disposal.postedAtUtc! }]
         : []
+      // The custody-timeline endpoint serves the live wire row (flat
+      // `holderType`/`holderId`, `fromUtc`/`toUtc`); the scenario keeps the
+      // legacy generated shape, so the projection happens here, at the consumer.
+      const toCustodyTimelineRow = (custody: AssetCustody) => ({
+        custodyId: custody.custodyId,
+        assetId: custody.assetId,
+        holderType: custody.holder.type,
+        holderId: custody.holder.id,
+        custodyKind: custody.custodyKind,
+        issueDocumentId: custody.issueDocumentId,
+        returnDocumentId: custody.returnDocumentId ?? null,
+        status: custody.status,
+        fromUtc: custody.fromTs,
+        toUtc: custody.toTs ?? null,
+        rowVersion: custody.rowVersion,
+      })
       const existingEvents = scenario.ledgers.assetMovements.filter(
         (row) => row.assetId === originalAsset.assetId && row.eventType !== 'Disposed',
       )
@@ -381,28 +458,41 @@ describe('count adjustment and disposal chain', () => {
         assetId: originalAsset.assetId,
         ...(activeCustody ? { custodyId: activeCustody.custodyId } : {}),
       }
-      const response: AdjustmentPostResult = {
-        ...postResult(postedAdjustment, stockRows),
-        affectedAsset: disposedAsset,
-        assetMovements: [disposedEvent],
-        ...(activeCustody ? { closedCustodyId: activeCustody.custodyId } : {}),
-      }
       let posted = false
       const posts: unknown[] = []
+      const postedAdjustment: AdjustmentDetail = {
+        ...draft,
+        status: 'Posted',
+        documentStatus: 'Posted',
+        postedAtUtc: disposal.postedAtUtc,
+        rowVersion: draft.rowVersion + 1,
+      }
       server.use(
-        http.get(`*/api/v1/adjustments/${disposal.adjustmentId}`, () =>
-          apiJson(posted ? postedAdjustment : draftOf(postedAdjustment)),
-        ),
-        http.post(`*/api/v1/adjustments/${disposal.adjustmentId}/post`, async ({ request }) => {
+        http.get(`*/api/v1/adjustments/${disposal.id}`, () => apiJson(posted ? postedAdjustment : draft)),
+        http.post(`*/api/v1/adjustments/${disposal.id}/post`, async ({ request }) => {
           posts.push(await request.json())
           posted = true
-          return apiJson(response)
+          // PostDocumentResponse: the page reads nothing out of it; the
+          // asset/custody/balance/ledger projections come from refetches.
+          return apiJson(postResult(disposal.id))
         }),
+        http.get(`*/api/v1/warehouse-documents/${disposal.id}`, () =>
+          okJson(
+            toWireDetails(posted ? scenario.documents.disposal : draftDocumentOf(draft, true)),
+          ),
+        ),
+        http.get(`*/api/v1/warehouse-documents/${disposal.id}/policy`, () =>
+          okJson(
+            toWirePolicy(posted ? scenario.documents.disposal : draftDocumentOf(draft, true)),
+          ),
+        ),
         http.get(`*/api/v1/assets/${originalAsset.assetId}`, () =>
           apiJson(posted ? disposedAsset : originalAsset),
         ),
-        http.get(`*/api/v1/assets/${originalAsset.assetId}/custody`, () =>
-          okJson(posted ? closedCustodies : activeCustody ? [activeCustody] : []),
+        http.get(`*/api/v1/assets/${originalAsset.assetId}/custody-timeline`, () =>
+          okJson(
+            (posted ? closedCustodies : activeCustody ? [activeCustody] : []).map(toCustodyTimelineRow),
+          ),
         ),
         http.get(`*/api/v1/assets/${originalAsset.assetId}/movements`, () =>
           okPageJson(posted ? [...existingEvents, disposedEvent] : existingEvents),
@@ -410,7 +500,7 @@ describe('count adjustment and disposal chain', () => {
         http.get('*/api/v1/custodies', () =>
           okPageJson(!posted && activeCustody ? [activeCustody] : []),
         ),
-        http.get(`*/api/v1/inventory/balances/${balance.balanceId}`, () =>
+        http.get(`*/api/v1/inventory/balances/${balance.id}`, () =>
           apiJson({ ...balance, quantity: posted || issued ? 2 : 3 }),
         ),
         http.get('*/api/v1/inventory/movements', () => okPageJson(posted ? stockRows : [])),
@@ -422,8 +512,8 @@ describe('count adjustment and disposal chain', () => {
           custody: useAssetCustodyTimelineQuery(originalAsset.assetId),
           pending: useCustodiesQuery({ status: 'Active' }),
           history: useAssetMovementsQuery(originalAsset.assetId, { pageIndex: 0, pageSize: 20 }),
-          balance: useInventoryBalanceQuery(balance.balanceId),
-          stock: useStockMovementsQuery({ documentId: disposal.documentId }),
+          balance: useInventoryBalanceQuery(balance.id),
+          stock: useStockMovementsQuery({ documentId: disposal.id }),
         }),
         { wrapper: journey.wrapper },
       )
@@ -436,7 +526,9 @@ describe('count adjustment and disposal chain', () => {
       )
       await journey.user.click(await screen.findByRole('button', { name: 'ترحيل السند' }))
       await waitFor(() => expect(projections.result.current.asset.data).toEqual(disposedAsset))
-      await waitFor(() => expect(projections.result.current.custody.data).toEqual(closedCustodies))
+      await waitFor(() =>
+        expect(projections.result.current.custody.data).toEqual(closedCustodies.map(toCustodyTimelineRow)),
+      )
       await waitFor(() => expect(projections.result.current.pending.data?.items).toEqual([]))
       await waitFor(() =>
         expect(projections.result.current.history.data?.items).toEqual([
@@ -452,17 +544,16 @@ describe('count adjustment and disposal chain', () => {
       expect(stockRows).toHaveLength(issued ? 0 : 1)
       if (!issued)
         expect(stockRows[0]).toMatchObject({
-          documentId: disposal.documentId,
-          documentLineId: scenario.documents.disposal.lines[0]!.lineId,
-          material: { id: originalAsset.material.id },
+          documentId: disposal.id,
+          lineId: scenario.documents.disposal.lines[0]!.lineId,
+          materialId: originalAsset.material.id,
           quantityDelta: -1,
           movementType: 'AdjustmentOut',
         })
       if (issued) {
-        expect(response.closedCustodyId).toBe(activeCustody!.custodyId)
         expect(closedCustodies[0]!.issueDocumentId).toBe(scenario.documents.issue.documentId)
       }
-      expect(disposedEvent.documentId).toBe(disposal.documentId)
+      expect(disposedEvent.documentId).toBe(disposal.id)
       expect(disposedEvent.documentLineId).toBe(scenario.documents.disposal.lines[0]!.lineId)
       await act(async () => {
         await journey.router.navigate(
@@ -470,7 +561,7 @@ describe('count adjustment and disposal chain', () => {
         )
       })
       expect(await screen.findByText('مستبعد')).toBeInTheDocument()
-      expect(await screen.findByText(disposal.documentReference)).toBeInTheDocument()
+      expect(await screen.findByText(disposal.systemReferenceNumber)).toBeInTheDocument()
       expect(screen.getByText(originalAsset.receiptLineId!)).toBeInTheDocument()
       expect(screen.getAllByText(originalAsset.assetNumber).length).toBeGreaterThan(0)
       expect(screen.queryByRole('button', { name: /تعديل|حذف|عكس/ })).not.toBeInTheDocument()

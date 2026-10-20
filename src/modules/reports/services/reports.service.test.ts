@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest'
 
 import { createReportsService } from '@/modules/reports/services/reports.service'
 import type {
+  InventoryReportRow,
   ListAssetReportQuery,
   ListCountAdjustmentReportQuery,
   ListInventoryReportQuery,
   ListOperationalDocumentsReportQuery,
 } from '@/modules/reports/types/reports.types'
-import { createInventoryBalance } from '@/test/msw/factories'
 import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 import { registerTestTransportHarness } from '@/test/support/test-transport-harness'
@@ -31,12 +31,19 @@ describe('reportsService', () => {
   describe('getInventoryReport', () => {
     it('forwards only documented query params and returns the typed balance page', async () => {
       const service = setupService()
-      const balance = createInventoryBalance()
+      const summary: InventoryReportRow = {
+        materialId: '00000000-0000-4000-8000-000000000024',
+        materialCode: 'IT-HW-PC-001',
+        materialNameAr: 'حاسوب مكتبي',
+        totalQuantity: 10,
+        warehouseCount: 1,
+        lastUpdatedUtc: '2026-08-21T10:00:00.000Z',
+      }
       const captured: Record<string, string>[] = []
       server.use(
         http.get(`${API_BASE_URL}/reports/inventory`, ({ request }) => {
           captured.push(Object.fromEntries(new URL(request.url).searchParams))
-          return okPageJson([balance], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
+          return okPageJson([summary], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
         }),
       )
 
@@ -48,10 +55,10 @@ describe('reportsService', () => {
       }
       const page = await service.getInventoryReport(query)
 
-      expect(page.items).toEqual([balance])
+      expect(page.items).toEqual([summary])
       expect(page.meta).toEqual({ pageIndex: 0, pageSize: 10, totalItems: 1, totalPages: 1 })
       expect(captured.at(-1)).toMatchObject({
-        pageIndex: '0',
+        page: '1',
         pageSize: '10',
         search: 'حاسوب',
         warehouseId: 'wh-1',
@@ -97,7 +104,7 @@ describe('reportsService', () => {
 
       expect(page.items).toEqual([])
       expect(captured.at(-1)).toMatchObject({
-        pageIndex: '0',
+        page: '1',
         pageSize: '10',
         status: 'InStock',
         warehouseId: 'wh-1',
@@ -126,11 +133,11 @@ describe('reportsService', () => {
       await service.getCountAdjustmentReport(query)
 
       expect(captured.at(-1)).toMatchObject({
-        pageIndex: '0',
+        page: '1',
         pageSize: '10',
         warehouseId: 'wh-1',
-        dateFrom: '2026-09-01T00:00:00.000Z',
-        dateTo: '2026-09-30T00:00:00.000Z',
+        fromUtc: '2026-09-01T00:00:00.000Z',
+        toUtc: '2026-09-30T00:00:00.000Z',
       })
     })
   })
@@ -157,11 +164,11 @@ describe('reportsService', () => {
 
       const last = captured.at(-1) ?? {}
       expect(last).toMatchObject({
-        pageIndex: '0',
+        page: '1',
         pageSize: '10',
         warehouseId: 'wh-1',
-        dateFrom: '2026-09-01T00:00:00.000Z',
-        dateTo: '2026-09-30T00:00:00.000Z',
+        fromUtc: '2026-09-01T00:00:00.000Z',
+        toUtc: '2026-09-30T00:00:00.000Z',
       })
       expect(last).not.toHaveProperty('documentType')
     })
