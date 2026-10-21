@@ -1,13 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
+import { MemoryRouter, useLocation } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AdjustmentActionBar } from '@/modules/adjustment/components/adjustment-action-bar'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
-import { okJson } from '@/test/msw/envelope'
+import { apiJson, okJson } from '@/test/msw/envelope'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import type {
   DocumentActionAvailability,
@@ -15,6 +16,7 @@ import type {
   DocumentPolicyBlocker,
 } from '@/shared/documents/types/document-wire.types'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
+import { toast } from '@/shared/ui/toast-manager'
 
 vi.mock('@/shared/ui/toast-manager', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -30,6 +32,8 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
 }
 
 const ADJUSTMENT_ID = '423e4567-e89b-42d3-a456-426614174004'
+/** The compensating document the server creates when a posted adjustment is reversed. */
+const REVERSAL_ID = '523e4567-e89b-42d3-a456-426614174005'
 
 const ENABLED_POST: ReadonlyArray<DocumentActionAvailability> = [
   {
@@ -78,6 +82,29 @@ function usePostHandler() {
   )
 }
 
+/**
+ * The reversal endpoint answers 201 with the compensating document's id only
+ * (`ResourceIdResponse`), or the Arabic error envelope when it refuses.
+ */
+function useReverseHandler(options: { ok: boolean }) {
+  server.use(
+    http.post(`*/api/v1/adjustments/${ADJUSTMENT_ID}/reverse`, () =>
+      options.ok
+        ? apiJson({ id: REVERSAL_ID }, { status: 201 })
+        : apiJson(
+            { title: 'تعذّر عكس السند', detailAr: 'لا يمكن عكس السند في حالته الحالية.' },
+            { status: 409 },
+          ),
+    ),
+  )
+}
+
+/** Exposes the router location so a navigation can be observed. */
+function CurrentPath() {
+  const { pathname } = useLocation()
+  return <span data-testid="current-path">{pathname}</span>
+}
+
 function Harness({
   status,
   purpose,
@@ -98,22 +125,26 @@ function Harness({
   })
   client.setQueryData(authSessionQueryKey, sessionWith(permissions))
   return (
-    <QueryClientProvider client={client}>
-      <AdjustmentActionBar
-        adjustmentId={ADJUSTMENT_ID}
-        status={status}
-        purpose={purpose}
-        rowVersion={7}
-        actions={actions}
-        blockers={blockers}
-        advisories={advisories}
-      />
-    </QueryClientProvider>
+    <MemoryRouter initialEntries={[`/adjustments/${ADJUSTMENT_ID}`]}>
+      <QueryClientProvider client={client}>
+        <CurrentPath />
+        <AdjustmentActionBar
+          adjustmentId={ADJUSTMENT_ID}
+          status={status}
+          purpose={purpose}
+          rowVersion={7}
+          actions={actions}
+          blockers={blockers}
+          advisories={advisories}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>
   )
 }
 
 beforeEach(() => {
   server.resetHandlers()
+  vi.clearAllMocks()
 })
 
 describe('AdjustmentActionBar (e21-t06)', () => {
@@ -194,21 +225,57 @@ describe('AdjustmentActionBar (e21-t06)', () => {
     expect(await screen.findByRole('button', { name: 'عكس السند' })).toBeInTheDocument()
   })
 
+  // F15: the reversal creates a COMPENSATING document, and that document is
+  // the only place the reversal can be finished (upload its signed original,
+  // then post it). Without a navigation it is unreachable from the UI.
+  it('navigates to the compensating document after a successful reversal', async () => {
+    useReverseHandler({ ok: true })
+    const user = userEvent.setup()
+    render(<Harness status="Posted" purpose="DirectCorrection" actions={ENABLED_REVERSE} />)
+
+    await user.click(screen.getByRole('button', { name: 'عكس السند' }))
+    await user.type(screen.getByLabelText('سبب العكس'), 'خطأ في الترحيل')
+    await user.click(screen.getByRole('button', { name: 'تأكيد العكس' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('current-path')).toHaveTextContent(`/adjustments/${REVERSAL_ID}`),
+    )
+    // The existing behaviour is unchanged: the success toast still fires.
+    expect(toast.success).toHaveBeenCalled()
+  })
+
+  it('stays on the source document when the reversal fails', async () => {
+    useReverseHandler({ ok: false })
+    const user = userEvent.setup()
+    render(<Harness status="Posted" purpose="DirectCorrection" actions={ENABLED_REVERSE} />)
+
+    await user.click(screen.getByRole('button', { name: 'عكس السند' }))
+    await user.type(screen.getByLabelText('سبب العكس'), 'خطأ في الترحيل')
+    await user.click(screen.getByRole('button', { name: 'تأكيد العكس' }))
+
+    // The failure is the settled signal that no navigation may have happened.
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    expect(screen.getByTestId('current-path')).toHaveTextContent(`/adjustments/${ADJUSTMENT_ID}`)
+    expect(screen.getByTestId('current-path')).not.toHaveTextContent(REVERSAL_ID)
+  })
+
   it('hides Post from a keeper despite document.create and an enabled policy', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     client.setQueryData(authSessionQueryKey, sessionWith(['document.view', 'document.create']))
     render(
-      <QueryClientProvider client={client}>
-        <AdjustmentActionBar
-          adjustmentId={ADJUSTMENT_ID}
-          status="Draft"
-          purpose="DirectCorrection"
-          rowVersion={1}
-          actions={ENABLED_POST}
-          blockers={[]}
-          advisories={[]}
-        />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <AdjustmentActionBar
+            adjustmentId={ADJUSTMENT_ID}
+            status="Draft"
+            purpose="DirectCorrection"
+            rowVersion={1}
+            actions={ENABLED_POST}
+            blockers={[]}
+            advisories={[]}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
     )
 
     expect(screen.queryByRole('button', { name: 'ترحيل السند' })).toBeNull()
