@@ -27,14 +27,23 @@ describe('InventoryLowStockBadge', () => {
     [2, 'NotConfigured', 'حدّ التنبيه غير محدد'],
     [3, 'Disabled', 'تنبيه الانخفاض معطّل'],
   ] as const)('renders %s without inventing a null threshold', (state, name, label) => {
-    const { container } = render(
-      <InventoryLowStockBadge state={state} thresholdQuantity={null} />,
-    )
+    const { container } = render(<InventoryLowStockBadge state={state} thresholdQuantity={null} />)
 
     expect(screen.getByText(label)).toBeInTheDocument()
     expect(container.querySelector('[data-slot="inventory-low-stock"]')).toHaveAttribute(
       'data-low-stock-state',
       name,
+    )
+    expect(container.querySelector('[data-slot="inventory-low-stock-threshold"]')).toBeNull()
+  })
+
+  it('renders a neutral fallback for a wire code outside 0..3', () => {
+    const { container } = render(<InventoryLowStockBadge state={9} thresholdQuantity={5} />)
+
+    expect(screen.getByText('حالة غير معروفة')).toBeInTheDocument()
+    expect(container.querySelector('[data-slot="inventory-low-stock"]')).toHaveAttribute(
+      'data-low-stock-state',
+      'Unknown',
     )
     expect(container.querySelector('[data-slot="inventory-low-stock-threshold"]')).toBeNull()
   })
