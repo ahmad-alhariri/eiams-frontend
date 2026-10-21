@@ -1,12 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
 
 import type {
   InventoryBalance,
+  InventoryLowStockStateCode,
   StockMovement,
 } from '@/modules/inventory/types/inventory.api-types'
+import type { InventoryReportRow } from '@/modules/reports/types/reports.types'
 
 /**
  * Drift gate between the handwritten inventory wire contract and the LIVE
@@ -18,6 +20,10 @@ import type {
  * The sample values below are annotated with the declared types, so a field
  * added to or removed from either interface fails to compile, and the runtime
  * assertion then compares the property names to the baseline.
+ *
+ * The baseline is COMMITTED (`contracts/openapi/eiams-v1.consumer-baseline.json`)
+ * and is the fingerprint captured from the live API, so its absence is a defect
+ * and fails the gate instead of silently disabling it.
  */
 
 type BaselineEndpoint = {
@@ -30,17 +36,35 @@ type Baseline = {
   readonly endpoints: readonly BaselineEndpoint[]
 }
 
-// The baseline is an UNTRACKED ratchet captured from the live API, so a clean
-// checkout may not have it. Read it conditionally (a static `?raw` import would
-// fail to transform) and skip the gate when it is absent; whenever the file is
-// present the shape is still enforced.
-const BASELINE_PATH = join(process.cwd(), 'contracts/openapi/eiams-v1.consumer-baseline.json')
-const baseline = existsSync(BASELINE_PATH)
-  ? (JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Baseline)
-  : undefined
+// Resolved from the test file, not `process.cwd()`, so the gate enforces the
+// same baseline no matter where Vitest is launched from.
+const BASELINE_RELATIVE_PATH = '../../../contracts/openapi/eiams-v1.consumer-baseline.json'
+
+let baseline: Baseline
+
+function loadBaseline(baselinePath: string): Baseline {
+  if (!existsSync(baselinePath)) {
+    throw new Error(
+      `Committed consumer baseline is missing at ${baselinePath}. ` +
+        'It is tracked in git (added with the inventory read contract); restore it ' +
+        'rather than letting the wire gate silently skip.',
+    )
+  }
+  return JSON.parse(readFileSync(baselinePath, 'utf8')) as Baseline
+}
+
+beforeAll(() => {
+  const testFilePath = expect.getState().testPath
+  if (testFilePath === undefined) {
+    throw new Error(
+      'Vitest did not report the current test file path; cannot locate the consumer baseline.',
+    )
+  }
+  baseline = loadBaseline(join(dirname(testFilePath), BASELINE_RELATIVE_PATH))
+})
 
 function responseProperties(path: string): string[] {
-  const endpoint = baseline?.endpoints.find(
+  const endpoint = baseline.endpoints.find(
     (candidate) => candidate.path === path && candidate.method === 'GET',
   )
   if (endpoint === undefined) {
@@ -80,7 +104,16 @@ const STOCK_MOVEMENT_SAMPLE: StockMovement = {
   postedBy: '00000000-0000-4000-8000-000000000010',
 }
 
-describe.skipIf(baseline === undefined)('inventory wire contract', () => {
+const INVENTORY_REPORT_ROW_SAMPLE: InventoryReportRow = {
+  materialId: '00000000-0000-4000-8000-000000000024',
+  materialCode: 'IT-HW-PC-001',
+  materialNameAr: 'حاسوب مكتبي',
+  totalQuantity: 10,
+  warehouseCount: 1,
+  lastUpdatedUtc: '2026-08-21T10:00:00.000Z',
+}
+
+describe('inventory wire contract', () => {
   it('declares exactly the live InventoryBalance response properties', () => {
     expect(Object.keys(INVENTORY_BALANCE_SAMPLE).sort()).toEqual(
       responseProperties('/inventory/balances'),
@@ -91,5 +124,29 @@ describe.skipIf(baseline === undefined)('inventory wire contract', () => {
     expect(Object.keys(STOCK_MOVEMENT_SAMPLE).sort()).toEqual(
       responseProperties('/inventory/movements'),
     )
+  })
+
+  it('declares exactly the live InventoryReportRow response properties', () => {
+    expect(Object.keys(INVENTORY_REPORT_ROW_SAMPLE).sort()).toEqual(
+      responseProperties('/reports/inventory'),
+    )
+  })
+
+  it('declares the nested lowStock shape with a numeric state', () => {
+    // The baseline's flat `responseProperties` cannot express a nested object,
+    // so the key set is stated explicitly. Source of truth: the live capture
+    // recorded in `inventory.api-types.ts` and the backend DTO
+    // `Application/InventoryBalances/GetList/LowStockProjectionResponse.cs`
+    // (`State`, `ThresholdQuantity`), serialized as numbers by the Minimal API.
+    expect(Object.keys(INVENTORY_BALANCE_SAMPLE.lowStock).sort()).toEqual([
+      'state',
+      'thresholdQuantity',
+    ])
+
+    expect(typeof INVENTORY_BALANCE_SAMPLE.lowStock.state).toBe('number')
+    expect([0, 1, 2, 3]).toContain(INVENTORY_BALANCE_SAMPLE.lowStock.state)
+    expectTypeOf<
+      InventoryBalance['lowStock']['state']
+    >().toEqualTypeOf<InventoryLowStockStateCode>()
   })
 })
