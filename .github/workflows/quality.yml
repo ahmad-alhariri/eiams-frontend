@@ -26,6 +26,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The return-info schema test mirrors a backend domain cap and reads a
+      # sibling `eiams-backend` checkout; it fails loudly when the file is
+      # absent. actions/checkout rejects a `path` outside $GITHUB_WORKSPACE, so
+      # the checkout lands inside and is moved beside the frontend below.
+      - name: Checkout canonical backend as data
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: ahmad-alhariri/eiams-backend
+          ref: main
+          path: .ci/eiams-backend
+          token: ${{ secrets.EIAMS_CROSS_REPO_READ_TOKEN }}
+          persist-credentials: false
+
+      - name: Move the backend checkout beside the frontend
+        run: mv "$GITHUB_WORKSPACE/.ci/eiams-backend" "$GITHUB_WORKSPACE/../eiams-backend"
+
       # setup-node resolves the pnpm store path when cache is enabled, so pnpm
       # must be on PATH before this step executes.
       - name: Setup pnpm
