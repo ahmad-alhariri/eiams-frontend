@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
+import { useNavigate } from 'react-router'
 
+import { ROUTE_PATHS } from '@/config/routes'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { adjustmentService } from '@/modules/adjustment/services/adjustment.service'
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -120,9 +122,17 @@ export function usePostAdjustmentAction(adjustmentId: string | null) {
  * Reverses a Posted ordinary adjustment through a compensating document
  * (`POST /adjustments/{id}/reverse`, idempotent, reasoned). Disposal is not
  * reversible — the UI never offers the action there and the server rejects it.
+ *
+ * The server answers with the compensating document's id (201 `{ id }`), and
+ * that document is the ONLY place the reversal can be finished: its signed
+ * original is uploaded and it is posted from its own page. The reversed source
+ * page is terminal and offers no action, so a successful reversal navigates to
+ * the compensating document — otherwise the new document is unreachable from
+ * the UI (F15).
  */
 export function useReverseAdjustmentAction(adjustmentId: string | null) {
   const invalidate = useInvalidateAdjustmentScope()
+  const navigate = useNavigate()
   const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
   return useMutation<ResourceIdResponse, Error, AdjustReverseVariables>({
     mutationFn: (variables) => {
@@ -137,10 +147,11 @@ export function useReverseAdjustmentAction(adjustmentId: string | null) {
         idempotencyKeyRef.current,
       )
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       idempotencyKeyRef.current = null
       toast.success({ title: 'تم عكس السند وإنشاء السند المقابل' })
       invalidate()
+      navigate(ROUTE_PATHS.adjustmentDetail.replace(':adjustmentId', result.id))
     },
     onError: (error) => {
       const apiError = normalizeApiError(error)
