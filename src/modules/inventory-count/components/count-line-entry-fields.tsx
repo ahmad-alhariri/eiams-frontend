@@ -4,6 +4,7 @@ import {
   useCountLineDraftValue,
   useCountLineDrafts,
 } from '@/modules/inventory-count/components/count-line-drafts'
+import { useMaterialName } from '@/modules/inventory-count/hooks/use-count-names'
 import { countLineDraftField } from '@/modules/inventory-count/components/count-quantity-workspace.model'
 import type { CountLineEntryFormValues } from '@/modules/inventory-count/schemas/count-line-entry.schemas'
 import { countLineDifference } from '@/modules/inventory-count/schemas/count-line-entry.schemas'
@@ -11,13 +12,15 @@ import { isAssetCountLine } from '@/modules/inventory-count/types/inventory-coun
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import { cn } from '@/shared/utils/class-names'
-import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
+import type { InventoryCountLine } from '@/modules/inventory-count/types/inventory-count.types'
 
 /**
  * The «الكمية الفعلية» / «الفرق» / «سبب الفرق» cells for one row of the
  * current server page (hbfu). All three read and write the page's React Hook
  * Form through its context, so Arabic validation, the live difference preview
- * and the unsaved-draft guard all come from one form.
+ * and the unsaved-draft guard all come from one form. The material name is
+ * resolved per id from the catalog (`GET /catalog/materials/{materialId}`);
+ * an unresolved id renders as itself and never crashes.
  *
  * D-MAT-01: an asset line counts a serialized asset, so it is verified as
  * present (1) or missing (0) and is never coerced into a free numeric input.
@@ -34,7 +37,7 @@ function CountLineQuantityField({ disabled, index, line }: CountLineEntryFieldsP
   const { control, formState, setValue } = useFormContext<CountLineEntryFormValues>()
   const value = useCountLineDraftValue(control, index, 'actualQuantity')
   const errorMessage = formState.errors.lines?.[index]?.actualQuantity?.message
-  const materialName = line.material.displayName
+  const materialName = useMaterialName(line.materialId)
 
   if (isAssetCountLine(line)) {
     return (
@@ -107,12 +110,13 @@ function CountLineReasonField({ disabled, index, line }: CountLineEntryFieldsPro
   const { control, formState, setValue } = useFormContext<CountLineEntryFormValues>()
   const value = useCountLineDraftValue(control, index, 'reason')
   const errorMessage = formState.errors.lines?.[index]?.reason?.message
+  const materialName = useMaterialName(line.materialId)
 
   return (
     <div className="flex flex-col gap-1">
       <Input
         type="text"
-        aria-label={`سبب الفرق لـ ${line.material.displayName}`}
+        aria-label={`سبب الفرق لـ ${materialName}`}
         aria-invalid={errorMessage !== undefined}
         placeholder="سبب الفرق"
         value={value}

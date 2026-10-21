@@ -137,7 +137,8 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // mutations do. Neither introduces any of the three banned shapes
     // (`{} as any`, `client as unknown as ApiTransport`, `transport as any`),
     // so every banned-pattern assertion below stays green.
-    assertScannedFiles(PRODUCTION_FILES, 398)
+    // +3 application files: inventory-count/hooks/use-count-names.ts, inventory-count/components/count-name-fields.tsx, adjustment/hooks/use-count-variance-seeds.ts
+  assertScannedFiles(PRODUCTION_FILES, 401)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

@@ -13,6 +13,11 @@ import {
   createSessionScope,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import { countNameHandlers } from '@/test/msw/count-wire-fixtures'
+import {
+  INVENTORY_COUNT_SCOPE_LABELS_AR,
+  INVENTORY_COUNT_TYPE_LABELS_AR,
+} from '@/modules/inventory-count/types/inventory-count.types'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 
@@ -44,24 +49,24 @@ function useCountHandlers() {
       expect(url.searchParams.get('status')).toBe(null)
       return okPageJson([
         {
-          countId: COUNT_ID,
-          countType: 'Partial',
-          createdAt: '2026-08-18T08:00:00.000Z',
-          createdBy: { id: fixtureUuid(90), displayName: 'مروان السيد' },
+          id: COUNT_ID,
+          warehouseId: fixtureUuid(30),
+          countType: 'Cycle',
+          scopeType: 'EntireWarehouse',
           freezePolicy: 'SoftFreeze',
-          lineCount: 3,
-          referenceNumber: 'EIAMS-CNT-2026-0001',
-          rowVersion: 1,
-          scope: { scopeIds: [], scopeType: 'ByCategory', summaryAr: 'أجهزة الحاسوب' },
-          startedAt: '2026-08-18T09:00:00.000Z',
           status: 'InProgress',
-          varianceCount: 0,
-          warehouse: { id: fixtureUuid(30), displayName: 'المستودع المركزي' },
+          rowVersion: 1,
+          plannedAtUtc: '2026-08-18T08:00:00.000Z',
+          startedAtUtc: '2026-08-18T09:00:00.000Z',
+          completedAtUtc: null,
+          closedAtUtc: null,
+          abortedAtUtc: null,
         },
       ])
-    }),
-  )
-}
+      }),
+      ...countNameHandlers({ warehouses: { [fixtureUuid(30)]: 'W1' } }),
+    )
+  }
 
 function renderPage(permissionCodes: readonly string[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -85,10 +90,9 @@ describe('InventoryCountListPage (e20-t02)', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'جلسات الجرد' }),
     ).toBeInTheDocument()
-    expect(await screen.findByText('EIAMS-CNT-2026-0001')).toBeInTheDocument()
-    expect(screen.getByText('جرد جزئي')).toBeInTheDocument()
-    expect(screen.getByText('أجهزة الحاسوب')).toBeInTheDocument()
-    const detailLink = screen.getByRole('link', { name: /EIAMS-CNT-2026-0001/ })
+        expect(await screen.findByText(INVENTORY_COUNT_TYPE_LABELS_AR.Cycle)).toBeInTheDocument()
+    expect(await screen.findByText(INVENTORY_COUNT_SCOPE_LABELS_AR.EntireWarehouse)).toBeInTheDocument()
+    const detailLink = screen.getByRole('link', { name: /\u0641\u062A\u062D/ })
     expect(detailLink.getAttribute('href')).toBe(`/counts/${COUNT_ID}`)
   })
 

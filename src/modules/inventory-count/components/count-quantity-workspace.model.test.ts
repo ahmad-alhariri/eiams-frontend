@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
 import { countLineDraftField, countLinePageStats } from './count-quantity-workspace.model'
-import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
+import type { InventoryCountLine } from '@/modules/inventory-count/types/inventory-count.types'
 
-function line(snapshotQuantity: number, countLineId: string): InventoryCountLine {
+function line(snapshotQuantity: number, id: string): InventoryCountLine {
   return {
-    countLineId,
-    material: { id: countLineId, displayName: `مادة ${countLineId}` },
+    id,
+    materialId: `m-${id}`,
+    assetId: null,
     snapshotQuantity,
     actualQuantity: null,
     difference: 0,
-    rowVersion: 1,
+    varianceReason: null,
   }
 }
 

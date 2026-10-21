@@ -9,7 +9,10 @@ import {
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { AttachmentPanel } from '@/shared/documents/attachment-panel'
 import { useDocumentAttachmentManager } from '@/shared/documents/use-document-attachments'
-import { useDocumentPolicyQuery } from '@/shared/documents/use-document-queries'
+import {
+  useDocumentDetailQuery,
+  useDocumentPolicyQuery,
+} from '@/shared/documents/use-document-queries'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
@@ -37,6 +40,12 @@ export default function AdjustmentDetailPage() {
   const documentId = adjustment === undefined ? null : adjustment.id
   const policyQuery = useDocumentPolicyQuery(documentId)
   const attachmentManager = useDocumentAttachmentManager(documentId)
+  // The DOCUMENT version is the one the lifecycle mutations are checked against:
+  // uploading the signed original bumps the document, and the shared document
+  // detail query is the one the attachment manager invalidates. The adjustment
+  // read is not refreshed by that invalidation, so posting its (stale) version
+  // would answer 409 WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH (F12).
+  const documentQuery = useDocumentDetailQuery(documentId)
 
   if (detailQuery.isLoading) {
     return <LoadingSpinner label="جارٍ تحميل سند التسوية..." />
@@ -113,7 +122,7 @@ export default function AdjustmentDetailPage() {
           adjustmentId={adjustment.id}
           status={adjustment.status}
           purpose={adjustment.purpose}
-          rowVersion={adjustment.rowVersion}
+          rowVersion={documentQuery.data?.rowVersion ?? adjustment.rowVersion}
           actions={policy.actions}
           blockers={policy.blockers}
           advisories={policy.warnings}

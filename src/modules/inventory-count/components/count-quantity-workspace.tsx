@@ -9,11 +9,13 @@ import {
   CountLineReasonField,
 } from '@/modules/inventory-count/components/count-line-entry-fields'
 import { useCountLineDrafts } from '@/modules/inventory-count/components/count-line-drafts'
+import { CountMaterialName } from '@/modules/inventory-count/components/count-name-fields'
 import { countLinePageStats } from '@/modules/inventory-count/components/count-quantity-workspace.model'
 import { useCountConflictRecovery } from '@/modules/inventory-count/hooks/use-count-conflict-recovery'
 import {
   useCountLinesQuery,
   useInventoryCountQuery,
+  useSetLineVarianceReasonMutation,
   useUpdateCountLinesMutation,
 } from '@/modules/inventory-count/hooks/use-count-queries'
 import {
@@ -25,6 +27,7 @@ import {
   type CountLineSaveBlock,
 } from '@/modules/inventory-count/schemas/count-line-entry.schemas'
 import { isAssetCountLine } from '@/modules/inventory-count/types/inventory-count.types'
+import type { InventoryCountLine } from '@/modules/inventory-count/types/inventory-count.types'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { Form } from '@/shared/forms/form'
 import { useConfirm } from '@/shared/hooks/use-confirm'
@@ -38,7 +41,6 @@ import { DataTableServer } from '@/shared/ui/data-table-server'
 import { toast } from '@/shared/ui/toast-manager'
 import { toArabicDigits } from '@/shared/utils/format'
 import { pageRows } from '@/shared/utils/table-data'
-import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
 
 /** Rows requested on first render; the shared bar offers 10/25/50/100. */
 const INITIAL_PAGE_SIZE = 25
@@ -50,16 +52,16 @@ const EMPTY_LINES: readonly InventoryCountLine[] = []
 /**
  * Why a changed row cannot travel in the current save. The wording states only
  * what is observable — nothing was sent for this row, and here is the
- * condition — and never guesses at a cause the server did not report.
+ * condition — and never guesses at a cause the server did not report. The line
+ * DTO carries no rowVersion, so there is no version-based block left (F2).
  */
 const SAVE_BLOCK_REASON_AR: Readonly<Record<CountLineSaveBlock['kind'], string>> = {
   'no-quantity': 'لا تُرسل كمية غير مُدخلة أو غير صالحة.',
-  'missing-row-version': 'لا يمكن إرسالها: الخادم لم يوفّر إصداراً لهذا البند.',
 }
 
 const CONFLICT_TITLE_AR = 'تعارض على بنود الجرد'
 const CONFLICT_DESCRIPTION_AR =
-  'رفض الخادم الحفظ لأن نسخته الآن تختلف عن ما أرسلته. الرد لا يوضّح أي البنود حُفظت، لذا راجع القيم المعروضة قبل إعادة المحاولة.'
+  'رفض الخادم الحفظ لأن نسخته الآن تختلف عن ما أرسلته. راجع القيم المعروضة قبل إعادة المحاولة.'
 const CONFLICT_RECOVER_AR = 'تحميل النسخة الأحدث'
 const CONFLICT_RECOVERING_AR = 'جارٍ التحميل...'
 const CONFLICT_STAY_AR = 'البقاء على القيم الحالية'
@@ -79,16 +81,15 @@ function blockedSummaryAr(blocked: readonly CountLineSaveBlock[]): string {
  * Quantity-entry workspace (e20-t06, hbfu, eiams-frontend-3wv1).
  *
  * The server owns paging: every count line is reachable through the shared RTL
- * pagination bar, and the draft form is scoped to the page on screen. Because
- * drafts are per page, navigating away from a page with unsaved entry is
- * explicitly guarded by a discard confirmation instead of silently dropping
- * operator work.
+ * pagination bar (1-based `page` + `pageSize`), and the draft form is scoped to
+ * the page on screen.
  *
- * Saves are batched through `updateInventoryCountLines` and carry only the
- * rows that actually changed and hold a usable counted quantity, so a
- * partially counted page stays savable and resumable. The page is re-seeded
- * from the server after every successful save, and by `values` on navigation,
- * so a row never keeps comparing against a stale baseline.
+ * Saves carry the COUNT's `expectedRowVersion` (never a per-line version — the
+ * line DTO has none, F2): quantities travel as one all-or-nothing batch
+ * (`PUT /actuals`, one version bump), and a variance reason the operator typed
+ * travels through `PUT /{countId}/lines/{lineId}/variance-reason` (F3) with the
+ * freshly refetched count version, so Close is never blocked by an
+ * unsent reason. The page is re-seeded from the server after the batch.
  */
 export function CountQuantityWorkspace({
   countId,
@@ -102,8 +103,8 @@ export function CountQuantityWorkspace({
   const pagination = useServerPagination({ initialPageSize: INITIAL_PAGE_SIZE })
   const { page, pageSize, setPage, setPageSize } = pagination
 
-  // DataTableServer controls are 1-based; the count-lines read is 0-based.
-  const linesQueryInput = useMemo(() => ({ pageIndex: page - 1, pageSize }), [page, pageSize])
+  // 1-based end to end: the shared bar, the query key and the wire agree.
+  const linesQueryInput = useMemo(() => ({ page, pageSize }), [page, pageSize])
   const linesQuery = useCountLinesQuery(countId, linesQueryInput)
   const serverPage = linesQuery.data
   const items: readonly InventoryCountLine[] = serverPage?.items ?? EMPTY_LINES
@@ -113,34 +114,21 @@ export function CountQuantityWorkspace({
   const form = useForm<CountLineEntryFormValues>({
     resolver: zodResolver(countLineEntrySchema),
     defaultValues: currentPageValues,
-    // The `values` prop is deliberately NOT used. react-hook-form treats any
-    // deep-unequal `values` change as a FULL reset, and that cannot tell the
-    // cases apart: a background refetch, the reseed after a successful save,
-    // and a page change all look identical to it. A full reset on the first two
-    // erases entries the operator typed, and on the third it would have to be a
-    // full reset even though `resetOptions.keepDirtyValues` cannot be used
-    // globally — drafts are keyed by row INDEX, so keeping dirty values across
-    // a page change would carry page 1's quantities onto page 2's rows.
-    //
-    // Reseeding is therefore explicit below: an effect keeps the operator's
-    // entries when the page content changes, and page navigation clears the
-    // form first so nothing leaks across pages.
+    // The `values` prop is deliberately NOT used; reseeding is explicit below
+    // (a keyed reset would erase entries or leak drafts across pages).
   })
   const drafts = useCountLineDrafts(form.control)
 
   /**
-   * Reseed the form when the server page changes.
-   *
-   * `keepDirtyValues` protects anything the operator has typed but not yet
-   * saved. A row whose entry travelled in the last save now matches the server,
-   * so it goes clean; a row that could not be sent stays dirty, is still
-   * reported, and is still offered in the next save.
+   * Reseed the form when the server page changes. `keepDirtyValues` protects
+   * anything the operator typed but has not yet saved.
    */
   useEffect(() => {
     form.reset(currentPageValues, { keepDirtyValues: true })
   }, [currentPageValues, form])
 
   const updateMutation = useUpdateCountLinesMutation(countId)
+  const reasonMutation = useSetLineVarianceReasonMutation(countId)
   const { confirm: openConfirm, element: confirmDialog } = useConfirm()
 
   // A second observer on the same key as the parent page, so the recovery path
@@ -154,22 +142,18 @@ export function CountQuantityWorkspace({
 
   const dirtyCount = useMemo(() => countDirtyLineIndexes(items, drafts).length, [drafts, items])
   const pageStats = useMemo(() => countLinePageStats(items, drafts), [drafts, items])
-  const isEditorDisabled = !canEnter || updateMutation.isPending
+  const isEditorDisabled = !canEnter || updateMutation.isPending || reasonMutation.isPending
 
   /**
    * What the current save would carry, and which changed rows it cannot carry.
-   *
-   * Derived from the live drafts so the button label, the blocked-row warning
-   * and the batch the save handler builds are all the same computation. A
-   * changed row with a blank or unparseable quantity used to be dropped from
-   * the payload while still counting toward `dirtyCount`, so a save could report
-   * success and the page would go on claiming unsaved changes.
+   * Derived from the live drafts so the button, the blocked-row warning and the
+   * batch the save handler builds are all the same computation.
    */
   const savePlan = useMemo(
     () => planCountLineSaves(countRowVersion, items, { lines: drafts }),
     [countRowVersion, drafts, items],
   )
-  const sendableCount = savePlan.request.actuals.length
+  const sendableCount = savePlan.request.actuals.length + savePlan.reasons.length
   const blockedCount = savePlan.blocked.length
 
   /**
@@ -184,14 +168,11 @@ export function CountQuantityWorkspace({
       }
       const { confirmed } = await openConfirm({
         title: 'تغييرات غير محفوظة',
-        message: 'لديك كميات غير محفوظة في هذه الصفحة. الانتقال إلى صفحة أخرى سيفقدها.',
+        message: 'لديك كميات أو أسباب غير محفوظة في هذه الصفحة. الانتقال إلى صفحة أخرى سيفقدها.',
         confirmLabel: 'الانتقال وفقدان التغييرات',
         cancelLabel: 'البقاء في هذه الصفحة',
       })
       if (confirmed) {
-        // Clear before navigating. The reseed effect keeps dirty values, and
-        // drafts are index-keyed, so leaving the old page's entries in place
-        // would apply them to the new page's rows.
         form.reset(toCountLineEntryFormValues(EMPTY_LINES))
         navigate()
       }
@@ -220,16 +201,15 @@ export function CountQuantityWorkspace({
   const columns = useMemo(
     () =>
       countLineColumnHelper.columns([
-        countLineColumnHelper.accessor((line) => line.material.displayName, {
+        countLineColumnHelper.accessor('materialId', {
           id: 'material',
           header: 'المادة',
           cell: ({ row }) => (
             <div className="flex flex-col gap-0.5">
-              <span>{row.original.material.displayName}</span>
+              <CountMaterialName materialId={row.original.materialId} />
               {isAssetCountLine(row.original) ? (
                 <span className="inline-flex w-fit items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                  أصل مسلسل
-                  {row.original.assetNumber != null ? ` · ${row.original.assetNumber}` : ''}
+                  أصل مسسلسيل · {row.original.assetId}
                 </span>
               ) : null}
             </div>
@@ -274,20 +254,43 @@ export function CountQuantityWorkspace({
   const handleSave = form.handleSubmit(
     async (values) => {
       // The plan is the single source of truth for "what is in this save" and
-      // "which of the operator's changes are not", so the batch and the warning
-      // beside the save button can never disagree.
+      // "which of the operator's changes are not". It emits BOTH wires: the
+      // quantity batch (all-or-nothing, expectedRowVersion = count today) and
+      // the per-line variance reasons (F3), each with the freshly refetched
+      // count version.
       const plan = planCountLineSaves(countRowVersion, items, values)
-      if (plan.request.actuals.length === 0) {
+      if (plan.request.actuals.length === 0 && plan.reasons.length === 0) {
         return
       }
-      // Handled here rather than through `submitFeedback`, because a conflict
-      // must not raise the generic status fallback: `api-error.ts` answers a
-      // contract-shaped 409 is missing with "refresh the page and try again",
-      // and a refresh is the one action that discards these entries with no
-      // guard. The recovery dialog is the only surface that can be honest about
-      // a 409, and it does not say what happened to the batch.
       try {
-        await updateMutation.mutateAsync(plan.request)
+        if (plan.request.actuals.length > 0) {
+          await updateMutation.mutateAsync(plan.request)
+          toast.success({ title: 'حُفظت الكميات الفعلية.' })
+          // The batch moved the count version; re-seed from the server so no
+          // saved row keeps comparing against its pre-save baseline. Reasons
+          // stay dirty (the server baseline for one that was NOT yet sent).
+          const refreshed = await linesQuery.refetch()
+          form.reset(toCountLineEntryFormValues(refreshed.data?.items ?? EMPTY_LINES), {
+            keepDirtyValues: true,
+          })
+        }
+        for (const entry of plan.reasons) {
+          // The authoritative count version at THIS instant — refetch, don't
+          // guess the bump. Every reason save is one version-bump apart.
+          const { data: fresh } = await countQuery.refetch()
+          const version = fresh?.rowVersion
+          if (version === undefined) {
+            throw new Error('count version unavailable')
+          }
+          await reasonMutation.mutateAsync({
+            lineId: entry.lineId,
+            reason: entry.reason,
+            expectedRowVersion: version,
+          })
+        }
+        if (plan.reasons.length > 0) {
+          toast.success({ title: 'حُفظت أسباب الفروقات.' })
+        }
       } catch (error: unknown) {
         if (isConflictError(error)) {
           recovery.reportConflict()
@@ -298,32 +301,19 @@ export function CountQuantityWorkspace({
             ...(apiError.detailAr === null ? {} : { description: apiError.detailAr }),
           })
         }
-        // Nothing is refetched on any failure: a reload would reset the form
-        // through the `values` prop and destroy the entries being saved.
+        // Nothing is refetched on failure: a reload would reset the form and
+        // destroy the entries being saved.
         return
       }
 
-      toast.success({ title: 'حُفظت الكميات الفعلية.' })
-
-      // The mutation invalidated every page of this session, so refetch the page
-      // on screen and reseed the form from it. Without this the typed drafts
-      // would keep comparing against the pre-save baseline and the page would
-      // keep claiming unsaved changes.
-      //
-      // `keepDirtyValues` is required, and is the OPPOSITE case from the warning
-      // on the `useForm` call above. This reset is an explicit call at a point
-      // where we know which rows travelled: a row in the batch now matches the
-      // server, and a row that was BLOCKED did not travel, so adopting the
-      // server's unchanged value for it would erase the operator's entry and
-      // then report the page as having no unsaved changes - the exact
-      // silent-drop this bead exists to remove. Keeping the dirty values leaves
-      // such a row dirty, so it stays reported and stays in the next save. The
-      // `values` prop cannot make this distinction; it has no knowledge of the
-      // batch.
-      const refreshed = await linesQuery.refetch()
-      form.reset(toCountLineEntryFormValues(refreshed.data?.items ?? EMPTY_LINES), {
-        keepDirtyValues: true,
-      })
+      if (plan.request.actuals.length > 0 && plan.reasons.length > 0) {
+        // Reason round-trips already refetched the count; refresh the lines
+        // once more so the saved reasons show in the table immediately.
+        const refreshed = await linesQuery.refetch()
+        form.reset(toCountLineEntryFormValues(refreshed.data?.items ?? EMPTY_LINES), {
+          keepDirtyValues: false,
+        })
+      }
     },
     () => {
       // Arabic validation messages render inline on the offending field.
@@ -336,7 +326,7 @@ export function CountQuantityWorkspace({
         <span>
           إجمالي البنود:{' '}
           <strong className="text-foreground">
-            {toArabicDigits(serverPage?.meta.totalItems ?? 0)}
+            {toArabicDigits(serverPage?.totalItems ?? 0)}
           </strong>
         </span>
         <span>
@@ -366,8 +356,8 @@ export function CountQuantityWorkspace({
           emptyDescription="لم يُلتقط أي بند ضمن نطاق هذه الجلسة. راجع نطاق الجرد ثم أعد تحميل الصفحة."
           page={page}
           pageSize={pageSize}
-          totalCount={serverPage?.meta.totalItems}
-          totalPages={Math.max(serverPage?.meta.totalPages ?? 1, 1)}
+          totalCount={serverPage?.totalItems}
+          totalPages={Math.max(serverPage?.totalPages ?? 1, 1)}
           onPageChange={handlePageChange}
           onPageSizeChange={handlePageSizeChange}
         />
@@ -377,9 +367,11 @@ export function CountQuantityWorkspace({
             <Button
               type="button"
               onClick={() => void handleSave()}
-              disabled={updateMutation.isPending || sendableCount === 0}
+              disabled={
+                updateMutation.isPending || reasonMutation.isPending || sendableCount === 0
+              }
             >
-              {updateMutation.isPending
+              {updateMutation.isPending || reasonMutation.isPending
                 ? 'جارٍ الحفظ...'
                 : `حفظ (${toArabicDigits(sendableCount)})`}
             </Button>
@@ -394,11 +386,6 @@ export function CountQuantityWorkspace({
               <p role="alert" className="text-sm text-destructive">
                 {toArabicDigits(blockedCount)} تغيير في هذه الصفحة لن يُرسل مع الحفظ:{' '}
                 {blockedSummaryAr(savePlan.blocked)}
-              </p>
-            ) : null}
-            {updateMutation.error !== null && !recovery.conflict.active ? (
-              <p role="alert" className="text-sm text-destructive">
-                تعذّر حفظ بنود الجرد. لم تُضِع ما أدخلته، ويمكنك إعادة المحاولة.
               </p>
             ) : null}
           </div>

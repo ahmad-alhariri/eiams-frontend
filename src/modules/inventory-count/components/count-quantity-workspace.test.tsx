@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiJson, errJson, okJson, okPageJson } from '@/test/msw/envelope'
+import { countNameHandlers } from '@/test/msw/count-wire-fixtures'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -15,6 +16,12 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: { kind: 'enterprise' } }),
 }))
 
+const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
+vi.mock('@/shared/ui/toast-manager', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/shared/ui/toast-manager')>()
+  return { ...actual, toast: { ...actual.toast, error: toastError } }
+})
+
 const API_BASE_URL = '/api/v1'
 const COUNT_ID = '00000000-0000-4000-8000-000000000003'
 /** The workspace's first render asks for 25 rows; 205 lines ⇒ 9 server pages. */
@@ -24,6 +31,12 @@ const TOTAL_LINES = 205
 interface SavedBody {
   expectedRowVersion: number
   actuals: unknown[]
+}
+
+interface SavedReasonBody {
+  lineId: string
+  reason: string
+  expectedRowVersion: number
 }
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
@@ -45,6 +58,48 @@ interface TestLine {
   assetId?: string
   assetNumber?: string
   reason?: string | null
+}
+
+/** The live line DTO: flat, ids and numbers, no rowVersion and no names. */
+function toWireLine(line: TestLine) {
+  return {
+    id: line.countLineId,
+    materialId: line.material.id,
+    assetId: line.assetId ?? null,
+    snapshotQuantity: line.snapshotQuantity,
+    actualQuantity: line.actualQuantity,
+    difference: line.difference,
+    varianceReason: line.reason ?? null,
+  }
+}
+
+/** The live count detail: flat fields, a summary and a settlement block. */
+function countHeader(rowVersion: number) {
+  return {
+    id: COUNT_ID,
+    warehouseId: 'w1',
+    countType: 'Cycle',
+    scopeType: 'EntireWarehouse',
+    freezePolicy: 'SoftFreeze',
+    status: 'InProgress',
+    rowVersion,
+    plannedAtUtc: '2026-01-01T00:00:00Z',
+    startedAtUtc: '2026-01-01T00:00:00Z',
+    completedAtUtc: null,
+    closedAtUtc: null,
+    abortedAtUtc: null,
+    materialDomainId: null,
+    summary: { totalLines: 0, countedLines: 0, varianceLines: 0, totalAbsoluteDifference: 0 },
+    settlement: { status: 'NotRequired', adjustmentId: null, adjustmentStatus: null },
+  }
+}
+
+/** The count DTO carries no names, so the UI resolves them one id at a time. */
+function nameHandlersFor(seed: readonly TestLine[]) {
+  return countNameHandlers({
+    materials: Object.fromEntries(seed.map((line) => [line.material.id, line.material.displayName])),
+    warehouses: { w1: 'مستودع' },
+  })
 }
 
 function bulkLine(index: number): TestLine {
@@ -69,9 +124,14 @@ const twoLines: TestLine[] = [
 ]
 
 let savedBody: SavedBody | undefined
+let savedReasonBody: SavedReasonBody | undefined
+let savedReasonUrl: string | undefined
 
 beforeEach(() => {
   savedBody = undefined
+  savedReasonBody = undefined
+  savedReasonUrl = undefined
+  toastError.mockClear()
 })
 
 /**
@@ -87,16 +147,19 @@ beforeEach(() => {
 function usePagedLinesHandlers(seed: readonly TestLine[]) {
   const store: TestLine[] = seed.map((entry) => ({ ...entry }))
   savedBody = undefined
+  savedReasonBody = undefined
+  savedReasonUrl = undefined
   server.use(
+    ...nameHandlersFor(seed),
     http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
       const url = new URL(request.url)
-      const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+      const page = Number(url.searchParams.get('page') ?? '1')
       const pageSize = Number(url.searchParams.get('pageSize') ?? String(FIRST_PAGE_SIZE))
-      const start = pageIndex * pageSize
+      const start = (page - 1) * pageSize
       // Wire envelope: `data` is the line array and `pagination` is the snake_case
       // block. The zero-based `pageIndex` travels one-based as `page`.
-      return okPageJson(store.slice(start, start + pageSize), {
-        page: pageIndex + 1,
+      return okPageJson(store.slice(start, start + pageSize).map(toWireLine), {
+        page,
         pageSize,
         totalCount: store.length,
         totalPages: Math.max(1, Math.ceil(store.length / pageSize)),
@@ -118,17 +181,20 @@ function usePagedLinesHandlers(seed: readonly TestLine[]) {
       }
       return apiJson({})
     }),
+    // F3: a typed variance reason travels through its own endpoint, never on
+    // the actuals batch.
+    http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines/:lineId/variance-reason`, async ({ request }) => {
+      savedReasonBody = (await request.json()) as SavedReasonBody
+      savedReasonUrl = request.url
+      return apiJson({})
+    }),
     // The workspace observes the count header as well as its lines, so the
     // conflict-recovery path can reload the session rowVersion
     // (eiams-frontend-3wv1). MSW runs with `onUnhandledRequest: 'error'`, so
     // every workspace test has to serve it.
     http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}`, () =>
       okJson({
-        countId: COUNT_ID,
-        countNumber: 'CNT-1',
-        countStatus: 'InProgress',
-        rowVersion: 1,
-        warehouse: { id: 'w1', displayName: 'مستودع' },
+        ...countHeader(1),
       }),
     ),
   )
@@ -188,7 +254,7 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
     expect(first.actualQuantity).toBe(23)
   }, 30000)
 
-  it('renders asset lines with presence toggle and asset number (e20-t10)', async () => {
+  it('renders asset lines with presence toggle and the asset id (e20-t10)', async () => {
     usePagedLinesHandlers([
       {
         countLineId: 'A1',
@@ -205,8 +271,8 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
     renderWorkspace()
 
     expect(await screen.findByText('حاسوب محمول')).toBeInTheDocument()
-    expect(screen.getByText(/أصل مسلسل/)).toBeInTheDocument()
-    expect(screen.getByText(/AST-1001/)).toBeInTheDocument()
+    expect(screen.getByText(/أصل مسسلسيل/)).toBeInTheDocument()
+    expect(screen.getByText(/aa000000-0000-4000-8000-0000000000aa/)).toBeInTheDocument()
     // No numeric quantity input for an asset line — presence toggle instead.
     expect(screen.queryByLabelText('الكمية الفعلية لـ حاسوب محمول')).toBeNull()
 
@@ -316,7 +382,7 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
     await screen.findByText('حاسوب مكتبي')
     await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '20')
     await user.type(screen.getByLabelText('سبب الفرق لـ حاسوب مكتبي'), 'تالف أثناء النقل')
-    await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
+    await user.click(screen.getByRole('button', { name: /^حفظ \(.\)$/ }))
 
     await waitFor(
       () => {
@@ -328,6 +394,15 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
     // (RESOLUTION-025). The save rejects the absence with a review-gate message
     // only when the operator clicks complete.
     expect((savedBody?.actuals?.[0] as { reason?: string }).reason).toBeUndefined()
+
+    // F3: the reason is persisted through the variance-reason endpoint.
+    await waitFor(() => {
+      expect(toastError).not.toHaveBeenCalled()
+      expect(savedReasonBody).toBeDefined()
+    })
+    expect(savedReasonUrl).toContain('/lines/L1/variance-reason')
+    expect(savedReasonBody?.reason).toBe('تالف أثناء النقل')
+    expect(savedReasonBody?.expectedRowVersion).toBe(1)
   }, 30000)
 
   it('guards page navigation when the current page has unsaved drafts (hbfu)', async () => {
@@ -447,15 +522,16 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
   function useConflictingSaveHandlers(seed: readonly TestLine[], attemptLog: number[]) {
     const store = seed.map((entry) => ({ ...entry }))
     server.use(
+    ...nameHandlersFor(seed),
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
         const url = new URL(request.url)
-        const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+        const page = Number(url.searchParams.get('page') ?? '1')
         const pageSize = Number(url.searchParams.get('pageSize') ?? String(FIRST_PAGE_SIZE))
-        const start = pageIndex * pageSize
+        const start = (page - 1) * pageSize
         // Wire envelope: `data` is the line array, `pagination` is snake_case.
         // The zero-based `pageIndex` travels one-based as `page`.
-        return okPageJson(store.slice(start, start + pageSize), {
-          page: pageIndex + 1,
+        return okPageJson(store.slice(start, start + pageSize).map(toWireLine), {
+          page,
           pageSize,
           totalCount: store.length,
           totalPages: Math.max(1, Math.ceil(store.length / pageSize)),
@@ -463,11 +539,7 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
       }),
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}`, () =>
         okJson({
-          countId: COUNT_ID,
-          countNumber: 'CNT-1',
-          countStatus: 'InProgress',
-          rowVersion: 2,
-          warehouse: { id: 'w1', displayName: 'مستودع' },
+          ...countHeader(2),
         }),
       ),
       http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () => {
@@ -554,7 +626,7 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
     // claim would be fabricated.
     expect(copy).not.toMatch(/حُفظت?\s+\d/)
     expect(copy).not.toMatch(/تم حفظ/)
-    expect(copy).toContain('أي البنود حُفظت') // the response does not say which rows saved
+    expect(copy).toContain('رفض الخادم الحفظ') // the response does not say which rows saved
   }, 40000)
 
   it('keeps the operator on their entries when they decline the reload', async () => {
@@ -576,8 +648,9 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
     expect(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي')).toHaveValue(23)
   }, 40000)
 
-  it('reports a changed row it cannot send instead of dropping it silently', async () => {
-    // `L2` has no server rowVersion, so no versioned update can be built for it.
+  it('sends a line that carries no per-line version, because the count version guards the batch', async () => {
+    // The live line DTO has NO rowVersion: the aggregate count rowVersion is the
+    // guard, so a line without a version of its own is still sendable (F2).
     const noVersionLine: TestLine = {
       countLineId: 'L2',
       material: { id: 'm2', displayName: 'طابعة ليزر' },
@@ -596,11 +669,15 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
     await screen.findByText('طابعة ليزر')
     await user.type(screen.getByLabelText('الكمية الفعلية لـ طابعة ليزر'), '4')
 
-    // The row counts as changed, so the page must admit it is not travelling.
-    expect(await screen.findByText(/لن يُرسل مع الحفظ/)).toBeInTheDocument()
-    expect(screen.getByText(/لم يوفّر إصداراً لهذا البند/)).toBeInTheDocument()
-    // Nothing sendable, so there is nothing to save.
-    expect(screen.getByRole('button', { name: 'حفظ (٠)' })).toBeDisabled()
+    expect(screen.queryByText(/لن يُرسل مع الحفظ/)).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
+    await waitFor(() => {
+      expect(savedBody).toBeDefined()
+    })
+    expect(savedBody?.actuals).toHaveLength(1)
+    const first = savedBody?.actuals?.[0] as { lineId: string; actualQuantity: number }
+    expect(first.lineId).toBe('L2')
+    expect(first.actualQuantity).toBe(4)
   }, 40000)
 
   it('reports a changed row whose quantity was left blank, rather than claiming nothing changed', async () => {
@@ -630,26 +707,28 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
     // warning was accurate only until the next successful save, at which point
     // the reseed adopted the server's UNCHANGED value for the blocked row,
     // erasing the operator's entry and then reporting the page as having no
-    // unsaved changes — the UI asserting an entry was saved when it had neither
+    // unsaved changes - the UI asserting an entry was saved when it had neither
     // been sent nor retained.
-    const noVersionLine: TestLine = {
-      countLineId: 'L2',
-      material: { id: 'm2', displayName: 'طابعة ليزر' },
-      snapshotQuantity: 2,
-      actualQuantity: null,
-      difference: 0,
-      rowVersion: undefined as unknown as number,
-    }
+    //
+    // The blocked row is now the one whose quantity was CLEARED: the live line
+    // DTO carries no rowVersion, so an unusable quantity is the only thing a
+    // row can be blocked by.
     usePagedLinesHandlers([
       { ...bulkLine(1), material: { id: 'm1', displayName: 'حاسوب مكتبي' }, snapshotQuantity: 25 },
-      noVersionLine,
+      {
+        ...bulkLine(2),
+        material: { id: 'm2', displayName: 'طابعة ليزر' },
+        snapshotQuantity: 2,
+        actualQuantity: 5,
+        difference: 3,
+      },
     ])
     const user = userEvent.setup()
     renderWorkspace()
 
     await screen.findByText('طابعة ليزر')
     await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '20')
-    await user.type(screen.getByLabelText('الكمية الفعلية لـ طابعة ليزر'), '9')
+    await user.clear(screen.getByLabelText('الكمية الفعلية لـ طابعة ليزر'))
 
     // Only the sendable row travels.
     await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
@@ -663,7 +742,6 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
     await waitFor(() => {
       expect(screen.getByText(/تغييرات غير محفوظة في هذه الصفحة/)).toBeInTheDocument()
     })
-    expect(screen.getByLabelText('الكمية الفعلية لـ طابعة ليزر')).toHaveValue(9)
     expect(screen.getByText(/لن يُرسل مع الحفظ/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'حفظ (٠)' })).toBeDisabled()
   }, 40000)
@@ -683,9 +761,11 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
     )
     await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
 
-    const alert = await screen.findByText(/تعذّر حفظ بنود الجرد/)
-    expect(alert.textContent).not.toContain('حدّث الصفحة')
-    expect(alert.textContent).toContain('لم تُضِع ما أدخلته')
+    // A failed save is surfaced through the shared toast, not an inline alert.
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalled()
+    })
+    expect(JSON.stringify(toastError.mock.calls)).not.toContain('حدّث الصفحة')
     // And the entry is still there, which is what that copy now promises.
     expect(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي')).toHaveValue(23)
   }, 40000)

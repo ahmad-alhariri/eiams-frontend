@@ -23,6 +23,8 @@ import {
   isCountAdjustmentEligible,
   summarizeCountLines,
 } from '@/modules/inventory-count/utils/count-review'
+import { useWarehouseName } from '@/modules/inventory-count/hooks/use-count-names'
+import { useCountVarianceSeeds } from '@/modules/adjustment/hooks/use-count-variance-seeds'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
@@ -69,23 +71,35 @@ export default function AdjustmentDraftFormPage() {
       countLinesQuery.data === undefined ? undefined : summarizeCountLines(countLinesQuery.data),
     [countLinesQuery.data],
   )
+  const { names: seedNames, namesResolved: seedNamesResolved } = useCountVarianceSeeds(
+    countSummary === undefined
+      ? []
+      : countSummary.variance.map((line) => line.materialId),
+  )
+
   const varianceSeed = useMemo<AdjustmentLineValues[] | undefined>(() => {
     if (!launchedFromCount || countSummary === undefined) return undefined
+    // The seeded rows must carry the material NAME, so the seed waits for the
+    // catalog lookups to settle (a failed lookup still settles, and then the
+    // raw id is the documented fallback).
+    if (!seedNamesResolved) return undefined
     return countSummary.variance.map((line) => ({
-      materialId: line.material.id,
-      materialNameAr: line.material.displayName,
+      materialId: line.materialId,
+      materialNameAr: seedNames.get(line.materialId) ?? line.materialId,
       ...(line.assetId === undefined || line.assetId === null ? {} : { assetId: line.assetId }),
-      quantityDelta: line.difference,
-      reason: line.reason ?? '',
+      quantityDelta: line.difference ?? 0,
+      reason: line.varianceReason ?? '',
     }))
-  }, [launchedFromCount, countSummary])
+  }, [countSummary, launchedFromCount, seedNames, seedNamesResolved])
 
   // Both warehouse identity and Arabic label come from the fetched count.
   const countQuery = useInventoryCountQuery(canCreate && launchedFromCount ? launchCountId : null)
-  const launchWarehouseLabel =
-    launchedFromCount && countQuery.data !== undefined
-      ? countQuery.data.warehouse.displayName
-      : undefined
+  const launchWarehouseId = launchedFromCount ? (countQuery.data?.warehouseId ?? undefined) : undefined
+  // Resolution per id (`GET /warehouses/{id}`); the raw id falls back, never crashes.
+  const launchWarehouseName = useWarehouseName(launchWarehouseId)
+  const launchWarehouseLabel = launchedFromCount && countQuery.data !== undefined
+    ? launchWarehouseName
+    : undefined
 
   // Readiness gates BOTH seeds: the variance rows AND the launch-warehouse
   // label must be resolved before the form component mounts, so its
@@ -194,7 +208,7 @@ export default function AdjustmentDraftFormPage() {
         key={launchedFromCount ? launchCountId : 'direct-correction'}
         launchedFromCount={launchedFromCount}
         launchCountId={launchCountId || undefined}
-        launchWarehouseId={launchedFromCount ? (countQuery.data?.warehouse.id ?? '') : ''}
+        launchWarehouseId={launchedFromCount ? (countQuery.data?.warehouseId ?? '') : ''}
         launchWarehouseLabel={launchWarehouseLabel}
         lockedPurpose={lockedPurpose}
         varianceSeed={lockedPurpose === 'CountVariance' ? varianceSeed : undefined}

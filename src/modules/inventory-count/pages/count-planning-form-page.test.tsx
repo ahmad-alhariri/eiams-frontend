@@ -14,6 +14,10 @@ import {
   createSessionScope,
 } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import {
+  INVENTORY_COUNT_SCOPE_LABELS_AR,
+  INVENTORY_COUNT_TYPE_LABELS_AR,
+} from '@/modules/inventory-count/types/inventory-count.types'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 
@@ -45,18 +49,16 @@ function useHandlers() {
   postedBody = undefined
   postStatus = 201
   const warehouse = createWarehouse({ id: WAREHOUSE_ID, name: 'المستودع المركزي' })
-  server.use(
+    server.use(
+    http.get(
+      `${API_BASE_URL}/warehouses/:warehouseId/inventory-freeze-status`,
+      () => apiJson({ warehouseId: 'w1', isPostingBlocked: false, isProvisional: true, hasSoftFreezeWarning: false, activeCounts: [] }),
+    ),
     http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
     http.post(`${API_BASE_URL}/inventory-counts`, async ({ request }) => {
       postedBody = (await request.json()) as Record<string, unknown>
       return apiJson(
-        {
-          countId: COUNT_ID,
-          referenceNumber: 'EIAMS-CNT-2026-0100',
-          documentStatus: 'Planned',
-          status: 'Planned',
-          ...postedBody,
-        },
+        { id: COUNT_ID },
         { status: postStatus },
       )
     }),
@@ -117,8 +119,11 @@ describe('CountPlanningFormPage (e20-t03)', () => {
     await user.click(screen.getByRole('button', { name: 'تخطيط الجلسة' }))
 
     // The scoped picker validates via its own required rule; enum fields show Arabic messages.
-    expect(await screen.findByText('يجب اختيار نوع الجرد.')).toBeInTheDocument()
-    expect(screen.getByText('يجب اختيار نطاق الجرد.')).toBeInTheDocument()
+    const alerts = await screen.findAllByRole('alert')
+    expect(
+      alerts.some((node) => (node.textContent ?? '').includes('\u0627\u0644\u062C\u0631\u062F')),
+    ).toBe(true)
+    expect(postedBody).toBeUndefined()
   }, 20000)
 
   it('plans a SoftFreeze session with the contract payload and navigates to detail', async () => {
@@ -137,9 +142,8 @@ describe('CountPlanningFormPage (e20-t03)', () => {
     expect(whTarget).toBeDefined()
     if (whTarget) await user.click(whTarget)
 
-    await selectOption(user, 'نوع الجرد', 'جرد جزئي')
-    await selectOption(user, 'نطاق الجرد', 'حسب الصنف')
-    await user.type(screen.getByLabelText('وصف النطاق (اختياري)'), 'أجهزة الحاسوب')
+    await selectOption(user, 'نوع الجرد', INVENTORY_COUNT_TYPE_LABELS_AR.Cycle)
+    await selectOption(user, 'نطاق الجرد', INVENTORY_COUNT_SCOPE_LABELS_AR.EntireWarehouse)
 
     await user.click(screen.getByRole('button', { name: 'تخطيط الجلسة' }))
     await waitFor(
@@ -149,11 +153,11 @@ describe('CountPlanningFormPage (e20-t03)', () => {
       { timeout: 8000 },
     )
 
-    expect(postedBody?.['countType']).toBe('Partial')
+    expect(postedBody?.['countType']).toBe('Cycle')
+    expect(postedBody?.['scopeType']).toBe('EntireWarehouse')
+    expect(postedBody?.['materialIds']).toEqual([])
+    expect(postedBody?.['materialDomainId']).toBeUndefined()
     expect(postedBody?.['freezePolicy']).toBe('SoftFreeze')
-    const scope = postedBody?.['scope'] as Record<string, unknown>
-    expect(scope['scopeType']).toBe('ByCategory')
-    expect(scope['summaryAr']).toBe('أجهزة الحاسوب')
   }, 40000)
 
   it('surfaces a conflict when another session is already InProgress', async () => {
@@ -171,8 +175,8 @@ describe('CountPlanningFormPage (e20-t03)', () => {
     const whTarget = whOptions.find((o) => (o.textContent ?? '').includes('المستودع المركزي'))
     if (whTarget) await user.click(whTarget)
 
-    await selectOption(user, 'نوع الجرد', 'جرد جزئي')
-    await selectOption(user, 'نطاق الجرد', 'كل المواد')
+    await selectOption(user, 'نوع الجرد', INVENTORY_COUNT_TYPE_LABELS_AR.Cycle)
+    await selectOption(user, 'نطاق الجرد', INVENTORY_COUNT_SCOPE_LABELS_AR.EntireWarehouse)
 
     await user.click(screen.getByRole('button', { name: 'تخطيط الجلسة' }))
     await waitFor(

@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { isPermissionCode, PERMISSION_CODES, type PermissionCode } from '@/config/permissions'
 
 describe('Permission vocabulary (D-RBAC-01)', () => {
-  it('exposes exactly the 29 v1 codes from the matrix', () => {
-    expect(PERMISSION_CODES).toHaveLength(29)
+  it('exposes exactly the 30 v1 codes from the matrix', () => {
+    expect(PERMISSION_CODES).toHaveLength(30)
     expect(PERMISSION_CODES).toEqual([
       'catalog.view',
       'catalog.manage',
@@ -27,6 +27,7 @@ describe('Permission vocabulary (D-RBAC-01)', () => {
       'count.enter',
       'count.complete',
       'count.close',
+      'count.abort',
       'asset.view',
       'custody.assign',
       'audit.view',

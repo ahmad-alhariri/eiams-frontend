@@ -1,20 +1,19 @@
 import { z } from 'zod'
 
 import { isAssetCountLine } from '@/modules/inventory-count/types/inventory-count.types'
-import type { UpdateCountLinesRequest } from '@/modules/inventory-count/types/inventory-count.types'
-import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
+import type {
+  InventoryCountLine,
+  UpdateCountLinesRequest,
+} from '@/modules/inventory-count/types/inventory-count.types'
 
 /**
  * Form schema for the count quantity-entry workspace (hbfu).
  *
- * The operator records `actualQuantity` per line and, when it differs from
- * the captured `snapshotQuantity`, a variance `reason` (PRD §12.6 step 4 —
- * a reason is required before the session can be completed). The shape mirrors
- * `UpdateCountLineInput` exactly; nothing here invents a wire field.
- *
- * Only the CURRENT server page is held in the form: the workspace paginates
- * server-side, so drafts are per-page and page navigation is guarded by an
- * explicit discard confirmation (`count-quantity-workspace.tsx`).
+ * The operator records `actualQuantity` per line and, when it differs from the
+ * captured `snapshotQuantity`, a variance `reason`. ONLY the CURRENT server
+ * page is held in the form: the workspace paginates server-side, so drafts are
+ * per-page and page navigation is guarded by an explicit discard confirmation
+ * (`count-quantity-workspace.tsx`).
  */
 
 /** Decimal grammar for an operator-entered quantity: unsigned, finite, no exponent. */
@@ -74,11 +73,9 @@ export const countLineDraftSchema = z.object({
 export type CountLineDraftValues = z.infer<typeof countLineDraftSchema>
 
 /**
- * The form deliberately does NOT require a reason on a variance line: PRD
- * §12.6 collects the counted quantity while entering (step 4) and demands the
- * per-variance reason at review/complete (step 5). Refusing to save a count
- * because its reason is still blank would block recording, so that rule lives
- * in the variance review's completion gate, not here.
+ * The form deliberately does NOT require a reason at entry time: the
+ * quantity save and the variance-reason save are separate wire operations and
+ * the completion gate is what enforces a reason on every variance line.
  */
 export const countLineEntrySchema = z.object({
   lines: z.array(countLineDraftSchema),
@@ -89,14 +86,10 @@ export type CountLineEntryFormValues = z.infer<typeof countLineEntrySchema>
 /** The row's server state as an editable draft baseline. */
 export function toCountLineDraftValues(line: InventoryCountLine): CountLineDraftValues {
   const actualQuantity = line.actualQuantity
-  const hasVariance =
-    actualQuantity !== null &&
-    actualQuantity !== undefined &&
-    actualQuantity !== line.snapshotQuantity
   return {
     actualQuantity:
       actualQuantity === null || actualQuantity === undefined ? '' : String(actualQuantity),
-    reason: hasVariance ? (line.reason ?? '') : '',
+    reason: line.varianceReason ?? '',
   }
 }
 
@@ -110,8 +103,8 @@ export function toCountLineEntryFormValues(
 /**
  * True when the operator changed a row relative to its server baseline.
  * A cleared quantity is a change (it un-counts a previously counted line), and
- * a reason typed against a matching quantity still counts as a change so it
- * is not silently dropped on save.
+ * a reason typed on a row still counts as a change so it is not silently
+ * dropped on save.
  */
 export function isCountLineDraftDirty(
   baseline: CountLineDraftValues,
@@ -142,56 +135,57 @@ export function countDirtyLineIndexes(
 }
 
 /**
- * Why a row the operator changed cannot be sent in this save.
+ * Why a row the operator changed cannot travel in a quantity batch.
  *
- * Both cases used to fail silently, in a single `toCountLineUpdateRequest`
- * projection that this function replaces. A blank or unparseable quantity was
- * `flatMap`-ed away while still counting toward `dirtyCount`, so a page could
- * report a successful save and then go on claiming unsaved changes. A line with
- * no server-supplied `rowVersion` was sent as `0`, and
- * `UpdateCountLineInput.rowVersion` declares `"minimum": 1` — a payload the
- * contract guarantees it will reject with 422.
+ * The live line DTO carries NO rowVersion and nothing else gates a quantity
+ * (F2), so the only block left is an unusable quantity. A reason the operator
+ * typed on a changed row is never silently dropped either: when the row is not
+ * in the quantity batch (cleared or invalid quantity) but the reason changed,
+ * the reason still travels on its own wire operation.
  */
 export type CountLineSaveBlock =
   /** The quantity is blank or not a valid decimal, so there is no actual to record. */
   | { readonly index: number; readonly kind: 'no-quantity' }
-  /** The server supplied no `rowVersion` for this line, so a versioned update cannot be built. */
-  | { readonly index: number; readonly kind: 'missing-row-version' }
+
+export interface CountLineReasonSave {
+  /** The line id on the wire (`InventoryCountLine.id`). */
+  readonly lineId: string
+  readonly reason: string
+}
 
 export interface CountLineSavePlan {
-  /** The batch to send. May be empty when every changed row is blocked. */
+  /**
+   * The batch body for `PUT /inventory-counts/{countId}/actuals`. `actuals` may
+   * be empty when nothing changed; `expectedRowVersion` is the COUNT's
+   * aggregate version (one bump per batch).
+   */
   readonly request: UpdateCountLinesRequest
-  /** Rows the operator changed that this save cannot carry, in row order. */
+  /** Reasons to persist on their own versioned endpoints, in row order. */
+  readonly reasons: readonly CountLineReasonSave[]
+  /** Rows the operator changed that the quantity batch cannot carry. */
   readonly blocked: readonly CountLineSaveBlock[]
 }
 
 /**
- * Plans the batched `PUT /inventory-counts/{countId}/actuals` payload (hbfu,
- * RESOLUTION-025 / CONFLICT-020) for the current page, and reports the
- * changed rows it cannot carry.
+ * Plans the `PUT /inventory-counts/{countId}/actuals` payload (RESOLUTION-025)
+ * plus the variance-reason saves for the current page, and reports the rows the
+ * quantity batch cannot carry.
  *
- * Only rows the operator actually changed are considered, so a partially
- * entered page stays savable and resumable. A changed row that cannot be sent
- * is **reported rather than dropped**: the caller can then tell the operator
- * that their change did not travel, instead of the page silently disagreeing
- * with itself.
- *
- * The batch and the block list are produced together on purpose — "which rows
- * are in this save" and "which changed rows are not" must never disagree, and a
- * separate projection for each is how they did.
- *
- * The wire carries `{ actuals: [{ lineId, actualQuantity }], expectedRowVersion }`
- * — aggregate count row version only. Per-line rowVersion is not in the
- * payload because the live record does not carry one. A line without a
- * server-supplied rowVersion is still blocked (we cannot prove a stable
- * line id without it), but the per-line rowVersion is NEVER sent.
+ * - The wire carries `{ actuals: [{ lineId, actualQuantity }], expectedRowVersion }`
+ *   (aggregate count row version only).
+ * - The reason fields live IN the same form, and a reason the operator typed
+ *   travels in `plan.reasons` for the caller to persist through
+ *   `PUT /{countId}/lines/{lineId}/variance-reason` (count.enter). A blank
+ * reason is never sent (the endpoint requires a non-blank reason); reasons
+ * stay attached to the row instead of being cleared.
  */
 export function planCountLineSaves(
   countRowVersion: number,
   lines: readonly InventoryCountLine[],
   values: CountLineEntryFormValues,
 ): CountLineSavePlan {
-  const payload: UpdateCountLinesRequest['actuals'][number][] = []
+  const actuals: UpdateCountLinesRequest['actuals'][number][] = []
+  const reasons: CountLineReasonSave[] = []
   const blocked: CountLineSaveBlock[] = []
 
   for (const index of countDirtyLineIndexes(lines, values.lines)) {
@@ -201,25 +195,26 @@ export function planCountLineSaves(
       continue
     }
     const entered = parseActualQuantity(draft.actualQuantity)
-    if (entered.status !== 'counted') {
+    if (entered.status === 'counted') {
+      actuals.push({
+        lineId: line.id,
+        actualQuantity: entered.value,
+      })
+    } else {
       blocked.push({ index, kind: 'no-quantity' })
-      continue
     }
-    // `InventoryCountLine.rowVersion` is optional in the read projection; the
-    // live actuals wire carries no per-line rowVersion, but a missing one on
-    // the read side still means we cannot prove the operator's row matches a
-    // server row. Block rather than send.
-    if (line.rowVersion === undefined) {
-      blocked.push({ index, kind: 'missing-row-version' })
-      continue
+    const draftReason = draft.reason.trim()
+    const serverReason = (line.varianceReason ?? '').trim()
+    if (draftReason !== '' && draftReason !== serverReason) {
+      reasons.push({ lineId: line.id, reason: draftReason })
     }
-    payload.push({
-      lineId: line.countLineId,
-      actualQuantity: entered.value,
-    })
   }
 
-  return { request: { actuals: payload, expectedRowVersion: countRowVersion }, blocked }
+  return {
+    request: { actuals, expectedRowVersion: countRowVersion },
+    reasons,
+    blocked,
+  }
 }
 
 /**

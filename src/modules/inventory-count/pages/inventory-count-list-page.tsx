@@ -3,15 +3,18 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { Link } from 'react-router'
 
 import {
+  INVENTORY_COUNT_FREEZE_POLICY_LABELS_AR,
   INVENTORY_COUNT_SCOPE_LABELS_AR,
   INVENTORY_COUNT_STATUS_LABELS_AR,
   INVENTORY_COUNT_TYPE_LABELS_AR,
-  type ListInventoryCountsQuery,
+  type CountStatus,
+  type ListCountsQuery,
 } from '@/modules/inventory-count/types/inventory-count.types'
 import { useInventoryCountsQuery } from '@/modules/inventory-count/hooks/use-count-queries'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
+import { CountWarehouseName } from '@/modules/inventory-count/components/count-name-fields'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import type { InventoryCount } from '@/shared/types/generated/eiams-v1'
+import type { InventoryCountListItem } from '@/modules/inventory-count/types/inventory-count.types'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
@@ -20,22 +23,25 @@ import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 
 /**
- * Count-session list (e20-t02): every count session in the active scope,
- * filterable by lifecycle status, with a `count.plan`-gated create CTA
- * rendered through the DataTable's toolbar slot.
+ * Count-session list (e20-t02, IC-FE-1): every count session in the active
+ * scope (cross-warehouse — `warehouseId` stays OPTIONAL), 1-based paged
+ * through the shared transport normalizer, filterable by lifecycle status
+ * (including `Aborted`), with a `count.plan`-gated create CTA. Columns render
+ * flat DTO fields and resolved ids only — no `referenceNumber`, no counts,
+ * no nested objects (the live list projection carries none of them).
  */
-const columnHelper = createColumnHelper<typeof dataTableFeatures, InventoryCount>()
+const columnHelper = createColumnHelper<typeof dataTableFeatures, InventoryCountListItem>()
 
-type CountStatusValue = InventoryCount['status']
+const LIFECYCLE_STATUSES = Object.keys(INVENTORY_COUNT_STATUS_LABELS_AR) as readonly CountStatus[]
 
 export default function InventoryCountListPage() {
   const pagination = useServerPagination()
-  const [status, setStatus] = useState<CountStatusValue | undefined>()
+  const [status, setStatus] = useState<CountStatus | undefined>()
   const { has } = usePermission()
 
-  const filters = useMemo<ListInventoryCountsQuery>(
+  const filters = useMemo<ListCountsQuery>(
     () => ({
-      pageIndex: pagination.page - 1,
+      page: pagination.page,
       pageSize: pagination.pageSize,
       ...(status === undefined ? {} : { status }),
     }),
@@ -44,7 +50,7 @@ export default function InventoryCountListPage() {
 
   const handleStatusChange = useCallback(
     (value: string | null) => {
-      setStatus(value === null || value === 'all' ? undefined : (value as CountStatusValue))
+      setStatus(value === null || value === 'all' ? undefined : (value as CountStatus))
       pagination.setPage(1)
     },
     [pagination],
@@ -55,33 +61,25 @@ export default function InventoryCountListPage() {
   const columns = useMemo(
     () =>
       columnHelper.columns([
-        columnHelper.accessor('referenceNumber', {
-          id: 'referenceNumber',
-          header: 'رقم الجلسة',
-          cell: ({ getValue, row }) => (
-            <Link
-              className="font-mono text-sm font-semibold text-foreground underline-offset-4 hover:underline"
-              to={ROUTE_PATHS.countDetail.replace(':countId', row.original.countId)}
-            >
-              <span dir="ltr">{getValue()}</span>
-            </Link>
-          ),
-        }),
-        columnHelper.accessor((row) => row.warehouse.displayName, {
-          id: 'warehouse',
-          header: 'المستودع',
-        }),
         columnHelper.accessor('countType', {
           id: 'countType',
           header: 'نوع الجرد',
           cell: ({ getValue }) => INVENTORY_COUNT_TYPE_LABELS_AR[getValue()],
         }),
-        columnHelper.accessor((row) => row.scope.scopeType, {
+        columnHelper.accessor('warehouseId', {
+          id: 'warehouse',
+          header: 'المستودع',
+          cell: ({ getValue }) => <CountWarehouseName warehouseId={getValue()} />,
+        }),
+        columnHelper.accessor('scopeType', {
           id: 'scope',
           header: 'النطاق',
-          cell: ({ row }) =>
-            row.original.scope.summaryAr ??
-            INVENTORY_COUNT_SCOPE_LABELS_AR[row.original.scope.scopeType],
+          cell: ({ getValue }) => INVENTORY_COUNT_SCOPE_LABELS_AR[getValue()],
+        }),
+        columnHelper.accessor('freezePolicy', {
+          id: 'freezePolicy',
+          header: 'سياسة التجميد',
+          cell: ({ getValue }) => INVENTORY_COUNT_FREEZE_POLICY_LABELS_AR[getValue()],
         }),
         columnHelper.accessor('status', {
           id: 'status',
@@ -92,15 +90,24 @@ export default function InventoryCountListPage() {
             </span>
           ),
         }),
-        columnHelper.accessor('lineCount', {
-          id: 'lineCount',
-          header: 'عدد البنود',
-          cell: ({ getValue }) => (getValue() === undefined ? '—' : String(getValue())),
+        columnHelper.accessor('plannedAtUtc', {
+          id: 'plannedAtUtc',
+          header: 'أُخططت في',
+          cell: ({ getValue }) =>
+            getValue() === null ? '—' : <span dir="ltr">{getValue()}</span>,
         }),
-        columnHelper.accessor('varianceCount', {
-          id: 'varianceCount',
-          header: 'الفروقات',
-          cell: ({ getValue }) => (getValue() === undefined ? '—' : String(getValue())),
+        columnHelper.display({
+          id: 'open',
+          header: '',
+          cell: ({ row }) => (
+            <Link
+              className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+              to={ROUTE_PATHS.countDetail.replace(':countId', row.original.id)}
+              aria-label="فتح جلسة الجرد"
+            >
+              فتح
+            </Link>
+          ),
         }),
       ]),
     [],
@@ -110,7 +117,7 @@ export default function InventoryCountListPage() {
     <div dir="rtl" className="min-w-0">
       <PageHeader
         title={ROUTE_METADATA.counts.labelAr}
-        subtitle="جميع جلسات الجرد ضمن نطاق العمل الحالي مع حالتها ونطاقها وفروقاتها."
+        subtitle="جميع جلسات الجرد ضمن نطاق العمل الحالي مع حالتها ونطاقها وسياسة تجميدها."
         actions={
           has('count.plan') ? (
             <Link
@@ -132,13 +139,11 @@ export default function InventoryCountListPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">كل الحالات</SelectItem>
-                {(Object.keys(INVENTORY_COUNT_STATUS_LABELS_AR) as CountStatusValue[]).map(
-                  (value) => (
-                    <SelectItem key={value} value={value}>
-                      {INVENTORY_COUNT_STATUS_LABELS_AR[value]}
-                    </SelectItem>
-                  ),
-                )}
+                {LIFECYCLE_STATUSES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {INVENTORY_COUNT_STATUS_LABELS_AR[value]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -164,8 +169,8 @@ export default function InventoryCountListPage() {
           }
           page={pagination.page}
           pageSize={pagination.pageSize}
-          totalCount={countsQuery.data?.meta.totalItems}
-          totalPages={Math.max(countsQuery.data?.meta.totalPages ?? 1, 1)}
+          totalCount={countsQuery.data?.totalItems}
+          totalPages={Math.max(countsQuery.data?.totalPages ?? 1, 1)}
           onPageChange={pagination.setPage}
           onPageSizeChange={pagination.setPageSize}
         />

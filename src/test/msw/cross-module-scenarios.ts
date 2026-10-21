@@ -5,11 +5,10 @@ import type {
   AuditLog,
   AuditLogEntry,
   DocumentLifecycleEvent,
-  InventoryCount,
-  InventoryCountLine,
   NamedReference,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
+import type { InventoryCount, InventoryCountLine } from '@/modules/inventory-count/types/inventory-count.types'
 import type { AdjustmentDetail } from '@/modules/adjustment/types/adjustment.types'
 // `Warehouse` is typed against the handwritten contract, NOT the frozen generated
 // snapshot: the wire record serves `id` + `name` and a FLAT `siteId`, so the
@@ -558,30 +557,30 @@ export function createCrossModuleScenario(): CrossModuleScenario {
   // movement carries; the module-owned adjustment line below mirrors it.
   const countAdjustmentDelta = 2
   const count: InventoryCount = {
-    completedAt: '2026-08-24T11:00:00.000Z',
-    countId,
-    countType: 'Full',
-    createdAt: '2026-08-24T08:00:00.000Z',
-    createdBy: managerRef,
+    id: countId,
+    warehouseId: sourceRef.id,
+    countType: 'Cycle',
+    scopeType: 'EntireWarehouse',
     freezePolicy: 'SoftFreeze',
-    lineCount: 1,
-    notes: 'جرد دوري للمستودع المركزي',
-    referenceNumber: 'EIAMS-CNT-2026-0004',
-    rowVersion: 3,
-    scope: { scopeIds: [], scopeType: 'AllMaterials', summaryAr: 'كل مواد المستودع المركزي' },
-    startedAt: '2026-08-24T09:00:00.000Z',
     status: 'Completed',
-    varianceCount: 1,
-    warehouse: sourceRef,
+    rowVersion: 3,
+    plannedAtUtc: '2026-08-24T08:00:00.000Z',
+    startedAtUtc: '2026-08-24T09:00:00.000Z',
+    completedAtUtc: '2026-08-24T11:00:00.000Z',
+    closedAtUtc: null,
+    abortedAtUtc: null,
+    materialDomainId: null,
+    summary: { totalLines: 1, countedLines: 1, varianceLines: 1, totalAbsoluteDifference: 2 },
+    settlement: { status: 'Pending', adjustmentId: null, adjustmentStatus: null },
   }
   const countLines: readonly InventoryCountLine[] = [
     {
+      id: countLineId,
+      materialId: consumableMaterial.id,
+      assetId: null,
       actualQuantity: 9,
-      countLineId,
       difference: 2,
-      material: reference(consumableMaterial.id, consumableMaterial.nameAr),
-      reason: 'إدخال سابق لم يثبت في السجل الورقي',
-      rowVersion: 1,
+      varianceReason: 'إدخال سابق لم يثبت في السجل الورقي',
       snapshotQuantity: 7,
     },
   ]

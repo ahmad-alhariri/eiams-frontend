@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiJson, okJson } from '@/test/msw/envelope'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
@@ -319,5 +320,41 @@ describe('AdjustmentDetailPage (e21-t07)', () => {
     renderPage()
 
     expect(await screen.findByText('تعذّر تحميل سند التسوية')).toBeInTheDocument()
+  })
+
+  // F12: uploading the signed original bumps the DOCUMENT, and the shared
+  // document detail query is the one the attachment manager invalidates. The
+  // adjustment read is NOT refreshed, so posting its stale version answers 409.
+  it('posts the document CURRENT rowVersion, not the adjustment read stale one (F12)', async () => {
+    const staleAdjustment = {
+      ...draftFixture({
+        purpose: 'DirectCorrection',
+        status: 'Draft',
+        signedOriginalSatisfied: true,
+      }),
+      rowVersion: 1,
+    }
+    let postedBody: unknown
+    server.use(
+      http.post(`*/api/v1/adjustments/${ADJUSTMENT_ID}/post`, async ({ request }) => {
+        postedBody = await request.json()
+        return okJson({
+          documentId: DOCUMENT_ID,
+          status: 'Posted',
+          postedAtUtc: '2026-08-26T09:00:00.000Z',
+        })
+      }),
+    )
+    useDetailHandlers({
+      adjustment: staleAdjustment,
+      documentStatus: 'Draft',
+      signedOriginalSatisfied: true,
+    })
+    renderPage()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'ترحيل السند' }))
+
+    await waitFor(() => expect(postedBody).toEqual({ rowVersion: 2 }))
   })
 })

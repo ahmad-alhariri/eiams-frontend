@@ -30,6 +30,7 @@ export const PERMISSION_CODES = [
   'count.enter',
   'count.complete',
   'count.close',
+  'count.abort',
   'asset.view',
   'custody.assign',
   'audit.view',

@@ -3,7 +3,7 @@ import {
   countLineDifference,
   parseActualQuantity,
 } from '@/modules/inventory-count/schemas/count-line-entry.schemas'
-import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
+import type { InventoryCountLine } from '@/modules/inventory-count/types/inventory-count.types'
 
 /**
  * Pure helpers shared by the quantity-entry workspace's table columns and its
