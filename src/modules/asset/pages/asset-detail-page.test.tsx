@@ -6,10 +6,7 @@ import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
-import {
-  createAsset as createAssetFixture,
-  fixtureUuid,
-} from '@/test/msw/factories'
+import { createAsset as createAssetFixture, fixtureUuid } from '@/test/msw/factories'
 import type { AssetCustodyTimelineRow } from '@/modules/asset/services/asset.service'
 import { server } from '@/test/msw/server'
 import { createQueryClient } from '@/shared/services/query.client'
@@ -32,7 +29,9 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
  * the typed fields only. Holder display name lives in the sibling counterpart
  * lookup and is not part of the timeline row.
  */
-function buildTimelineEntry(overrides: Partial<AssetCustodyTimelineRow> = {}): AssetCustodyTimelineRow {
+function buildTimelineEntry(
+  overrides: Partial<AssetCustodyTimelineRow> = {},
+): AssetCustodyTimelineRow {
   return {
     assetId: ASSET_ID,
     custodyId: fixtureUuid(51),

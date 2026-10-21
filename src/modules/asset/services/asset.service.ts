@@ -3,12 +3,7 @@ import type { ApiTransport } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 
 import type { ListAssetMovementsQuery, ListAssetsQuery } from '@/modules/asset/types/asset.types'
-import type {
-  Asset,
-  AssetMovementPage,
-  AssetPage,
-  paths,
-} from '@/shared/types/generated/eiams-v1'
+import type { Asset, AssetMovementPage, AssetPage, paths } from '@/shared/types/generated/eiams-v1'
 
 /**
  * Handwritten wire row for `GET /assets/{assetId}/custody-timeline`

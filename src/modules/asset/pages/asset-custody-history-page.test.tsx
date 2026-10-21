@@ -87,9 +87,7 @@ describe('AssetCustodyHistoryPage (e19-t08)', () => {
     const rows = screen.getAllByRole('row')
     const bodyText = rows.map((row) => row.textContent ?? '')
     const personalIndex = bodyText.findIndex((text) => text.includes('Employee:'))
-    const operationalIndex = bodyText.findIndex((text) =>
-      text.includes('OrganizationalUnit:'),
-    )
+    const operationalIndex = bodyText.findIndex((text) => text.includes('OrganizationalUnit:'))
     expect(personalIndex).toBeGreaterThan(-1)
     expect(operationalIndex).toBeGreaterThan(-1)
     expect(personalIndex).toBeLessThan(operationalIndex)

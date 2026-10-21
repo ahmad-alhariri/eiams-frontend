@@ -127,15 +127,11 @@ export default function TransferDocumentFormPage() {
     return null
   }, [balanceByMaterialId, materialIds, quantities])
 
-
   // Fail CLOSED: an unverifiable source balance blocks persistence, but the
   // reason shown to the user is the failed read — never a fabricated shortfall
   // (AGENTS.md rule 3, D-LIFE-01: the server owns the balance decision).
   const saveDisabled =
-    isSubmitting ||
-    balancesLoading ||
-    balancesFailed ||
-    overBalanceMessageAr !== null
+    isSubmitting || balancesLoading || balancesFailed || overBalanceMessageAr !== null
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -208,9 +204,9 @@ export default function TransferDocumentFormPage() {
             </p>
           ) : null}
           {balancesFailed ? <BalanceReadError onRetry={retryBalances} /> : null}
-            <p className="text-sm text-muted-foreground" aria-live="polite">
-              جارٍ التحقق من أرصدة المستودع المصدر للبنود المختارة...
-            </p>
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            جارٍ التحقق من أرصدة المستودع المصدر للبنود المختارة...
+          </p>
           {submitErrorMessage !== null ? (
             <p role="alert" className="text-sm text-destructive">
               {submitErrorMessage}
@@ -234,5 +230,3 @@ export default function TransferDocumentFormPage() {
     </div>
   )
 }
-
-

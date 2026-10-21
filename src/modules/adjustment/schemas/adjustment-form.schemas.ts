@@ -94,9 +94,7 @@ export type AdjustmentHeaderValues = z.infer<typeof adjustmentHeaderSchema>
 export type AdjustmentFormValues = z.infer<typeof adjustmentFormSchema>
 
 /** Maps validated form values onto the exact contract request body. */
-export function toAdjustmentDraftRequest(
-  values: AdjustmentFormValues,
-): AdjustmentDraftRequest {
+export function toAdjustmentDraftRequest(values: AdjustmentFormValues): AdjustmentDraftRequest {
   return {
     warehouseId: values.header.warehouseId,
     purpose: values.header.purpose,

@@ -185,10 +185,7 @@ describe('issue custody and return chain', () => {
     expect(screen.getByText('سند-إرجاع-موقّع.pdf')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: new RegExp(issue.systemReferenceNumber) }),
-    ).toHaveAttribute(
-      'href',
-      issueDetailPath(),
-    )
+    ).toHaveAttribute('href', issueDetailPath())
     expect(
       screen.getAllByRole('link', { name: toArabicDigits(returnedAsset.assetId) }).length,
     ).toBeGreaterThan(0)

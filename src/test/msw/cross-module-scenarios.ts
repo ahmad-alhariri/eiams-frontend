@@ -24,10 +24,7 @@ import type { Material } from '@/modules/catalog/types/catalog.api-types'
 // StockMovement and InventoryBalance: handwritten wire shapes — flat
 // warehouse/material columns, `postedBy: Uuid`, `id` (not `movementId` /
 // `balanceId`). Mirrored in factories.ts.
-import type {
-  InventoryBalance,
-  StockMovement,
-} from '@/modules/inventory/types/inventory.api-types'
+import type { InventoryBalance, StockMovement } from '@/modules/inventory/types/inventory.api-types'
 import {
   createAsset,
   createAssetCustody,

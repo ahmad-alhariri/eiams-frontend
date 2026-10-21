@@ -190,9 +190,8 @@ describe('ExternalPartiesPage', () => {
     // the row, so the failure must stay on the ordinary Arabic error path.
     await waitFor(() =>
       expect(
-        screen.getAllByText(
-          'تغيّرت حالة العهدة بعد العملية الأصلية، لذلك لا يمكن عكس السند.',
-        ).length,
+        screen.getAllByText('تغيّرت حالة العهدة بعد العملية الأصلية، لذلك لا يمكن عكس السند.')
+          .length,
       ).toBeGreaterThan(0),
     )
     expect(

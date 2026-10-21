@@ -127,13 +127,11 @@ describe('DraftPaperReferenceEditor', () => {
     // A state conflict, not a stale row: the save is refused on its own merits,
     // so a "someone else edited this document" reload dialog would be a lie.
     server.use(
-      http.put(
-        `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/paper-reference`,
-        () =>
-          errJson(409, {
-            code: 'WAREHOUSE_DOCUMENTS_PAPER_REFERENCE_REQUIRED',
-            message: 'The paper reference is required.',
-          }),
+      http.put(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/paper-reference`, () =>
+        errJson(409, {
+          code: 'WAREHOUSE_DOCUMENTS_PAPER_REFERENCE_REQUIRED',
+          message: 'The paper reference is required.',
+        }),
       ),
     )
 
@@ -142,9 +140,9 @@ describe('DraftPaperReferenceEditor', () => {
     await userEvent.click(screen.getByRole('button', { name: 'حفظ الرقم الورقي' }))
 
     await waitFor(() =>
-      expect(
-        screen.getByRole('alert').textContent,
-      ).toContain('يجب إدخال رقم المستند الورقي وسنته قبل التقديم.'),
+      expect(screen.getByRole('alert').textContent).toContain(
+        'يجب إدخال رقم المستند الورقي وسنته قبل التقديم.',
+      ),
     )
     expect(onConflict).not.toHaveBeenCalled()
   })

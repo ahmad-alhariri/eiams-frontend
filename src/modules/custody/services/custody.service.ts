@@ -41,10 +41,7 @@ export interface CustodyService {
     assetId: string,
     request: AssignAssetCustodyRequest,
   ) => Promise<CustodyAssignmentCreated>
-  transferCustody: (
-    custodyId: string,
-    request: TransferCustodyRequest,
-  ) => Promise<Custody>
+  transferCustody: (custodyId: string, request: TransferCustodyRequest) => Promise<Custody>
 }
 
 export function createCustodyService(transport: ApiTransport): CustodyService {

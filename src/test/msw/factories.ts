@@ -57,10 +57,7 @@ import type {
 // are flat (no nested warehouse/material). The handwritten types live next to
 // the service that reads them; using them here makes the factories mint the
 // same shape the pages render.
-import type {
-  InventoryBalance,
-  StockMovement,
-} from '@/modules/inventory/types/inventory.api-types'
+import type { InventoryBalance, StockMovement } from '@/modules/inventory/types/inventory.api-types'
 // The catalog master-data records are minted against the HANDWRITTEN contracts,
 // not the frozen generated snapshot: the wire says `id` (never
 // `domainId`/`categoryId`/`familyId`/`unitId`), `name` (never `nameAr`), and

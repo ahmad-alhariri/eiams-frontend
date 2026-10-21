@@ -179,10 +179,7 @@ function useDocumentHandlers() {
       if (url.searchParams.get('originalIssueDocumentId') === WRONG_ISSUE_DOC_ID) {
         return okPageJson([])
       }
-      return okPageJson([
-        eligibleAsset(1, ASSET_A_ID),
-        eligibleAsset(2, ASSET_B_ID),
-      ])
+      return okPageJson([eligibleAsset(1, ASSET_A_ID), eligibleAsset(2, ASSET_B_ID)])
     }),
     // A form with lines to save must use `complete-draft`: it is the only write
     // that creates a document together with its lines, and it answers the whole
@@ -240,7 +237,10 @@ describe('ReturnDocumentFormPage (FIX-R1..FIX-R5)', () => {
 
     expect(await screen.findByText('سند إرجاع جديد')).toBeInTheDocument()
     // FIX-R3: no raw uuid input remains; the field is a server-fed selector.
-    expect(screen.getByLabelText('سند الصرف الأصلي')).toHaveAttribute('id', 'original-issue-document')
+    expect(screen.getByLabelText('سند الصرف الأصلي')).toHaveAttribute(
+      'id',
+      'original-issue-document',
+    )
     expect(screen.queryByText('معرّف سند الصرف الأصلي')).not.toBeInTheDocument()
     expect(screen.getByLabelText('سبب الإرجاع')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeInTheDocument()
@@ -285,10 +285,7 @@ describe('ReturnDocumentFormPage (FIX-R1..FIX-R5)', () => {
       expect(writes.lastCompleteDraft?.['documentType']).toBe('Return')
       expect(returnInfo['originalIssueDocumentId']).toBe(ISSUE_DOC_ID)
       // FIX-R4: the petal carries ONLY the id and the reason.
-      expect(Object.keys(returnInfo).sort()).toEqual([
-        'originalIssueDocumentId',
-        'returnReason',
-      ])
+      expect(Object.keys(returnInfo).sort()).toEqual(['originalIssueDocumentId', 'returnReason'])
     },
   )
 
@@ -366,25 +363,22 @@ describe('ReturnDocumentFormPage (FIX-R1..FIX-R5)', () => {
     expect(writes.completeDraftCalls).toBe(0)
   })
 
-  it(
-    'blocks an implicit (Enter) submit while the wrong-warehouse guard is active',
-    async () => {
-      const writes = useDocumentHandlers()
-      const user = userEvent.setup()
-      renderPage()
+  it('blocks an implicit (Enter) submit while the wrong-warehouse guard is active', async () => {
+    const writes = useDocumentHandlers()
+    const user = userEvent.setup()
+    renderPage()
 
-      await screen.findByText('سند إرجاع جديد')
-      await fillHeader(user)
-      await pickOriginalIssue(user, 2)
+    await screen.findByText('سند إرجاع جديد')
+    await fillHeader(user)
+    await pickOriginalIssue(user, 2)
 
-      // Wrong-warehouse guard active, asset guard not yet relevant. Fire an
-      // Enter on the reason field: this is the implicit form submit that the
-      // (disabled) save button cannot intercept, and the proxy for any
-      // programmatic `form.submit()` path.
-      const reason = screen.getByLabelText('سبب الإرجاع')
-      await user.type(reason, 'سبب كافٍ للإرجاع{Enter}')
+    // Wrong-warehouse guard active, asset guard not yet relevant. Fire an
+    // Enter on the reason field: this is the implicit form submit that the
+    // (disabled) save button cannot intercept, and the proxy for any
+    // programmatic `form.submit()` path.
+    const reason = screen.getByLabelText('سبب الإرجاع')
+    await user.type(reason, 'سبب كافٍ للإرجاع{Enter}')
 
-      await waitFor(() => expect(writes.completeDraftCalls).toBe(0))
-    },
-  )
+    await waitFor(() => expect(writes.completeDraftCalls).toBe(0))
+  })
 })

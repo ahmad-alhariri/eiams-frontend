@@ -35,9 +35,7 @@ export default function AssetCustodyHistoryPage() {
 
   const sorted = useMemo(
     () =>
-      [...timeline].sort((a, b) =>
-        a.fromUtc < b.fromUtc ? 1 : a.fromUtc > b.fromUtc ? -1 : 0,
-      ),
+      [...timeline].sort((a, b) => (a.fromUtc < b.fromUtc ? 1 : a.fromUtc > b.fromUtc ? -1 : 0)),
     [timeline],
   )
 

@@ -75,9 +75,7 @@ describe('InventoryBalanceDetailPage', () => {
       lowStock: { state: 0, thresholdQuantity: 2.125 },
       quantity: 2.125,
     })
-    server.use(
-      http.get(`${API_BASE_URL}/inventory/balances/${balance.id}`, () => okJson(balance)),
-    )
+    server.use(http.get(`${API_BASE_URL}/inventory/balances/${balance.id}`, () => okJson(balance)))
 
     render(<InventoryBalanceDetailPage />, { wrapper: PageWrapper })
 

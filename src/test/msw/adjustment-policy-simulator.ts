@@ -59,7 +59,12 @@ export interface AdjustmentDraftPolicyInput {
   readonly warehouseId: string
   readonly scenario?: AdjustmentPolicyScenario
   /** Advisory payload; defaults describe one count covering this warehouse. */
-  readonly softFreezeAdvisory?: { readonly code: string; readonly message: string; readonly countId: string | null; readonly warehouseId: string | null }
+  readonly softFreezeAdvisory?: {
+    readonly code: string
+    readonly message: string
+    readonly countId: string | null
+    readonly warehouseId: string | null
+  }
 }
 
 const SOFT_FREEZE_COUNT_ID = '523e4567-e89b-42d3-a456-4266141740c1'

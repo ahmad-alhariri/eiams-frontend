@@ -156,7 +156,7 @@ describe('custody.service (e19-t01)', () => {
     mockedRequest.mockResolvedValue(envelope({}))
     const service = createCustodyService(testTransport)
 
-    await service.transferCustody(CUSTODY_ID, transferRequest,)
+    await service.transferCustody(CUSTODY_ID, transferRequest)
 
     const { url: path, data: body, headers } = sentConfig()
     expect(path).toBe(`/custodies/${CUSTODY_ID}/transfer`)
@@ -168,7 +168,7 @@ describe('custody.service (e19-t01)', () => {
     mockedRequest.mockResolvedValue(envelope({}))
     const service = createCustodyService(testTransport)
 
-    await service.transferCustody('id/with slash', transferRequest,)
+    await service.transferCustody('id/with slash', transferRequest)
 
     expect(sentConfig().url).toBe('/custodies/id%2Fwith%20slash/transfer')
   })

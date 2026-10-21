@@ -81,8 +81,6 @@ export interface AdjustmentService {
   ) => Promise<AssetPage>
 }
 
-
-
 /**
  * Contract-backed adjustment transport (D-INT-02). Adjustments own the
  * `/adjustments` endpoint family and are NOT served by the shared document

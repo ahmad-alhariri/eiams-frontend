@@ -32,3 +32,5 @@ qa-artifacts/
 qa-evidence/
 qa-shots/
 
+tsc-stdout.txt
+tsc-stderr.txt

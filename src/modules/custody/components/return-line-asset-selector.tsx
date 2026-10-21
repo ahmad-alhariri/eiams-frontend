@@ -84,10 +84,7 @@ export function ReturnLineAssetSelector({
         <div className="flex flex-wrap gap-2">
           {options.map((item) => {
             const checked = selected.includes(item.subjectId)
-            const chipLabel =
-              item.assetNumber ??
-              item.serialNumber ??
-              item.subjectId
+            const chipLabel = item.assetNumber ?? item.serialNumber ?? item.subjectId
             return (
               <label
                 key={item.subjectId}

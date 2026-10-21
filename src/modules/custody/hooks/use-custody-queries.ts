@@ -86,13 +86,8 @@ export function useAssignCustodyMutation() {
 export function useTransferCustodyMutation() {
   const invalidate = useCustodyInvalidation()
   return useMutation({
-    mutationFn: ({
-      custodyId,
-      request,
-    }: {
-      custodyId: string
-      request: TransferCustodyRequest
-    }) => custodyService.transferCustody(custodyId, request),
+    mutationFn: ({ custodyId, request }: { custodyId: string; request: TransferCustodyRequest }) =>
+      custodyService.transferCustody(custodyId, request),
     onSuccess: invalidate,
   })
 }

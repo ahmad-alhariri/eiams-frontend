@@ -1,7 +1,4 @@
-import type {
-  InventoryBalance,
-  StockMovement,
-} from '@/modules/inventory/types/inventory.api-types'
+import type { InventoryBalance, StockMovement } from '@/modules/inventory/types/inventory.api-types'
 
 import { fixtureUuid } from './factories'
 

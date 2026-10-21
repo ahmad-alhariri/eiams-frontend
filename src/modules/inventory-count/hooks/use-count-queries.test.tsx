@@ -76,9 +76,7 @@ describe('useUpdateCountLinesMutation invalidation', () => {
       <button
         type="button"
         disabled={mutation.isPending}
-        onClick={() =>
-          mutation.mutate({ actuals: [], expectedRowVersion: 3 })
-        }
+        onClick={() => mutation.mutate({ actuals: [], expectedRowVersion: 3 })}
       >
         حفظ
       </button>
@@ -89,11 +87,7 @@ describe('useUpdateCountLinesMutation invalidation', () => {
     // RESOLUTION-025: the live save is PUT /inventory-counts/{countId}/actuals;
     // it answers ApiResponse<EmptyResponse> (200 + empty body) and the hook
     // invalidates the read keys itself.
-    server.use(
-      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () =>
-        apiJson({}),
-      ),
-    )
+    server.use(http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () => apiJson({})))
     const client = createClient()
     // The review reads `allLines`; the quantity-entry workspace reads a paged
     // `lines` page. A line save must refresh both or the completion gate would
@@ -125,11 +119,7 @@ describe('useUpdateCountLinesMutation invalidation', () => {
     // docs/feature-service-composition-standard.md. Pinned here so a future
     // move to precise per-count invalidation is a deliberate, visible change
     // across all five count mutations at once.
-    server.use(
-      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () =>
-        apiJson({}),
-      ),
-    )
+    server.use(http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () => apiJson({})))
     const client = createClient()
     const otherCount = countQueryKeys.allLines(SCOPE, OTHER_COUNT_ID)
     client.setQueryData(otherCount, [])

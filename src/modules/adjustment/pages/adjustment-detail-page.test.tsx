@@ -50,9 +50,7 @@ function postAvailability(signedOriginalSatisfied: boolean): DocumentActionAvail
     allowed: signedOriginalSatisfied,
     confirmationRequired: false,
     presentation: signedOriginalSatisfied ? 'Enabled' : 'Disabled',
-    reasonCode: signedOriginalSatisfied
-      ? null
-      : 'document.signed_original_missing',
+    reasonCode: signedOriginalSatisfied ? null : 'document.signed_original_missing',
     reason: signedOriginalSatisfied ? null : 'يلزم رفع النسخة الموقعة من السند.',
     reasonRequired: false,
   }
@@ -74,7 +72,8 @@ function wirePolicy(input: {
     rowVersion: 1,
     evaluatedAtUtc: '2026-08-26T08:05:00.000Z',
     signedOriginalSatisfied: input.signedOriginalSatisfied,
-    actions: input.documentStatus === 'Draft' ? [postAvailability(input.signedOriginalSatisfied)] : [],
+    actions:
+      input.documentStatus === 'Draft' ? [postAvailability(input.signedOriginalSatisfied)] : [],
     blockers: input.signedOriginalSatisfied ? [] : [SIGNED_MISSING_BLOCKER],
     warnings: [],
   }
@@ -247,7 +246,11 @@ function renderPage(
 describe('AdjustmentDetailPage (e21-t07)', () => {
   it('renders the server read model: header fields, signed lines, attachment row', async () => {
     useDetailHandlers({
-      adjustment: draftFixture({ purpose: 'DirectCorrection', status: 'Draft', signedOriginalSatisfied: true }),
+      adjustment: draftFixture({
+        purpose: 'DirectCorrection',
+        status: 'Draft',
+        signedOriginalSatisfied: true,
+      }),
       documentStatus: 'Draft',
       signedOriginalSatisfied: true,
     })
@@ -268,7 +271,11 @@ describe('AdjustmentDetailPage (e21-t07)', () => {
 
   it('shows the posting action disabled to a manager on a Draft whose signed original is missing', async () => {
     useDetailHandlers({
-      adjustment: draftFixture({ purpose: 'DirectCorrection', status: 'Draft', signedOriginalSatisfied: false }),
+      adjustment: draftFixture({
+        purpose: 'DirectCorrection',
+        status: 'Draft',
+        signedOriginalSatisfied: false,
+      }),
       documentStatus: 'Draft',
       signedOriginalSatisfied: false,
     })
@@ -282,7 +289,11 @@ describe('AdjustmentDetailPage (e21-t07)', () => {
 
   it('marks a posted disposal as terminal with no reversal affordance', async () => {
     useDetailHandlers({
-      adjustment: draftFixture({ purpose: 'Disposal', status: 'Posted', signedOriginalSatisfied: true }),
+      adjustment: draftFixture({
+        purpose: 'Disposal',
+        status: 'Posted',
+        signedOriginalSatisfied: true,
+      }),
       documentStatus: 'Posted',
       signedOriginalSatisfied: true,
     })

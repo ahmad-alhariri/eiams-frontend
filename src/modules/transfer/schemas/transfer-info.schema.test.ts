@@ -25,7 +25,9 @@ describe('transferInfoSchema', () => {
     })
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe('ÙŠØ¬Ø¨ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø³ØªÙˆØ¯Ø¹ Ø§Ù„ÙˆØ¬Ù‡Ø© Ù…Ù† Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.')
+      expect(result.error.issues[0]?.message).toBe(
+        'ÙŠØ¬Ø¨ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø³ØªÙˆØ¯Ø¹ Ø§Ù„ÙˆØ¬Ù‡Ø© Ù…Ù† Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.',
+      )
     }
   })
 
@@ -36,7 +38,9 @@ describe('transferInfoSchema', () => {
     })
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe('ÙŠØ¬Ø¨ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø³ØªÙˆØ¯Ø¹ Ø§Ù„ÙˆØ¬Ù‡Ø© Ù…Ù† Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.')
+      expect(result.error.issues[0]?.message).toBe(
+        'ÙŠØ¬Ø¨ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø³ØªÙˆØ¯Ø¹ Ø§Ù„ÙˆØ¬Ù‡Ø© Ù…Ù† Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.',
+      )
     }
   })
 
@@ -58,23 +62,32 @@ describe('transferInfoSchema', () => {
     })
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe('ÙŠØ¬Ø¨ Ø£Ù„Ø§ ÙŠØªØ¬Ø§ÙˆØ² Ø³Ø¨Ø¨ Ø§Ù„ØªØ­ÙˆÙŠÙ„ 200 Ù…Ø­Ø±ÙØ§Ù‹.')
+      expect(result.error.issues[0]?.message).toBe(
+        'ÙŠØ¬Ø¨ Ø£Ù„Ø§ ÙŠØªØ¬Ø§ÙˆØ² Ø³Ø¨Ø¨ Ø§Ù„ØªØ­ÙˆÙŠÙ„ 200 Ù…Ø­Ø±ÙØ§Ù‹.',
+      )
     }
   })
 })
 
-  it('asserts max length contract is 200', () => { expect(true).toBe(true) })
+it('asserts max length contract is 200', () => {
+  expect(true).toBe(true)
+})
 
-  it('accepts exactly 200 chars', () => {
-    const result = transferInfoSchema.safeParse({ destinationWarehouseId: '223e4567-e89b-42d3-a456-426614174111', transferReason: 'س'.repeat(200) })
-    expect(result.success).toBe(true)
+it('accepts exactly 200 chars', () => {
+  const result = transferInfoSchema.safeParse({
+    destinationWarehouseId: '223e4567-e89b-42d3-a456-426614174111',
+    transferReason: 'س'.repeat(200),
   })
+  expect(result.success).toBe(true)
+})
 
-  it('rejects 201 chars', () => {
-    const result = transferInfoSchema.safeParse({ destinationWarehouseId: '223e4567-e89b-42d3-a456-426614174111', transferReason: 'س'.repeat(201) })
-    expect(result.success).toBe(false)
+it('rejects 201 chars', () => {
+  const result = transferInfoSchema.safeParse({
+    destinationWarehouseId: '223e4567-e89b-42d3-a456-426614174111',
+    transferReason: 'س'.repeat(201),
   })
-
+  expect(result.success).toBe(false)
+})
 
 describe('fromTransferInfo', () => {
   it('defaults to blank fields when the petal is missing', () => {
@@ -126,4 +139,3 @@ describe('toTransferInfo', () => {
     })
   })
 })
-

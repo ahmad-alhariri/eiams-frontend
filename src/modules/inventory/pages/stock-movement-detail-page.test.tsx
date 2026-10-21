@@ -84,9 +84,7 @@ describe('StockMovementDetailPage', () => {
   it('renders only immutable contract-backed provenance in Arabic RTL', async () => {
     const movement = createMovement({ quantityDelta: -2.125, movementType: 'AdjustmentOut' })
     server.use(
-      http.get(`${API_BASE_URL}/inventory/movements/${movement.id}`, () =>
-        okJson(movement),
-      ),
+      http.get(`${API_BASE_URL}/inventory/movements/${movement.id}`, () => okJson(movement)),
     )
 
     render(<StockMovementDetailPage />, { wrapper: PageWrapper })

@@ -313,9 +313,7 @@ describe('D-OPEN-02 opening and initialization codes (domain-code drift guard)',
  * user can act on; this family fails the build if the C# code renames or the
  * Arabic mapping drops.
  */
-const BACKEND_ADJUSTMENT_DOMAIN_CODES = [
-  'INVENTORY_ADJUSTMENTS_COUNT_VARIANCE_MISMATCH',
-] as const
+const BACKEND_ADJUSTMENT_DOMAIN_CODES = ['INVENTORY_ADJUSTMENTS_COUNT_VARIANCE_MISMATCH'] as const
 
 const ADJUSTMENT_CODE_NORMALIZATION: ReadonlyArray<readonly [string, string]> = [
   ['InventoryAdjustments.CountVarianceMismatch', 'INVENTORY_ADJUSTMENTS_COUNT_VARIANCE_MISMATCH'],

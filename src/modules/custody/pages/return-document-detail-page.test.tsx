@@ -144,8 +144,9 @@ describe('ReturnDocumentDetailPage (e19-t07)', () => {
     await waitFor(() =>
       expect(screen.getByText('عودة المواد بعد انتهاء الحاجة')).toBeInTheDocument(),
     )
-    expect(
-      screen.getByRole('link', { name: ISSUE_DOCUMENT_ID }),
-    ).toHaveAttribute('href', `/documents/issue/${ISSUE_DOCUMENT_ID}`)
+    expect(screen.getByRole('link', { name: ISSUE_DOCUMENT_ID })).toHaveAttribute(
+      'href',
+      `/documents/issue/${ISSUE_DOCUMENT_ID}`,
+    )
   })
 })
