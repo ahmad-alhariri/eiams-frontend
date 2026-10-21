@@ -975,6 +975,24 @@
       "responseProperties": []
     },
     {
+      "path": "/inventory-counts/{countId}/adjustment",
+      "method": "POST",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
+      "path": "/inventory-counts/{countId}/cancel",
+      "method": "POST",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
       "path": "/inventory-counts/{countId}/close",
       "method": "POST",
       "sources": [
@@ -985,6 +1003,30 @@
     {
       "path": "/inventory-counts/{countId}/complete",
       "method": "POST",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/inventory-counts/{countId}/freeze-policy",
+      "method": "PUT",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/inventory-counts/{countId}/lines/{lineId}/actual",
+      "method": "PUT",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/inventory-counts/{countId}/lines/{lineId}/variance-reason",
+      "method": "PUT",
       "sources": [
         "src/modules/inventory-count/services/count.service.ts"
       ],
@@ -1015,6 +1057,14 @@
       "responseProperties": []
     },
     {
+      "path": "/inventory-counts/{countId}/status",
+      "method": "PUT",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
       "path": "/inventory-counts/{countId}",
       "method": "GET",
       "sources": [
@@ -1031,6 +1081,7 @@
         "plannedAtUtc",
         "rowVersion",
         "scopeType",
+        "settlement",
         "startedAtUtc",
         "status",
         "summary",
@@ -1727,6 +1778,20 @@
       ],
       "responseProperties": [
         "id"
+      ]
+    },
+    {
+      "path": "/warehouses/{warehouseId}/inventory-freeze-status",
+      "method": "GET",
+      "sources": [
+        "src/modules/inventory-count/services/count.service.ts"
+      ],
+      "responseProperties": [
+        "activeCounts",
+        "hasSoftFreezeWarning",
+        "isPostingBlocked",
+        "isProvisional",
+        "warehouseId"
       ]
     },
     {

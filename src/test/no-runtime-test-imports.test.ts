@@ -152,7 +152,8 @@ import {
  * transport, invalidating the detail branch on success). Neither reaches into
  * `@/test/**`, so the no-offenders assertion below stays green.
  */
-const SCANNED_FILE_COUNT = 398
+// +3 application files: inventory-count/hooks/use-count-names.ts, inventory-count/components/count-name-fields.tsx, adjustment/hooks/use-count-variance-seeds.ts
+const SCANNED_FILE_COUNT = 401
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

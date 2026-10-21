@@ -5,47 +5,61 @@ import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-con
 import {
   INVENTORY_COUNT_STATUS_LABELS_AR,
   INVENTORY_COUNT_TYPE_LABELS_AR,
-  type InventoryCountPlanRequest,
-  type ListInventoryCountsQuery,
-  type UpdateCountLinesRequest,
+} from '@/modules/inventory-count/types/inventory-count.types'
+import type {
+  CancelCountRequest,
+  CountStatus,
+  InventoryCountLine,
+  ListCountLinesQuery,
+  ListCountsQuery,
+  PlanCountRequest,
+  ResourceId,
+  SetLineVarianceReasonRequest,
+  UpdateCountLinesRequest,
+  UpdateFreezePolicyRequest,
 } from '@/modules/inventory-count/types/inventory-count.types'
 import { countService } from '@/modules/inventory-count/services/count.service'
 import { createIdempotencyKey, type IdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
-import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
 
 const COUNT_RESOURCE = 'inventory-counts'
-const ALL_COUNT_LINES_PAGE_SIZE = 200
+// The server caps a page at PaginationDefaults.MaximumPageSize (100); asking for
+// more answers 400 and the variance review never loads.
+const ALL_COUNT_LINES_PAGE_SIZE = 100
 
 export const countQueryKeys = {
-  counts: (scope: ScopeCacheKey, query: ListInventoryCountsQuery) =>
+  counts: (scope: ScopeCacheKey, query: ListCountsQuery) =>
     queryKeys.scoped(scope, COUNT_RESOURCE, 'counts', query),
   count: (scope: ScopeCacheKey, countId: string) =>
     queryKeys.scoped(scope, COUNT_RESOURCE, 'count', countId),
-  lines: (
-    scope: ScopeCacheKey,
-    countId: string,
-    query: { pageIndex?: number; pageSize?: number; search?: string },
-  ) => queryKeys.scoped(scope, COUNT_RESOURCE, 'lines', countId, query),
+  lines: (scope: ScopeCacheKey, countId: string, query: ListCountLinesQuery) =>
+    queryKeys.scoped(scope, COUNT_RESOURCE, 'lines', countId, query),
   allLines: (scope: ScopeCacheKey, countId: string) =>
     queryKeys.scoped(scope, COUNT_RESOURCE, 'lines', countId, 'all'),
+  freezeStatus: (scope: ScopeCacheKey, warehouseId: string) =>
+    queryKeys.scoped(scope, COUNT_RESOURCE, 'freeze-status', warehouseId),
+}
+
+export {
+  INVENTORY_COUNT_STATUS_LABELS_AR as COUNT_STATUS_LABELS_AR,
+  INVENTORY_COUNT_TYPE_LABELS_AR as COUNT_TYPE_LABELS_AR,
 }
 
 /**
  * Reads every page of one count snapshot before publishing any lines. A
- * count-linked adjustment must never be seeded from a partial page: later
- * variance lines carry the same material/asset provenance as the first page.
+ * count-linked adjustment must never be seeded from a partial page. Pages are
+ * ONE-based on the wire (`page`, `pageSize`).
  */
 async function listAllCountLines(countId: string): Promise<readonly InventoryCountLine[]> {
   const firstPage = await countService.listLines(countId, {
-    pageIndex: 0,
+    page: 1,
     pageSize: ALL_COUNT_LINES_PAGE_SIZE,
   })
   const remainingPages = await Promise.all(
-    Array.from({ length: Math.max(0, firstPage.meta.totalPages - 1) }, (_, index) =>
+    Array.from({ length: Math.max(0, firstPage.totalPages - 1) }, (_, index) =>
       countService.listLines(countId, {
-        pageIndex: index + 1,
+        page: index + 2,
         pageSize: ALL_COUNT_LINES_PAGE_SIZE,
       }),
     ),
@@ -57,15 +71,10 @@ async function listAllCountLines(countId: string): Promise<readonly InventoryCou
   ] satisfies readonly InventoryCountLine[]
 }
 
-export {
-  INVENTORY_COUNT_STATUS_LABELS_AR as COUNT_STATUS_LABELS_AR,
-  INVENTORY_COUNT_TYPE_LABELS_AR as COUNT_TYPE_LABELS_AR,
-}
-
 /**
  * Shared invalidation for every count mutation: the touched count's detail
  * and lines plus the session list (status transitions move rows between
- * filters).
+ * filters), and the freeze-status reads.
  */
 function useCountInvalidation() {
   const queryClient = useQueryClient()
@@ -84,10 +93,11 @@ function useCountInvalidation() {
 }
 
 /**
- * Paged count sessions for the active scope (e20-t01). Operational data —
- * 30s stale time per the architecture's stale-time policy.
+ * Paged count sessions for the active scope. `warehouseId` is OPTIONAL in the
+ * query — omitted reads every count in the caller's scope (F4, cross-warehouse
+ * list). 30s stale time per the operational-data policy.
  */
-export function useInventoryCountsQuery(query: ListInventoryCountsQuery) {
+export function useInventoryCountsQuery(query: ListCountsQuery) {
   const scope = useActiveScopeContext()
   return useQuery({
     queryKey:
@@ -100,7 +110,7 @@ export function useInventoryCountsQuery(query: ListInventoryCountsQuery) {
   })
 }
 
-/** Single count session with its lifecycle state. */
+/** Single count session with summary + settlement. */
 export function useInventoryCountQuery(countId: string | undefined | null) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
@@ -114,10 +124,10 @@ export function useInventoryCountQuery(countId: string | undefined | null) {
   })
 }
 
-/** Paged count lines (snapshot vs actual vs difference). */
+/** Paged count lines (snapshot vs actual vs server difference). 1-based page. */
 export function useCountLinesQuery(
   countId: string | undefined | null,
-  query: { pageIndex?: number; pageSize?: number; search?: string } = {},
+  query: ListCountLinesQuery = {},
 ) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
@@ -151,19 +161,45 @@ export function useAllCountLinesQuery(countId: string | undefined | null) {
 }
 
 /**
- * Plans a new count session (`count.plan`). Navigates on success at the page.
+ * The warehouse freeze advisory (`GET
+ * /warehouses/{warehouseId}/inventory-freeze-status`). Enabled by the caller:
+ * the planning form asks while a warehouse is picked, the detail page while a
+ * count is InProgress (F9).
+ */
+export function useWarehouseFreezeStatusQuery(
+  warehouseId: string | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useActiveScopeContext()
+  return useQuery({
+    queryKey:
+      scope.activeScopeCacheKey === undefined || warehouseId === undefined
+        ? ['inventory-counts', 'freeze-status', 'unscoped', warehouseId]
+        : countQueryKeys.freezeStatus(scope.activeScopeCacheKey, warehouseId),
+    queryFn: () => countService.getFreezeStatus(warehouseId ?? ''),
+    enabled:
+      (options.enabled !== undefined ? options.enabled : scope.activeScopeCacheKey !== undefined) &&
+      warehouseId !== undefined &&
+      warehouseId !== '',
+    staleTime: OPERATIONAL_STALE_TIME,
+  })
+}
+
+/**
+ * Plans a new count session (`count.plan`). Returns the 201 `{ id }`; the page
+ * navigates to the detail where the session is refetched.
  *
  * The idempotency key is minted once per user-approved execution and held in a
  * ref, so an explicit retry after an uncertain outcome reuses the SAME key. A
  * key minted as a call argument is fresh on every invocation, so a retry the
- * operator makes after a lost response is indistinguishable to the server from a
- * second plan (eiams-frontend-xlfs).
+ * operator makes after a lost response is indistinguishable to the server from
+ * a second plan (eiams-frontend-xlfs).
  */
 export function usePlanCountMutation() {
   const invalidate = useCountInvalidation()
   const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
   return useMutation({
-    mutationFn: (request: InventoryCountPlanRequest) => {
+    mutationFn: (request: PlanCountRequest) => {
       idempotencyKeyRef.current ??= createIdempotencyKey()
       return countService.planCount(request, idempotencyKeyRef.current)
     },
@@ -174,35 +210,29 @@ export function usePlanCountMutation() {
   })
 }
 
-/** Starts a Planned session, capturing the balance snapshot. */
+/** Starts a Planned count, capturing the balance snapshot (Body: expectedRowVersion). */
 export function useStartCountMutation(countId: string) {
   const invalidate = useCountInvalidation()
   return useMutation({
-    mutationFn: (rowVersion: number) => countService.startCount(countId, rowVersion),
+    mutationFn: (expectedRowVersion: number) => countService.startCount(countId, expectedRowVersion),
     onSuccess: invalidate,
   })
 }
 
-/** Batches actual-quantity entry onto count lines (`count.enter`). */
 /**
- * Saves the batch of changed count lines.
+ * Batches actual-quantity entry onto count lines (`count.enter`).
  *
  * There is deliberately **no `onError` invalidation** here, and that absence is
  * load-bearing rather than an oversight. The quantity-entry workspace feeds the
- * loaded page to react-hook-form through the `values` prop, and react-hook-form
- * treats a deep-unequal `values` change as a full reset. Invalidating on the
- * error path would therefore reload the lines — including on a `409`, which is
- * the case where keeping the operator's work matters most — and silently
- * discard every quantity they had typed, immediately after the toast told them
- * to try again.
+ * loaded page to react-hook-form through its reseed effects, and a refetch on
+ * the error path would reload the lines — including on a `409`, the exact case
+ * where keeping the operator's work matters most — and silently discard every
+ * quantity they had typed.
  *
  * A `409` is surfaced instead through `isConflictError(error)` at the call
- * boundary, which hands it to `useCountConflictRecovery`. That refetches the
- * authoritative count and lines only when the operator explicitly asks for the
- * newer version. The save is never retried automatically: this operation
- * accepts no `Idempotency-Key` (unlike its `/start`, `/complete` and `/close`
- * siblings), so a retry cannot be made safe, and
- * `docs/feature-service-composition-standard.md:90-91` forbids it.
+ * boundary, which hands it to `useCountConflictRecovery`. The save is never
+ * retried automatically: this operation accepts no `Idempotency-Key`, so a
+ * retry cannot be made safe.
  */
 export function useUpdateCountLinesMutation(countId: string) {
   const invalidate = useCountInvalidation()
@@ -212,14 +242,50 @@ export function useUpdateCountLinesMutation(countId: string) {
   })
 }
 
-/** Marks the session Completed (`count.complete`, idempotent). Retry-safe key, as in `usePlanCountMutation`. */
+/**
+ * Persists one variance reason (`count.enter`, F3): `PUT
+ * /{countId}/lines/{lineId}/variance-reason` with `{ reason,
+ * expectedRowVersion }` — the COUNT's row version. Without this save the
+ * server blocks Close with `InventoryCounts.VarianceReasonsRequired`.
+ */
+export function useSetLineVarianceReasonMutation(countId: string) {
+  const invalidate = useCountInvalidation()
+  return useMutation({
+    mutationFn: (input: SetLineVarianceReasonRequest & { readonly lineId: string }) =>
+      countService.setLineVarianceReason(countId, input.lineId, {
+        reason: input.reason,
+        expectedRowVersion: input.expectedRowVersion,
+      }),
+    onSuccess: invalidate,
+  })
+}
+
+/** Cancellation/abort with a required reason (`count.abort`). Arabic errors surface at the call site. */
+export function useCancelCountMutation(countId: string) {
+  const invalidate = useCountInvalidation()
+  return useMutation({
+    mutationFn: (request: CancelCountRequest) => countService.cancelCount(countId, request),
+    onSuccess: invalidate,
+  })
+}
+
+/** Changes the freeze policy while Planned (`count.plan`). */
+export function useSetFreezePolicyMutation(countId: string) {
+  const invalidate = useCountInvalidation()
+  return useMutation({
+    mutationFn: (request: UpdateFreezePolicyRequest) => countService.setFreezePolicy(countId, request),
+    onSuccess: invalidate,
+  })
+}
+
+/** Marks the count Completed (`count.complete`, idempotent). Retry-safe key, as in plan. */
 export function useCompleteCountMutation(countId: string) {
   const invalidate = useCountInvalidation()
   const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
   return useMutation({
-    mutationFn: (rowVersion: number) => {
+    mutationFn: (expectedRowVersion: number) => {
       idempotencyKeyRef.current ??= createIdempotencyKey()
-      return countService.completeCount(countId, rowVersion, idempotencyKeyRef.current)
+      return countService.completeCount(countId, expectedRowVersion, idempotencyKeyRef.current)
     },
     onSuccess: () => {
       idempotencyKeyRef.current = null
@@ -228,11 +294,34 @@ export function useCompleteCountMutation(countId: string) {
   })
 }
 
-/** Closes the session after variance review (`count.close`). */
+/** Closes the count after variance review (`count.close`). */
 export function useCloseCountMutation(countId: string) {
   const invalidate = useCountInvalidation()
   return useMutation({
-    mutationFn: (rowVersion: number) => countService.closeCount(countId, rowVersion),
+    mutationFn: (expectedRowVersion: number) => countService.closeCount(countId, expectedRowVersion),
     onSuccess: invalidate,
   })
 }
+
+/**
+ * Opens the adjustment draft for this count (F8): `POST
+ * /{countId}/adjustment` (no body) → 201 `{ id }`. Retry-safe key, as in plan.
+ */
+export function useCreateAdjustmentMutation(countId: string) {
+  const invalidate = useCountInvalidation()
+  const idempotencyKeyRef = useRef<IdempotencyKey | null>(null)
+  return useMutation({
+    mutationFn: () => {
+      idempotencyKeyRef.current ??= createIdempotencyKey()
+      return countService.createAdjustment(countId, idempotencyKeyRef.current)
+    },
+    onSuccess: (id) => {
+      idempotencyKeyRef.current = null
+      invalidate()
+      return id
+    },
+  })
+}
+
+/** Exposed for the list filter's own select vocabulary. */
+export type { CountStatus, ResourceId }

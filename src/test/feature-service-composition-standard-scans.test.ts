@@ -64,7 +64,8 @@ const HOOK_FILES = moduleHookFiles()
  * `useInvalidateDocumentDetail` hook, so scan 1 (hand-derived key prefix)
  * stays green.
  */
-const EXPECTED_HOOK_FILES = 47
+// +2 hook files: inventory-count/hooks/use-count-names.ts, adjustment/hooks/use-count-variance-seeds.ts
+const EXPECTED_HOOK_FILES = 49
 
 // ---------------------------------------------------------------------------
 // Scan 1 — query keys must come from a factory

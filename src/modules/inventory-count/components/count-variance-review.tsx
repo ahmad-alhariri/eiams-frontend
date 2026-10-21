@@ -1,17 +1,22 @@
 import { useMemo } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 
+import { CountMaterialName } from '@/modules/inventory-count/components/count-name-fields'
 import { useAllCountLinesQuery } from '@/modules/inventory-count/hooks/use-count-queries'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
-import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
 import { isAssetCountLine } from '@/modules/inventory-count/types/inventory-count.types'
+import type {
+  CountSummary,
+  InventoryCountLine,
+} from '@/modules/inventory-count/types/inventory-count.types'
 import { summarizeCountLines } from '@/modules/inventory-count/utils/count-review'
 import { Button } from '@/shared/ui/button'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
+import { toArabicDigits } from '@/shared/utils/format'
 import { listRows } from '@/shared/utils/table-data'
 
 /** Rows per review page; the shared bar offers 10/25/50/100. */
@@ -19,29 +24,26 @@ const REVIEW_PAGE_SIZE = 50
 
 const countLineColumnHelper = createColumnHelper<typeof dataTableFeatures, InventoryCountLine>()
 
-interface VarianceRow {
-  line: InventoryCountLine
-  difference: number
-  hasReason: boolean
-}
-
-/** Server-owned result label; never derived from a client-side difference. */
+/**
+ * Server-owned result label; never derived from a client-side recompute. The
+ * server `difference` is null-guarded; an unentered line is «لم تُدخل الكمية
+ * بعد», never a manufactured shortage.
+ */
 function reviewResultAr(line: InventoryCountLine): string {
   if (line.actualQuantity == null) return 'لم تُدخل الكمية بعد'
-  return line.difference === 0 ? 'مطابق' : 'عنده فرق'
+  return (line.difference ?? 0) === 0 ? 'مطابق' : 'عنده فرق'
 }
 
 const countLineColumns = countLineColumnHelper.columns([
-  countLineColumnHelper.accessor((line) => line.material.displayName, {
+  countLineColumnHelper.accessor('materialId', {
     id: 'material',
     header: 'المادة',
     cell: ({ row }) => (
       <div className="flex flex-col gap-0.5">
-        <span>{row.original.material.displayName}</span>
+        <CountMaterialName materialId={row.original.materialId} />
         {isAssetCountLine(row.original) ? (
           <span className="inline-flex w-fit items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-            أصل مسلسل
-            {row.original.assetNumber ? ` · ${row.original.assetNumber}` : ''}
+            أصل مسسلسيل · {row.original.assetId}
           </span>
         ) : null}
       </div>
@@ -60,15 +62,18 @@ const countLineColumns = countLineColumnHelper.columns([
   countLineColumnHelper.accessor('difference', {
     id: 'difference',
     header: 'الفرق',
-    // Straight from the server read model, but an unentered line is never
-    // presented as a zero difference: kc7v forbids treating null as zero,
-    // because the snapshot 0 simply reflects that nothing was counted.
+    // Straight from the server read model (null-guarded), but an unentered line
+    // is never presented as a zero difference: kc7v forbids treating null as
+    // zero, because the snapshot 0 simply reflects that nothing was counted.
     cell: ({ row }) => {
       const line = row.original
       if (line.actualQuantity == null) {
         return <span className="ltr text-muted-foreground">—</span>
       }
       const difference = line.difference
+      if (difference === null) {
+        return <span className="ltr text-muted-foreground">—</span>
+      }
       return (
         <span className={`ltr ${difference !== 0 ? 'text-destructive' : ''}`}>
           {difference > 0 ? `+${difference}` : difference}
@@ -76,17 +81,17 @@ const countLineColumns = countLineColumnHelper.columns([
       )
     },
   }),
-  countLineColumnHelper.accessor('reason', {
-    id: 'reason',
+  countLineColumnHelper.accessor('varianceReason', {
+    id: 'varianceReason',
     header: 'سبب الفرق',
     cell: ({ row }) => {
       if (row.original.actualQuantity == null) {
         return <span className="text-muted-foreground">—</span>
       }
-      if (row.original.difference === 0) {
+      if ((row.original.difference ?? 0) === 0) {
         return <span className="text-muted-foreground">—</span>
       }
-      const reason = (row.original.reason ?? '').trim()
+      const reason = (row.original.varianceReason ?? '').trim()
       return reason === '' ? (
         <span className="text-destructive">لم يُدخل سبب الفرق بعد.</span>
       ) : (
@@ -106,18 +111,15 @@ const countLineColumns = countLineColumnHelper.columns([
 ])
 
 /**
- * Variance review (e20-t07, eiams-frontend-hbfu). Read-only split of the lines
- * into matching vs. differing (variance) and unentered buckets. PRD §12.6
- * requires actual entry before completion; retain the existing reason gate for
- * nonzero differences. All differences come from the server; the UI never
- * treats null as zero.
- *
- * The whole session is loaded (never a single page) and then paged through the
- * shared RTL controls, so a large session stays navigable without the
- * completion gate ever being computed from a subset.
+ * Variance review (e20-t07, eiams-frontend-hbfu). Read-only rendering of the
+ * lines with the server difference and reasons; the count's totals come from
+ * the server `summary` — never recomputed from a local bucketing (F7).
+ * The client-side buckets remain ONLY for the completion gate and the
+ * «دون سبب» badge, which the summary does not carry.
  */
 export function CountVarianceReview({
   countId,
+  summary,
   canComplete,
   canClose,
   onComplete,
@@ -128,6 +130,7 @@ export function CountVarianceReview({
   closeError,
 }: {
   countId: string
+  summary: CountSummary
   canComplete: boolean
   canClose: boolean
   onComplete: () => void
@@ -150,19 +153,7 @@ export function CountVarianceReview({
     [items, offset, pageSize],
   )
 
-  const { matching, variance, missingReason, unentered } = useMemo(() => {
-    const summary = summarizeCountLines(items)
-    const toRow = (line: InventoryCountLine): VarianceRow => ({
-      line,
-      difference: line.difference,
-      hasReason: (line.reason ?? '').trim() !== '',
-    })
-    return {
-      ...summary,
-      matching: summary.matching.map(toRow),
-      variance: summary.variance.map(toRow),
-    }
-  }, [items])
+  const { missingReason, unentered } = useMemo(() => summarizeCountLines(items), [items])
 
   if (linesQuery.isLoading) {
     return <LoadingSpinner label="جارٍ تحميل بنود الفروقات..." />
@@ -192,22 +183,27 @@ export function CountVarianceReview({
 
   return (
     <div dir="rtl" className="grid gap-5">
+      {/* The four totals are the server's summary, verbatim (F7). */}
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-popover px-4 py-3 text-sm">
         <span>
-          إجمالي البنود: <strong className="text-foreground">{items.length}</strong>
+          إجمالي البنود: <strong className="text-foreground">{toArabicDigits(summary.totalLines)}</strong>
         </span>
         <span>
-          مطابقة: <strong className="text-foreground">{matching.length}</strong>
+          أُدخلت: <strong className="text-foreground">{toArabicDigits(summary.countedLines)}</strong>
         </span>
         <span>
-          ذات فرق: <strong className="text-foreground">{variance.length}</strong>
+          ذات فرق: <strong className="text-foreground">{toArabicDigits(summary.varianceLines)}</strong>
         </span>
         <span>
-          لم تُدخل بعد: <strong className="text-foreground">{unentered.length}</strong>
+          إجمالي الفرق (مطلق): <strong className="text-foreground">
+            {toArabicDigits(summary.totalAbsoluteDifference)}
+          </strong>
         </span>
-        <span>
-          دون سبب: <strong className="text-destructive">{missingReason.length}</strong>
-        </span>
+        {missingReason.length > 0 ? (
+          <span>
+            دون سبب: <strong className="text-destructive">{toArabicDigits(missingReason.length)}</strong>
+          </span>
+        ) : null}
       </div>
 
       {unentered.length > 0 ? (

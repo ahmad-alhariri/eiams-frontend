@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
 import { okJson, okPageJson } from '@/test/msw/envelope'
+import { countNameHandlers } from '@/test/msw/count-wire-fixtures'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -18,24 +19,34 @@ const COUNT_ID = '223e4567-e89b-42d3-a456-426614174002'
 /** Serves the count-lines AND count-detail queries the page runs before seeding. */
 function useCountLinesHandler(status: InventoryCount['status'] = 'Completed') {
   server.use(
+    ...countNameHandlers({
+      materials: {
+        '723e4567-e89b-42d3-a456-426614174007': 'حاسوب مكتبي',
+        '753e4567-e89b-42d3-a456-426614174009': 'حاسوب من الصفحة الثانية',
+        '743e4567-e89b-42d3-a456-426614174008': 'ورق تصوير A4',
+      },
+      warehouses: {
+        '823e4567-e89b-42d3-a456-426614174008': 'المستودع المركزي',
+      },
+    }),
     http.get(`*/api/v1/inventory-counts/${COUNT_ID}/lines`, () =>
       okPageJson(
         [
           {
-            countLineId: 'a23e4567-e89b-42d3-a456-426614174001',
+            id: 'a23e4567-e89b-42d3-a456-426614174001',
+            materialId: '723e4567-e89b-42d3-a456-426614174007',
+            assetId: null,
             difference: -2,
-            material: { id: '723e4567-e89b-42d3-a456-426614174007', displayName: 'حاسوب مكتبي' },
-            reason: null,
-            rowVersion: 1,
+            varianceReason: null,
             snapshotQuantity: 25,
             actualQuantity: 23,
           },
           {
-            countLineId: 'b23e4567-e89b-42d3-a456-426614174002',
+            id: 'b23e4567-e89b-42d3-a456-426614174002',
+            materialId: '743e4567-e89b-42d3-a456-426614174008',
+            assetId: null,
             difference: 0,
-            material: { id: '743e4567-e89b-42d3-a456-426614174008', displayName: 'ورق تصوير A4' },
-            reason: null,
-            rowVersion: 1,
+            varianceReason: null,
             snapshotQuantity: 10,
             actualQuantity: 10,
           },
@@ -45,9 +56,21 @@ function useCountLinesHandler(status: InventoryCount['status'] = 'Completed') {
     ),
     http.get(`*/api/v1/inventory-counts/${COUNT_ID}`, () =>
       okJson({
-        countId: COUNT_ID,
+        id: COUNT_ID,
+        warehouseId: '823e4567-e89b-42d3-a456-426614174008',
+        countType: 'Cycle',
+        scopeType: 'EntireWarehouse',
+        freezePolicy: 'SoftFreeze',
         status,
-        warehouse: { id: '823e4567-e89b-42d3-a456-426614174008', displayName: 'المستودع المركزي' },
+        rowVersion: 1,
+        plannedAtUtc: '2026-08-24T08:00:00.000Z',
+        startedAtUtc: '2026-08-24T09:00:00.000Z',
+        completedAtUtc: null,
+        closedAtUtc: null,
+        abortedAtUtc: null,
+        materialDomainId: null,
+        summary: { totalLines: 2, countedLines: 2, varianceLines: 1, totalAbsoluteDifference: 2 },
+        settlement: { status: 'Pending', adjustmentId: null, adjustmentStatus: null },
       }),
     ),
   )
@@ -57,43 +80,40 @@ function usePagedCountLinesHandler() {
   const requestedPages: number[] = []
   // Both fixtures differ only in fields the contract types loosely.
   type CountLineView = {
-    countLineId: string
+    id: string
+    materialId: string
+    assetId: string | null
     difference: number
-    material: { id: string; displayName: string }
-    reason: string | null
-    rowVersion: number
+    varianceReason: string | null
     snapshotQuantity: number
     actualQuantity: number | null
   }
 
   const matchingLines = Array.from({ length: 200 }, (_, index) => ({
-    countLineId: `count-line-${index}`,
+    id: `count-line-${index}`,
+    materialId: '743e4567-e89b-42d3-a456-426614174008',
+    assetId: null,
     difference: 0,
-    material: { id: '743e4567-e89b-42d3-a456-426614174008', displayName: 'ورق تصوير A4' },
-    reason: null,
-    rowVersion: 1,
+    varianceReason: null,
     snapshotQuantity: 10,
     actualQuantity: 10,
   }))
   const laterVariance = {
-    countLineId: 'count-line-200',
+    id: 'count-line-200',
+    materialId: '753e4567-e89b-42d3-a456-426614174009',
+    assetId: null,
     difference: -1,
-    material: {
-      id: '723e4567-e89b-42d3-a456-426614174007',
-      displayName: 'حاسوب من الصفحة الثانية',
-    },
-    reason: 'عجز مرصود في الصفحة الثانية',
-    rowVersion: 1,
+    varianceReason: 'عجز مرصود في الصفحة الثانية',
     snapshotQuantity: 4,
     actualQuantity: 3,
   }
 
   server.use(
     http.get(`*/api/v1/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
-      const pageIndex = Number(new URL(request.url).searchParams.get('pageIndex'))
-      requestedPages.push(pageIndex)
-      return okPageJson<CountLineView>(pageIndex === 0 ? matchingLines : [laterVariance], {
-        page: pageIndex + 1,
+      const page = Number(new URL(request.url).searchParams.get('page') ?? '1')
+      requestedPages.push(page - 1)
+      return okPageJson<CountLineView>(page === 1 ? matchingLines : [laterVariance], {
+        page,
         pageSize: 200,
         totalCount: 201,
         totalPages: 2,
@@ -101,13 +121,37 @@ function usePagedCountLinesHandler() {
     }),
     http.get(`*/api/v1/inventory-counts/${COUNT_ID}`, () =>
       okJson({
-        countId: COUNT_ID,
+        id: COUNT_ID,
+        warehouseId: '823e4567-e89b-42d3-a456-426614174008',
+        countType: 'Cycle',
+        scopeType: 'EntireWarehouse',
+        freezePolicy: 'SoftFreeze',
         status: 'Completed',
-        warehouse: { id: '823e4567-e89b-42d3-a456-426614174008', displayName: 'المستودع المركزي' },
+        rowVersion: 1,
+        plannedAtUtc: '2026-08-24T08:00:00.000Z',
+        startedAtUtc: '2026-08-24T09:00:00.000Z',
+        completedAtUtc: null,
+        closedAtUtc: null,
+        abortedAtUtc: null,
+        materialDomainId: null,
+        summary: { totalLines: 2, countedLines: 2, varianceLines: 1, totalAbsoluteDifference: 2 },
+        settlement: { status: 'Pending', adjustmentId: null, adjustmentStatus: null },
       }),
     ),
   )
 
+  server.use(
+    ...countNameHandlers({
+      materials: {
+        '723e4567-e89b-42d3-a456-426614174007': 'حاسوب مكتبي',
+        '753e4567-e89b-42d3-a456-426614174009': 'حاسوب من الصفحة الثانية',
+        '743e4567-e89b-42d3-a456-426614174008': 'ورق تصوير A4',
+      },
+      warehouses: {
+        '823e4567-e89b-42d3-a456-426614174008': 'المستودع المركزي',
+      },
+    }),
+  )
   return requestedPages
 }
 
@@ -346,7 +390,9 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
     // session's warehouse — otherwise a locked draft can never be saved.
     const trigger = screen.getByRole('combobox', { name: 'مستودع التسوية' })
     expect(trigger).toBeDisabled()
-    expect((trigger as HTMLInputElement).value).toBe('المستودع المركزي')
+    // The label resolves asynchronously: the scoped selector loads the option list
+    // for the locked warehouse id, and only then does the combobox show the name.
+    expect(await screen.findByDisplayValue('المستودع المركزي')).toBeInTheDocument()
   })
 
   it('seeds locked variance rows from the count session lines (QA defect D4)', async () => {

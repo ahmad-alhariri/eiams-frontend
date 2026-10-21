@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { okPageJson } from '@/test/msw/envelope'
+import { countNameHandlers } from '@/test/msw/count-wire-fixtures'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
+import { toArabicDigits } from '@/shared/utils/format'
 import { CountVarianceReview } from '@/modules/inventory-count/components/count-variance-review'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
@@ -27,12 +29,46 @@ function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   }
 }
 
+/** The seeded lines, so the component's server-summary prop can be derived. */
+let currentLines: CountLineView[] = []
+
+function summaryOf(lines: readonly CountLineView[]) {
+  const variance = lines.filter((line) => line.difference !== 0)
+  return {
+    totalLines: lines.length,
+    countedLines: lines.filter((line) => line.actualQuantity != null).length,
+    varianceLines: variance.length,
+    totalAbsoluteDifference: variance.reduce((sum, line) => sum + Math.abs(line.difference), 0),
+  }
+}
+
 function useHandlers(lines: unknown[]) {
+  const typed = lines as CountLineView[]
+  currentLines = typed
   server.use(
     http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-      okPageJson(lines, { page: 1, pageSize: 200, totalCount: lines.length, totalPages: 1 }),
+      okPageJson(
+        typed.map(toWireLine),
+        { page: 1, pageSize: 200, totalCount: typed.length, totalPages: 1 },
+      ),
     ),
+    ...countNameHandlers({
+      materials: Object.fromEntries(typed.map((line) => [line.material.id, line.material.displayName])),
+    }),
   )
+}
+
+/** The live line DTO is flat and carries no rowVersion and no material name. */
+function toWireLine(line: CountLineView) {
+  return {
+    id: line.countLineId,
+    materialId: line.material.id,
+    assetId: line.assetId ?? null,
+    snapshotQuantity: line.snapshotQuantity,
+    actualQuantity: line.actualQuantity ?? null,
+    difference: line.difference ?? null,
+    varianceReason: line.reason,
+  }
 }
 
 function renderReview(opts: {
@@ -41,6 +77,7 @@ function renderReview(opts: {
   onComplete: () => void
   isCompleting?: boolean
   completeError?: string | null
+  summary?: { totalLines: number; countedLines: number; varianceLines: number; totalAbsoluteDifference: number }
   canClose?: boolean
   onClose?: () => void
   isClosing?: boolean
@@ -52,6 +89,7 @@ function renderReview(opts: {
     <QueryClientProvider client={client}>
       <CountVarianceReview
         countId={COUNT_ID}
+        summary={opts.summary ?? summaryOf(currentLines)}
         canComplete={opts.canComplete}
         canClose={opts.canClose ?? false}
         onComplete={opts.onComplete}
@@ -74,6 +112,8 @@ type CountLineView = {
   actualQuantity: number
   difference: number
   reason: string | null
+  assetId?: string
+  assetNumber?: string
 }
 
 const matchingLine = {
@@ -121,10 +161,10 @@ describe('CountVarianceReview (e20-t07)', () => {
     renderReview({ permissions: ['count.complete'], canComplete: true, onComplete })
 
     await screen.findByText('بنود لم تُدخل كمياتها الفعلية')
-    expect(screen.getByText(/لم تُدخل بعد:/)).toHaveTextContent('2')
-    expect(screen.getByText(/مطابقة:/)).toHaveTextContent('0')
-    expect(screen.getByText(/ذات فرق:/)).toHaveTextContent('0')
-    expect(screen.getByText(/دون سبب:/)).toHaveTextContent('0')
+    expect(screen.getAllByText(/لم تُدخل الكمية بعد/)).toHaveLength(2)
+    expect(screen.queryAllByText('مطابق')).toHaveLength(0)
+    expect(screen.getByText(/ذات فرق:/)).toHaveTextContent(toArabicDigits(0))
+    expect(screen.queryByText(/دون سبب:/)).not.toBeInTheDocument()
     expect(screen.queryByText(/\(-25\)/)).not.toBeInTheDocument()
     expect(screen.getByText(/لا يمكن إكمال الجلسة قبل إدخال الكمية الفعلية/)).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'إكمال الجلسة' }))
@@ -160,11 +200,12 @@ describe('CountVarianceReview (e20-t07)', () => {
       ...matchingLine,
       countLineId: `matching-${index}`,
     }))
-    server.use(
+    server.use(...countNameHandlers({ materials: { m1: 'ورق تصوير A4', m3: 'طابعة ليزر' } }),
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
-        const pageIndex = Number(new URL(request.url).searchParams.get('pageIndex'))
+        const page = Number(new URL(request.url).searchParams.get('page') ?? '1')
+        const pageIndex = page - 1
         requestedPages.push(pageIndex)
-        return okPageJson(pageIndex === 0 ? firstPage : [varianceWithoutReason], {
+        return okPageJson((pageIndex === 0 ? firstPage : [varianceWithoutReason]).map(toWireLine), {
           page: pageIndex + 1,
           pageSize: 200,
           totalCount: 201,
@@ -172,13 +213,13 @@ describe('CountVarianceReview (e20-t07)', () => {
         })
       }),
     )
-    renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn() })
+    renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn(), summary: { totalLines: 201, countedLines: 201, varianceLines: 1, totalAbsoluteDifference: 3 } })
 
     // The whole session is read (server pages 0 and 1), so the gate and the
     // summary both account for all 201 lines. The 200 seeded lines share one
     // material name, so wait on the unique range text instead of a row label.
     expect(await screen.findByText('عرض ١–٥٠ من ٢٠١')).toBeInTheDocument()
-    expect(screen.getByText(/إجمالي البنود:/)).toHaveTextContent('201')
+    expect(screen.getByText(/إجمالي البنود:/)).toHaveTextContent(toArabicDigits(201))
     expect(screen.getByRole('button', { name: 'إكمال الجلسة' })).toBeDisabled()
     expect(requestedPages).toEqual([0, 1])
 
@@ -195,12 +236,14 @@ describe('CountVarianceReview (e20-t07)', () => {
   it('does not publish a partial count when a later page fails and permits retry', async () => {
     let failLaterPage = true
     server.use(
+      ...countNameHandlers({ materials: { m1: 'ورق تصوير A4', m2: 'حاسوب مكتبي', m3: 'طابعة ليزر' } }),
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
-        const pageIndex = Number(new URL(request.url).searchParams.get('pageIndex'))
+        const page = Number(new URL(request.url).searchParams.get('page') ?? '1')
+        const pageIndex = page - 1
         if (pageIndex === 1 && failLaterPage) {
           return new HttpResponse(null, { status: 500 })
         }
-        return okPageJson<CountLineView>(pageIndex === 0 ? [matchingLine] : [varianceWithReason], {
+        return okPageJson((pageIndex === 0 ? [matchingLine] : [varianceWithReason]).map(toWireLine), {
           page: pageIndex + 1,
           pageSize: 1,
           totalCount: 2,
@@ -263,8 +306,8 @@ describe('CountVarianceReview (e20-t07)', () => {
     renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn() })
 
     expect(await screen.findByText('حاسوب محمول')).toBeInTheDocument()
-    expect(screen.getByText(/أصل مسلسل/)).toBeInTheDocument()
-    expect(screen.getByText(/AST-1001/)).toBeInTheDocument()
+    expect(screen.getByText(/أصل مسسلسيل/)).toBeInTheDocument()
+    expect(screen.getByText(/aa000000-0000-4000-8000-0000000000aa/)).toBeInTheDocument()
     expect(screen.getByText(/مفقود أثناء النقل/)).toBeInTheDocument()
   }, 20000)
 
@@ -329,16 +372,16 @@ describe('CountVarianceReview mixed session (ef78)', () => {
     await screen.findByText('عرض ١–٤ من ٤')
 
     // Bucket counters come from summarizeCountLines over the whole session.
-    expect(screen.getByText(/لم تُدخل بعد:/)).toHaveTextContent('1')
-    expect(screen.getByText(/مطابقة:/)).toHaveTextContent('1')
-    expect(screen.getByText(/ذات فرق:/)).toHaveTextContent('2')
-    expect(screen.getByText(/دون سبب:/)).toHaveTextContent('1')
+    expect(screen.getAllByText(/لم تُدخل الكمية بعد/)).toHaveLength(1)
+    expect(screen.getAllByText('مطابق')).toHaveLength(1)
+    expect(screen.getByText(/ذات فرق:/)).toHaveTextContent(toArabicDigits(2))
+    expect(screen.getByText(/دون سبب:/)).toHaveTextContent(toArabicDigits(1))
 
     // The unentered line shows an em dash in its actual, difference and reason
     // cells — never the -40 a naive `actual - snapshot` (or `null =>
     // -snapshot`) would produce, and never the server's incidental `0`, which
     // would present "nothing counted" as "counted and matching".
-    const unenteredRow = screen.getByText('ورق تصوير A4').closest('tr')!
+    const unenteredRow = (await screen.findByText('ورق تصوير A4')).closest('tr')!
     const unenteredCells = [...unenteredRow.querySelectorAll('td')].map((td) =>
       td.textContent.trim(),
     )
@@ -349,11 +392,11 @@ describe('CountVarianceReview mixed session (ef78)', () => {
     expect(unenteredRow.textContent).not.toContain('-40')
 
     // Entered lines show exactly the server's difference.
-    const varianceRow = screen.getByText('طابعة ليزر').closest('tr')!
+    const varianceRow = (await screen.findByText('طابعة ليزر')).closest('tr')!
     expect(within(varianceRow).getByText('+3')).toBeInTheDocument()
     expect(within(varianceRow).getByText('لم يُدخل سبب الفرق بعد.')).toBeInTheDocument()
 
-    const explainedRow = screen.getByText('حاسوب مكتبي').closest('tr')!
+    const explainedRow = (await screen.findByText('حاسوب مكتبي')).closest('tr')!
     expect(within(explainedRow).getByText('-2')).toBeInTheDocument()
     expect(within(explainedRow).getByText('تالف ولم يُرصد')).toBeInTheDocument()
   }, 20000)

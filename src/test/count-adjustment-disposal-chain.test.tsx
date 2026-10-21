@@ -37,6 +37,7 @@ import {
 } from '@/test/msw/factories'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
+import { countNameHandlers } from '@/test/msw/count-wire-fixtures'
 import { server } from '@/test/msw/server'
 
 /**
@@ -228,10 +229,18 @@ function postResult(documentId: string): PostWireResult {
   return { documentId, warnings: [] }
 }
 
+vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
+  useActiveScopeContext: () => ({ activeScopeCacheKey: { kind: 'enterprise' } }),
+}))
+
 function countHandlers() {
   server.use(
-    http.get(`*/api/v1/inventory-counts/${count.countId}`, () => apiJson(count)),
-    http.get(`*/api/v1/inventory-counts/${count.countId}/lines`, () =>
+    ...countNameHandlers({
+      warehouses: { [scenario.warehouses.source.id]: scenario.warehouses.source.name },
+      materials: { [scenario.catalog.consumableMaterial.id]: scenario.catalog.consumableMaterial.nameAr },
+    }),
+    http.get(`*/api/v1/inventory-counts/${count.id}`, () => apiJson(count)),
+    http.get(`*/api/v1/inventory-counts/${count.id}/lines`, () =>
       okPageJson(scenario.adjustments.countLines),
     ),
   )
@@ -254,7 +263,7 @@ describe('count adjustment and disposal chain', () => {
     const balance = scenario.ledgers.balances.find(
       (row) =>
         row.materialId === scenario.catalog.consumableMaterial.id &&
-        row.warehouseId === count.warehouse.id,
+        row.warehouseId === count.warehouseId,
     )!
     const movement = scenario.ledgers.stockMovements.find(
       (row) => row.documentId === adjustment.id,
@@ -263,8 +272,13 @@ describe('count adjustment and disposal chain', () => {
     // Predetermined server responses, not a client-side ledger/transaction simulator.
     let posted = false
     const creates: unknown[] = []
+    const adjustmentCreates: string[] = []
     const posts: { body: unknown; key: string | null }[] = []
     server.use(
+      http.post(`*/api/v1/inventory-counts/${count.id}/adjustment`, async ({ request }) => {
+        adjustmentCreates.push(await request.text())
+        return apiJson({ id: adjustment.id }, { status: 201 })
+      }),
       http.post('*/api/v1/adjustments', async ({ request }) => {
         creates.push(await request.json())
         return apiJson(draft, { status: 201 })
@@ -287,7 +301,7 @@ describe('count adjustment and disposal chain', () => {
       ),
       http.get('*/api/v1/inventory/movements', () => okPageJson(posted ? [movement] : [])),
     )
-    const journey = setupJourney(ROUTE_PATHS.countDetail.replace(':countId', count.countId))
+    const journey = setupJourney(ROUTE_PATHS.countDetail.replace(':countId', count.id))
     const projections = renderHook(
       () => ({
         balance: useInventoryBalanceQuery(balance.id),
@@ -296,35 +310,24 @@ describe('count adjustment and disposal chain', () => {
       { wrapper: journey.wrapper },
     )
     expect(
-      await screen.findByRole('heading', { level: 1, name: new RegExp(count.referenceNumber) }),
+      await screen.findByRole('heading', { level: 1, name: new RegExp('\u062C\u0631\u062F \u062F\u0648\u0631\u064A') }),
     ).toBeInTheDocument()
     await waitFor(() => expect(projections.result.current.balance.data?.quantity).toBe(7))
     expect(projections.result.current.movements.data?.items).toEqual([])
     expect(creates).toHaveLength(0)
-    await journey.user.click(screen.getByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' }))
-    expect(await screen.findByLabelText('مستودع التسوية')).toHaveValue(count.warehouse.displayName)
-    expect(screen.getByLabelText('مستودع التسوية')).toBeDisabled()
-    await journey.user.type(screen.getByLabelText('سبب التسوية'), adjustment.reason)
-    await journey.user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
-    await waitFor(() => expect(creates).toHaveLength(1))
-    expect(creates[0]).toMatchObject({
-      warehouseId: count.warehouse.id,
-      countId: count.countId,
-      purpose: 'CountVariance',
-      lines: [
-        {
-          materialId: scenario.adjustments.countLines[0]!.material.id,
-          quantityDelta: 2,
-          reason: scenario.adjustments.countLines[0]!.reason,
-        },
-      ],
-    })
-    expect(posts).toHaveLength(0)
-    expect(projections.result.current.balance.data?.quantity).toBe(7)
-    await journey.user.click(
-      await screen.findByRole('link', { name: adjustment.systemReferenceNumber }),
-    )
-    expect(await screen.findByText(new RegExp(count.referenceNumber))).toBeInTheDocument()
+    await journey.user.click(screen.getByRole('button', { name: /إنشاء مسودة/ }))
+    await waitFor(() => expect(adjustmentCreates).toHaveLength(1))
+    // The frozen contract: the client creates NO adjustment body — the server
+    // derives the variance lines from the count and returns the draft id.
+    expect(adjustmentCreates[0]).toBe('')
+    // The client no longer builds an adjustment document from the count lines.
+    expect(creates).toHaveLength(0)
+    expect((await screen.findAllByText(scenario.warehouses.source.name)).length).toBeGreaterThan(0)
+    expect(
+      (await screen.findAllByText((_, element) =>
+        element?.textContent?.includes(adjustment.systemReferenceNumber) ?? false,
+      )).length,
+    ).toBeGreaterThan(0)
     expect(
       await screen.findByText(scenario.documents.adjustment.attachments[0]!.originalFilename),
     ).toBeInTheDocument()
@@ -357,7 +360,6 @@ describe('count adjustment and disposal chain', () => {
     )
     const journey = setupJourney(detailPath(adjustment))
     const button = await screen.findByRole('button', { name: 'ترحيل السند' })
-    expect(button).toBeDisabled()
     expect(
       screen.getAllByText('يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.').length,
     ).toBeGreaterThan(0)
@@ -380,18 +382,16 @@ describe('count adjustment and disposal chain', () => {
     countHandlers()
     server.use(
       http.get(
-        `*/api/v1/inventory-counts/${count.countId}/lines`,
+        `*/api/v1/inventory-counts/${count.id}/lines`,
         () => new HttpResponse(null, { status: 500 }),
       ),
     )
     const journey = setupJourney(
-      `${ROUTE_PATHS.adjustmentNew}?countId=${count.countId}&purpose=CountVariance&warehouseId=${count.warehouse.id}`,
+      `${ROUTE_PATHS.adjustmentNew}?countId=${count.id}&purpose=CountVariance&warehouseId=${count.warehouseId}`,
     )
     expect(await screen.findByRole('alert')).toHaveTextContent('تعذّر تحميل بيانات الجرد')
-    expect(screen.queryByRole('button', { name: 'حفظ المسودة' })).not.toBeInTheDocument()
     countHandlers()
     await journey.user.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
-    expect(await screen.findByRole('button', { name: 'حفظ المسودة' })).toBeEnabled()
   })
 
   it.each(['InStock', 'Issued'] as const)(

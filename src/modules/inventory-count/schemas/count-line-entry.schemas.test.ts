@@ -11,16 +11,17 @@ import {
   toCountLineEntryFormValues,
   planCountLineSaves,
 } from './count-line-entry.schemas'
-import type { InventoryCountLine } from '@/shared/types/generated/eiams-v1'
+import type { InventoryCountLine } from '@/modules/inventory-count/types/inventory-count.types'
 
 function line(overrides: Partial<InventoryCountLine> = {}): InventoryCountLine {
   return {
-    countLineId: 'L1',
-    material: { id: 'm1', displayName: 'حاسوب مكتبي' },
+    id: 'L1',
+    materialId: 'm1',
+    assetId: null,
     snapshotQuantity: 10,
     actualQuantity: null,
     difference: 0,
-    rowVersion: 4,
+    varianceReason: null,
     ...overrides,
   }
 }
@@ -89,12 +90,12 @@ describe('toCountLineDraftValues', () => {
     expect(toCountLineDraftValues(line())).toEqual({ actualQuantity: '', reason: '' })
   })
 
-  it('seeds the stored reason only when a variance already exists', () => {
-    expect(toCountLineDraftValues(line({ actualQuantity: 8, reason: 'تالف' }))).toEqual({
+  it('seeds the stored actual and reason as the draft baseline', () => {
+    expect(toCountLineDraftValues(line({ actualQuantity: 8, varianceReason: 'تالف' }))).toEqual({
       actualQuantity: '8',
       reason: 'تالف',
     })
-    expect(toCountLineDraftValues(line({ actualQuantity: 10, reason: 'تالف' }))).toEqual({
+    expect(toCountLineDraftValues(line({ actualQuantity: 10, varianceReason: null }))).toEqual({
       actualQuantity: '10',
       reason: '',
     })
@@ -129,10 +130,7 @@ describe('isCountLineDraftDirty', () => {
 
 describe('countDirtyLineIndexes', () => {
   it('reports only the rows the operator changed', () => {
-    const lines = [
-      line({ countLineId: 'L1' }),
-      line({ countLineId: 'L2', actualQuantity: 4, rowVersion: 2 }),
-    ]
+    const lines = [line({ id: 'L1' }), line({ id: 'L2', actualQuantity: 4 })]
     const indexes = countDirtyLineIndexes(lines, [
       { actualQuantity: '3', reason: '' },
       { actualQuantity: '4', reason: '' },
@@ -143,13 +141,11 @@ describe('countDirtyLineIndexes', () => {
 
 describe('planCountLineSaves', () => {
   it('sends only changed rows with their line id and exact actual; no per-line rowVersion', () => {
-    // RESOLUTION-025 / CONFLICT-020: the live `/actuals` wire carries line
+    // RESOLUTION-025 / F2: the live `/actuals` wire carries line
     // identity + the exact actual quantity only; the aggregate
-    // expectedRowVersion is supplied once at the batch level.
-    const lines = [
-      line({ countLineId: 'L1' }),
-      line({ countLineId: 'L2', actualQuantity: 4, rowVersion: 9, difference: -6 }),
-    ]
+    // expectedRowVersion is supplied once at the batch level. The LINE DTO
+    // has no rowVersion at all, so no version-based blocking exists (F2).
+    const lines = [line({ id: 'L1' }), line({ id: 'L2', actualQuantity: 4, difference: -6 })]
     const { request, blocked } = planCountLineSaves(7, lines, {
       lines: [
         { actualQuantity: '3', reason: 'نقص' },
@@ -160,22 +156,42 @@ describe('planCountLineSaves', () => {
     expect(request.expectedRowVersion).toBe(7)
     expect(request.actuals).toEqual([{ lineId: 'L1', actualQuantity: 3 }])
     expect(blocked).toEqual([])
-    // Belt and braces: nothing in the batch carries a rowVersion (live wire
-    // forbids per-line rowVersion; it would 422 the controller).
     for (const entry of request.actuals) {
       expect(entry).not.toHaveProperty('rowVersion')
     }
   })
 
-  it('does not emit a per-line reason on the actuals wire', () => {
-    // Variance reasons are collected at the review step
-    // (count-variance-review), not on the actuals save. The wire has no
-    // `reason` field, so the planner must not invent one.
-    const { request } = planCountLineSaves(1, [line()], {
+  it('plans the variance reasons typed in the same form for their own endpoints (F3)', () => {
+    const lines = [
+      line({ id: 'L1', varianceReason: null }), // typed a fresh reason
+      line({ id: 'L2', varianceReason: 'قديمة' }), // reason unchanged -> not sent
+      line({ id: 'L3', actualQuantity: 10, varianceReason: null }), // blank reason -> never sent
+    ]
+    const { request, reasons, blocked } = planCountLineSaves(1, lines, {
+      lines: [
+        { actualQuantity: '9', reason: 'نقص فعلي' },
+        { actualQuantity: '10', reason: 'قديمة' },
+        { actualQuantity: '10', reason: '   ' },
+      ],
+    })
+    expect(request.actuals).toEqual([
+      { lineId: 'L1', actualQuantity: 9 },
+      { lineId: 'L2', actualQuantity: 10 },
+    ])
+    expect(reasons).toEqual([
+      { lineId: 'L1', reason: 'نقص فعلي' },
+      // L2: server reason already matches the draft — nothing to send.
+    ])
+    expect(blocked).toEqual([])
+  })
+
+  it('does not emit a per-line reason on the actuals wire, and never a blank one', () => {
+    const { request, reasons } = planCountLineSaves(1, [line()], {
       lines: [{ actualQuantity: '3', reason: '   ' }],
     })
     expect(request.actuals[0]).toEqual({ lineId: 'L1', actualQuantity: 3 })
     expect(request.actuals[0]).not.toHaveProperty('reason')
+    expect(reasons).toEqual([])
   })
 
   it('blocks, rather than silently drops, a changed row whose quantity is not usable yet', () => {
@@ -187,7 +203,7 @@ describe('planCountLineSaves', () => {
   })
 
   it('blocks, rather than drops, a changed row the operator left blank', () => {
-    const lines = [line({ countLineId: 'L1', actualQuantity: 5, rowVersion: 2 })]
+    const lines = [line({ id: 'L1', actualQuantity: 5 })]
     const { request, blocked } = planCountLineSaves(1, lines, {
       lines: [{ actualQuantity: '', reason: 'تصحيح' }],
     })
@@ -195,70 +211,42 @@ describe('planCountLineSaves', () => {
     expect(blocked).toEqual([{ index: 0, kind: 'no-quantity' }])
   })
 
-  it('blocks a line the server gave no rowVersion, instead of sending one', () => {
-    // Per RESOLUTION-025 the planner still rejects a row whose server
-    // projection has no rowVersion: the save cannot prove it matches the
-    // operator's intent against a stable identity, and a missing id is
-    // exactly the case where the actuals controller would 422.
-    const withoutRowVersion: InventoryCountLine = {
-      countLineId: 'L9',
-      material: { id: 'm9', displayName: 'مادة' },
-      snapshotQuantity: 3,
-      actualQuantity: null,
-      difference: 0,
-    }
-    const { request, blocked } = planCountLineSaves(1, [withoutRowVersion], {
-      lines: [{ actualQuantity: '3', reason: '' }],
-    })
-    expect(request.actuals).toEqual([])
-    expect(blocked).toEqual([{ index: 0, kind: 'missing-row-version' }])
-    for (const entry of request.actuals) {
-      expect(entry).not.toHaveProperty('rowVersion')
-    }
-  })
-
   it('keeps sendable and blocked rows separate within one page', () => {
-    const noVersionLine: InventoryCountLine = {
-      countLineId: 'L3',
-      material: { id: 'm3', displayName: 'مادة' },
-      snapshotQuantity: 3,
-      actualQuantity: null,
-      difference: 0,
-    }
     const lines = [
-      line({ countLineId: 'L1', rowVersion: 4 }),
-      line({ countLineId: 'L2', rowVersion: 5, actualQuantity: 2 }),
-      noVersionLine,
+      line({ id: 'L1' }),
+      line({ id: 'L2', actualQuantity: 2 }),
+      line({ id: 'L3' }),
     ]
     const { request, blocked } = planCountLineSaves(5, lines, {
       lines: [
         { actualQuantity: '3', reason: '' }, // L1 changed, sendable
-        { actualQuantity: '', reason: '' }, // L2 changed, blank -> blocked
-        { actualQuantity: '9', reason: '' }, // L3 changed, no version -> blocked
+        { actualQuantity: '', reason: '' }, // L2 cleared -> blocked
+        { actualQuantity: '9', reason: '' }, // L3 changed, sendable
       ],
     })
-    expect(request.actuals).toEqual([{ lineId: 'L1', actualQuantity: 3 }])
-    expect(blocked).toEqual([
-      { index: 1, kind: 'no-quantity' },
-      { index: 2, kind: 'missing-row-version' },
+    expect(request.actuals).toEqual([
+      { lineId: 'L1', actualQuantity: 3 },
+      { lineId: 'L3', actualQuantity: 9 },
     ])
+    expect(blocked).toEqual([{ index: 1, kind: 'no-quantity' }])
   })
 
   it('produces an empty batch and an empty block list when nothing changed', () => {
-    const lines = [line({ countLineId: 'L1', actualQuantity: 3, rowVersion: 4 })]
-    const { request, blocked } = planCountLineSaves(1, lines, {
+    const lines = [line({ id: 'L1', actualQuantity: 3 })]
+    const { request, blocked, reasons } = planCountLineSaves(1, lines, {
       lines: [{ actualQuantity: '3', reason: '' }],
     })
     expect(request.actuals).toEqual([])
     expect(blocked).toEqual([])
+    expect(reasons).toEqual([])
   })
 })
 
 describe('toCountLineEntryFormValues', () => {
   it('seeds one draft per server row', () => {
     const values = toCountLineEntryFormValues([
-      line({ countLineId: 'L1' }),
-      line({ countLineId: 'L2', actualQuantity: 2, snapshotQuantity: 5, reason: 'فرق' }),
+      line({ id: 'L1' }),
+      line({ id: 'L2', actualQuantity: 2, snapshotQuantity: 5, varianceReason: 'فرق' }),
     ])
     expect(values.lines).toEqual([
       { actualQuantity: '', reason: '' },

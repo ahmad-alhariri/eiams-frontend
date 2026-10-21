@@ -33,7 +33,7 @@ function envelope(data: unknown) {
   } as never
 }
 
-/** A wire paged envelope, which is what transport.requestPage reads. */
+/** A wire paged envelope (snake_case pagination, as the live API sends it). */
 function pagedEnvelope(items: readonly unknown[]) {
   return {
     data: {
@@ -53,58 +53,131 @@ function pagedEnvelope(items: readonly unknown[]) {
 }
 
 const COUNT_ID = '123e4567-e89b-42d3-a456-426614174001'
+const LINE_ID = '123e4567-e89b-42d3-a456-426614174002'
+const WAREHOUSE_ID = '123e4567-e89b-42d3-a456-426614174009'
 
 beforeEach(() => {
   mockedRequest.mockReset()
 })
 
-describe('createCountService (e20-t01)', () => {
-  it('lists counts with status and warehouse filters as query params', async () => {
-    mockedRequest.mockReturnValue(pagedEnvelope([]) as never)
+describe('createCountService (IC-FE-1 live wire)', () => {
+  it('lists counts paged 1-based with optional status/warehouse filters', async () => {
+    mockedRequest.mockReturnValue(pagedEnvelope([{}]) as never)
     const service = createCountService(testTransport)
 
-    await service.listCounts({
-      pageIndex: 1,
-      pageSize: 10,
+    const page = await service.listCounts({
+      warehouseId: WAREHOUSE_ID,
       status: 'InProgress',
-      warehouseId: 'abc',
+      page: 1,
+      pageSize: 20,
     })
 
     expect(sentConfig()).toMatchObject({
       url: '/inventory-counts',
-      params: { pageIndex: 1, pageSize: 10, status: 'InProgress', warehouseId: 'abc' },
+      params: { warehouseId: WAREHOUSE_ID, status: 'InProgress', page: 1, pageSize: 20 },
+    })
+    // Normalized pagination (snake_case → camelCase), never a fabricated meta.
+    expect(page.page).toBe(1)
+    expect(page.pageSize).toBe(20)
+    expect(page.totalItems).toBe(1)
+  })
+
+  it('reads the count detail', async () => {
+    mockedRequest.mockReturnValue(envelope({ id: COUNT_ID }) as never)
+    const service = createCountService(testTransport)
+
+    await service.getCount(COUNT_ID)
+
+    expect(sentConfig()).toMatchObject({
+      url: `/inventory-counts/${COUNT_ID}`,
+      method: 'GET',
     })
   })
 
-  it('plans a count with an Idempotency-Key header and returns the session', async () => {
-    const session = { countId: COUNT_ID, status: 'Planned' }
-    mockedRequest.mockReturnValue(envelope(session))
+  it('plans a count with the closed 201 body and an Idempotency-Key, answering { id }', async () => {
+    mockedRequest.mockReturnValue(envelope({ id: COUNT_ID }) as never)
     const service = createCountService(testTransport)
 
-    const result = await service.planCount(
-      {
-        warehouseId: VALID_UUID(),
-        countType: 'Full',
-        freezePolicy: 'SoftFreeze',
-        rowVersion: 0,
-        scope: { scopeIds: [], scopeType: 'AllMaterials' },
-      },
-      'idem-key-1',
-    )
+    const request = {
+      warehouseId: WAREHOUSE_ID,
+      countType: 'Scheduled' as const,
+      scopeType: 'MaterialDomain' as const,
+      materialDomainId: WAREHOUSE_ID,
+      materialIds: [] as const,
+      freezePolicy: 'HardFreeze' as const,
+      freezePolicyReason: 'جرد سنوي',
+    }
+    const created = await service.planCount(request, 'idem-key-1')
 
-    expect(result).toEqual(session)
+    expect(created).toEqual({ id: COUNT_ID })
+    expect(sentConfig()).toMatchObject({
+      url: '/inventory-counts',
+      method: 'POST',
+      data: request,
+    })
     expect(sentConfig().headers?.['Idempotency-Key']).toBe('idem-key-1')
   })
 
-  it('starts a count with RowVersionAction semantics', async () => {
-    mockedRequest.mockReturnValue(envelope({ countId: COUNT_ID, status: 'InProgress' }))
+  it('starts a count with the live `{ expectedRowVersion }` body', async () => {
+    mockedRequest.mockReturnValue(envelope({}) as never)
     const service = createCountService(testTransport)
 
     await service.startCount(COUNT_ID, 3)
 
     expect(sentConfig()).toMatchObject({
       url: `/inventory-counts/${COUNT_ID}/start`,
-      data: { rowVersion: 3 },
+      method: 'POST',
+      data: { expectedRowVersion: 3 },
+    })
+  })
+
+  it('completes a count idempotently and closes with the live bodies', async () => {
+    mockedRequest.mockReturnValue(envelope({}) as never)
+    const service = createCountService(testTransport)
+
+    await service.completeCount(COUNT_ID, 5, 'idem-complete')
+    expect(sentConfig(0).data).toEqual({ expectedRowVersion: 5 })
+    expect(sentConfig(0).headers?.['Idempotency-Key']).toBe('idem-complete')
+
+    await service.closeCount(COUNT_ID, 6)
+    expect(sentConfig(1)).toMatchObject({
+      url: `/inventory-counts/${COUNT_ID}/close`,
+      data: { expectedRowVersion: 6 },
+    })
+  })
+
+  it('aborts with the mandatory reason (POST /cancel)', async () => {
+    mockedRequest.mockReturnValue(envelope({}) as never)
+    const service = createCountService(testTransport)
+
+    await service.cancelCount(COUNT_ID, { expectedRowVersion: 3, reason: 'سبب الإلغاء' })
+
+    expect(sentConfig()).toMatchObject({
+      url: `/inventory-counts/${COUNT_ID}/cancel`,
+      method: 'POST',
+      data: { expectedRowVersion: 3, reason: 'سبب الإلغاء' },
+    })
+  })
+
+  it('sets target status and freeze policy (PUT) with the live bodies', async () => {
+    mockedRequest.mockReturnValue(envelope({}) as never)
+    const service = createCountService(testTransport)
+
+    await service.setCountStatus(COUNT_ID, { targetStatus: 'InProgress', expectedRowVersion: 3 })
+    expect(sentConfig(0)).toMatchObject({
+      url: `/inventory-counts/${COUNT_ID}/status`,
+      method: 'PUT',
+      data: { targetStatus: 'InProgress', expectedRowVersion: 3 },
+    })
+
+    await service.setFreezePolicy(COUNT_ID, {
+      freezePolicy: 'SoftFreeze',
+      expectedRowVersion: 3,
+    })
+    expect(sentConfig(1)).toMatchObject({
+      url: `/inventory-counts/${COUNT_ID}/freeze-policy`,
+      method: 'PUT',
+      data: { freezePolicy: 'SoftFreeze', expectedRowVersion: 3 },
     })
   })
 
@@ -112,49 +185,96 @@ describe('createCountService (e20-t01)', () => {
     // RESOLUTION-025: PUT /inventory-counts/{countId}/actuals carries ONLY
     // `{ actuals: [{ lineId, actualQuantity }], expectedRowVersion }` — the
     // aggregate count row version, no per-line rowVersion.
-    mockedRequest.mockReturnValue(envelope({}))
+    mockedRequest.mockReturnValue(envelope({}) as never)
     const service = createCountService(testTransport)
 
     const request = {
-      actuals: [{ lineId: VALID_UUID(), actualQuantity: 5 }],
+      actuals: [{ lineId: LINE_ID, actualQuantity: 5 }],
       expectedRowVersion: 4,
     }
-    const result = await service.updateLines(COUNT_ID, request)
+    await service.updateLines(COUNT_ID, request)
 
     expect(sentConfig()).toMatchObject({
       url: `/inventory-counts/${COUNT_ID}/actuals`,
       method: 'PUT',
       data: {
-        actuals: [{ lineId: request.actuals[0]!.lineId, actualQuantity: 5 }],
+        actuals: [{ lineId: LINE_ID, actualQuantity: 5 }],
         expectedRowVersion: 4,
       },
     })
-    // Response body is `ApiResponse<EmptyResponse>` (200 + empty data); the
-    // service hands back an EmptyResponse so the hook refetches the count
-    // and lines instead of reading a page from this wire.
-    expect(result).toEqual({})
   })
 
-  it('completes a count idempotently and closes with row version', async () => {
-    mockedRequest.mockReturnValue(envelope({ countId: COUNT_ID, status: 'Completed' }))
+  it('saves one line actual and one variance reason (PUT per-line routes)', async () => {
+    mockedRequest.mockReturnValue(envelope({}) as never)
     const service = createCountService(testTransport)
 
-    await service.completeCount(COUNT_ID, 5, 'idem-complete')
+    await service.updateLineActual(COUNT_ID, LINE_ID, { actualQuantity: 23, expectedRowVersion: 3 })
+    expect(sentConfig(0)).toMatchObject({
+      url: `/inventory-counts/${COUNT_ID}/lines/${LINE_ID}/actual`,
+      method: 'PUT',
+      data: { actualQuantity: 23, expectedRowVersion: 3 },
+    })
 
-    const completeConfig = sentConfig()
-    expect(completeConfig.data).toEqual({ rowVersion: 5 })
-    expect(completeConfig.headers?.['Idempotency-Key']).toBe('idem-complete')
-
-    mockedRequest.mockReturnValue(envelope({ countId: COUNT_ID, status: 'Closed' }))
-    await service.closeCount(COUNT_ID, 6)
-    // Second call: the first was completeCount, which shares this transport.
+    await service.setLineVarianceReason(COUNT_ID, LINE_ID, {
+      reason: 'فرق فعلي',
+      expectedRowVersion: 4,
+    })
     expect(sentConfig(1)).toMatchObject({
-      url: `/inventory-counts/${COUNT_ID}/close`,
-      data: { rowVersion: 6 },
+      url: `/inventory-counts/${COUNT_ID}/lines/${LINE_ID}/variance-reason`,
+      method: 'PUT',
+      data: { reason: 'فرق فعلي', expectedRowVersion: 4 },
     })
   })
-})
 
-function VALID_UUID(): string {
-  return '999e4567-e89b-42d3-a456-426614174009'
-}
+  it('creates the adjustment draft with NO body (POST /adjustment → { id })', async () => {
+    mockedRequest.mockReturnValue(envelope({ id: COUNT_ID }) as never)
+    const service = createCountService(testTransport)
+
+    const created = await service.createAdjustment(COUNT_ID, 'idem-3')
+
+    expect(created).toEqual({ id: COUNT_ID })
+    expect(sentConfig()).toMatchObject({
+      url: `/inventory-counts/${COUNT_ID}/adjustment`,
+      method: 'POST',
+    })
+    expect(sentConfig().headers?.['Idempotency-Key']).toBe('idem-3')
+    expect(sentConfig().data).toBeUndefined()
+  })
+
+  it('reads lists of lines paged with the normalization on the lines route', async () => {
+    mockedRequest.mockReturnValue(
+      pagedEnvelope([{ id: LINE_ID, materialId: 'm', assetId: null, snapshotQuantity: 1, actualQuantity: null, difference: null, varianceReason: null }]) as never,
+    )
+    const service = createCountService(testTransport)
+
+    const page = await service.listLines(COUNT_ID, { page: 2, pageSize: 50, onlyVariance: true })
+
+    expect(sentConfig()).toMatchObject({
+      url: `/inventory-counts/${COUNT_ID}/lines`,
+      params: { page: 2, pageSize: 50, onlyVariance: true },
+    })
+    expect(page.items).toHaveLength(1)
+    expect(page.totalItems).toBe(1)
+  })
+
+  it('reads the warehouse freeze status (F9 endpoint)', async () => {
+    mockedRequest.mockReturnValue(
+      envelope({
+        warehouseId: WAREHOUSE_ID,
+        isPostingBlocked: true,
+        isProvisional: false,
+        hasSoftFreezeWarning: true,
+        activeCounts: [],
+      }) as never,
+    )
+    const service = createCountService(testTransport)
+
+    const status = await service.getFreezeStatus(WAREHOUSE_ID)
+
+    expect(sentConfig()).toMatchObject({
+      url: `/warehouses/${WAREHOUSE_ID}/inventory-freeze-status`,
+      method: 'GET',
+    })
+    expect(status.isPostingBlocked).toBe(true)
+  })
+})

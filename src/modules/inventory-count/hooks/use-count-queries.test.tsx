@@ -44,24 +44,20 @@ function createClient() {
   return client
 }
 
-// Only the SERVICE view-model is seeded here now: the live save
-// (`PUT /actuals`) answers `ApiResponse<EmptyResponse>` (200 + empty body), so
-// no MSW shape is needed for the mutation handlers.
-/** The view-model `countService.listLines` resolves to. */
-function emptyViewPage(pageIndex: number, pageSize: number, totalItems: number) {
+/**
+ * The normalized `ApiPage` a lines read resolves to: the live transport
+ * normalizes the snake_case wire pagination into these camelCase keys.
+ */
+function seededPage(page: number, pageSize: number, totalItems: number) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
   return {
     items: [],
-    meta: {
-      pageIndex,
-      page: pageIndex + 1,
-      pageSize,
-      itemCount: totalItems,
-      totalItems,
-      totalCount: totalItems,
-      totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
-      hasNextPage: false,
-      hasPreviousPage: false,
-    },
+    page,
+    pageSize,
+    totalItems,
+    totalPages,
+    hasNextPage: page < totalPages,
+    hasPreviousPage: page > 1,
   }
 }
 
@@ -85,8 +81,7 @@ describe('useUpdateCountLinesMutation invalidation', () => {
 
   it('refreshes both the whole-session review and the paged entry read', async () => {
     // RESOLUTION-025: the live save is PUT /inventory-counts/{countId}/actuals;
-    // it answers ApiResponse<EmptyResponse> (200 + empty body) and the hook
-    // invalidates the read keys itself.
+    // it answers with an empty body and the hook invalidates the read keys itself.
     server.use(http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () => apiJson({})))
     const client = createClient()
     // The review reads `allLines`; the quantity-entry workspace reads a paged
@@ -94,12 +89,12 @@ describe('useUpdateCountLinesMutation invalidation', () => {
     // be computed from a stale collection.
     const allLines = countQueryKeys.allLines(SCOPE, COUNT_ID)
     const pagedLines = countQueryKeys.lines(SCOPE, COUNT_ID, {
-      pageIndex: 1,
+      page: 1,
       pageSize: 25,
     })
 
     client.setQueryData(allLines, [])
-    client.setQueryData(pagedLines, emptyViewPage(1, 25, 205))
+    client.setQueryData(pagedLines, seededPage(1, 25, 205))
 
     const user = userEvent.setup()
     render(withClient(client, <SaveProbe />))
@@ -118,7 +113,7 @@ describe('useUpdateCountLinesMutation invalidation', () => {
     // stale) but imprecise, and it contradicts the "exact keys" clause of
     // docs/feature-service-composition-standard.md. Pinned here so a future
     // move to precise per-count invalidation is a deliberate, visible change
-    // across all five count mutations at once.
+    // across all count mutations at once.
     server.use(http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () => apiJson({})))
     const client = createClient()
     const otherCount = countQueryKeys.allLines(SCOPE, OTHER_COUNT_ID)
@@ -136,28 +131,29 @@ describe('useUpdateCountLinesMutation invalidation', () => {
 
 describe('useAllCountLinesQuery', () => {
   /**
-   * Server-paged handler. The session spans several `pageSize` pages so the
-   * fan-out is genuinely exercised rather than a single-page read.
+   * Server-paged handler (1-based). The session spans several `pageSize`
+   * pages so the fan-out is genuinely exercised rather than a single-page read.
    */
   function usePagedHandler(totalItems: number) {
     server.use(
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
         const url = new URL(request.url)
-        const pageIndex = Number(url.searchParams.get('pageIndex') ?? '0')
+        const page = Number(url.searchParams.get('page') ?? '1')
         const pageSize = Number(url.searchParams.get('pageSize') ?? String(ALL_LINES_PAGE_SIZE))
-        const start = pageIndex * pageSize
+        const start = (page - 1) * pageSize
         const size = Math.max(0, Math.min(pageSize, totalItems - start))
         return okPageJson(
           Array.from({ length: size }, (_u, i) => ({
-            countLineId: `L${start + i + 1}`,
-            material: { id: `m${start + i + 1}`, displayName: `مادة ${start + i + 1}` },
+            id: `L${start + i + 1}`,
+            materialId: `m${start + i + 1}`,
+            assetId: null,
             snapshotQuantity: 4,
             actualQuantity: start + i + 1,
             difference: start + i - 3,
-            rowVersion: 1,
+            varianceReason: null,
           })),
           {
-            page: pageIndex + 1,
+            page,
             pageSize,
             totalCount: totalItems,
             totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
@@ -178,8 +174,8 @@ describe('useAllCountLinesQuery', () => {
       expect(result.current.isSuccess).toBe(true)
     })
     expect(result.current.data).toHaveLength(450)
-    expect(result.current.data?.[0]?.countLineId).toBe('L1')
-    expect(result.current.data?.[449]?.countLineId).toBe('L450')
+    expect(result.current.data?.[0]?.id).toBe('L1')
+    expect(result.current.data?.[449]?.id).toBe('L450')
   }, 20000)
 
   it('preserves the server difference on every joined line', async () => {
@@ -194,7 +190,7 @@ describe('useAllCountLinesQuery', () => {
     })
     // The read must not recompute: every line's difference equals the wire value.
     for (const line of result.current.data ?? []) {
-      expect(line.difference).toBe(line.actualQuantity! - line.snapshotQuantity)
+      expect(line.difference).toBe((line.actualQuantity ?? 0) - line.snapshotQuantity)
     }
   }, 20000)
 

@@ -5,123 +5,114 @@ import { describe, expect, it } from 'vitest'
 
 import { CountToAdjustmentLaunch } from '@/modules/inventory-count/components/count-to-adjustment-launch'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { InventoryCount } from '@/shared/types/generated/eiams-v1'
+import type { InventoryCount } from '@/modules/inventory-count/types/inventory-count.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
-import {
-  fixtureUuid,
-  createSessionUser,
-  createSessionRole,
-  createSessionScope,
-} from '@/test/msw/factories'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 const COUNT_ID = '223e4567-e89b-42d3-a456-426614174002'
 const WAREHOUSE_ID = '823e4567-e89b-42d3-a456-426614174008'
+const ADJUSTMENT_ID = 'a23e4567-e89b-42d3-a456-426614174009'
+/** The adjustment route (adjustmentNew) is gated by these three codes. */
+const MANAGER_PERMISSIONS = ['count.view', 'document.view', 'document.create', 'document.post']
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: createSessionUser({ firstName: 'مدير المستودع' }),
+    user: createSessionUser({ firstName: '\u0645\u062F\u064A\u0631 \u0627\u0644\u0645\u0633\u062A\u0648\u062F\u0639' }),
     role: createSessionRole(),
     activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
   }
 }
 
-function completedCount(): InventoryCount {
+/** The live count detail: a flat DTO plus the server-owned settlement projection. */
+function count(overrides: Partial<InventoryCount> = {}): InventoryCount {
   return {
-    countId: COUNT_ID,
-    countType: 'Full',
-    createdAt: '2026-08-20T08:00:00.000Z',
-    createdBy: { id: fixtureUuid(90), displayName: 'مدير الجرد' },
+    id: COUNT_ID,
+    warehouseId: WAREHOUSE_ID,
+    countType: 'Cycle',
+    scopeType: 'EntireWarehouse',
     freezePolicy: 'SoftFreeze',
-    lineCount: 4,
-    referenceNumber: 'EIAMS-CNT-2026-0101',
-    rowVersion: 3,
-    scope: { scopeIds: [], scopeType: 'AllMaterials' },
-    startedAt: '2026-08-20T09:00:00.000Z',
     status: 'Completed',
-    varianceCount: 2,
-    warehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي' },
+    rowVersion: 3,
+    plannedAtUtc: '2026-08-20T08:00:00.000Z',
+    startedAtUtc: '2026-08-20T09:00:00.000Z',
+    completedAtUtc: '2026-08-20T10:00:00.000Z',
+    closedAtUtc: null,
+    abortedAtUtc: null,
+    materialDomainId: null,
+    summary: { totalLines: 4, countedLines: 4, varianceLines: 2, totalAbsoluteDifference: 5 },
+    settlement: { status: 'Pending', adjustmentId: null, adjustmentStatus: null },
+    ...overrides,
   }
 }
 
-function renderLaunch(count: InventoryCount, permissionCodes: readonly string[]) {
+function renderLaunch(
+  value: InventoryCount,
+  permissionCodes: readonly string[] = MANAGER_PERMISSIONS,
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(authSessionQueryKey, sessionWith(permissionCodes))
   return render(
-    <MemoryRouter initialEntries={[`/counts/${COUNT_ID}`]}>
+    <MemoryRouter initialEntries={['/counts/' + COUNT_ID]}>
       <QueryClientProvider client={client}>
         <Routes>
-          <Route path="/counts/:countId" element={<CountToAdjustmentLaunch count={count} />} />
+          <Route path="/counts/:countId" element={<CountToAdjustmentLaunch count={value} />} />
         </Routes>
       </QueryClientProvider>
     </MemoryRouter>,
   )
 }
 
-describe('CountToAdjustmentLaunch (e21-t03)', () => {
+const CREATE_DRAFT = /\u0625\u0646\u0634\u0627\u0621 \u0645\u0633\u0648\u062F\u0629/
+const GO_TO_DRAFT = /\u0627\u0644\u0627\u0646\u062A\u0642\u0627\u0644 \u0625\u0644\u0649 \u0645\u0633\u0648\u062F\u0629/
+
+describe('CountToAdjustmentLaunch (F8 - settlement drives the CTA)', () => {
   it.each(['Planned', 'InProgress'] as const)(
-    'hides launch for %s even with variance and manager permissions',
+    'hides the launch for %s even for an adjustment manager',
     (status) => {
-      renderLaunch({ ...completedCount(), status }, [
-        'document.view',
-        'document.create',
-        'document.post',
-      ])
-      expect(screen.queryByRole('link')).not.toBeInTheDocument()
+      renderLaunch(count({ status }))
+      expect(screen.queryByRole('button', { name: CREATE_DRAFT })).toBeNull()
+      expect(screen.queryByRole('link', { name: GO_TO_DRAFT })).toBeNull()
     },
   )
 
-  it.each(['Completed', 'Closed'] as const)('permits %s with nonzero variances', (status) => {
-    renderLaunch({ ...completedCount(), status }, [
-      'document.view',
-      'document.create',
-      'document.post',
-    ])
-    expect(screen.getByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' })).toBeVisible()
+  it('offers to create the settlement draft while the variance is unsettled', () => {
+    renderLaunch(count())
+    expect(screen.getByRole('button', { name: CREATE_DRAFT })).toBeVisible()
+    expect(screen.queryByRole('link', { name: GO_TO_DRAFT })).toBeNull()
   })
 
-  it('hides launch when the server reports zero variances', () => {
-    renderLaunch({ ...completedCount(), varianceCount: 0 }, [
-      'document.view',
-      'document.create',
-      'document.post',
-    ])
-    expect(screen.queryByRole('link')).not.toBeInTheDocument()
-  })
-
-  it('renders the launch CTA for an eligible manager with full count context', () => {
-    renderLaunch(completedCount(), [
-      'count.view',
-      'document.view',
-      'document.create',
-      'document.post',
-    ])
-
-    const cta = screen.getByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' })
-    expect(cta.getAttribute('href')).toBe(
-      `/adjustments/new?countId=${COUNT_ID}&purpose=CountVariance&warehouseId=${WAREHOUSE_ID}`,
+  it('links to the existing draft instead of creating a second one', () => {
+    renderLaunch(
+      count({ settlement: { status: 'Pending', adjustmentId: ADJUSTMENT_ID, adjustmentStatus: 'Draft' } }),
     )
+    const link = screen.getByRole('link', { name: GO_TO_DRAFT })
+    expect(link.getAttribute('href')).toBe('/adjustments/' + ADJUSTMENT_ID)
+    expect(screen.queryByRole('button', { name: CREATE_DRAFT })).toBeNull()
   })
 
-  it('hides the CTA for a keeper who can create ordinary documents but cannot post', () => {
-    renderLaunch(completedCount(), ['count.view', 'document.view', 'document.create'])
-
-    expect(screen.queryByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' })).toBeNull()
-    expect(screen.queryByText('إنشاء سند تسوية')).toBeNull()
+  it('shows nothing when the count has no variance to settle', () => {
+    renderLaunch(
+      count({ settlement: { status: 'NotRequired', adjustmentId: null, adjustmentStatus: null } }),
+    )
+    expect(screen.queryByRole('button', { name: CREATE_DRAFT })).toBeNull()
+    expect(screen.queryByRole('link', { name: GO_TO_DRAFT })).toBeNull()
   })
 
-  it('encodes identifiers safely in the query string', () => {
-    const count = {
-      ...completedCount(),
-      countId: 'id-with-سبيشل?chars',
-      warehouse: { id: 'wh&with=params', displayName: 'المستودع' },
-    }
-    renderLaunch(count, ['document.view', 'document.create', 'document.post'])
+  it('shows nothing once the adjustment settled the variance', () => {
+    renderLaunch(
+      count({
+        status: 'Closed',
+        settlement: { status: 'Settled', adjustmentId: ADJUSTMENT_ID, adjustmentStatus: 'Posted' },
+      }),
+    )
+    expect(screen.queryByRole('button', { name: CREATE_DRAFT })).toBeNull()
+    expect(screen.queryByRole('link', { name: GO_TO_DRAFT })).toBeNull()
+  })
 
-    const href = screen
-      .getByRole('link', { name: 'إنشاء سند تسوية لفروقات الجلسة' })
-      .getAttribute('href')
-    expect(href).toContain(`countId=${encodeURIComponent('id-with-سبيشل?chars')}`)
-    expect(href).toContain(`warehouseId=${encodeURIComponent('wh&with=params')}`)
+  it('hides the CTA from a keeper who may not create adjustments', () => {
+    renderLaunch(count(), ['count.view', 'document.view', 'document.create'])
+    expect(screen.queryByRole('button', { name: CREATE_DRAFT })).toBeNull()
+    expect(screen.queryByRole('link', { name: GO_TO_DRAFT })).toBeNull()
   })
 })
