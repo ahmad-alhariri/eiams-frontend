@@ -64,8 +64,7 @@ describe('cross-module scenario data', () => {
     const consumableMaterialId = scenario.catalog.consumableMaterial.id
     const sourceAssetDelta = scenario.ledgers.stockMovements
       .filter(
-        (movement) =>
-          movement.warehouseId === sourceId && movement.materialId === assetMaterialId,
+        (movement) => movement.warehouseId === sourceId && movement.materialId === assetMaterialId,
       )
       .reduce((total, movement) => total + movement.quantityDelta, 0)
     const sourceConsumableDelta = scenario.ledgers.stockMovements

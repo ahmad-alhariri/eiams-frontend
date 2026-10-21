@@ -4,13 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
 import type { ReactNode } from 'react'
-import {
-  FormProvider,
-  useForm,
-  useWatch,
-  type Resolver,
-  type UseFormReturn,
-} from 'react-hook-form'
+import { FormProvider, useForm, useWatch, type Resolver, type UseFormReturn } from 'react-hook-form'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
@@ -108,9 +102,7 @@ function linesValue(): DocumentLinesContainer['lines'] {
 }
 
 function useEligibleItemsHandler(items: readonly ReturnEligibleItem[]) {
-  server.use(
-    http.get(`${API_BASE_URL}/returns/eligible-items`, () => okPageJson([...items])),
-  )
+  server.use(http.get(`${API_BASE_URL}/returns/eligible-items`, () => okPageJson([...items])))
 }
 
 afterEach(() => {
@@ -170,13 +162,15 @@ describe('ReturnLineAssetSelector (FIX-R2)', () => {
 
     await user.click(screen.getByRole('checkbox', { name: 'AST-2026-0001 — حاسوب محمول' }))
     await waitFor(() => expect(linesValue()[0]?.assetIds).toEqual([ASSET_A_ID]))
-    expect(screen.getByText('المحدد 1 من 2 — يجب أن يساوي عدد الأصول المحددة الكمية.'))
-      .toBeInTheDocument()
+    expect(
+      screen.getByText('المحدد 1 من 2 — يجب أن يساوي عدد الأصول المحددة الكمية.'),
+    ).toBeInTheDocument()
 
     await user.click(screen.getByRole('checkbox', { name: 'AST-2026-0002 — حاسوب محمول' }))
     await waitFor(() => expect(linesValue()[0]?.assetIds).toEqual([ASSET_A_ID, ASSET_B_ID]))
-    expect(screen.getByText('الأصول المستردة للبند: 2 من 2 (يجب أن يساوي المحدد الكمية)'))
-      .toBeInTheDocument()
+    expect(
+      screen.getByText('الأصول المستردة للبند: 2 من 2 (يجب أن يساوي المحدد الكمية)'),
+    ).toBeInTheDocument()
   })
 
   it('flags a non-integer quantity on the asset line', () => {

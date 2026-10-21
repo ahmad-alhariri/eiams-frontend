@@ -368,9 +368,7 @@ describe('the cross-module ledger graph is consumable through the production ser
       http.get(`${API_BASE_URL}/assets/:assetId/movements`, () =>
         okPageJson(ledgers.assetMovements),
       ),
-      http.get(`${API_BASE_URL}/assets/:assetId/custody-timeline`, () =>
-        okJson(ledgers.custodies),
-      ),
+      http.get(`${API_BASE_URL}/assets/:assetId/custody-timeline`, () => okJson(ledgers.custodies)),
       http.get(`${API_BASE_URL}/audit-logs`, ({ request }) => {
         requested.push(new URL(request.url).searchParams.get('pageIndex') ?? '')
         return okPageJson(ledgers.auditLogs)

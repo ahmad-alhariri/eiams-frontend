@@ -240,7 +240,9 @@ describe('QuantityLineEditor', () => {
     const user = userEvent.setup()
     useCatalogHandlers()
     const { host } = createTestHost()
-    const rendered = render(host(() => <QuantityLineEditor documentType="Issue" warehouseId={undefined} />))
+    const rendered = render(
+      host(() => <QuantityLineEditor documentType="Issue" warehouseId={undefined} />),
+    )
     await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
     fireEvent.change(screen.getByPlaceholderText('ابحث عن مادة...'), { target: { value: 'قطعة' } })
     await waitFor(() =>

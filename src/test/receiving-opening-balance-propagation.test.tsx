@@ -18,10 +18,7 @@ import { documentQueryKeys, useDocumentDetailQuery } from '@/shared/documents/us
 import { RouteSuspense } from '@/shared/layout/route-suspense'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
-import type {
-  InventoryBalance,
-  StockMovement,
-} from '@/modules/inventory/types/inventory.api-types'
+import type { InventoryBalance, StockMovement } from '@/modules/inventory/types/inventory.api-types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
@@ -164,13 +161,10 @@ describe('receiving and opening balance propagation', () => {
           wireDocumentDetails(responseScope === 'enterprise' ? receiving : warehouseDocument),
         )
       }),
-      http.get(
-        `${environment.apiBaseUrl}/inventory/movements/${receivingMovement.id}`,
-        () => {
-          requestCounts.movement += 1
-          return apiJson(responseScope === 'enterprise' ? receivingMovement : warehouseMovement)
-        },
-      ),
+      http.get(`${environment.apiBaseUrl}/inventory/movements/${receivingMovement.id}`, () => {
+        requestCounts.movement += 1
+        return apiJson(responseScope === 'enterprise' ? receivingMovement : warehouseMovement)
+      }),
       http.get(`${environment.apiBaseUrl}/inventory/balances/${receivingBalance.id}`, () => {
         requestCounts.balance += 1
         return apiJson(responseScope === 'enterprise' ? receivingBalance : warehouseBalance)
@@ -211,14 +205,10 @@ describe('receiving and opening balance propagation', () => {
       client.getQueryData(documentQueryKeys.document(warehouseScope, receiving.documentId)),
     ).toEqual(wireDocumentDetails(warehouseDocument))
     expect(
-      client.getQueryData(
-        inventoryQueryKeys.movement(enterpriseScope, receivingMovement.id),
-      ),
+      client.getQueryData(inventoryQueryKeys.movement(enterpriseScope, receivingMovement.id)),
     ).toEqual(receivingMovement)
     expect(
-      client.getQueryData(
-        inventoryQueryKeys.movement(warehouseScope, receivingMovement.id),
-      ),
+      client.getQueryData(inventoryQueryKeys.movement(warehouseScope, receivingMovement.id)),
     ).toEqual(warehouseMovement)
     expect(
       client.getQueryData(inventoryQueryKeys.balance(enterpriseScope, receivingBalance.id)),
@@ -330,8 +320,7 @@ function useScenarioHandlers(
 function findMovement(document: WarehouseDocument): StockMovement {
   const lineId = document.lines[0]?.lineId
   const movement = scenario.ledgers.stockMovements.find(
-    (candidate) =>
-      candidate.documentId === document.documentId && candidate.lineId === lineId,
+    (candidate) => candidate.documentId === document.documentId && candidate.lineId === lineId,
   )
   if (movement === undefined) {
     throw new Error(`Missing stock movement for document ${document.documentId}`)

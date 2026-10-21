@@ -284,16 +284,14 @@ describe('useDocumentLifecycleAction family', () => {
   it('does not report a business 409 as a concurrent edit or blame another user', async () => {
     const { toastWrapper } = createHarness()
     server.use(
-      http.post(
-        `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/cancel`,
-        () =>
-          apiJson(
-            {
-              code: 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
-              detailAr: 'تعذر تنفيذ الإجراء: حالة السند لا تسمح بالإلغاء.',
-            },
-            { status: 409 },
-          ),
+      http.post(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/cancel`, () =>
+        apiJson(
+          {
+            code: 'WAREHOUSE_DOCUMENTS_INVALID_TRANSITION',
+            detailAr: 'تعذر تنفيذ الإجراء: حالة السند لا تسمح بالإلغاء.',
+          },
+          { status: 409 },
+        ),
       ),
     )
 
@@ -302,7 +300,11 @@ describe('useDocumentLifecycleAction family', () => {
     })
 
     act(() => {
-      result.current.mutate({ rowVersion: 1, reason: 'سبب الإلغاء', idempotencyKey: 'cancel-key-2' })
+      result.current.mutate({
+        rowVersion: 1,
+        reason: 'سبب الإلغاء',
+        idempotencyKey: 'cancel-key-2',
+      })
     })
 
     await waitFor(() => expect(result.current.error).not.toBeNull())

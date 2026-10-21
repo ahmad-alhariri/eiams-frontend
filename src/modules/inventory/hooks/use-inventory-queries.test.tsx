@@ -90,9 +90,7 @@ describe('inventory query hooks', () => {
       http.get(`${API_BASE_URL}/inventory/balances`, () => okPageJson([balance])),
       http.get(`${API_BASE_URL}/inventory/balances/${balance.id}`, () => okJson(balance)),
       http.get(`${API_BASE_URL}/inventory/movements`, () => okPageJson([movement])),
-      http.get(`${API_BASE_URL}/inventory/movements/${movement.id}`, () =>
-        okJson(movement),
-      ),
+      http.get(`${API_BASE_URL}/inventory/movements/${movement.id}`, () => okJson(movement)),
     )
 
     const listWrapper = createWrapper()

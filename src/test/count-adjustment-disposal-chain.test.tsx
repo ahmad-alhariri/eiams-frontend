@@ -28,11 +28,13 @@ import type {
 } from '@/modules/adjustment/types/adjustment.types'
 import type { Asset, AssetCustody } from '@/shared/types/generated/eiams-v1'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
+import { toWireDetails, toWirePolicy } from '@/test/msw/warehouse-document-handlers'
 import {
-  toWireDetails,
-  toWirePolicy,
-} from '@/test/msw/warehouse-document-handlers'
-import { createDocumentPolicy, createPolicyBlocker, createActionAvailability, createSession } from '@/test/msw/factories'
+  createDocumentPolicy,
+  createPolicyBlocker,
+  createActionAvailability,
+  createSession,
+} from '@/test/msw/factories'
 import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
 import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
@@ -468,7 +470,9 @@ describe('count adjustment and disposal chain', () => {
         rowVersion: draft.rowVersion + 1,
       }
       server.use(
-        http.get(`*/api/v1/adjustments/${disposal.id}`, () => apiJson(posted ? postedAdjustment : draft)),
+        http.get(`*/api/v1/adjustments/${disposal.id}`, () =>
+          apiJson(posted ? postedAdjustment : draft),
+        ),
         http.post(`*/api/v1/adjustments/${disposal.id}/post`, async ({ request }) => {
           posts.push(await request.json())
           posted = true
@@ -482,16 +486,16 @@ describe('count adjustment and disposal chain', () => {
           ),
         ),
         http.get(`*/api/v1/warehouse-documents/${disposal.id}/policy`, () =>
-          okJson(
-            toWirePolicy(posted ? scenario.documents.disposal : draftDocumentOf(draft, true)),
-          ),
+          okJson(toWirePolicy(posted ? scenario.documents.disposal : draftDocumentOf(draft, true))),
         ),
         http.get(`*/api/v1/assets/${originalAsset.assetId}`, () =>
           apiJson(posted ? disposedAsset : originalAsset),
         ),
         http.get(`*/api/v1/assets/${originalAsset.assetId}/custody-timeline`, () =>
           okJson(
-            (posted ? closedCustodies : activeCustody ? [activeCustody] : []).map(toCustodyTimelineRow),
+            (posted ? closedCustodies : activeCustody ? [activeCustody] : []).map(
+              toCustodyTimelineRow,
+            ),
           ),
         ),
         http.get(`*/api/v1/assets/${originalAsset.assetId}/movements`, () =>
@@ -527,7 +531,9 @@ describe('count adjustment and disposal chain', () => {
       await journey.user.click(await screen.findByRole('button', { name: 'ترحيل السند' }))
       await waitFor(() => expect(projections.result.current.asset.data).toEqual(disposedAsset))
       await waitFor(() =>
-        expect(projections.result.current.custody.data).toEqual(closedCustodies.map(toCustodyTimelineRow)),
+        expect(projections.result.current.custody.data).toEqual(
+          closedCustodies.map(toCustodyTimelineRow),
+        ),
       )
       await waitFor(() => expect(projections.result.current.pending.data?.items).toEqual([]))
       await waitFor(() =>

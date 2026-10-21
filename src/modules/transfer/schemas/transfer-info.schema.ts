@@ -15,7 +15,9 @@ const TRANSFER_REASON_MAX_LENGTH = 200
  * (uuid), with a mandatory Arabic reason for the audit trail.
  */
 export const transferInfoSchema = z.object({
-  destinationWarehouseId: z.string().uuid('ÙŠØ¬Ø¨ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø³ØªÙˆØ¯Ø¹ Ø§Ù„ÙˆØ¬Ù‡Ø© Ù…Ù† Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.'),
+  destinationWarehouseId: z
+    .string()
+    .uuid('ÙŠØ¬Ø¨ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø³ØªÙˆØ¯Ø¹ Ø§Ù„ÙˆØ¬Ù‡Ø© Ù…Ù† Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.'),
   transferReason: z
     .string()
     .trim()
@@ -97,4 +99,3 @@ export function buildTransferPetal(values: TransferPetalContainer['petal']): Tra
     values.destinationWarehouseName === '' ? undefined : values.destinationWarehouseName,
   )
 }
-

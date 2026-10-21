@@ -20,10 +20,7 @@ import { AsyncSelect } from '@/shared/ui/async-select'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type {
-  AdjustmentPurpose,
-  AdjustmentStatus,
-} from '@/shared/types/generated/eiams-v1'
+import type { AdjustmentPurpose, AdjustmentStatus } from '@/shared/types/generated/eiams-v1'
 import { formatDateTime } from '@/shared/utils/format'
 
 /**

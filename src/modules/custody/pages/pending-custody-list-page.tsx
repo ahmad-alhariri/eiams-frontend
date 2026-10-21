@@ -121,11 +121,7 @@ export default function PendingCustodyListPage() {
           header: '',
           cell: ({ row }) =>
             canAssign ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setAssigningRow(row.original)}
-              >
+              <Button type="button" variant="outline" onClick={() => setAssigningRow(row.original)}>
                 تكليف موظف
               </Button>
             ) : null,

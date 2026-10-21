@@ -10,13 +10,7 @@ import { isConcurrencyConflict } from '@/shared/services/mutation-safety'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 
-import {
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/shared/forms/form'
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 
 const FALLBACK_SAVE_ERROR_AR = 'تعذّر حفظ رقم المستند الورقي.'
 
@@ -99,7 +93,9 @@ export function DraftPaperReferenceEditor({
       // only covers a network failure with no structured answer at all.
       const apiError = normalizeApiError(error)
       form.setError('root', {
-        message: apiError.detailAr ?? (apiError.titleAr === '' ? FALLBACK_SAVE_ERROR_AR : apiError.titleAr),
+        message:
+          apiError.detailAr ??
+          (apiError.titleAr === '' ? FALLBACK_SAVE_ERROR_AR : apiError.titleAr),
       })
     }
   })
@@ -164,11 +160,7 @@ export function DraftPaperReferenceEditor({
             )}
           />
           <div className="flex items-end">
-            <Button
-              type="submit"
-              loading={mutation.isPending}
-              disabled={mutation.isPending}
-            >
+            <Button type="submit" loading={mutation.isPending} disabled={mutation.isPending}>
               حفظ الرقم الورقي
             </Button>
           </div>

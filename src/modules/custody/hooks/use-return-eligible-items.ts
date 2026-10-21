@@ -32,12 +32,7 @@ export function useReturnEligibleItems(
     queryKey:
       scope === undefined || originalIssueDocumentId === undefined
         ? queryKeys.public(RETURN_RESOURCE, 'eligible-items')
-        : queryKeys.scoped(
-            scope,
-            RETURN_RESOURCE,
-            'eligible-items',
-            originalIssueDocumentId,
-          ),
+        : queryKeys.scoped(scope, RETURN_RESOURCE, 'eligible-items', originalIssueDocumentId),
     queryFn: () => returnService.listEligibleItems(originalIssueDocumentId ?? ''),
     enabled,
     staleTime: OPERATIONAL_STALE_TIME,

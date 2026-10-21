@@ -17,10 +17,7 @@ import {
 import { documentQueryKeys, useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
-import type {
-  InventoryBalance,
-  StockMovement,
-} from '@/modules/inventory/types/inventory.api-types'
+import type { InventoryBalance, StockMovement } from '@/modules/inventory/types/inventory.api-types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
@@ -220,15 +217,10 @@ describe('atomic transfer propagation', () => {
         requestCounts.sourceBalance += 1
         return apiJson(responseScope === 'enterprise' ? sourceBalance : siteSourceBalance)
       }),
-      http.get(
-        `${environment.apiBaseUrl}/inventory/balances/${destinationBalance.id}`,
-        () => {
-          requestCounts.destinationBalance += 1
-          return apiJson(
-            responseScope === 'enterprise' ? destinationBalance : siteDestinationBalance,
-          )
-        },
-      ),
+      http.get(`${environment.apiBaseUrl}/inventory/balances/${destinationBalance.id}`, () => {
+        requestCounts.destinationBalance += 1
+        return apiJson(responseScope === 'enterprise' ? destinationBalance : siteDestinationBalance)
+      }),
     )
 
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -286,25 +278,23 @@ describe('atomic transfer propagation', () => {
     expect(
       client.getQueryData(inventoryQueryKeys.movement(enterpriseScope, transferOut.id)),
     ).toEqual(transferOut)
-    expect(
-      client.getQueryData(inventoryQueryKeys.movement(siteScope, transferOut.id)),
-    ).toEqual(siteTransferOut)
+    expect(client.getQueryData(inventoryQueryKeys.movement(siteScope, transferOut.id))).toEqual(
+      siteTransferOut,
+    )
     expect(
       client.getQueryData(inventoryQueryKeys.movement(enterpriseScope, transferIn.id)),
     ).toEqual(transferIn)
-    expect(
-      client.getQueryData(inventoryQueryKeys.movement(siteScope, transferIn.id)),
-    ).toEqual(siteTransferIn)
+    expect(client.getQueryData(inventoryQueryKeys.movement(siteScope, transferIn.id))).toEqual(
+      siteTransferIn,
+    )
     expect(
       client.getQueryData(inventoryQueryKeys.balance(enterpriseScope, sourceBalance.id)),
     ).toEqual(sourceBalance)
+    expect(client.getQueryData(inventoryQueryKeys.balance(siteScope, sourceBalance.id))).toEqual(
+      siteSourceBalance,
+    )
     expect(
-      client.getQueryData(inventoryQueryKeys.balance(siteScope, sourceBalance.id)),
-    ).toEqual(siteSourceBalance)
-    expect(
-      client.getQueryData(
-        inventoryQueryKeys.balance(enterpriseScope, destinationBalance.id),
-      ),
+      client.getQueryData(inventoryQueryKeys.balance(enterpriseScope, destinationBalance.id)),
     ).toEqual(destinationBalance)
     expect(
       client.getQueryData(inventoryQueryKeys.balance(siteScope, destinationBalance.id)),

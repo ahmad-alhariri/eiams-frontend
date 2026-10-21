@@ -126,7 +126,9 @@ describe('mutation safety helpers', () => {
     })
 
     it('is false for a status that is not a conflict at all', () => {
-      expect(isConcurrencyConflict(responseError(wireError('UNPROCESSABLE_ENTITY'), 422))).toBe(false)
+      expect(isConcurrencyConflict(responseError(wireError('UNPROCESSABLE_ENTITY'), 422))).toBe(
+        false,
+      )
       expect(isConcurrencyConflict(new Error('offline'))).toBe(false)
     })
 
@@ -138,7 +140,9 @@ describe('mutation safety helpers', () => {
       expect(isConcurrencyConflict(responseError({ success: false, error: {} }, 409))).toBe(true)
       expect(isConcurrencyConflict(responseError('Conflict', 409))).toBe(true)
       expect(
-        isConcurrencyConflict(responseError(wireError('WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH'), 422)),
+        isConcurrencyConflict(
+          responseError(wireError('WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH'), 422),
+        ),
       ).toBe(false)
     })
   })

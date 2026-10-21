@@ -158,9 +158,7 @@ describe('planCountLineSaves', () => {
     })
 
     expect(request.expectedRowVersion).toBe(7)
-    expect(request.actuals).toEqual([
-      { lineId: 'L1', actualQuantity: 3 },
-    ])
+    expect(request.actuals).toEqual([{ lineId: 'L1', actualQuantity: 3 }])
     expect(blocked).toEqual([])
     // Belt and braces: nothing in the batch carries a rowVersion (live wire
     // forbids per-line rowVersion; it would 422 the controller).
