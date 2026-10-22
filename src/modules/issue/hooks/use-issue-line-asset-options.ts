@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 
 import { useAssetsQuery } from '@/modules/asset/hooks/use-asset-queries'
-import type { Asset } from '@/shared/types/generated/eiams-v1'
+import type { Asset } from '@/modules/asset/types/asset.types'
 
 /**
  * Existing-asset options source for the t05 issued-asset selector (D-IAR-01).
@@ -27,7 +27,7 @@ export function useIssueLineAssetOptions(
     warehouseId: warehouseId ?? '',
     materialId: materialId ?? '',
     status: 'InStock',
-    ...(enabled ? {} : { pageIndex: 0, pageSize: 1 }),
+    ...(enabled ? {} : { page: 1, pageSize: 1 }),
   })
 
   return useMemo(
