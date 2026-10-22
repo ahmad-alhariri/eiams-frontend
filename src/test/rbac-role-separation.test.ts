@@ -207,9 +207,15 @@ describe('custody assignment stays with the keeper workflow', () => {
     expect(manager.permissionCodes).not.toContain('custody.assign')
   })
 
-  it('gates the pending queue on assign permission, not on the view code', () => {
+  it('gates the pending queue on the view code, not on the assign permission', () => {
+    // The pending queue is a READ: the server serves `GET /custodies/pending`
+    // with the same `asset.view` permission as every other custody read
+    // (`PermissionCodes.Custodies.View` is `asset.view`). `custody.assign`
+    // gates the WRITE affordance on the page — the assignment button — which
+    // is why the keeper (who holds it) and the manager (who does not) both
+    // reach the route while only the keeper can act on a row.
     expect(hasRoutePermission(keeper.permissionCodes, 'custodyPending')).toBe(true)
-    expect(hasRoutePermission(manager.permissionCodes, 'custodyPending')).toBe(false)
+    expect(hasRoutePermission(manager.permissionCodes, 'custodyPending')).toBe(true)
   })
 
   it('leaves the active read-only custody list open to both', () => {

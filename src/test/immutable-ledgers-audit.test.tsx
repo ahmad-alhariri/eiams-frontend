@@ -23,7 +23,6 @@ import {
   createAssetMovement,
   createAuditLog,
   createAuditLogEntry,
-  createPage,
   createSession,
   fixtureUuid,
 } from '@/test/msw/factories'
@@ -231,6 +230,7 @@ describe('the five ledgers expose no write path (static proof)', () => {
     ])
     expect(Object.keys(assetService).sort()).toEqual([
       'getAsset',
+      'getAssetCurrentStatus',
       'getAssetCustodyTimeline',
       'listAssetMovements',
       'listAssets',
@@ -381,7 +381,7 @@ describe('the cross-module ledger graph is consumable through the production ser
     const balances = await inventoryService.listBalances({ page: 1, pageSize: 10 })
     const stockMovements = await inventoryService.listMovements({ page: 1, pageSize: 10 })
     const assetMovements = await assetService.listAssetMovements(SCENARIO.assets.returned.assetId, {
-      pageIndex: 0,
+      page: 1,
       pageSize: 10,
     })
     const custodies = await assetService.getAssetCustodyTimeline(SCENARIO.assets.returned.assetId)
@@ -669,18 +669,23 @@ describe('the custody timeline surfaces a closed row end time', () => {
 describe('the asset movement ledger pages against the server', () => {
   const ASSET_ID = fixtureUuid(4501)
 
-  function movementPage(pageIndex: number) {
-    return createPage(
-      [
-        createAssetMovement({
-          assetId: ASSET_ID,
-          documentReference: `EIAMS-MOV-2026-000${pageIndex + 1}`,
-          movementId: fixtureUuid(4510 + pageIndex),
-          occurredAt: '2026-08-2' + (pageIndex + 1) + 'T10:00:00.000Z',
-        }),
-      ],
-      { pageIndex, pageSize: 10, totalItems: 3, totalPages: 3 },
-    )
+  /**
+   * The LIVE movement row (`AssetMovementResponse`): flat, camelCase, and
+   * without the snapshot's warehouse routing or operator. The wire page is
+   * ONE-based, so the first page is `1`.
+   */
+  function movementPage(page: number) {
+    return [
+      {
+        id: fixtureUuid(4510 + page),
+        assetId: ASSET_ID,
+        documentId: fixtureUuid(4520 + page),
+        documentReferenceNumber: `EIAMS-MOV-2026-000${page}`,
+        documentType: 'Adjustment',
+        movementType: 'Disposed' as const,
+        movedAtUtc: '2026-08-2' + page + 'T10:00:00.000Z',
+      },
+    ]
   }
 
   it('requests the next page index when the page control is used', async () => {
@@ -688,14 +693,13 @@ describe('the asset movement ledger pages against the server', () => {
     const requested: string[] = []
     server.use(
       http.get(`${API_BASE_URL}/assets/:assetId/movements`, ({ request }) => {
-        const pageIndex = new URL(request.url).searchParams.get('pageIndex') ?? ''
-        requested.push(pageIndex)
-        const movementResponse = movementPage(Number(pageIndex))
-        return okPageJson(movementResponse.items, {
-          page: pageIndex === '' ? 1 : Number(pageIndex) + 1,
-          pageSize: movementResponse.meta.pageSize,
-          totalCount: movementResponse.meta.totalItems,
-          totalPages: movementResponse.meta.totalPages,
+        const page = new URL(request.url).searchParams.get('page') ?? ''
+        requested.push(page)
+        return okPageJson(movementPage(Number(page) || 1), {
+          page: Number(page) || 1,
+          pageSize: 10,
+          totalCount: 3,
+          totalPages: 3,
         })
       }),
     )
@@ -703,24 +707,24 @@ describe('the asset movement ledger pages against the server', () => {
 
     expect(await screen.findByText('EIAMS-MOV-2026-0001')).toBeInTheDocument()
     expect(await screen.findByText('صفحة ١ من ٣')).toBeInTheDocument()
-    expect(requested).toEqual(['0'])
+    // The wire page is ONE-based; the snapshot's pageIndex is never sent.
+    expect(requested).toEqual(['1'])
 
     await user.click(screen.getByRole('button', { name: 'الصفحة التالية' }))
 
     expect(await screen.findByText('EIAMS-MOV-2026-0002')).toBeInTheDocument()
-    await waitFor(() => expect(requested).toEqual(['0', '1']))
+    await waitFor(() => expect(requested).toEqual(['1', '2']))
     expect(screen.getByText('صفحة ٢ من ٣')).toBeInTheDocument()
   })
 
   it('formats the event timestamp instead of rendering the raw ISO value', async () => {
-    const movementResponse = movementPage(0)
     server.use(
       http.get(`${API_BASE_URL}/assets/:assetId/movements`, () =>
-        okPageJson(movementResponse.items, {
+        okPageJson(movementPage(1), {
           page: 1,
-          pageSize: movementResponse.meta.pageSize,
-          totalCount: movementResponse.meta.totalItems,
-          totalPages: movementResponse.meta.totalPages,
+          pageSize: 10,
+          totalCount: 3,
+          totalPages: 3,
         }),
       ),
     )

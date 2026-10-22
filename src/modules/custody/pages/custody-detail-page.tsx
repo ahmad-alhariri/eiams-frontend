@@ -1,25 +1,29 @@
 import { Link, useParams } from 'react-router'
 
 import { TransferCustodyDialog } from '@/modules/custody/components/transfer-custody-dialog'
+import { CustodyStatusBadge } from '@/modules/custody/components/custody-status-badge'
 import { useCustodyRowQuery } from '@/modules/custody/hooks/use-custody-row-query'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
-import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
+import { formatDateTime } from '@/shared/utils/format'
 
 /**
- * Custody detail page (e19-t04): one active or historical custody row with
- * its holder and asset context. The responsibility transfer flow (e19-t05)
- * composes here as a dialog gated by `custody.assign`.
+ * Custody detail page: one active or historical custody row with its holder
+ * and asset context. The responsibility transfer flow composes here as a
+ * dialog gated by `custody.assign`.
+ *
+ * The live row is flat: `holderDisplayName` + `holderType`/`holderId` for the
+ * holder, `subjectId` for the asset the row is about, and `fromUtc` / `toUtc`
+ * for the custody period.
  */
 export default function CustodyDetailPage() {
   const { custodyId } = useParams<{ custodyId: string }>()
   const rowQuery = useCustodyRowQuery(custodyId)
-  console.log('CUSTODY DETAIL MOUNT, id:', custodyId, 'status:', rowQuery.status)
   const row = rowQuery.data
   const { has } = usePermission()
   const canTransfer = has('custody.assign') && row?.status === 'Active'
@@ -31,12 +35,10 @@ export default function CustodyDetailPage() {
         subtitle={
           row === undefined || row === null
             ? undefined
-            : `${row.assetNumber} — ${row.holder.displayName}`
+            : `${row.assetNumber ?? row.materialNameAr} — ${row.holderDisplayName}`
         }
         toolbar={
-          row === undefined || row === null ? null : (
-            <StatusBadge entity="custody" status={row.status} />
-          )
+          row === undefined || row === null ? null : <CustodyStatusBadge status={row.status} />
         }
       />
 
@@ -61,19 +63,29 @@ export default function CustodyDetailPage() {
           <ContentCard title="بيانات العهدة">
             <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
               <DetailField label="رقم الأصل">
-                <Link
-                  className="font-mono text-sm font-semibold underline-offset-4 hover:underline"
-                  to={ROUTE_PATHS.assetDetail.replace(':assetId', row.assetId)}
-                >
-                  <span dir="ltr">{row.assetNumber}</span>
-                </Link>
+                {row.assetNumber === null ? (
+                  <span>{row.materialNameAr}</span>
+                ) : (
+                  <Link
+                    className="font-mono text-sm font-semibold underline-offset-4 hover:underline"
+                    to={ROUTE_PATHS.assetDetail.replace(':assetId', row.subjectId)}
+                  >
+                    <span dir="ltr">{row.assetNumber}</span>
+                  </Link>
+                )}
               </DetailField>
-              <DetailField label="الحائز">{row.holder.displayName}</DetailField>
+              <DetailField label="الحائز">{row.holderDisplayName}</DetailField>
+              <DetailField label="نوع الحائز" ltr>
+                {row.holderType}
+              </DetailField>
               <DetailField label="نوع الحفظ">
                 {row.custodyKind === 'Personal' ? 'حفظ شخصي' : 'حفظ تشغيلي'}
               </DetailField>
               <DetailField label="بداية العهدة" ltr>
-                {row.fromTs}
+                {formatDateTime(row.fromUtc)}
+              </DetailField>
+              <DetailField label="نهاية العهدة" ltr={row.toUtc !== null}>
+                {row.toUtc === null ? '—' : formatDateTime(row.toUtc)}
               </DetailField>
               <DetailField label="سند الصرف المرجعي" ltr>
                 <span className="font-mono text-sm">{row.issueDocumentId}</span>

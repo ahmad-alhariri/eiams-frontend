@@ -19,7 +19,12 @@ import { documentQueryKeys, useDocumentDetailQuery } from '@/shared/documents/us
 import { RouteSuspense } from '@/shared/layout/route-suspense'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
 import { toArabicDigits } from '@/shared/utils/format'
-import type { AssetCustody, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type {
+  Asset,
+  AssetCustody,
+  AssetMovement,
+  WarehouseDocument,
+} from '@/shared/types/generated/eiams-v1'
 import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
@@ -73,13 +78,74 @@ function toCustodyTimelineRow(custody: AssetCustody) {
   }
 }
 
+/**
+ * The asset detail endpoint serves the live wire row (flat, camelCase:
+ * `id`, `materialNameAr`, `warehouseName`, `currentStatus`); the scenario
+ * keeps the legacy generated shape, so the projection happens here too.
+ */
+function toAssetDetails(asset: Asset, currentStatus: string) {
+  return {
+    id: asset.assetId,
+    assetNumber: asset.assetNumber,
+    serialNumber: asset.serialNumber ?? null,
+    materialId: asset.material.id,
+    materialCode: asset.material.code ?? '',
+    materialNameAr: asset.material.displayName,
+    materialNameEn: null,
+    warehouseId: asset.currentWarehouse?.id ?? '',
+    warehouseCode: '',
+    warehouseName: asset.currentWarehouse?.displayName ?? '',
+    currentStatus,
+    activeCustodyId: null,
+    holderType: null,
+    holderId: null,
+    custodyKind: null,
+    latestMovementType: null,
+    latestMovementAtUtc: null,
+    receiptLineId: asset.receiptLineId ?? null,
+    receiptDocumentId: null,
+    receiptDocumentReference: null,
+    acquisitionDate: asset.acquisitionDate ?? '2026-08-24',
+    warrantyExpiry: asset.warrantyExpiry ?? null,
+    rowVersion: asset.rowVersion,
+  }
+}
+
+/** The live `GET /custodies/pending` row. */
+function toPendingCustody(custody: AssetCustody, materialId: string) {
+  return {
+    custodyId: custody.custodyId,
+    assetId: custody.assetId,
+    assetNumber: custody.assetNumber,
+    materialId,
+    holderType: custody.holder.type,
+    holderId: custody.holder.id,
+    issueDocumentId: custody.issueDocumentId,
+    fromUtc: custody.fromTs,
+    rowVersion: custody.rowVersion,
+  }
+}
+
+/** The live movement row (`AssetMovementResponse`). */
+function toAssetMovement(movement: AssetMovement) {
+  return {
+    id: movement.movementId,
+    assetId: movement.assetId,
+    documentId: movement.documentId,
+    documentReferenceNumber: movement.documentReference,
+    documentType: movement.eventType,
+    movementType: movement.eventType,
+    movedAtUtc: movement.occurredAt,
+  }
+}
+
 const returnedTimelineRow = toCustodyTimelineRow(returnedCustody)
 const issueMovement = findStockMovement(issue, 'Issue')
 const returnMovement = findStockMovement(returnDocument, 'Receipt')
 const pendingFilters = {
-  custodyKind: 'Operational' as const,
-  pageIndex: 0,
+  page: 1,
   pageSize: 10,
+  subjectType: 'Asset' as const,
   status: 'Active' as const,
 }
 
@@ -102,6 +168,7 @@ afterEach(() => {
 describe('issue custody and return chain', () => {
   it('keeps the posted issue, custody, return, asset, and stock ledgers exactly traceable', async () => {
     const custodyListQueries: Record<string, string>[] = []
+    const pendingQueries: Record<string, string>[] = []
     const assetMovementQueries: Record<string, string>[] = []
     const stockMovementQueries: Record<string, string>[] = []
     useScenarioHandlers(custodyListQueries, assetMovementQueries, stockMovementQueries)
@@ -112,6 +179,11 @@ describe('issue custody and return chain', () => {
       http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.assetId}/custody-timeline`, () =>
         apiJson([returnedTimelineRow]),
       ),
+      // The pending queue is served by the live warehouse-scoped endpoint.
+      http.get(`${environment.apiBaseUrl}/custodies/pending`, ({ request }) => {
+        pendingQueries.push(Object.fromEntries(new URL(request.url).searchParams))
+        return okPageJson([toPendingCustody(pendingCustody, pendingAsset.material.id)])
+      }),
     )
 
     const router = renderJourney(issueDetailPath())
@@ -134,6 +206,10 @@ describe('issue custody and return chain', () => {
     }
     expect(screen.queryByRole('button', { name: /ترحيل|عكس|رفض/ })).not.toBeInTheDocument()
 
+    // The pending queue is WAREHOUSE-scoped on the server: the live endpoint
+    // binds a non-nullable warehouse id, so the journey runs it in the
+    // keeper's warehouse scope — the scope the assignment flow lives in.
+    activeScope.key = { kind: 'warehouse', id: scenario.warehouses.source.id }
     await navigate(router, ROUTE_PATHS.custodyPending)
 
     expect(
@@ -141,17 +217,21 @@ describe('issue custody and return chain', () => {
     ).toBeInTheDocument()
     const pendingRow = screen.getByText(pendingAsset.assetNumber).closest('tr')
     expect(pendingRow).not.toBeNull()
-    expect(within(pendingRow as HTMLElement).getByText('مديرية المعلوماتية')).toBeInTheDocument()
-    expect(within(pendingRow as HTMLElement).getByText('نشطة')).toBeInTheDocument()
+    // The live pending row carries the holder TYPE and ID — no display name.
+    expect(
+      within(pendingRow as HTMLElement).getByText(
+        `${pendingCustody.holder.type}:${pendingCustody.holder.id}`,
+      ),
+    ).toBeInTheDocument()
     expect(
       within(pendingRow as HTMLElement).getByRole('button', { name: 'تكليف موظف' }),
     ).toBeEnabled()
-    expect(custodyListQueries.at(-1)).toMatchObject({
-      custodyKind: 'Operational',
-      pageIndex: '0',
+    expect(pendingQueries.at(-1)).toMatchObject({
+      warehouseId: scenario.warehouses.source.id,
+      page: '1',
       pageSize: '10',
-      status: 'Active',
     })
+    activeScope.key = { kind: 'enterprise' }
 
     await navigate(router, assetDetailPath())
 
@@ -171,8 +251,8 @@ describe('issue custody and return chain', () => {
     expect(within(issuedAssetRow as HTMLElement).getByText('صرف')).toBeInTheDocument()
     expect(within(returnedAssetRow as HTMLElement).getByText('إرجاع')).toBeInTheDocument()
     // The movement ledger now shares the app-wide server pagination, so the
-    // page size is the shared default (10), not the former hardcoded 20.
-    expect(assetMovementQueries.at(-1)).toMatchObject({ pageIndex: '0', pageSize: '10' })
+    // page size is the shared default (10), and the wire page is ONE-based.
+    expect(assetMovementQueries.at(-1)).toMatchObject({ page: '1', pageSize: '10' })
 
     await navigate(router, returnDetailPath())
 
@@ -408,16 +488,9 @@ function useScenarioHandlers(
     http.get(`${environment.apiBaseUrl}/custodies`, ({ request }) => {
       const searchParams = new URL(request.url).searchParams
       custodyListQueries.push(Object.fromEntries(searchParams))
-      const custodyKind = searchParams.get('custodyKind')
       const status = searchParams.get('status')
-      const search = searchParams.get('search')?.toLowerCase()
       const rows = scenario.ledgers.custodies.filter(
-        (custody) =>
-          (custodyKind === null || custody.custodyKind === custodyKind) &&
-          (status === null || custody.status === status) &&
-          (search === undefined ||
-            custody.holder.displayName.toLowerCase().includes(search) ||
-            ('assetNumber' in custody && custody.assetNumber.toLowerCase().includes(search))),
+        (custody) => status === null || custody.status === status,
       )
       return okPageJson(rows)
     }),
@@ -425,7 +498,30 @@ function useScenarioHandlers(
       const asset = Object.values(scenario.assets).find(
         (candidate) => candidate.assetId === params['assetId'],
       )
-      return asset === undefined ? new HttpResponse(null, { status: 404 }) : apiJson(asset)
+      return asset === undefined
+        ? new HttpResponse(null, { status: 404 })
+        : apiJson(toAssetDetails(asset, asset.derivedStatus))
+    }),
+    http.get(`${environment.apiBaseUrl}/assets/:assetId/current-status`, ({ params }) => {
+      const asset = Object.values(scenario.assets).find(
+        (candidate) => candidate.assetId === params['assetId'],
+      )
+      return asset === undefined
+        ? new HttpResponse(null, { status: 404 })
+        : apiJson({
+            assetId: asset.assetId,
+            materialId: asset.material.id,
+            warehouseId: asset.currentWarehouse?.id ?? null,
+            assetNumber: asset.assetNumber,
+            serialNumber: asset.serialNumber ?? null,
+            currentStatus: asset.derivedStatus,
+            activeCustodyId: null,
+            holderType: null,
+            holderId: null,
+            custodyKind: null,
+            latestMovementType: null,
+            latestMovementAtUtc: null,
+          })
     }),
     http.get(`${environment.apiBaseUrl}/assets/:assetId/custody-timeline`, ({ params }) =>
       apiJson(
@@ -437,9 +533,9 @@ function useScenarioHandlers(
     http.get(`${environment.apiBaseUrl}/assets/:assetId/movements`, ({ params, request }) => {
       assetMovementQueries.push(Object.fromEntries(new URL(request.url).searchParams))
       return okPageJson(
-        scenario.ledgers.assetMovements.filter(
-          (movement) => movement.assetId === params['assetId'],
-        ),
+        scenario.ledgers.assetMovements
+          .filter((movement) => movement.assetId === params['assetId'])
+          .map(toAssetMovement),
       )
     }),
     http.get(`${environment.apiBaseUrl}/inventory/movements`, ({ request }) => {

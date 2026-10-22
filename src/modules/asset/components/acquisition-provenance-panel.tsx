@@ -1,26 +1,27 @@
-import type { Asset } from '@/shared/types/generated/eiams-v1'
+import type { AssetDetails } from '@/modules/asset/types/asset.types'
 import { ContentCard } from '@/shared/layout/content-card'
 
 export interface AcquisitionProvenancePanelProps {
-  asset: Asset
+  asset: AssetDetails
 }
 
 /**
- * Acquisition provenance panel (e18-t04): the contract-backed origin record
- * of one asset — the receiving line that created it (`receiptLineId`) plus
- * the acquisition and warranty dates captured at reception. The id is
- * rendered verbatim because resolving a receipt line to its document is not
- * yet an admitted contract operation; when the backend exposes that link,
- * this panel becomes clickable without shape changes.
+ * Acquisition provenance panel: the origin record of one asset — the receiving
+ * document and line that created it, plus the acquisition and warranty dates
+ * captured at reception.
+ *
+ * The live detail row carries `receiptDocumentId`, `receiptDocumentReference`
+ * and `receiptLineId`; the ids are rendered verbatim because resolving a
+ * receipt line to its document is not an admitted contract operation, and the
+ * reference number is rendered as the server sent it.
  */
 export function AcquisitionProvenancePanel({ asset }: AcquisitionProvenancePanelProps) {
-  // Presence semantics: an explicit null date still means the server recorded
-  // provenance ("no date"); only a record with no receipt line and no date
-  // fields at all renders the empty state.
+  // Presence semantics: the server sends `null` for a field it has no value
+  // for, so "no provenance" means every receipt field is null.
   const hasProvenance =
-    asset.receiptLineId !== undefined ||
-    asset.acquisitionDate !== undefined ||
-    asset.warrantyExpiry !== undefined
+    asset.receiptDocumentId !== null ||
+    asset.receiptLineId !== null ||
+    asset.receiptDocumentReference !== null
 
   return (
     <ContentCard
@@ -30,19 +31,29 @@ export function AcquisitionProvenancePanel({ asset }: AcquisitionProvenancePanel
       {hasProvenance ? (
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="border-b border-border pb-4 sm:border-b-0 sm:col-span-2 lg:col-span-3">
-            <dt className="text-sm font-medium text-muted-foreground">بند الاستلام المرجعي</dt>
+            <dt className="text-sm font-medium text-muted-foreground">سند الاستلام المرجعي</dt>
             <dd className="mt-1.5 text-base font-medium text-foreground" dir="ltr">
-              {asset.receiptLineId === undefined ? (
+              {asset.receiptDocumentReference === null ? (
+                '—'
+              ) : (
+                <span className="font-mono text-sm">{asset.receiptDocumentReference}</span>
+              )}
+            </dd>
+          </div>
+          <div className="border-b border-border pb-4 sm:border-b-0">
+            <dt className="text-sm font-medium text-muted-foreground">بند الاستلام</dt>
+            <dd className="mt-1.5 text-base font-medium text-foreground" dir="ltr">
+              {asset.receiptLineId === null ? (
                 '—'
               ) : (
                 <span className="font-mono text-sm">{asset.receiptLineId}</span>
               )}
             </dd>
           </div>
-          <div className="border-b border-border pb-4 last:border-b-0 sm:border-b-0">
+          <div className="border-b border-border pb-4 sm:border-b-0">
             <dt className="text-sm font-medium text-muted-foreground">تاريخ الاقتناء</dt>
             <dd className="mt-1.5 text-base font-medium text-foreground" dir="ltr">
-              {asset.acquisitionDate ?? '—'}
+              {asset.acquisitionDate}
             </dd>
           </div>
           <div className="border-b border-border pb-4 last:border-b-0 sm:border-b-0">

@@ -3,80 +3,55 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { Link } from 'react-router'
 
 import { useCustodiesQuery } from '@/modules/custody/hooks/use-custody-queries'
-import type { ListCustodiesQuery } from '@/modules/custody/types/custody.types'
+import { CustodyStatusBadge } from '@/modules/custody/components/custody-status-badge'
+import { CUSTODY_STATUS_LABELS_AR } from '@/modules/custody/custody-status-labels'
+import type { Custody, ListCustodiesQuery } from '@/modules/custody/types/custody.types'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
-import type { CustodyStatus } from '@/shared/types/generated/eiams-v1'
-import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
+import { pageRows } from '@/shared/utils/table-data'
+import { formatDateTime } from '@/shared/utils/format'
 
 /**
  * Active-custody rows are Asset-subject custody rows for this registry view;
  * Material/TrackedUnit subjects surface in their own module views.
  */
-interface ActiveCustodyRow {
-  readonly assetId: string
-  readonly assetNumber: string
-  readonly custodyId: string
-  readonly custodyKind: 'Operational' | 'Personal'
-  readonly fromTs: string
-  readonly holder: { readonly displayName: string }
-  readonly status: CustodyStatus
-}
+const columnHelper = createColumnHelper<typeof dataTableFeatures, Custody>()
 
-function toActiveRows(
-  page: Readonly<{ items: readonly unknown[] }> | undefined,
-): ActiveCustodyRow[] {
-  if (page === undefined) return []
-  return page.items as ActiveCustodyRow[]
-}
-
-const columnHelper = createColumnHelper<typeof dataTableFeatures, ActiveCustodyRow>()
-
-const CUSTODY_STATUS_LABELS_AR: Readonly<Record<CustodyStatus, string>> = {
-  Active: 'نشطة',
-  Closed: 'مغلقة',
-}
-const CUSTODY_KIND_LABELS_AR = {
-  Operational: 'تشغيلي',
-  Personal: 'شخصي',
-} as const
+/** The two statuses an Asset-subject custody row can carry. */
+const ASSET_CUSTODY_STATUSES = ['Active', 'Closed'] as const
 
 /**
- * Active custody list (e19-t04): every custody row within the active scope,
- * filterable by status. Rows link to the custody detail route; the transfer
- * action (t05) composes on the detail page.
+ * Active custody list: every Asset-subject custody row within the active
+ * scope, filterable by status. Rows link to the custody detail route; the
+ * transfer action composes on the detail page.
+ *
+ * The live `GET /custodies` binds `holderType`, `holderId`, `materialId`,
+ * `subjectType`, `status`, `warehouseId`, `page` and `pageSize` — and
+ * NOTHING else: it has no `search` and no `custodyKind`, so the list offers
+ * no search box and no custody-kind filter.
  */
 export default function ActiveCustodyListPage() {
   const { page, pageSize, setPage, setPageSize } = useServerPagination()
-  const [status, setStatus] = useState<CustodyStatus | undefined>()
-  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState<'Active' | 'Closed' | undefined>()
 
   const filters = useMemo<ListCustodiesQuery>(
     () => ({
-      pageIndex: page - 1,
+      page,
       pageSize,
+      subjectType: 'Asset',
       ...(status === undefined ? {} : { status }),
-      ...(search.trim() === '' ? {} : { search: search.trim() }),
     }),
-    [page, pageSize, search, status],
-  )
-
-  const handleSearchChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      setSearch(event.target.value)
-      setPage(1)
-    },
-    [setPage],
+    [page, pageSize, status],
   )
 
   const handleStatusChange = useCallback(
     (value: string | null) => {
-      setStatus(value === null || value === 'all' ? undefined : (value as CustodyStatus))
+      setStatus(value === null || value === 'all' ? undefined : (value as 'Active' | 'Closed'))
       setPage(1)
     },
     [setPage],
@@ -95,32 +70,32 @@ export default function ActiveCustodyListPage() {
               className="font-mono text-sm font-semibold text-foreground underline-offset-4 hover:underline"
               to={ROUTE_PATHS.custodyDetail.replace(':custodyId', row.original.custodyId)}
             >
-              <span dir="ltr">{getValue()}</span>
+              <span dir="ltr">{getValue() ?? '—'}</span>
             </Link>
           ),
         }),
-        columnHelper.accessor((row) => row.holder.displayName, {
-          id: 'holder',
+        columnHelper.accessor('holderDisplayName', {
+          id: 'holderDisplayName',
           header: 'الحائز',
         }),
         columnHelper.accessor('custodyKind', {
           id: 'custodyKind',
           header: 'نوع الحفظ',
-          cell: ({ getValue }) => CUSTODY_KIND_LABELS_AR[getValue()],
+          cell: ({ getValue }) => (getValue() === 'Personal' ? 'حفظ شخصي' : 'حفظ تشغيلي'),
         }),
-        columnHelper.accessor('fromTs', {
-          id: 'fromTs',
+        columnHelper.accessor('fromUtc', {
+          id: 'fromUtc',
           header: 'منذ',
           cell: ({ getValue }) => (
             <span dir="ltr" className="text-sm">
-              {getValue()}
+              {formatDateTime(getValue())}
             </span>
           ),
         }),
         columnHelper.accessor('status', {
           id: 'status',
           header: 'الحالة',
-          cell: ({ getValue }) => <StatusBadge entity="custody" status={getValue()} />,
+          cell: ({ getValue }) => <CustodyStatusBadge status={getValue()} />,
         }),
         columnHelper.display({
           id: 'detailLink',
@@ -142,7 +117,7 @@ export default function ActiveCustodyListPage() {
     <div dir="rtl" className="min-w-0">
       <PageHeader
         title={ROUTE_METADATA.custodyActive.labelAr}
-        subtitle="جميع العهد النشطة والمغلقة ضمن نطاق العمل الحالي، مع تصفية حسب الحالة وبحث نصي."
+        subtitle="جميع عهد الأصول النشطة والمغلقة ضمن نطاق العمل الحالي، مع تصفية حسب الحالة."
         toolbar={
           <div className="flex min-w-44 flex-col gap-2">
             <span className="text-sm font-medium text-foreground">حالة العهدة</span>
@@ -154,7 +129,7 @@ export default function ActiveCustodyListPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">كل الحالات</SelectItem>
-                {(Object.keys(CUSTODY_STATUS_LABELS_AR) as CustodyStatus[]).map((value) => (
+                {ASSET_CUSTODY_STATUSES.map((value) => (
                   <SelectItem key={value} value={value}>
                     {CUSTODY_STATUS_LABELS_AR[value]}
                   </SelectItem>
@@ -167,29 +142,22 @@ export default function ActiveCustodyListPage() {
 
       <ContentCard
         title="قائمة العهد"
-        description="ابحث باسم الحائز أو رقم الأصل، وصفِّ حسب حالة العهدة. تُنفَّذ النتائج والترقيم في الخادم."
+        description="عهد الأصول المسجّلة في نطاق العمل الحالي، مفلترة حسب حالة العهدة. تُنفَّذ النتائج والترقيم في الخادم."
       >
-        <input
-          className="mb-3 h-9 w-full max-w-80 rounded-md border border-input bg-background px-3 text-sm"
-          placeholder="ابحث عن حائز أو رقم أصل..."
-          aria-label="بحث في العهد"
-          value={search}
-          onChange={handleSearchChange}
-        />
         <DataTableServer
           columns={columns}
-          data={toActiveRows(custodiesQuery.data)}
+          data={pageRows(custodiesQuery.data, custodiesQuery.isError)}
           isLoading={custodiesQuery.isLoading}
           isError={custodiesQuery.isError}
           onRetry={() => void custodiesQuery.refetch()}
           errorTitle="تعذّر تحميل العهد"
           errorMessage="تعذّر جلب قائمة العهد. حاول مرة أخرى."
           emptyTitle="لا توجد عهد"
-          emptyDescription="لم يتم العثور على عهد تطابق معايير البحث الحالية."
+          emptyDescription="لم يتم العثور على عهد تطابق معايير التصفية الحالية."
           page={page}
           pageSize={pageSize}
-          totalCount={custodiesQuery.data?.meta.totalItems}
-          totalPages={Math.max(custodiesQuery.data?.meta.totalPages ?? 1, 1)}
+          totalCount={custodiesQuery.data?.totalItems}
+          totalPages={Math.max(custodiesQuery.data?.totalPages ?? 1, 1)}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
         />

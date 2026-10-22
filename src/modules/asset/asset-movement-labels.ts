@@ -1,10 +1,15 @@
-import type { AssetMovement } from '@/shared/types/generated/eiams-v1'
+import type { AssetMovementType } from '@/modules/asset/types/asset.types'
 
-/** Arabic labels for the immutable asset movement event types (D-RAE-01). */
-export const ASSET_MOVEMENT_TYPE_LABELS_AR: Readonly<Record<AssetMovement['eventType'], string>> = {
+/**
+ * Arabic labels for the immutable asset movement types (the live
+ * `Domain.Common.AssetMovementType` vocabulary: Received, Transferred, Issued,
+ * Returned, Disposed, OpeningRegistered).
+ */
+export const ASSET_MOVEMENT_TYPE_LABELS_AR = {
   Received: 'استلام',
+  Transferred: 'تحويل',
   Issued: 'صرف',
   Returned: 'إرجاع',
   Disposed: 'استبعاد',
   OpeningRegistered: 'تسجيل افتتاحي',
-}
+} as const satisfies Record<AssetMovementType, string>

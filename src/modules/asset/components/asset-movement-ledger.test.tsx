@@ -5,12 +5,12 @@ import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AssetMovementLedger } from './asset-movement-ledger'
-import { fixtureUuid } from '@/test/msw/factories'
+import type { AssetMovement } from '@/modules/asset/types/asset.types'
 import { server } from '@/test/msw/server'
 import { createQueryClient } from '@/shared/services/query.client'
 
 const API_BASE_URL = '/api/v1'
-const ASSET_ID = fixtureUuid(230)
+const ASSET_ID = '77777777-7777-4777-8777-777777777777'
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({
@@ -18,40 +18,34 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   }),
 }))
 
+/** The LIVE `GET /assets/{assetId}/movements` row: flat, no warehouse routing. */
+function movementRow(overrides: Partial<AssetMovement> = {}): AssetMovement {
+  return {
+    id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    assetId: ASSET_ID,
+    documentId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    documentReferenceNumber: 'EIAMS-REC-2024-0101',
+    documentType: 'Receiving',
+    movementType: 'Received',
+    movedAtUtc: '2024-03-01T09:00:00.000Z',
+    ...overrides,
+  }
+}
+
 function useMovementsHandler() {
   server.use(
     http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () =>
       okPageJson(
         [
-          {
-            assetId: ASSET_ID,
-            documentId: fixtureUuid(150),
-            documentLineId: fixtureUuid(160),
-            documentReference: 'EIAMS-REC-2024-0101',
-            eventType: 'Received',
-            movementId: fixtureUuid(240),
-            occurredAt: '2024-03-01T09:00:00.000Z',
-            occurredBy: { displayName: 'مريم الحلبي', id: fixtureUuid(12) },
-            toWarehouse: {
-              displayName: 'المستودع المركزي',
-              id: fixtureUuid(30),
-            },
-          },
-          {
-            assetId: ASSET_ID,
-            custodyId: fixtureUuid(51),
-            documentId: fixtureUuid(151),
-            documentLineId: fixtureUuid(161),
-            documentReference: 'EIAMS-ISS-2026-0001',
-            eventType: 'Issued',
-            fromWarehouse: {
-              displayName: 'المستودع المركزي',
-              id: fixtureUuid(30),
-            },
-            movementId: fixtureUuid(241),
-            occurredAt: '2026-08-24T10:00:00.000Z',
-            occurredBy: { displayName: 'مدير النظام', id: fixtureUuid(11) },
-          },
+          movementRow(),
+          movementRow({
+            id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            documentId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+            documentReferenceNumber: 'EIAMS-ISS-2026-0001',
+            documentType: 'Issue',
+            movementType: 'Issued',
+            movedAtUtc: '2026-08-24T10:00:00.000Z',
+          }),
         ],
         { page: 1, pageSize: 20, totalCount: 2, totalPages: 1 },
       ),
@@ -68,18 +62,28 @@ function renderLedger() {
   )
 }
 
-describe('AssetMovementLedger (e18-t05)', () => {
-  it('renders one immutable event row per movement with Arabic event labels', async () => {
+describe('AssetMovementLedger', () => {
+  it('renders one row per movement with the Arabic movement labels', async () => {
     useMovementsHandler()
     renderLedger()
 
     expect(await screen.findByText('استلام')).toBeInTheDocument()
     expect(screen.getByText('صرف')).toBeInTheDocument()
-    // Document references render ltr in mono.
+    // Document references and types render ltr in mono.
     expect(screen.getByText('EIAMS-REC-2024-0101')).toBeInTheDocument()
     expect(screen.getByText('EIAMS-ISS-2026-0001')).toBeInTheDocument()
-    // Warehouse routing columns.
-    expect(screen.getAllByText('المستودع المركزي').length).toBeGreaterThan(0)
+    expect(screen.getByText('Receiving')).toBeInTheDocument()
+    expect(screen.getByText('Issue')).toBeInTheDocument()
+  })
+
+  it('shows no warehouse routing columns, which the live row does not carry', async () => {
+    useMovementsHandler()
+    renderLedger()
+
+    await screen.findByText('استلام')
+    expect(screen.queryByText('من مستودع')).toBeNull()
+    expect(screen.queryByText('إلى مستودع')).toBeNull()
+    expect(screen.queryByText('بواسطة')).toBeNull()
   })
 
   it('shows the empty state when the asset has no movements', async () => {

@@ -8,18 +8,22 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import { fixtureUuid } from '@/test/msw/factories'
+import type { PendingCustody } from '@/modules/custody/types/custody.types'
 import { server } from '@/test/msw/server'
 
 import PendingCustodyListPage from './pending-custody-list-page'
 
 const API_BASE_URL = '/api/v1'
-const ASSET_ID = fixtureUuid(235)
+const ASSET_ID = '77777777-7777-4777-8777-777777777777'
+const WAREHOUSE_ID = '33333333-3333-4333-8333-333333333333'
+
+const activeScope = vi.hoisted(() => ({
+  key: { kind: 'warehouse' as const, id: '33333333-3333-4333-8333-333333333333' } as
+    { kind: 'warehouse'; id: string } | { kind: 'enterprise' },
+}))
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
-  useActiveScopeContext: () => ({
-    activeScopeCacheKey: { kind: 'enterprise' } as unknown,
-  }),
+  useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
 }))
 
 const permissionState = vi.hoisted(() => ({ canAssign: true }))
@@ -28,34 +32,28 @@ vi.mock('@/modules/auth/hooks/use-permission', () => ({
   usePermission: () => ({ has: () => permissionState.canAssign }),
 }))
 
+/** The LIVE `GET /custodies/pending` row. */
+const pendingRow: PendingCustody = {
+  custodyId: '44444444-4444-4444-8444-444444444444',
+  assetId: ASSET_ID,
+  assetNumber: 'AST-2023-C099',
+  materialId: '22222222-2222-4222-8222-222222222222',
+  holderType: 'OrganizationalUnit',
+  holderId: '55555555-5555-4555-8555-555555555555',
+  issueDocumentId: '66666666-6666-4666-8666-666666666666',
+  fromUtc: '2026-08-01T08:00:00.000Z',
+  rowVersion: 1,
+}
+
+let pendingRequests = 0
+let requestedParams: URLSearchParams | undefined
+
 function usePendingHandler() {
   server.use(
-    http.get(`${API_BASE_URL}/custodies`, ({ request }) => {
-      const url = new URL(request.url)
-      expect(url.searchParams.get('status')).toBe('Active')
-      expect(url.searchParams.get('custodyKind')).toBe('Operational')
-      return okPageJson(
-        [
-          {
-            assetId: ASSET_ID,
-            assetNumber: 'AST-2023-C099',
-            custodyId: fixtureUuid(52),
-            custodyKind: 'Operational',
-            fromTs: '2026-08-01T08:00:00.000Z',
-            holder: {
-              displayName: 'مديرية النقل والحراسة',
-              id: fixtureUuid(21),
-              secondaryLabelAr: null,
-              status: 'Active' as const,
-              type: 'OrganizationalUnit' as const,
-            },
-            issueDocumentId: fixtureUuid(155),
-            rowVersion: 1,
-            status: 'Active',
-          },
-        ],
-        { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 },
-      )
+    http.get(`${API_BASE_URL}/custodies/pending`, ({ request }) => {
+      pendingRequests += 1
+      requestedParams = new URL(request.url).searchParams
+      return okPageJson([pendingRow], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
     }),
   )
 }
@@ -71,13 +69,25 @@ function createWrapper() {
   }
 }
 
-describe('PendingCustodyListPage (e19-t02)', () => {
-  it('renders pending operational custody rows with holder and assign action', async () => {
+describe('PendingCustodyListPage', () => {
+  it('reads the live pending endpoint for the active warehouse', async () => {
     usePendingHandler()
     render(<PendingCustodyListPage />, { wrapper: createWrapper() })
 
     expect(await screen.findByRole('link', { name: /AST-2023-C099/ })).toBeInTheDocument()
-    expect(screen.getByText(/مديرية النقل والحراسة/)).toBeInTheDocument()
+    expect(requestedParams?.get('warehouseId')).toBe(WAREHOUSE_ID)
+    expect(requestedParams?.get('page')).toBe('1')
+    // The holder travels as a type + id pair: the pending row carries no name.
+    expect(
+      screen.getByText('OrganizationalUnit:55555555-5555-4555-8555-555555555555'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows the assign action to a custody.assign holder', async () => {
+    usePendingHandler()
+    render(<PendingCustodyListPage />, { wrapper: createWrapper() })
+
+    expect(await screen.findByRole('link', { name: /AST-2023-C099/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'تكليف موظف' })).toBeInTheDocument()
   })
 
@@ -104,5 +114,21 @@ describe('PendingCustodyListPage (e19-t02)', () => {
 
     await screen.findByRole('link', { name: /AST-2023-C099/ })
     expect(screen.queryByRole('button', { name: 'تكليف موظف' })).toBeNull()
+    permissionState.canAssign = true
+  })
+
+  it('asks for a warehouse instead of reading one that the server cannot resolve', async () => {
+    activeScope.key = { kind: 'enterprise' }
+    pendingRequests = 0
+    usePendingHandler()
+    render(<PendingCustodyListPage />, { wrapper: createWrapper() })
+
+    expect(
+      await screen.findByText('اختر المستودع لعرض الأصول التي تنتظر التكليف الشخصي.'),
+    ).toBeInTheDocument()
+    // The live endpoint binds a non-nullable warehouse id, so no request may
+    // leave without one.
+    expect(pendingRequests).toBe(0)
+    activeScope.key = { kind: 'warehouse', id: WAREHOUSE_ID }
   })
 })

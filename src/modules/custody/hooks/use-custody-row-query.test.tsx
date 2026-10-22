@@ -16,17 +16,54 @@ import { authSessionLifecycle } from '@/modules/auth/services/auth-session-runti
 import { useAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import { queryClient } from '@/shared/services/query.client'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
-import { createAssetCustody, createPage, fixtureUuid } from '@/test/msw/factories'
+import type { Custody } from '@/modules/custody/types/custody.types'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
-const CUSTODY_ID = fixtureUuid(52)
-const ASSET_ID = fixtureUuid(230)
-const WAREHOUSE_SCOPE: ScopeCacheKey = { kind: 'warehouse', id: fixtureUuid(200) }
+const CUSTODY_ID = '44444444-4444-4444-8444-444444444444'
+const OTHER_CUSTODY_ID = '99999999-9999-4999-8999-999999999999'
+const ASSET_ID = '77777777-7777-4777-8777-777777777777'
+const WAREHOUSE_SCOPE: ScopeCacheKey = {
+  kind: 'warehouse',
+  id: '33333333-3333-4333-8333-333333333333',
+}
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: WAREHOUSE_SCOPE }),
 }))
+
+/** The LIVE `GET /custodies` row: flat, camelCase, no nested holder object. */
+const custodyRow: Custody = {
+  subjectType: 'Asset',
+  subjectId: ASSET_ID,
+  custodyId: CUSTODY_ID,
+  materialId: '22222222-2222-4222-8222-222222222222',
+  materialNameAr: 'حاسوب مكتبي',
+  materialNameEn: null,
+  materialCode: 'IT-HW-PC-001',
+  materialKind: 'Asset',
+  trackingType: 'Serial',
+  serialNumber: 'SN-PC-0001',
+  assetNumber: 'AST-2024-C01',
+  warehouseId: '33333333-3333-4333-8333-333333333333',
+  warehouseName: 'المستودع المركزي',
+  holderType: 'OrganizationalUnit',
+  holderId: '55555555-5555-4555-8555-555555555555',
+  holderDisplayName: 'مديرية النقل والحراسة',
+  custodyKind: 'Operational',
+  issuedQuantity: 1,
+  activeQuantity: 1,
+  returnedQuantity: 0,
+  issueDocumentId: '66666666-6666-4666-8666-666666666666',
+  systemReferenceNumber: 'ISSUE-2026-0001',
+  status: 'Active',
+  fromUtc: '2026-08-01T08:00:00.000Z',
+  toUtc: null,
+  rowVersion: 1,
+}
+
+/** Another Asset-subject row, so a page can be scanned without a hit. */
+const otherCustodyRow: Custody = { ...custodyRow, custodyId: OTHER_CUSTODY_ID }
 
 /**
  * The custody row key used to be a hand-rolled
@@ -38,10 +75,9 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
  * key to the shared factory and to the two paths that must reach it.
  */
 function seedCustodyEndpoints() {
-  const row = createAssetCustody({ custodyId: CUSTODY_ID, assetId: ASSET_ID })
   server.use(
     http.get(`${API_BASE_URL}/custodies`, () =>
-      okPageJson([row], { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 }),
+      okPageJson([custodyRow], { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 }),
     ),
     // Live `POST /assets/{assetId}/custody-assignment` answers 201
     // `ApiResponse<ResourceIdResponse>` — `{ id }` only, never the full row.
@@ -50,7 +86,7 @@ function seedCustodyEndpoints() {
     ),
   )
 
-  return row
+  return custodyRow
 }
 
 function createWrapper() {
@@ -133,22 +169,28 @@ describe('custody row cache key (e24-t10 review)', () => {
     seedCustodyEndpoints()
     const wrapper = createWrapper()
 
-    const listKey = custodyQueryKeys.custodies(WAREHOUSE_SCOPE, { status: 'Active' })
+    const listQuery = { page: 1, pageSize: 20, subjectType: 'Asset' as const }
+    const listKey = custodyQueryKeys.custodies(WAREHOUSE_SCOPE, listQuery)
     const rowKey = custodyQueryKeys.row(WAREHOUSE_SCOPE, CUSTODY_ID)
     const assetKey = assetQueryKeys.asset(WAREHOUSE_SCOPE, ASSET_ID)
     act(() => {
-      queryClient.setQueryData(listKey, createPage([]))
-      queryClient.setQueryData(
-        rowKey,
-        createAssetCustody({ custodyId: CUSTODY_ID, assetId: ASSET_ID }),
-      )
-      queryClient.setQueryData(assetKey, { assetId: ASSET_ID })
+      queryClient.setQueryData(listKey, {
+        items: [],
+        page: 1,
+        pageSize: 20,
+        totalItems: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      })
+      queryClient.setQueryData(rowKey, custodyRow)
+      queryClient.setQueryData(assetKey, { id: ASSET_ID })
     })
 
     const { result } = renderHook(
       () => ({
         assign: useAssignCustodyMutation(),
-        list: useCustodiesQuery({ status: 'Active' }),
+        list: useCustodiesQuery(listQuery),
       }),
       { wrapper },
     )
@@ -158,7 +200,7 @@ describe('custody row cache key (e24-t10 review)', () => {
       await result.current.assign.mutateAsync({
         assetId: ASSET_ID,
         request: {
-          employeeId: fixtureUuid(21),
+          employeeId: '55555555-5555-4555-8555-555555555555',
           expectedCustodyRowVersion: 1,
         },
       })
@@ -171,5 +213,71 @@ describe('custody row cache key (e24-t10 review)', () => {
     // key: every asset key is `['scoped', kind, id, 'asset', ...]`.
     expect(queryClient.getQueryState(assetKey)?.isInvalidated).toBe(true)
     expect(assetKey[0]).toBe('scoped')
+  })
+})
+
+/**
+ * The live API has no `GET /custodies/{id}` and no `custodyId` filter, so the
+ * hook resolves the row by scanning the ONE-based pages of the Asset-scoped
+ * list. It used to look at page 1 only: a row past the first hundred entries
+ * resolved to `null` and the detail page reported a load failure for a row
+ * that exists and is reachable from /custody/active.
+ */
+describe('custody row resolution across the Asset-scoped pages', () => {
+  it('resolves a row that sits on page 2 of a two-page list', async () => {
+    const requested: URLSearchParams[] = []
+    server.use(
+      http.get(`${API_BASE_URL}/custodies`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        requested.push(params)
+        const page = Number(params.get('page'))
+        return page === 2
+          ? okPageJson([custodyRow], { page: 2, pageSize: 100, totalCount: 101, totalPages: 2 })
+          : okPageJson([otherCustodyRow], {
+              page: 1,
+              pageSize: 100,
+              totalCount: 101,
+              totalPages: 2,
+            })
+      }),
+    )
+    const wrapper = createWrapper()
+
+    const { result } = renderHook(() => useCustodyRowQuery(CUSTODY_ID), { wrapper })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data).toMatchObject({ custodyId: CUSTODY_ID })
+    // The scan walks the pages in order and stops at the first hit.
+    expect(requested.map((params) => params.get('page'))).toEqual(['1', '2'])
+    // The wire carries the ONE-based page, the bound page size and the
+    // subject filter — and nothing the server does not bind.
+    expect(requested.map((params) => params.get('pageSize'))).toEqual(['100', '100'])
+    expect(requested.map((params) => params.get('subjectType'))).toEqual(['Asset', 'Asset'])
+    expect(requested.every((params) => !params.has('pageIndex'))).toBe(true)
+  })
+
+  it('returns null and stops at the last page when no page holds the row', async () => {
+    const requestedPages: (string | null)[] = []
+    server.use(
+      http.get(`${API_BASE_URL}/custodies`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        requestedPages.push(params.get('page'))
+        const page = Number(params.get('page'))
+        return okPageJson([otherCustodyRow], {
+          page,
+          pageSize: 100,
+          totalCount: 101,
+          totalPages: 2,
+        })
+      }),
+    )
+    const wrapper = createWrapper()
+
+    const { result } = renderHook(() => useCustodyRowQuery(CUSTODY_ID), { wrapper })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data).toBeNull()
+    // The scan stops when the server's totalPages is exhausted.
+    expect(requestedPages).toEqual(['1', '2'])
   })
 })

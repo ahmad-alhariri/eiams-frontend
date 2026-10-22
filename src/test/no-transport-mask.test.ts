@@ -138,7 +138,12 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // (`{} as any`, `client as unknown as ApiTransport`, `transport as any`),
     // so every banned-pattern assertion below stays green.
     // +3 application files: inventory-count/hooks/use-count-names.ts, inventory-count/components/count-name-fields.tsx, adjustment/hooks/use-count-variance-seeds.ts
-  assertScannedFiles(PRODUCTION_FILES, 401)
+    // +3 application files for the live asset/custody wire contract: the two
+    // module status badges (`asset/components/asset-status-badge.tsx`,
+    // `custody/components/custody-status-badge.tsx`) and the custody status
+    // label registry (`custody/custody-status-labels.ts`). They render the
+    // live status vocabularies and introduce none of the three banned shapes.
+    assertScannedFiles(PRODUCTION_FILES, 404)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

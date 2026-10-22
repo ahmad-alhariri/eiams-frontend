@@ -580,6 +580,38 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'تغيّرت حالة العهدة بعد العملية الأصلية، لذلك لا يمكن عكس السند.',
     detailAr: 'راجع حركة الأصل بعد هذا السند قبل طلب العكس.',
   },
+  // `CounterpartErrors` (`Application/Abstractions/Recipients/ICounterpartResolver.cs`):
+  // the counterpart lookup refuses an unusable HOLDER before any custody is
+  // written, so these are the reasons a transfer or an assignment was refused.
+  // Unmapped, they all degraded to the generic 400 wording, which told the
+  // operator nothing about the pair they had to fix.
+  COUNTERPARTS_TYPE_INVALID: {
+    titleAr: 'نوع الجهة المحددة غير صالح.',
+    detailAr: null,
+  },
+  COUNTERPARTS_NOT_FOUND: {
+    titleAr: 'لم يتم العثور على الجهة المحددة.',
+    detailAr: null,
+  },
+  COUNTERPARTS_INACTIVE: {
+    titleAr: 'الجهة المحددة غير نشطة.',
+    detailAr: null,
+  },
+  COUNTERPARTS_OUTSIDE_SCOPE: {
+    titleAr: 'الجهة المحددة خارج نطاق صلاحيتك.',
+    detailAr: null,
+  },
+  // The two halves of the custody-kind rule (`Domain/Custodies/Custody.cs`): a
+  // Personal custody is held by an Employee, an Operational one by an
+  // OrganizationalUnit, a Site or an External party.
+  COUNTERPARTS_PERSONAL_REQUIRES_EMPLOYEE: {
+    titleAr: 'العهدة الشخصية تتطلب جهة من نوع موظف.',
+    detailAr: null,
+  },
+  COUNTERPARTS_OPERATIONAL_REQUIRES_NON_EMPLOYEE: {
+    titleAr: 'العهدة التشغيلية تتطلب جهة من نوع وحدة تنظيمية أو موقع أو جهة خارجية.',
+    detailAr: null,
+  },
   // Domain not-found codes the backend emits verbatim as `<Aggregate>.NotFound`,
   // normalized to UPPER_SNAKE by `ApiResults.NormalizeErrorCode`. These replaced the
   // fabricated generic `RESOURCE_NOT_FOUND` that fixtures used to assert, so a 404
@@ -587,6 +619,36 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
   AUDIT_LOGS_NOT_FOUND: { titleAr: 'لم يتم العثور على سجل التدقيق.', detailAr: null },
   ASSETS_NOT_FOUND: { titleAr: 'لم يتم العثور على الأصل.', detailAr: null },
   CUSTODIES_NOT_FOUND: { titleAr: 'لم يتم العثور على العهدة.', detailAr: null },
+  // The custody-transfer endpoint answers 404 (NOT 403) for a custody outside
+  // the caller's scope, and the code depends on the subject type. All three
+  // must read as "not found / out of scope" and never as "unauthorized" —
+  // a 403 here would tell the operator they lack a permission they may well
+  // hold, while the real cause is that the row is not theirs to move.
+  // The two keys below are the C# literals as written
+  // (`TrackedMaterialUnitErrors.NotFound`, `DurableCustodyAllocationErrors.NotFound`):
+  // those two files spell the code UPPER_SNAKE and without an `ERRORS` segment,
+  // so the key is the literal, not the class name.
+  TRACKED_MATERIAL_UNIT_NOT_FOUND: {
+    titleAr: 'لم يتم العثور على الوحدة المتتبَّعة.',
+    detailAr: null,
+  },
+  DURABLE_CUSTODY_ALLOCATION_NOT_FOUND: {
+    titleAr: 'لم يتم العثور على تخصيص العهدة.',
+    detailAr: null,
+  },
+  // `TransferInfoErrors.AssetLineNotSupported` (400): a Transfer document may
+  // not carry an asset selection at all — individual asset transfer is
+  // deferred to v2 (D-RAE-01).
+  TRANSFER_INFOS_ASSET_LINE_NOT_SUPPORTED: {
+    titleAr: 'سند التحويل لا يدعم اختيار الأصول.',
+    detailAr: null,
+  },
+  // `DisposalErrors.SingleAssetRequired` (400): a disposal adjustment carries
+  // exactly one asset-backed line (D-ADJ-01, rule R8).
+  DISPOSALS_SINGLE_ASSET_REQUIRED: {
+    titleAr: 'سند الإهلاك يتطلّب أصلاً واحداً بالضبط.',
+    detailAr: null,
+  },
   DOCUMENT_ATTACHMENTS_NOT_FOUND: {
     titleAr: 'لم يتم العثور على المرفق.',
     detailAr: null,

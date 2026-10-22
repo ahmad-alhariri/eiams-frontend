@@ -15,6 +15,8 @@ export const assetQueryKeys = {
     queryKeys.scoped(scope, ASSET_RESOURCE, 'assets', query),
   asset: (scope: ScopeCacheKey, assetId: string) =>
     queryKeys.scoped(scope, ASSET_RESOURCE, 'assets', assetId),
+  currentStatus: (scope: ScopeCacheKey, assetId: string) =>
+    queryKeys.scoped(scope, ASSET_RESOURCE, 'assets', assetId, 'current-status'),
   custody: (scope: ScopeCacheKey, assetId: string) =>
     queryKeys.scoped(scope, ASSET_RESOURCE, 'assets', assetId, 'custody'),
   movements: (scope: ScopeCacheKey, assetId: string, query: ListAssetMovementsQuery) =>
@@ -25,7 +27,7 @@ function useActiveScopeCacheKey() {
   return useActiveScopeContext().activeScopeCacheKey
 }
 
-/** Registry read with derived-status filter (e18-t01). */
+/** Registry read with the live filters (warehouse, material, status, search). */
 export function useAssetsQuery(query: ListAssetsQuery) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
@@ -47,6 +49,20 @@ export function useAssetQuery(assetId: string | undefined) {
         ? queryKeys.public(ASSET_RESOURCE, 'assets', assetId)
         : assetQueryKeys.asset(scope, assetId),
     queryFn: () => assetService.getAsset(assetId ?? ''),
+    enabled: scope !== undefined && assetId !== undefined,
+    staleTime: OPERATIONAL_STALE_TIME,
+  })
+}
+
+/** The derived status projection of one asset (`v_asset_current_status`). */
+export function useAssetCurrentStatusQuery(assetId: string | undefined) {
+  const scope = useActiveScopeCacheKey()
+  return useQuery({
+    queryKey:
+      scope === undefined || assetId === undefined
+        ? queryKeys.public(ASSET_RESOURCE, 'current-status', assetId)
+        : assetQueryKeys.currentStatus(scope, assetId),
+    queryFn: () => assetService.getAssetCurrentStatus(assetId ?? ''),
     enabled: scope !== undefined && assetId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
