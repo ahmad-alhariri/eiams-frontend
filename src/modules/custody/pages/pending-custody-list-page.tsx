@@ -2,86 +2,125 @@ import { useCallback, useMemo, useState } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { Link } from 'react-router'
 
-import { useCustodiesQuery } from '@/modules/custody/hooks/use-custody-queries'
-import {
-  AssignCustodyDialog,
-  type AssignCustodyRow,
-} from '@/modules/custody/components/assign-custody-dialog'
-import type { ListCustodiesQuery } from '@/modules/custody/types/custody.types'
-import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
+import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { StatusBadge } from '@/shared/feedback/status-badge'
+import { usePendingCustodiesQuery } from '@/modules/custody/hooks/use-custody-queries'
+import { AssignCustodyDialog } from '@/modules/custody/components/assign-custody-dialog'
+import type { PendingCustody } from '@/modules/custody/types/custody.types'
+import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
+import { AsyncSelect } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
+import { pageRows } from '@/shared/utils/table-data'
+import { formatDateTime } from '@/shared/utils/format'
+
+const columnHelper = createColumnHelper<typeof dataTableFeatures, PendingCustody>()
 
 /**
  * Pending-assignment rows are always Asset-subject custody rows (PRD §12.8);
- * the union's Material/TrackedUnit members never appear in this list.
- */
-/**
- * Pending-assignment rows are always Asset-subject custody rows (PRD 12.8);
- * the server only returns those for this filter, and Material/TrackedUnit
- * custody never participates in personal assignment. Field view mirrors the
- * AssetCustody members the pending list renders.
- */
-interface PendingCustodyRow {
-  readonly assetId: string
-  readonly assetNumber: string
-  readonly custodyId: string
-  readonly custodyKind: 'Operational' | 'Personal'
-  readonly fromTs: string
-  readonly holder: { readonly displayName: string }
-  readonly issueDocumentId: string
-  readonly rowVersion: number
-  readonly status: 'Active' | 'Closed'
-}
-
-function toPendingRows(
-  page: Readonly<{ items: readonly unknown[] }> | undefined,
-): PendingCustodyRow[] {
-  if (page === undefined) return []
-  return page.items as PendingCustodyRow[]
-}
-
-const columnHelper = createColumnHelper<typeof dataTableFeatures, PendingCustodyRow>()
-
-/**
- * Pending custody list (e19-t02, PRD §12.8 step 1): assets under
- * `Operational` + `Active` custody awaiting personal assignment. Each row
- * opens the assignment dialog (the t03 flow) that creates a Personal custody
- * row for the chosen employee and closes the operational row.
+ * the live `GET /custodies/pending` answers exactly those: the Operational +
+ * Active custody rows of the assets issued out of one warehouse.
+ *
+ * The pending row carries the holder TYPE and ID but no holder display name,
+ * and it carries no status and no custody kind — the endpoint answers "rows
+ * awaiting a personal assignment", so the kind and the status are implied by
+ * the row's presence and must not be invented.
  */
 export default function PendingCustodyListPage() {
   const { page, pageSize, setPage, setPageSize } = useServerPagination()
-  const [search, setSearch] = useState('')
-  const [assigningRow, setAssigningRow] = useState<AssignCustodyRow | null>(null)
+  const [assigningRow, setAssigningRow] = useState<PendingCustody | null>(null)
   const { has } = usePermission()
+  const { activeScopeCacheKey } = useActiveScopeContext()
+  const warehouseSelector = useScopedWarehouseSelector()
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string | undefined>()
 
-  const filters = useMemo<ListCustodiesQuery>(
-    () => ({
-      pageIndex: page - 1,
-      pageSize,
-      status: 'Active',
-      custodyKind: 'Operational',
-      ...(search.trim() === '' ? {} : { search: search.trim() }),
-    }),
-    [page, pageSize, search],
-  )
+  // The pending list is WAREHOUSE-scoped on the server: the live endpoint
+  // binds a non-nullable warehouse id and answers 404 for an unknown one, so
+  // the warehouse comes from the active scope when the session is in one and
+  // from the explicit picker otherwise.
+  const warehouseId =
+    selectedWarehouseId ??
+    (activeScopeCacheKey?.kind === 'warehouse' ? activeScopeCacheKey.id : undefined)
 
-  const handleSearchChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      setSearch(event.target.value)
+  const handleWarehouseChange = useCallback(
+    (value: string | null) => {
+      setSelectedWarehouseId(value ?? undefined)
       setPage(1)
     },
     [setPage],
   )
 
-  const custodiesQuery = useCustodiesQuery(filters)
-  const canAssign = has('custody.assign')
+  return (
+    <div dir="rtl" className="min-w-0">
+      <PageHeader
+        title={ROUTE_METADATA.custodyPending.labelAr}
+        subtitle="أصول صُرفت إلى جهة تشغيلية وتنتظر تكلفتها الشخصية لموظف، وفق تدفق ما بعد الصرف (PRD 12.8)."
+        toolbar={
+          <div className="flex min-w-44 flex-col gap-2">
+            <span className="text-sm font-medium text-foreground">المستودع</span>
+            <AsyncSelect
+              value={warehouseId ?? null}
+              onValueChange={handleWarehouseChange}
+              loadOptions={warehouseSelector.loadOptions}
+              disabled={!warehouseSelector.scopeReady}
+              placeholder="اختر المستودع..."
+              inputProps={{ 'aria-label': 'تصفية حسب المستودع' }}
+            />
+          </div>
+        }
+      />
+
+      <ContentCard
+        title="الأصول بانتظار التكليف"
+        description="أصول صُرفت من مستودع واحد وما تزال في عهدة تشغيلية، بانتظار تكليفها لموظف. التكليف ينشئ سطر حفظ شخصياً ويغلق السطر التشغيلي الحالي."
+      >
+        {warehouseId === undefined ? (
+          <p className="text-sm text-muted-foreground">
+            اختر المستودع لعرض الأصول التي تنتظر التكليف الشخصي.
+          </p>
+        ) : (
+          <PendingCustodyTable
+            warehouseId={warehouseId}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            canAssign={has('custody.assign')}
+            onAssign={setAssigningRow}
+          />
+        )}
+      </ContentCard>
+
+      {assigningRow !== null ? (
+        <AssignCustodyDialog custody={assigningRow} onClose={() => setAssigningRow(null)} />
+      ) : null}
+    </div>
+  )
+}
+
+function PendingCustodyTable({
+  warehouseId,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  canAssign,
+  onAssign,
+}: {
+  warehouseId: string
+  page: number
+  pageSize: number
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
+  canAssign: boolean
+  onAssign: (row: PendingCustody) => void
+}) {
+  const custodiesQuery = usePendingCustodiesQuery(warehouseId, page, pageSize)
 
   const columns = useMemo(
     () =>
@@ -98,78 +137,55 @@ export default function PendingCustodyListPage() {
             </Link>
           ),
         }),
-        columnHelper.accessor((row) => row.holder.displayName, {
+        columnHelper.accessor((row) => `${row.holderType}:${row.holderId}`, {
           id: 'holder',
           header: 'الجهة الحائزة (تشغيلي)',
-        }),
-        columnHelper.accessor('fromTs', {
-          id: 'fromTs',
-          header: 'قيد العهدة منذ',
           cell: ({ getValue }) => (
-            <span dir="ltr" className="text-sm">
+            <span dir="ltr" className="font-mono text-xs">
               {getValue()}
             </span>
           ),
         }),
-        columnHelper.accessor('status', {
-          id: 'status',
-          header: 'الحالة',
-          cell: ({ getValue }) => <StatusBadge entity="custody" status={getValue()} />,
+        columnHelper.accessor('fromUtc', {
+          id: 'fromUtc',
+          header: 'قيد العهدة منذ',
+          cell: ({ getValue }) => (
+            <span dir="ltr" className="text-sm">
+              {formatDateTime(getValue())}
+            </span>
+          ),
         }),
         columnHelper.display({
           id: 'actions',
           header: '',
           cell: ({ row }) =>
             canAssign ? (
-              <Button type="button" variant="outline" onClick={() => setAssigningRow(row.original)}>
+              <Button type="button" variant="outline" onClick={() => onAssign(row.original)}>
                 تكليف موظف
               </Button>
             ) : null,
         }),
       ]),
-    [canAssign],
+    [canAssign, onAssign],
   )
 
   return (
-    <div dir="rtl" className="min-w-0">
-      <PageHeader
-        title={ROUTE_METADATA.custodyPending.labelAr}
-        subtitle="أصول صُرفت إلى جهة تشغيلية وتنتظر تكلفتها الشخصية لموظف، وفق تدفق ما بعد الصرف (PRD 12.8)."
-      />
-
-      <ContentCard
-        title="الأصول بانتظار التكليف"
-        description="ابحث باسم الجهة الحائزة أو رقم الأصل. التكليف ينشئ سطر حفظ شخصياً ويغلق السطر التشغيلي الحالي."
-      >
-        <input
-          className="mb-3 h-9 w-full max-w-80 rounded-md border border-input bg-background px-3 text-sm"
-          placeholder="ابحث عن جهة حائزة أو رقم أصل..."
-          aria-label="بحث في قائمة الانتظار"
-          value={search}
-          onChange={handleSearchChange}
-        />
-        <DataTableServer
-          columns={columns}
-          data={toPendingRows(custodiesQuery.data)}
-          isLoading={custodiesQuery.isLoading}
-          isError={custodiesQuery.isError}
-          onRetry={() => void custodiesQuery.refetch()}
-          errorTitle="تعذّر تحميل قائمة الانتظار"
-          errorMessage="تعذّر جلب الأصول بانتظار التكليف. حاول مرة أخرى."
-          emptyTitle="لا توجد أصول بانتظار التكليف"
-          emptyDescription="جميع الأصول المصروفة مكلفة شخصياً بالفعل."
-          page={page}
-          pageSize={pageSize}
-          totalCount={custodiesQuery.data?.meta.totalItems}
-          totalPages={Math.max(custodiesQuery.data?.meta.totalPages ?? 1, 1)}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-        />
-      </ContentCard>
-
-      {assigningRow !== null ? (
-        <AssignCustodyDialog custody={assigningRow} onClose={() => setAssigningRow(null)} />
-      ) : null}
-    </div>
+    <DataTableServer
+      columns={columns}
+      data={pageRows(custodiesQuery.data, custodiesQuery.isError)}
+      isLoading={custodiesQuery.isLoading}
+      isError={custodiesQuery.isError}
+      onRetry={() => void custodiesQuery.refetch()}
+      errorTitle="تعذّر تحميل قائمة الانتظار"
+      errorMessage="تعذّر جلب الأصول بانتظار التكليف. حاول مرة أخرى."
+      emptyTitle="لا توجد أصول بانتظار التكليف"
+      emptyDescription="جميع الأصول المصروفة مكلفة شخصياً بالفعل."
+      page={page}
+      pageSize={pageSize}
+      totalCount={custodiesQuery.data?.totalItems}
+      totalPages={Math.max(custodiesQuery.data?.totalPages ?? 1, 1)}
+      onPageChange={onPageChange}
+      onPageSizeChange={onPageSizeChange}
+    />
   )
 }

@@ -9,7 +9,13 @@ import {
   transferCustodySchema,
   type TransferCustodyFormValues,
 } from '@/modules/custody/schemas/transfer-custody.schema'
-import type { TransferCustodyRequest } from '@/modules/custody/types/custody.types'
+import type {
+  Custody,
+  CustodyKind,
+  TransferCustodyRequest,
+} from '@/modules/custody/types/custody.types'
+import type { CounterpartType } from '@/modules/organization/types/counterpart-lookup.types'
+import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -22,18 +28,31 @@ import {
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 
-/**
- * Minimal row shape the transfer dialog needs from the custody list.
- */
-interface TransferCustodyRow {
-  readonly custodyId: string
-  readonly custodyKind: 'Operational' | 'Personal'
-  readonly rowVersion: number
-  readonly assetNumber: string
+export interface TransferCustodyDialogProps {
+  /** The LIVE custody row being transferred (`GET /custodies`). */
+  custody: Custody
 }
 
-export interface TransferCustodyDialogProps {
-  custody: TransferCustodyRow
+/**
+ * The holder type this dialog can produce.
+ *
+ * The counterpart picker is employee-only (`operation: 'Issue'`, `type:
+ * 'Employee'`), so the transfer target is always an Employee.
+ */
+const NEW_HOLDER_TYPE: CounterpartType = 'Employee'
+
+/**
+ * The custody kind that goes with a holder type.
+ *
+ * `Domain/Custodies/Custody.cs` pairs the two: a Personal custody is held by an
+ * Employee, an Operational one by an OrganizationalUnit, Site or External party.
+ * The server refuses a mismatched pair with 400
+ * COUNTERPARTS_OPERATIONAL_REQUIRES_NON_EMPLOYEE, so the kind is derived from
+ * the HOLDER — copying it from the custody being transferred sent every
+ * transfer to an employee as an Operational custody and failed.
+ */
+function custodyKindForHolder(holderType: CounterpartType): CustodyKind {
+  return holderType === 'Employee' ? 'Personal' : 'Operational'
 }
 
 /**
@@ -64,10 +83,10 @@ export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
     // Live wire for `POST /custodies/{custodyId}/transfer`:
     //   { subjectType, newHolderType, newHolderId, newCustodyKind, expectedRowVersion, note? }
     const request: TransferCustodyRequest = {
-      subjectType: 'Asset',
-      newHolderType: 'Employee',
+      subjectType: custody.subjectType,
+      newHolderType: NEW_HOLDER_TYPE,
       newHolderId: values.holderId,
-      newCustodyKind: custody.custodyKind,
+      newCustodyKind: custodyKindForHolder(NEW_HOLDER_TYPE),
       expectedRowVersion: custody.rowVersion,
       note:
         values.reason !== undefined && values.reason !== ''
@@ -91,7 +110,7 @@ export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
             <span dir="ltr" className="font-mono">
               {custody.assetNumber}
             </span>
-            .
+            . الحائز الجديد موظف، لذلك تُفتح العهدة الجديدة كعهدة شخصية.
           </DialogDescription>
         </DialogHeader>
         <FormProvider {...methods}>
@@ -126,7 +145,10 @@ export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
             </div>
             {transferMutation.error !== null ? (
               <p role="alert" className="text-sm text-destructive">
-                تعذّر إتمام المبادلة. تحقق من البيانات وحاول مرة أخرى.
+                {/* The server's own code decides the wording: a 404 (a custody
+                    outside the caller's scope) reads as "not found", never as
+                    "unauthorized", and a row-version conflict names itself. */}
+                {normalizeApiError(transferMutation.error).titleAr}
               </p>
             ) : null}
             <DialogFooter>

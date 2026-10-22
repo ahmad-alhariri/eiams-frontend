@@ -2,44 +2,87 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { AcquisitionProvenancePanel } from './acquisition-provenance-panel'
-import { createAsset, fixtureUuid } from '@/test/msw/factories'
+import type { AssetDetails } from '@/modules/asset/types/asset.types'
 
-describe('AcquisitionProvenancePanel (e18-t04)', () => {
-  it('renders the receipt line id and acquisition/warranty dates', () => {
-    const receiptLineId = fixtureUuid(70)
+/** The LIVE `GET /assets/{assetId}` row. */
+function assetDetails(overrides: Partial<AssetDetails> = {}): AssetDetails {
+  return {
+    id: '77777777-7777-4777-8777-777777777777',
+    assetNumber: 'AST-2024-C01',
+    serialNumber: 'SN-PC-0001',
+    materialId: '22222222-2222-4222-8222-222222222222',
+    materialCode: 'IT-HW-PC-001',
+    materialNameAr: 'حاسوب مكتبي',
+    materialNameEn: null,
+    warehouseId: '33333333-3333-4333-8333-333333333333',
+    warehouseCode: 'WH-CENTRAL',
+    warehouseName: 'المستودع المركزي',
+    currentStatus: 'InStock',
+    activeCustodyId: null,
+    holderType: null,
+    holderId: null,
+    custodyKind: null,
+    latestMovementType: null,
+    latestMovementAtUtc: null,
+    receiptLineId: null,
+    receiptDocumentId: null,
+    receiptDocumentReference: null,
+    acquisitionDate: '2024-03-01',
+    warrantyExpiry: null,
+    rowVersion: 1,
+    ...overrides,
+  }
+}
+
+describe('AcquisitionProvenancePanel', () => {
+  it('renders the receipt document, its line and the acquisition/warranty dates', () => {
     render(
       <AcquisitionProvenancePanel
-        asset={createAsset({
-          receiptLineId,
+        asset={assetDetails({
+          receiptLineId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          receiptDocumentId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          receiptDocumentReference: 'EIAMS-RCV-2026-0001',
           acquisitionDate: '2024-03-01',
           warrantyExpiry: '2027-03-01',
         })}
       />,
     )
 
-    expect(screen.getByText(receiptLineId)).toBeInTheDocument()
+    expect(screen.getByText('EIAMS-RCV-2026-0001')).toBeInTheDocument()
+    expect(screen.getByText('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBeInTheDocument()
     expect(screen.getByText('2024-03-01')).toBeInTheDocument()
     expect(screen.getByText('2027-03-01')).toBeInTheDocument()
   })
 
-  it('renders em-dash placeholders when provenance fields are explicitly null', () => {
+  it('renders em-dash placeholders for the receipt fields the server sends as null', () => {
     render(
       <AcquisitionProvenancePanel
-        asset={createAsset({ acquisitionDate: null, warrantyExpiry: null })}
+        asset={assetDetails({
+          receiptDocumentReference: 'EIAMS-RCV-2026-0001',
+          receiptLineId: null,
+          receiptDocumentId: null,
+          warrantyExpiry: null,
+        })}
       />,
     )
 
-    const dashes = screen.getAllByText('—')
-    // receipt line (undefined) + acquisition + warranty placeholders.
-    expect(dashes.length).toBeGreaterThanOrEqual(3)
-    expect(screen.getByText(/بند الاستلام المرجعي/)).toBeInTheDocument()
+    // The receipt line and the warranty expiry placeholders.
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('EIAMS-RCV-2026-0001')).toBeInTheDocument()
+    expect(screen.getByText('سند الاستلام المرجعي')).toBeInTheDocument()
   })
 
-  it('shows the empty-state note when no provenance exists at all', () => {
-    // A bare fixture carries none of the provenance fields at all.
-    render(<AcquisitionProvenancePanel asset={createAsset()} />)
+  it('shows the empty-state note when the server recorded no receipt at all', () => {
+    render(
+      <AcquisitionProvenancePanel
+        asset={assetDetails({
+          receiptLineId: null,
+          receiptDocumentId: null,
+          receiptDocumentReference: null,
+        })}
+      />,
+    )
 
     expect(screen.getByText('لا توجد بيانات اقتناء مسجّلة لهذا الأصل.')).toBeInTheDocument()
-    expect(screen.queryByText(/بند الاستلام المرجعي/)).toBeNull()
   })
 })

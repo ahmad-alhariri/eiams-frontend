@@ -1,13 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { okJson } from '@/test/msw/envelope'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createAsset as createAssetFixture, fixtureUuid } from '@/test/msw/factories'
-import type { AssetCustodyTimelineRow } from '@/modules/asset/services/asset.service'
+import type {
+  AssetCustodyTimelineRow,
+  AssetCurrentStatusInfo,
+  AssetDetails,
+} from '@/modules/asset/types/asset.types'
 import { server } from '@/test/msw/server'
 import { createQueryClient } from '@/shared/services/query.client'
 import { formatDateTime } from '@/shared/utils/format'
@@ -15,8 +18,8 @@ import { formatDateTime } from '@/shared/utils/format'
 import AssetDetailPage from './asset-detail-page'
 
 const API_BASE_URL = '/api/v1'
-const ASSET_ID = fixtureUuid(230)
-const WAREHOUSE_ID = fixtureUuid(30)
+const ASSET_ID = '77777777-7777-4777-8777-777777777777'
+const WAREHOUSE_ID = '33333333-3333-4333-8333-333333333333'
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({
@@ -24,22 +27,71 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   }),
 }))
 
+/** The LIVE `GET /assets/{assetId}` row (`AssetDetailsResponse`). */
+function assetDetails(overrides: Partial<AssetDetails> = {}): AssetDetails {
+  return {
+    id: ASSET_ID,
+    assetNumber: 'AST-2024-C01',
+    serialNumber: 'SN-PC-0001',
+    materialId: '22222222-2222-4222-8222-222222222222',
+    materialCode: 'IT-HW-PC-001',
+    materialNameAr: 'حاسوب مكتبي',
+    materialNameEn: 'Desktop Computer',
+    warehouseId: WAREHOUSE_ID,
+    warehouseCode: 'WH-CENTRAL',
+    warehouseName: 'المستودع المركزي',
+    currentStatus: 'InStock',
+    activeCustodyId: null,
+    holderType: null,
+    holderId: null,
+    custodyKind: null,
+    latestMovementType: null,
+    latestMovementAtUtc: null,
+    receiptLineId: null,
+    receiptDocumentId: null,
+    receiptDocumentReference: null,
+    acquisitionDate: '2024-03-01',
+    warrantyExpiry: null,
+    rowVersion: 1,
+    ...overrides,
+  }
+}
+
+/** The LIVE `GET /assets/{assetId}/current-status` row. */
+function currentStatus(overrides: Partial<AssetCurrentStatusInfo> = {}): AssetCurrentStatusInfo {
+  return {
+    assetId: ASSET_ID,
+    materialId: '22222222-2222-4222-8222-222222222222',
+    warehouseId: WAREHOUSE_ID,
+    assetNumber: 'AST-2024-C01',
+    serialNumber: 'SN-PC-0001',
+    currentStatus: 'InStock',
+    activeCustodyId: null,
+    holderType: null,
+    holderId: null,
+    custodyKind: null,
+    latestMovementType: null,
+    latestMovementAtUtc: null,
+    ...overrides,
+  }
+}
+
 /**
- * Live wire for `GET /assets/{assetId}/custody-timeline` (D-INT-02): holds
- * the typed fields only. Holder display name lives in the sibling counterpart
- * lookup and is not part of the timeline row.
+ * Live wire for `GET /assets/{assetId}/custody-timeline`: the typed fields
+ * only. The holder display name lives in the sibling counterpart lookup and
+ * is not part of the timeline row.
  */
 function buildTimelineEntry(
   overrides: Partial<AssetCustodyTimelineRow> = {},
 ): AssetCustodyTimelineRow {
   return {
     assetId: ASSET_ID,
-    custodyId: fixtureUuid(51),
+    custodyId: '44444444-4444-4444-8444-444444444444',
     custodyKind: 'Operational',
     fromUtc: '2026-08-24T08:00:00.000Z',
-    holderId: fixtureUuid(20),
+    holderId: '55555555-5555-4555-8555-555555555555',
     holderType: 'OrganizationalUnit',
-    issueDocumentId: fixtureUuid(20),
+    issueDocumentId: '66666666-6666-4666-8666-666666666666',
     returnDocumentId: null,
     rowVersion: 1,
     status: 'Active',
@@ -50,22 +102,12 @@ function buildTimelineEntry(
 
 function useDetailHandlers() {
   server.use(
-    http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
-      okJson(
-        createAssetFixture({
-          assetId: ASSET_ID,
-          assetNumber: 'AST-2024-C01',
-          serialNumber: 'SN-PC-0001',
-          derivedStatus: 'InStock',
-          material: { id: fixtureUuid(61), displayName: 'حاسوب مكتبي' },
-          currentWarehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي' },
-          acquisitionDate: '2024-03-01',
-        }),
-      ),
-    ),
+    http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () => okJson(assetDetails())),
+    http.get(`${API_BASE_URL}/assets/${ASSET_ID}/current-status`, () => okJson(currentStatus())),
     http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () =>
       okJson([buildTimelineEntry()]),
     ),
+    http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () => okPageJson([])),
   )
 }
 
@@ -93,15 +135,45 @@ function createDeterministicClient(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } })
 }
 
-describe('AssetDetailPage (e18-t03)', () => {
-  it('renders the spine fields with the derived-status badge', async () => {
+describe('AssetDetailPage', () => {
+  it('renders the live spine fields and the status badge', async () => {
     useDetailHandlers()
     renderPage()
 
     expect(await screen.findByText('AST-2024-C01')).toBeInTheDocument()
     expect(screen.getByText('SN-PC-0001')).toBeInTheDocument()
-    expect(screen.getAllByText('في المخزن').length).toBeGreaterThan(0)
+    // The live row carries the material and warehouse names flat.
+    expect(screen.getByText('حاسوب مكتبي')).toBeInTheDocument()
     expect(screen.getByText('المستودع المركزي')).toBeInTheDocument()
+    expect(screen.getAllByText('في المخزن').length).toBeGreaterThan(0)
+  })
+
+  it('renders the derived status projection with its holder and last movement', async () => {
+    server.use(
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () => okJson(assetDetails())),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/current-status`, () =>
+        okJson(
+          currentStatus({
+            currentStatus: 'InCustody',
+            holderType: 'Employee',
+            holderId: '55555555-5555-4555-8555-555555555555',
+            custodyKind: 'Personal',
+            latestMovementType: 'Issued',
+            latestMovementAtUtc: '2026-08-24T10:00:00.000Z',
+          }),
+        ),
+      ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () => okJson([])),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () => okPageJson([])),
+    )
+    renderPage()
+
+    expect(await screen.findByText('قيد العهدة')).toBeInTheDocument()
+    // The live projection carries the holder TYPE and ID only.
+    expect(screen.getByText('Employee/55555555-5555-4555-8555-555555555555')).toBeInTheDocument()
+    expect(screen.getByText('حفظ شخصي')).toBeInTheDocument()
+    expect(screen.getByText('صرف')).toBeInTheDocument()
+    expect(screen.getByText(formatDateTime('2026-08-24T10:00:00.000Z'))).toBeInTheDocument()
   })
 
   it('renders the custody timeline with holder and kind', async () => {
@@ -115,16 +187,10 @@ describe('AssetDetailPage (e18-t03)', () => {
 
   it('shows the no-custody note when the timeline is empty', async () => {
     server.use(
-      http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
-        okJson(
-          createAssetFixture({
-            assetId: ASSET_ID,
-            derivedStatus: 'InStock',
-            material: { id: fixtureUuid(61), displayName: 'حاسوب مكتبي' },
-          }),
-        ),
-      ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () => okJson(assetDetails())),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/current-status`, () => okJson(currentStatus())),
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () => okJson([])),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () => okPageJson([])),
     )
     renderPage()
 
@@ -141,24 +207,22 @@ describe('AssetDetailPage (e18-t03)', () => {
     const toUtc = '2026-09-02T11:30:00.000Z'
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
-        okJson(
-          createAssetFixture({
-            assetId: ASSET_ID,
-            derivedStatus: 'InCustody',
-            material: { id: fixtureUuid(61), displayName: 'حاسوب مكتبي' },
-          }),
-        ),
+        okJson(assetDetails({ currentStatus: 'InCustody' })),
+      ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/current-status`, () =>
+        okJson(currentStatus({ currentStatus: 'InCustody' })),
       ),
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () =>
         okJson([
           buildTimelineEntry({
-            custodyId: fixtureUuid(52),
+            custodyId: '99999999-9999-4999-8999-999999999999',
             status: 'Closed',
             fromUtc,
             toUtc,
           }),
         ]),
       ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () => okPageJson([])),
     )
     renderPage()
 
@@ -174,24 +238,22 @@ describe('AssetDetailPage (e18-t03)', () => {
   it('omits the end time for an open custody row', async () => {
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
-        okJson(
-          createAssetFixture({
-            assetId: ASSET_ID,
-            derivedStatus: 'InCustody',
-            material: { id: fixtureUuid(61), displayName: 'حاسوب مكتبي' },
-          }),
-        ),
+        okJson(assetDetails({ currentStatus: 'InCustody' })),
+      ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/current-status`, () =>
+        okJson(currentStatus({ currentStatus: 'InCustody' })),
       ),
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () =>
         okJson([
           buildTimelineEntry({
-            custodyId: fixtureUuid(53),
+            custodyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
             status: 'Active',
             fromUtc: '2026-08-24T08:00:00.000Z',
             toUtc: null,
           }),
         ]),
       ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () => okPageJson([])),
     )
     renderPage()
 
@@ -208,16 +270,8 @@ describe('AssetDetailPage (e18-t03)', () => {
     let custodyRequests = 0
     let custodyShouldFail = true
     server.use(
-      http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
-        okJson(
-          createAssetFixture({
-            assetId: ASSET_ID,
-            assetNumber: 'AST-2024-C01',
-            derivedStatus: 'InCustody',
-            material: { id: fixtureUuid(61), displayName: 'حاسوب مكتبي' },
-          }),
-        ),
-      ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () => okJson(assetDetails())),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/current-status`, () => okJson(currentStatus())),
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () => {
         custodyRequests += 1
         if (custodyShouldFail) {
@@ -225,13 +279,14 @@ describe('AssetDetailPage (e18-t03)', () => {
         }
         return okJson([
           buildTimelineEntry({
-            custodyId: fixtureUuid(54),
+            custodyId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
             status: 'Active',
             fromUtc: '2026-08-24T08:00:00.000Z',
             toUtc: null,
           }),
         ])
       }),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () => okPageJson([])),
     )
     renderPage(createDeterministicClient())
 
@@ -255,7 +310,9 @@ describe('AssetDetailPage (e18-t03)', () => {
   it('uses the shared retry Button, not a hand-rolled element, for the asset read failure', async () => {
     server.use(
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () => new HttpResponse(null, { status: 500 })),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/current-status`, () => okJson(currentStatus())),
       http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () => okJson([])),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () => okPageJson([])),
     )
     const { container } = renderPage(createDeterministicClient())
 

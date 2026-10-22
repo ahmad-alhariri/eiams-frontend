@@ -9,13 +9,13 @@ import { describe, expect, it, vi } from 'vitest'
 
 import ActiveCustodyListPage from './active-custody-list-page'
 import CustodyDetailPage from './custody-detail-page'
-import { fixtureUuid } from '@/test/msw/factories'
+import type { Custody } from '@/modules/custody/types/custody.types'
 import { server } from '@/test/msw/server'
 import { createQueryClient } from '@/shared/services/query.client'
 
 const API_BASE_URL = '/api/v1'
-const ASSET_ID = fixtureUuid(235)
-const CUSTODY_ID = fixtureUuid(52)
+const ASSET_ID = '77777777-7777-4777-8777-777777777777'
+const CUSTODY_ID = '44444444-4444-4444-8444-444444444444'
 
 vi.mock('@/modules/auth/hooks/use-permission', () => ({
   usePermission: () => ({
@@ -29,31 +29,40 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   }),
 }))
 
+/** The LIVE `GET /custodies` row: flat, camelCase, no nested holder object. */
+const custodyRow: Custody = {
+  subjectType: 'Asset',
+  subjectId: ASSET_ID,
+  custodyId: CUSTODY_ID,
+  materialId: '22222222-2222-4222-8222-222222222222',
+  materialNameAr: 'حاسوب مكتبي',
+  materialNameEn: null,
+  materialCode: 'IT-HW-PC-001',
+  materialKind: 'Asset',
+  trackingType: 'Serial',
+  serialNumber: 'SN-PC-0001',
+  assetNumber: 'AST-2023-C099',
+  warehouseId: '33333333-3333-4333-8333-333333333333',
+  warehouseName: 'المستودع المركزي',
+  holderType: 'OrganizationalUnit',
+  holderId: '55555555-5555-4555-8555-555555555555',
+  holderDisplayName: 'مديرية النقل والحراسة',
+  custodyKind: 'Operational',
+  issuedQuantity: 1,
+  activeQuantity: 1,
+  returnedQuantity: 0,
+  issueDocumentId: '66666666-6666-4666-8666-666666666666',
+  systemReferenceNumber: 'ISSUE-2026-0001',
+  status: 'Active',
+  fromUtc: '2026-08-01T08:00:00.000Z',
+  toUtc: null,
+  rowVersion: 1,
+}
+
 function useCustodyHandlers() {
   server.use(
     http.get(`${API_BASE_URL}/custodies`, () =>
-      okPageJson(
-        [
-          {
-            assetId: ASSET_ID,
-            assetNumber: 'AST-2023-C099',
-            custodyId: CUSTODY_ID,
-            custodyKind: 'Operational',
-            fromTs: '2026-08-01T08:00:00.000Z',
-            holder: {
-              displayName: 'مديرية النقل والحراسة',
-              id: fixtureUuid(21),
-              secondaryLabelAr: null,
-              status: 'Active' as const,
-              type: 'OrganizationalUnit' as const,
-            },
-            issueDocumentId: fixtureUuid(155),
-            rowVersion: 1,
-            status: 'Active',
-          },
-        ],
-        { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 },
-      ),
+      okPageJson([custodyRow], { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 }),
     ),
   )
 }
@@ -76,8 +85,8 @@ function createWrapper(initialEntry: string) {
   }
 }
 
-describe('Active custody list + detail (e19-t04)', () => {
-  it('lists active custody rows with holder, kind, and status', async () => {
+describe('Active custody list + detail', () => {
+  it('lists custody rows with the live holder, kind and status', async () => {
     useCustodyHandlers()
     render(<ActiveCustodyListPage />, {
       wrapper: createWrapper('/custody/active'),
@@ -85,8 +94,30 @@ describe('Active custody list + detail (e19-t04)', () => {
 
     expect(await screen.findByRole('link', { name: /AST-2023-C099/ })).toBeInTheDocument()
     expect(screen.getByText(/مديرية النقل والحراسة/)).toBeInTheDocument()
-    expect(screen.getByText('تشغيلي')).toBeInTheDocument()
+    expect(screen.getByText('حفظ تشغيلي')).toBeInTheDocument()
+    expect(screen.getByText('نشطة')).toBeInTheDocument()
     expect(screen.getByText('عرض التفاصيل')).toBeInTheDocument()
+  })
+
+  it('sends the live list filters and no unsupported search box', async () => {
+    let requestedParams: URLSearchParams | undefined
+    server.use(
+      http.get(`${API_BASE_URL}/custodies`, ({ request }) => {
+        requestedParams = new URL(request.url).searchParams
+        return okPageJson([custodyRow], { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 })
+      }),
+    )
+    render(<ActiveCustodyListPage />, {
+      wrapper: createWrapper('/custody/active'),
+    })
+
+    await screen.findByRole('link', { name: /AST-2023-C099/ })
+    expect(requestedParams?.get('subjectType')).toBe('Asset')
+    expect(requestedParams?.get('page')).toBe('1')
+    expect(requestedParams?.has('search')).toBe(false)
+    // The server ignores `search` on /custodies, so no search affordance is
+    // offered at all.
+    expect(screen.queryByRole('searchbox')).toBeNull()
   })
 
   it('filters by custody status through the select', async () => {
@@ -113,7 +144,8 @@ describe('Active custody list + detail (e19-t04)', () => {
       })
 
       // The row query reuses the scoped list endpoint; wait for either outcome.
-      await screen.findByText(/الحائز/, undefined, { timeout: 10000 })
+      await screen.findByText('الحائز', undefined, { timeout: 10000 })
+      expect(screen.getByText('مديرية النقل والحراسة')).toBeInTheDocument()
       expect(screen.getByText('حفظ تشغيلي')).toBeInTheDocument()
       expect(screen.getByText('مبادلة المسؤولية')).toBeInTheDocument()
     },

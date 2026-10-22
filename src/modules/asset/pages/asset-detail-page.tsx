@@ -2,12 +2,15 @@ import { useParams } from 'react-router'
 
 import { AcquisitionProvenancePanel } from '@/modules/asset/components/acquisition-provenance-panel'
 import { AssetMovementLedger } from '@/modules/asset/components/asset-movement-ledger'
+import { AssetStatusBadge } from '@/modules/asset/components/asset-status-badge'
+import { ASSET_MOVEMENT_TYPE_LABELS_AR } from '@/modules/asset/asset-movement-labels'
 import {
   useAssetCustodyTimelineQuery,
+  useAssetCurrentStatusQuery,
   useAssetQuery,
 } from '@/modules/asset/hooks/use-asset-queries'
+import type { AssetDetails } from '@/modules/asset/types/asset.types'
 import { ROUTE_METADATA } from '@/config/routes'
-import type { Asset } from '@/shared/types/generated/eiams-v1'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { StatusBadge } from '@/shared/feedback/status-badge'
@@ -15,28 +18,34 @@ import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
-import { formatDateTime } from '@/shared/utils/format'
+import { formatDate, formatDateTime } from '@/shared/utils/format'
 
 /**
- * Asset detail page (e18-t03): contract spine of one asset with the
- * D-AST-02 derived status as the page's headline badge, plus the custody
- * timeline (`getAssetCustody`). Acquisition provenance and movement history
- * are separate beads (e18-t04/t05) and compose into this page later.
+ * Asset detail page: the asset record and its acquisition provenance, the
+ * DERIVED status projection the server owns, the custody timeline, and the
+ * immutable movement ledger.
+ *
+ * The live rows are flat (`materialNameAr`, `warehouseName`, `currentStatus`,
+ * `id`), so nothing here reads the nested `material` / `currentWarehouse` /
+ * `holder` objects of the frozen design snapshot.
  */
 export default function AssetDetailPage() {
   const { assetId } = useParams<{ assetId: string }>()
   const assetQuery = useAssetQuery(assetId)
   const asset = assetQuery.data
+  const statusQuery = useAssetCurrentStatusQuery(assetId)
 
   return (
     <div dir="rtl" className="min-w-0">
       <PageHeader
         title={ROUTE_METADATA.assetDetail.labelAr}
         subtitle={
-          asset === undefined ? undefined : `${asset.assetNumber} — ${asset.material.displayName}`
+          asset === undefined ? undefined : `${asset.assetNumber} — ${asset.materialNameAr}`
         }
         toolbar={
-          asset === undefined ? null : <StatusBadge entity="asset" status={asset.derivedStatus} />
+          statusQuery.data === undefined ? null : (
+            <AssetStatusBadge status={statusQuery.data.currentStatus} />
+          )
         }
       />
 
@@ -61,20 +70,22 @@ export default function AssetDetailPage() {
         <>
           <ContentCard
             title="بيانات الأصل"
-            description="الهوية المؤسسية للأصل وحالته المشتقة من سجل الحركات والعهدة (v_asset_current_status)."
+            description="الهوية المؤسسية للأصل: رقمه، مادته، مستودعه وتواريخ الاقتناء والضمان."
           >
             <SpineFields asset={asset} />
           </ContentCard>
 
           <AcquisitionProvenancePanel asset={asset} />
 
-          <CustodySection assetId={asset.assetId} />
+          <CurrentStatusSection assetId={asset.id} />
+
+          <CustodySection assetId={asset.id} />
 
           <ContentCard
             title="سجل حركات الأصل"
-            description="السجل غير القابل للتعديل لكل أحداث هذا الأصل: استلام، صرف، إرجاع، استبعاد."
+            description="السجل غير القابل للتعديل لكل أحداث هذا الأصل: استلام، تحويل، صرف، إرجاع، استبعاد."
           >
-            <AssetMovementLedger assetId={asset.assetId} />
+            <AssetMovementLedger assetId={asset.id} />
           </ContentCard>
         </>
       ) : null}
@@ -82,7 +93,7 @@ export default function AssetDetailPage() {
   )
 }
 
-function SpineFields({ asset }: { asset: Asset }) {
+function SpineFields({ asset }: { asset: AssetDetails }) {
   return (
     <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
       <DetailField label="رقم الأصل" ltr>
@@ -91,17 +102,86 @@ function SpineFields({ asset }: { asset: Asset }) {
       <DetailField label="الرقم التسلسلي" ltr={asset.serialNumber != null}>
         {asset.serialNumber ?? '—'}
       </DetailField>
-      <DetailField label="المادة">{asset.material.displayName}</DetailField>
-      <DetailField label="المستودع الحالي">
-        {asset.currentWarehouse?.displayName ?? '—'}
+      <DetailField label="المادة">{asset.materialNameAr}</DetailField>
+      <DetailField label="رمز المادة" ltr>
+        <span className="font-mono">{asset.materialCode}</span>
       </DetailField>
-      <DetailField label="تاريخ الاقتناء" ltr={asset.acquisitionDate != null}>
-        {asset.acquisitionDate ?? '—'}
+      <DetailField label="المستودع الحالي">{asset.warehouseName}</DetailField>
+      {/* The two DateOnly fields go through the shared date formatter like
+          every other date in the module. */}
+      <DetailField label="تاريخ الاقتناء" ltr>
+        {formatDate(asset.acquisitionDate)}
       </DetailField>
       <DetailField label="انتهاء الضمان" ltr={asset.warrantyExpiry != null}>
-        {asset.warrantyExpiry ?? '—'}
+        {asset.warrantyExpiry === null ? '—' : formatDate(asset.warrantyExpiry)}
       </DetailField>
     </dl>
+  )
+}
+
+/**
+ * The DERIVED status projection (`v_asset_current_status`): who holds the
+ * asset right now, and its last movement.
+ *
+ * It is read from `GET /assets/{assetId}/current-status` — the endpoint that
+ * serves exactly this projection — while the asset record and its provenance
+ * come from `GET /assets/{assetId}`. The STATUS itself is the page's headline
+ * badge (above the title); this card carries the facts around it, so the
+ * status is stated once and only once.
+ */
+function CurrentStatusSection({ assetId }: { assetId: string }) {
+  const statusQuery = useAssetCurrentStatusQuery(assetId)
+  const status = statusQuery.data
+
+  return (
+    <ContentCard
+      title="الوضع الحالي"
+      description="من يحتفظ بالأصل الآن، ونوع الحفظ، وآخر حركة مسجّلة عليه."
+    >
+      {statusQuery.isLoading ? (
+        <LoadingSpinner label="جارٍ تحميل الوضع الحالي..." />
+      ) : statusQuery.isError || status === undefined ? (
+        <ErrorState
+          title="تعذّر تحميل الوضع الحالي"
+          description="تعذّر جلب الوضع الحالي لهذا الأصل. حاول مرة أخرى."
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void statusQuery.refetch()}
+            >
+              إعادة المحاولة
+            </Button>
+          }
+        />
+      ) : (
+        <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+          <DetailField label="الحائز" ltr>
+            {/* The live projection carries the holder TYPE and ID only — no
+                display name — so the typed pair is what can be shown. */}
+            {status.holderType === null || status.holderId === null
+              ? '—'
+              : `${status.holderType}/${status.holderId}`}
+          </DetailField>
+          <DetailField label="نوع الحفظ">
+            {status.custodyKind === null
+              ? '—'
+              : status.custodyKind === 'Personal'
+                ? 'حفظ شخصي'
+                : 'حفظ تشغيلي'}
+          </DetailField>
+          <DetailField label="آخر حركة">
+            {status.latestMovementType === null
+              ? '—'
+              : ASSET_MOVEMENT_TYPE_LABELS_AR[status.latestMovementType]}
+          </DetailField>
+          <DetailField label="تاريخ آخر حركة" ltr={status.latestMovementAtUtc != null}>
+            {status.latestMovementAtUtc === null ? '—' : formatDateTime(status.latestMovementAtUtc)}
+          </DetailField>
+        </dl>
+      )}
+    </ContentCard>
   )
 }
 

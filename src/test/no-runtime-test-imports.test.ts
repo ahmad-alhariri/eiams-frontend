@@ -153,7 +153,12 @@ import {
  * `@/test/**`, so the no-offenders assertion below stays green.
  */
 // +3 application files: inventory-count/hooks/use-count-names.ts, inventory-count/components/count-name-fields.tsx, adjustment/hooks/use-count-variance-seeds.ts
-const SCANNED_FILE_COUNT = 401
+// +3 application files for the live asset/custody wire contract: the two
+// module status badges (`asset/components/asset-status-badge.tsx`,
+// `custody/components/custody-status-badge.tsx`) and the custody status label
+// registry (`custody/custody-status-labels.ts`). None of them reaches into
+// `@/test/**`, so the no-offenders assertion below stays green.
+const SCANNED_FILE_COUNT = 404
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

@@ -5,9 +5,9 @@ import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { useCustodiesQuery } from './use-custody-queries'
+import { useCustodiesQuery, usePendingCustodiesQuery } from './use-custody-queries'
 import { createQueryClient } from '@/shared/services/query.client'
-import { fixtureUuid } from '@/test/msw/factories'
+import type { Custody, PendingCustody } from '@/modules/custody/types/custody.types'
 import { server } from '@/test/msw/server'
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
@@ -17,7 +17,51 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 }))
 
 const API_BASE_URL = '/api/v1'
-const ASSET_ID = fixtureUuid(230)
+const ASSET_ID = '77777777-7777-4777-8777-777777777777'
+const WAREHOUSE_ID = '33333333-3333-4333-8333-333333333333'
+
+/** The LIVE `GET /custodies` row: flat, camelCase, no nested holder object. */
+const custodyRow: Custody = {
+  subjectType: 'Asset',
+  subjectId: ASSET_ID,
+  custodyId: '44444444-4444-4444-8444-444444444444',
+  materialId: '22222222-2222-4222-8222-222222222222',
+  materialNameAr: 'حاسوب مكتبي',
+  materialNameEn: 'Desktop Computer',
+  materialCode: 'IT-HW-PC-001',
+  materialKind: 'Asset',
+  trackingType: 'Serial',
+  serialNumber: 'SN-PC-0001',
+  assetNumber: 'AST-2024-C01',
+  warehouseId: WAREHOUSE_ID,
+  warehouseName: 'المستودع المركزي',
+  holderType: 'OrganizationalUnit',
+  holderId: '55555555-5555-4555-8555-555555555555',
+  holderDisplayName: 'مديرية النقل والحراسة',
+  custodyKind: 'Operational',
+  issuedQuantity: 1,
+  activeQuantity: 1,
+  returnedQuantity: 0,
+  issueDocumentId: '66666666-6666-4666-8666-666666666666',
+  systemReferenceNumber: 'ISSUE-2026-0001',
+  status: 'Active',
+  fromUtc: '2026-08-01T08:00:00.000Z',
+  toUtc: null,
+  rowVersion: 1,
+}
+
+/** The LIVE `GET /custodies/pending` row. */
+const pendingRow: PendingCustody = {
+  custodyId: custodyRow.custodyId,
+  assetId: ASSET_ID,
+  assetNumber: 'AST-2024-C01',
+  materialId: custodyRow.materialId,
+  holderType: 'OrganizationalUnit',
+  holderId: custodyRow.holderId,
+  issueDocumentId: custodyRow.issueDocumentId,
+  fromUtc: '2026-08-01T08:00:00.000Z',
+  rowVersion: 1,
+}
 
 function createWrapper() {
   const client = createQueryClient()
@@ -26,40 +70,18 @@ function createWrapper() {
   }
 }
 
-describe('useCustodiesQuery (e19-t01)', () => {
-  it('fetches scoped custody rows through MSW and exposes them', async () => {
+describe('useCustodiesQuery', () => {
+  it('fetches scoped custody rows with the live filters and exposes them', async () => {
+    let requestedParams: URLSearchParams | undefined
     server.use(
       http.get(`${API_BASE_URL}/custodies`, ({ request }) => {
-        const url = new URL(request.url)
-        expect(url.searchParams.get('status')).toBe('Active')
-        expect(url.searchParams.get('custodyKind')).toBe('Operational')
-        return okPageJson(
-          [
-            {
-              assetId: ASSET_ID,
-              assetNumber: 'AST-2024-C01',
-              custodyId: fixtureUuid(52),
-              custodyKind: 'Operational',
-              fromTs: '2026-08-01T08:00:00.000Z',
-              holder: {
-                displayName: 'مديرية النقل والحراسة',
-                id: fixtureUuid(21),
-                secondaryLabelAr: null,
-                status: 'Active' as const,
-                type: 'OrganizationalUnit' as const,
-              },
-              issueDocumentId: fixtureUuid(155),
-              rowVersion: 1,
-              status: 'Active',
-            },
-          ],
-          { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 },
-        )
+        requestedParams = new URL(request.url).searchParams
+        return okPageJson([custodyRow], { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 })
       }),
     )
 
     const { result } = renderHook(
-      () => useCustodiesQuery({ status: 'Active', custodyKind: 'Operational' }),
+      () => useCustodiesQuery({ page: 1, pageSize: 20, subjectType: 'Asset', status: 'Active' }),
       { wrapper: createWrapper() },
     )
 
@@ -68,23 +90,37 @@ describe('useCustodiesQuery (e19-t01)', () => {
     expect(result.current.data?.items[0]).toMatchObject({
       assetNumber: 'AST-2024-C01',
       custodyKind: 'Operational',
+      holderDisplayName: 'مديرية النقل والحراسة',
     })
+    // The live parameters and nothing else.
+    expect(requestedParams?.get('subjectType')).toBe('Asset')
+    expect(requestedParams?.get('status')).toBe('Active')
+    expect(requestedParams?.get('page')).toBe('1')
+    expect(requestedParams?.has('pageIndex')).toBe(false)
+    expect(requestedParams?.has('custodyKind')).toBe(false)
+    expect(requestedParams?.has('search')).toBe(false)
   })
 
-  it('stays idle until the scope cache key exists', async () => {
-    // The module-level mock above always provides a scope, so this test
-    // verifies the enabled wiring indirectly through the fetch happening —
-    // the disabled branch is covered by the service contract tests.
+  it('reads the warehouse-scoped pending list', async () => {
+    let requestedParams: URLSearchParams | undefined
     server.use(
-      http.get(`${API_BASE_URL}/custodies`, () =>
-        okPageJson([], { page: 1, pageSize: 20, totalCount: 0, totalPages: 0 }),
-      ),
+      http.get(`${API_BASE_URL}/custodies/pending`, ({ request }) => {
+        requestedParams = new URL(request.url).searchParams
+        return okPageJson([pendingRow], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
+      }),
     )
-    const { result } = renderHook(
-      () => useCustodiesQuery({ status: 'Active', custodyKind: 'Operational' }),
-      { wrapper: createWrapper() },
-    )
+
+    const { result } = renderHook(() => usePendingCustodiesQuery(WAREHOUSE_ID, 1, 10), {
+      wrapper: createWrapper(),
+    })
+
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(result.current.data?.items).toHaveLength(0)
+    expect(requestedParams?.get('warehouseId')).toBe(WAREHOUSE_ID)
+    expect(requestedParams?.get('page')).toBe('1')
+    expect(result.current.data?.items[0]).toMatchObject({
+      custodyId: pendingRow.custodyId,
+      assetNumber: 'AST-2024-C01',
+      holderType: 'OrganizationalUnit',
+    })
   })
 })

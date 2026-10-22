@@ -9,6 +9,8 @@ import {
   assignCustodySchema,
   type AssignCustodyFormValues,
 } from '@/modules/custody/schemas/assign-custody.schema'
+import type { PendingCustody } from '@/modules/custody/types/custody.types'
+import { normalizeApiError } from '@/shared/services/api-error'
 import {
   Dialog,
   DialogContent,
@@ -20,26 +22,13 @@ import {
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 
-/**
- * The minimal row shape the dialog needs from the pending list. Mirrors the
- * shape of `AssetCustody` (the list-row carried by `useCustodiesQuery` for
- * `subjectType === 'Asset'`) without dragging in the generated union — the
- * list never includes the other subjects, so a static type is sufficient.
- *
- * Lives next to the dialog so the next assignment-dialog workstream (when
- * this is replaced by the snapshot-as-source contract) does not need to
- * search for it.
- */
-export interface AssignCustodyRow {
-  readonly custodyId: string
-  readonly assetId: string
-  readonly assetNumber: string
-  readonly rowVersion: number
-  readonly issueDocumentId: string
-}
-
 export interface AssignCustodyDialogProps {
-  custody: AssignCustodyRow | null
+  /**
+   * The pending row being assigned. It is the LIVE `GET /custodies/pending`
+   * row (`PendingCustody`): the asset id travels in the path and the row's
+   * `rowVersion` is the `expectedCustodyRowVersion` the controller compares.
+   */
+  custody: PendingCustody | null
   onClose: () => void
 }
 
@@ -133,7 +122,11 @@ export function AssignCustodyDialog({ custody, onClose }: AssignCustodyDialogPro
             </div>
             {assignMutation.error !== null ? (
               <p role="alert" className="text-sm text-destructive">
-                تعذّر إتمام التكليف. تحقق من البيانات وحاول مرة أخرى.
+                {/* The server's own code decides the wording: no active
+                    custody, an unknown or inactive employee and a stale row
+                    version each name themselves instead of collapsing into one
+                    generic sentence. */}
+                {normalizeApiError(assignMutation.error).titleAr}
               </p>
             ) : null}
             <DialogFooter>

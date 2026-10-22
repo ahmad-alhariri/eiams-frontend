@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { CounterpartResolution } from '@/modules/organization/types/counterpart-lookup.types'
 import { assignCustodySchema } from '@/modules/custody/schemas/assign-custody.schema'
+import type { PendingCustody } from '@/modules/custody/types/custody.types'
 import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { createQueryClient } from '@/shared/services/query.client'
@@ -23,24 +24,22 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   }),
 }))
 
-const custody = {
+/**
+ * The LIVE `GET /custodies/pending` row the dialog is opened for: the asset
+ * id travels in the path and the row's `rowVersion` is the
+ * `expectedCustodyRowVersion` the controller compares.
+ */
+const custody: PendingCustody = {
+  custodyId: fixtureUuid(52),
   assetId: ASSET_ID,
   assetNumber: 'AST-2023-C099',
-  custodyId: fixtureUuid(52),
-  custodyKind: 'Operational',
-  fromTs: '2026-08-01T08:00:00.000Z',
-  holder: {
-    displayName: 'مديرية النقل والحراسة',
-    id: fixtureUuid(21),
-    secondaryLabelAr: null,
-    status: 'Active' as const,
-    type: 'OrganizationalUnit' as const,
-  },
+  materialId: fixtureUuid(61),
+  holderType: 'OrganizationalUnit',
+  holderId: fixtureUuid(21),
   issueDocumentId: fixtureUuid(155),
+  fromUtc: '2026-08-01T08:00:00.000Z',
   rowVersion: 1,
-  status: 'Active',
-  subjectType: 'Asset',
-} as const
+}
 
 /**
  * The employee choice is a `GET /counterparts?operation=Issue&type=Employee`

@@ -46,6 +46,7 @@ function pagedEnvelope(items: readonly unknown[]) {
         total_pages: 1,
         has_previous_page: false,
         has_next_page: false,
+        total_count: items.length,
       },
       meta: { request_id: 'r', timestamp: 't' },
     },
@@ -59,6 +60,8 @@ const ASSET_ID = '11111111-1111-4111-8111-111111111111'
 const HOLDER_ID = '22222222-2222-4222-8222-222222222222'
 
 const CUSTODY_ID = '44444444-4444-4444-8444-444444444444'
+
+const WAREHOUSE_ID = '33333333-3333-4333-8333-333333333333'
 
 /**
  * Live wire body for `POST /assets/{assetId}/custody-assignment`. The
@@ -91,17 +94,46 @@ beforeEach(() => {
   mockedRequest.mockReset()
 })
 
-describe('custody.service (e19-t01)', () => {
-  it('lists custodies with contract filters as query params', async () => {
+describe('custody.service', () => {
+  it('lists custodies with the live filters as query params', async () => {
     mockedRequest.mockResolvedValue(pagedEnvelope([]))
     const service = createCustodyService(testTransport)
 
-    await service.listCustodies({ status: 'Active', custodyKind: 'Operational' })
+    await service.listCustodies({ page: 1, pageSize: 20, subjectType: 'Asset', status: 'Active' })
 
     expect(sentConfig()).toMatchObject({
       url: '/custodies',
       method: 'GET',
-      params: { status: 'Active', custodyKind: 'Operational' },
+      params: { page: 1, pageSize: 20, subjectType: 'Asset', status: 'Active' },
+    })
+  })
+
+  it('never sends the parameters the live endpoint does not bind', async () => {
+    mockedRequest.mockResolvedValue(pagedEnvelope([]))
+    const service = createCustodyService(testTransport)
+
+    await service.listCustodies({ page: 2, pageSize: 20, subjectType: 'Asset' })
+
+    const params = sentConfig().params ?? {}
+    // `pageIndex`, `search` and `custodyKind` are snapshot-era names the
+    // server ignores; sending them is how the filters silently stopped
+    // applying.
+    expect(params).not.toHaveProperty('pageIndex')
+    expect(params).not.toHaveProperty('search')
+    expect(params).not.toHaveProperty('custodyKind')
+    expect(params['page']).toBe(2)
+  })
+
+  it('reads the warehouse-scoped pending list', async () => {
+    mockedRequest.mockResolvedValue(pagedEnvelope([]))
+    const service = createCustodyService(testTransport)
+
+    await service.listPendingCustodies({ warehouseId: WAREHOUSE_ID, page: 1, pageSize: 10 })
+
+    expect(sentConfig()).toMatchObject({
+      url: '/custodies/pending',
+      method: 'GET',
+      params: { warehouseId: WAREHOUSE_ID, page: 1, pageSize: 10 },
     })
   })
 
@@ -115,7 +147,7 @@ describe('custody.service (e19-t01)', () => {
     expect(path).toBe(`/assets/${ASSET_ID}/custody-assignment`)
     expect(body).toEqual(assignRequest)
     // The live controller does not accept Idempotency-Key (verified against
-    // AssignAssetCustodyController.cs, 2026-10-20) so none must be sent.
+    // AssignAssetCustodyController.cs) so none must be sent.
     expect(headers).toBeUndefined()
     expect(result).toEqual({ id: 'NEW-CUSTODY-ID' })
   })

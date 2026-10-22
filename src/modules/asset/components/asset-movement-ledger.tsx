@@ -6,7 +6,7 @@ import { DataTableServer } from '@/shared/ui/data-table-server'
 import { pageRows } from '@/shared/utils/table-data'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { formatDateTime } from '@/shared/utils/format'
-import type { AssetMovement } from '@/shared/types/generated/eiams-v1'
+import type { AssetMovement } from '@/modules/asset/types/asset.types'
 import { useAssetMovementsQuery } from '@/modules/asset/hooks/use-asset-queries'
 import { ASSET_MOVEMENT_TYPE_LABELS_AR } from '@/modules/asset/asset-movement-labels'
 
@@ -17,53 +17,51 @@ export interface AssetMovementLedgerProps {
 const columnHelper = createColumnHelper<typeof dataTableFeatures, AssetMovement>()
 
 /**
- * Immutable asset movement history ledger (e18-t05): server-paged
- * `GET /assets/{id}/movements` rendered as a read-only table under the asset
- * detail page. Rows are append-only per D-RAE-01; the ledger exposes no
- * mutation affordances.
+ * Immutable asset movement history ledger: server-paged
+ * `GET /assets/{assetId}/movements` rendered as a read-only table under the
+ * asset detail page. Rows are append-only; the ledger exposes no mutation
+ * affordances.
+ *
+ * The live movement row carries the movement type, its document (type +
+ * reference number) and the moment it happened. It carries NO warehouse
+ * routing and NO operator, so the columns show only what the server sends.
  */
 export function AssetMovementLedger({ assetId }: AssetMovementLedgerProps) {
   const { page: currentPage, pageSize, setPage, setPageSize } = useServerPagination()
   const movementsQuery = useAssetMovementsQuery(assetId, {
-    pageIndex: currentPage - 1,
+    page: currentPage,
     pageSize,
   })
 
   const columns = useMemo(
     () =>
       columnHelper.columns([
-        columnHelper.accessor('eventType', {
-          id: 'eventType',
-          header: 'نوع الحدث',
+        columnHelper.accessor('movementType', {
+          id: 'movementType',
+          header: 'نوع الحركة',
           cell: ({ getValue }) => ASSET_MOVEMENT_TYPE_LABELS_AR[getValue()],
         }),
-        columnHelper.accessor((movement) => movement.fromWarehouse?.displayName ?? '—', {
-          id: 'fromWarehouse',
-          header: 'من مستودع',
+        columnHelper.accessor('documentType', {
+          id: 'documentType',
+          header: 'نوع السند',
+          cell: ({ getValue }) => (
+            <span dir="ltr" className="font-mono text-xs">
+              {getValue()}
+            </span>
+          ),
         }),
-        columnHelper.accessor((movement) => movement.toWarehouse?.displayName ?? '—', {
-          id: 'toWarehouse',
-          header: 'إلى مستودع',
-        }),
-        columnHelper.accessor((movement) => movement.occurredBy.displayName, {
-          id: 'occurredBy',
-          header: 'بواسطة',
-        }),
-        columnHelper.accessor('documentReference', {
-          id: 'documentReference',
+        columnHelper.accessor('documentReferenceNumber', {
+          id: 'documentReferenceNumber',
           header: 'السند المرجعي',
-          cell: ({ getValue }) =>
-            getValue() === undefined ? (
-              '—'
-            ) : (
-              <span dir="ltr" className="font-mono text-xs">
-                {getValue()}
-              </span>
-            ),
+          cell: ({ getValue }) => (
+            <span dir="ltr" className="font-mono text-xs">
+              {getValue()}
+            </span>
+          ),
         }),
-        columnHelper.accessor('occurredAt', {
-          id: 'occurredAt',
-          header: 'تاريخ الحدث',
+        columnHelper.accessor('movedAtUtc', {
+          id: 'movedAtUtc',
+          header: 'تاريخ الحركة',
           cell: ({ getValue }) => <span dir="ltr">{formatDateTime(getValue())}</span>,
         }),
       ]),
@@ -83,8 +81,8 @@ export function AssetMovementLedger({ assetId }: AssetMovementLedgerProps) {
       emptyDescription="لم تُسجَّل أي حركات لهذا الأصل بعد."
       page={currentPage}
       pageSize={pageSize}
-      totalCount={movementsQuery.data?.meta.totalItems}
-      totalPages={Math.max(movementsQuery.data?.meta.totalPages ?? 1, 1)}
+      totalCount={movementsQuery.data?.totalItems}
+      totalPages={Math.max(movementsQuery.data?.totalPages ?? 1, 1)}
       onPageChange={setPage}
       onPageSizeChange={setPageSize}
     />

@@ -33,18 +33,19 @@ function envelope(data: unknown) {
 }
 
 /** A wire paged envelope, which is what `transport.requestPage` reads. */
-function pagedEnvelope(items: readonly unknown[]) {
+function pagedEnvelope(items: readonly unknown[], page = 1) {
   return {
     data: {
       success: true,
       data: items,
       pagination: {
-        page: 1,
+        page,
         page_size: 10,
         total_items: items.length,
         total_pages: 1,
-        has_previous_page: false,
+        has_previous_page: page > 1,
         has_next_page: false,
+        total_count: items.length,
       },
       meta: { request_id: 'r', timestamp: 't' },
     },
@@ -56,39 +57,40 @@ beforeEach(() => {
 })
 
 describe('createAssetService (transport seam)', () => {
-  it('lists assets with the contract path and passes query params through', async () => {
+  it('lists assets with the live path and the live query parameters', async () => {
     mockedRequest.mockResolvedValueOnce(pagedEnvelope([]))
 
     const service = createAssetService(testTransport)
-    await service.listAssets({ pageIndex: 0, pageSize: 10, status: 'InStock' })
+    await service.listAssets({ page: 1, pageSize: 10, status: 'InStock' })
 
     expect(sentConfig()).toMatchObject({
       url: '/assets',
       method: 'GET',
-      params: { pageIndex: 0, pageSize: 10, status: 'InStock' },
+      params: { page: 1, pageSize: 10, status: 'InStock' },
     })
   })
 
-  it('returns the documented page view-model rebuilt from the normalized ApiPage', async () => {
-    mockedRequest.mockResolvedValueOnce(pagedEnvelope([{ assetId: 'a1' }]))
+  it('sends the one-based page the server binds, never the snapshot pageIndex', async () => {
+    mockedRequest.mockResolvedValueOnce(pagedEnvelope([]))
 
     const service = createAssetService(testTransport)
-    const result = await service.listAssets({ pageIndex: 0, pageSize: 10 })
+    await service.listAssets({ page: 3, pageSize: 25 })
 
-    // The generated page type described a body the backend never sends on its
-    // own, so the service rebuilds it from the transport's normalized `ApiPage`.
-    // Asserting the rebuilt shape is what proves the envelope was unwrapped
-    // rather than returned verbatim.
-    expect(result.items).toEqual([{ assetId: 'a1' }])
-    expect(result.meta).toMatchObject({
-      pageIndex: 0,
-      page: 1,
-      pageSize: 10,
-      totalItems: 1,
-      totalPages: 1,
-      hasNextPage: false,
-      hasPreviousPage: false,
-    })
+    const params = sentConfig().params ?? {}
+    expect(params['page']).toBe(3)
+    expect(params).not.toHaveProperty('pageIndex')
+  })
+
+  it('returns the normalized page the transport produced', async () => {
+    mockedRequest.mockResolvedValueOnce(pagedEnvelope([{ id: 'a1' }], 2))
+
+    const service = createAssetService(testTransport)
+    const result = await service.listAssets({ page: 2, pageSize: 10 })
+
+    expect(result.items).toEqual([{ id: 'a1' }])
+    expect(result.page).toBe(2)
+    expect(result.totalItems).toBe(1)
+    expect(result.totalPages).toBe(1)
   })
 
   it('encodes the asset id into detail paths without double-encoding the template', async () => {
@@ -96,24 +98,30 @@ describe('createAssetService (transport seam)', () => {
 
     const service = createAssetService(testTransport)
     await service.getAsset('id/1')
+    await service.getAssetCurrentStatus('id/1')
     await service.getAssetCustodyTimeline('id/1')
-    await service.listAssetMovements('id/1', { pageIndex: 0, pageSize: 5 })
+    await service.listAssetMovements('id/1', { page: 1, pageSize: 5 })
 
     expect(sentConfig(0)).toMatchObject({ url: '/assets/id%2F1', method: 'GET' })
+    // The derived status projection has its own live endpoint.
+    expect(sentConfig(1)).toMatchObject({
+      url: '/assets/id%2F1/current-status',
+      method: 'GET',
+    })
     // GET /assets/{assetId}/custody is gone in the live API: replaced by
     // GET /assets/{assetId}/custody-timeline (D-INT-02).
-    expect(sentConfig(1)).toMatchObject({
+    expect(sentConfig(2)).toMatchObject({
       url: '/assets/id%2F1/custody-timeline',
       method: 'GET',
     })
-    expect(sentConfig(2)).toMatchObject({
+    expect(sentConfig(3)).toMatchObject({
       url: '/assets/id%2F1/movements',
       method: 'GET',
-      params: { pageIndex: 0, pageSize: 5 },
+      params: { page: 1, pageSize: 5 },
     })
   })
 
-  it('returns the live custody-timeline payload shape as an array of timeline rows', async () => {
+  it('requests the custody timeline at the server maximum page size', async () => {
     mockedRequest.mockResolvedValue(envelope([]))
 
     const service = createAssetService(testTransport)
@@ -124,6 +132,7 @@ describe('createAssetService (transport seam)', () => {
     expect(sentConfig()).toMatchObject({
       url: '/assets/asset-1/custody-timeline',
       method: 'GET',
+      params: { page: 1, pageSize: 100 },
     })
   })
 })

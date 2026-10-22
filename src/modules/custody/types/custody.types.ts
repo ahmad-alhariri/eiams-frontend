@@ -1,37 +1,130 @@
 /**
- * Handwritten wire contracts for the Custody module (D-INT-02).
+ * Handwritten wire contracts for the Custody module (D-INT-02 / ADR-0001).
  *
- * The two mutation request bodies the frontend posts and the list-read query
- * are the only non-generated types the page-level code needs; the live backend
- * serves them with shapes that diverge from the snapshot, so the contract
- * types live here rather than coming from `eiams-v1.ts`.
+ * The live rows are FLAT and camelCase. The frozen design snapshot
+ * (`src/shared/types/generated/eiams-v1.ts`) described a nested `holder` object
+ * and the field names `fromTs` / `toTs`; none of them exist on the wire, so
+ * nothing here may be typed against the snapshot.
  *
- * - `POST /assets/{assetId}/custody-assignment` (assignCustody) carries
- *   `{ employeeId, expectedCustodyRowVersion, note? }`. The snapshot's
- *   `CustodyMutationRequest` is a tagged union of the three subject kinds;
- *   Asset-only assign is its own type because it is the only one the live API
- *   exposes today.
- * - `POST /custodies/{custodyId}/transfer` (transferCustody) carries the live
- *   `TransferCustodyRequest` — a separate shape with `subjectType`,
- *   `newHolderType`, `newHolderId`, `newCustodyKind`, `expectedRowVersion`,
- *   `note?`. Do NOT reuse the assign body for transfer.
- * - The list read's filters come from the snapshot because the live
- *   `Custodies/GetCustodies` query parameters match it; this is the only piece
- *   the snapshot still gets right, so it stays generated.
+ * Verified against the live swagger and the backend DTOs:
+ * - `Application.Custodies.GetCustodies.CustodyResponse`      -> `Custody`
+ * - `Application.Custodies.GetPending.PendingCustodyResponse`  -> `PendingCustody`
+ * - `Web.Api.Controllers.Custodies.AssignAssetCustodyController.RequestBody`
+ * - `Web.Api.Controllers.Custodies.TransferCustodyRequest`
  */
-import type { operations } from '@/shared/types/generated/eiams-v1'
+import type { CounterpartType } from '@/modules/organization/types/counterpart-lookup.types'
 
-/** List-side filters for `GET /custodies`. */
-export type ListCustodiesQuery = NonNullable<operations['listCustodies']['parameters']['query']>
+/** Live `Domain.Common.CustodyKind`. */
+export type CustodyKind = 'Operational' | 'Personal'
+
+/** Live `Domain.Common.CustodySubjectType`. */
+export type CustodySubjectType = 'Asset' | 'TrackedUnit' | 'MaterialQuantity'
+
+/**
+ * The `status` string on a custody row. It is SUBJECT-DEPENDENT (see
+ * `GetCustodiesQueryHandler.GetStatus`): an Asset row is `Active` / `Closed`,
+ * a TrackedUnit row is `Issued` / `Returned` / `Disposed`, a MaterialQuantity
+ * row is `Active` / `FullyReturned`, and the server falls back to `Unknown`.
+ */
+export type CustodyStatus =
+  'Active' | 'Closed' | 'Issued' | 'Returned' | 'Disposed' | 'FullyReturned' | 'Unknown'
+
+/**
+ * `GET /custodies` row (`CustodyResponse`).
+ *
+ * `holderDisplayName` is served by the live API (resolved from the counterpart
+ * lookup) and is `Unknown` when the counterpart cannot be resolved; the asset
+ * row itself carries no name at all, so only this row may show one.
+ */
+export interface Custody {
+  readonly subjectType: CustodySubjectType
+  readonly subjectId: string
+  readonly custodyId: string
+  readonly materialId: string
+  readonly materialNameAr: string
+  readonly materialNameEn: string | null
+  readonly materialCode: string
+  readonly materialKind: string
+  readonly trackingType: string
+  readonly serialNumber: string | null
+  readonly assetNumber: string | null
+  readonly warehouseId: string
+  readonly warehouseName: string
+  readonly holderType: CounterpartType
+  readonly holderId: string
+  readonly holderDisplayName: string
+  readonly custodyKind: CustodyKind
+  readonly issuedQuantity: number
+  readonly activeQuantity: number
+  readonly returnedQuantity: number
+  readonly issueDocumentId: string
+  readonly systemReferenceNumber: string | null
+  readonly status: CustodyStatus
+  readonly fromUtc: string
+  readonly toUtc: string | null
+  readonly rowVersion: number
+}
+
+/**
+ * `GET /custodies/pending` row (`PendingCustodyResponse`).
+ *
+ * The pending projection carries no holder display name, no status and no
+ * custody kind: the endpoint answers "Operational + Active custody rows of
+ * assets issued out of this warehouse", so the kind and the status are implied
+ * by the row's presence.
+ */
+export interface PendingCustody {
+  readonly custodyId: string
+  readonly assetId: string
+  readonly assetNumber: string
+  readonly materialId: string
+  readonly holderType: CounterpartType
+  readonly holderId: string
+  readonly issueDocumentId: string
+  readonly fromUtc: string
+  readonly rowVersion: number
+}
+
+/**
+ * `GET /custodies` query — the live parameters and NOTHING else.
+ *
+ * The server binds `holderType`, `holderId`, `materialId`, `subjectType`,
+ * `status`, `warehouseId`, `page` (ONE-based) and `pageSize`. It has NO
+ * `search`, NO `custodyKind` and NO sort parameter, so none may be sent.
+ */
+export interface ListCustodiesQuery {
+  readonly holderType?: CounterpartType
+  readonly holderId?: string
+  readonly materialId?: string
+  readonly subjectType?: CustodySubjectType
+  readonly status?: string
+  readonly warehouseId?: string
+  readonly page?: number
+  readonly pageSize?: number
+}
+
+/**
+ * `GET /custodies/pending` query.
+ *
+ * The endpoint is WAREHOUSE-SCOPED: `GetPendingCustodiesQuery` binds a
+ * non-nullable `Guid WarehouseId` and answers 404 when the warehouse is
+ * unknown, so the id is required here rather than optional.
+ */
+export interface ListPendingCustodiesQuery {
+  readonly warehouseId: string
+  readonly page?: number
+  readonly pageSize?: number
+}
 
 /**
  * Request body of `POST /assets/{assetId}/custody-assignment`. Verified against
- * the live swagger (`Web.Api.Controllers.Custodies.AssignAssetCustodyController-RequestBody`)
- * on 2026-10-20.
+ * the live controller (`Web.Api.Controllers.Custodies.AssignAssetCustodyController`)
+ * on 2026-10-22: `{ employeeId, expectedCustodyRowVersion, note? }` and nothing
+ * else — the asset id travels in the path, and there is no `subjectType`,
+ * `custodyKind`, `holderType` or `issueDocumentId` in the body.
  *
  * `note` is omitted when the operator leaves the optional reason blank; the
- * live schema marks it `nullable: true` and never requires it. The path's
- * `{assetId}` carries the asset identity the snapshot used to put in the body.
+ * live schema marks it `nullable: true` and never requires it.
  */
 export interface AssignAssetCustodyRequest {
   readonly employeeId: string
@@ -40,21 +133,20 @@ export interface AssignAssetCustodyRequest {
 }
 
 /**
- * Request body of `POST /custodies/{custodyId}/transfer`. Verified against the
- * live swagger (`Web.Api.Controllers.Custodies.TransferCustodyRequest`) on
- * 2026-10-20. Distinct from the assign body — `subjectType`, `newHolderType`,
- * `newHolderId`, `newCustodyKind`, `expectedRowVersion`, optional `note` —
- * because transfer changes the existing row's holder instead of opening a new
- * one tied to an issue document.
+ * Request body of `POST /custodies/{custodyId}/transfer`. Verified against
+ * `Web.Api.Controllers.Custodies.TransferCustodyRequest` on 2026-10-22.
+ * Distinct from the assign body — transfer changes the existing row's holder
+ * instead of opening a new one tied to an issue document.
  *
- * The strings here are the live enum names; the string union is annotated
- * rather than reused so a generated enum rename can never silently widen it.
+ * `newHolderType` is the live `PartyType` vocabulary: `Employee`,
+ * `OrganizationalUnit`, `Site`, `External`. The snapshot's `ExternalParty` is
+ * not a member the server knows, so sending it is a 400.
  */
 export interface TransferCustodyRequest {
-  readonly subjectType: 'Asset' | 'MaterialQuantity' | 'TrackedUnit'
-  readonly newHolderType: 'Employee' | 'OrganizationalUnit' | 'ExternalParty' | 'Site'
+  readonly subjectType: CustodySubjectType
+  readonly newHolderType: CounterpartType
   readonly newHolderId: string
-  readonly newCustodyKind: 'Operational' | 'Personal'
+  readonly newCustodyKind: CustodyKind
   readonly expectedRowVersion: number
   readonly note?: string | null
 }
@@ -62,20 +154,9 @@ export interface TransferCustodyRequest {
 /**
  * Successful personal-assignment response. The live controller answers 201
  * `ApiResponse<ResourceIdResponse>` = `{ id }` (the new custody row's id),
- * NOT the full custody row. The caller now invalidates and refetches — see
+ * NOT the full custody row. The caller invalidates and refetches — see
  * `use-custody-queries.ts`.
  */
 export interface CustodyAssignmentCreated {
   readonly id: string
 }
-
-/**
- * Backwards-compatibility alias: the snapshot exported a `CustodyMutationRequest`
- * union that the assign and transfer dialogs referenced. The handwritten types
- * `AssignAssetCustodyRequest` and `TransferCustodyRequest` carry the live wire
- * shapes; this alias is the union of the two so call-sites still type-check
- * while they are migrated off the snapshot one at a time.
- *
- * shortcut: temp, drop when both dialogs use the specific request type.
- */
-export type CustodyMutationRequest = AssignAssetCustodyRequest | TransferCustodyRequest

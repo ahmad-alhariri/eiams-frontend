@@ -1,87 +1,102 @@
-﻿import type { ApiTransport } from '@/shared/api/api-transport'
+﻿import type { ApiPage } from '@/shared/api/api-contracts'
+import type { ApiTransport } from '@/shared/api/api-transport'
+import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import { apiTransport } from '@/shared/api/transport'
 
 import type {
   AssignAssetCustodyRequest,
+  Custody,
   CustodyAssignmentCreated,
   ListCustodiesQuery,
+  ListPendingCustodiesQuery,
+  PendingCustody,
   TransferCustodyRequest,
 } from '@/modules/custody/types/custody.types'
-import type { Custody, CustodyPage, paths } from '@/shared/types/generated/eiams-v1'
 
-const CUSTODIES_PATH = '/custodies' satisfies keyof paths
+const CUSTODIES_PATH = '/custodies'
+const CUSTODIES_PENDING_PATH = '/custodies/pending'
 const CUSTODY_ASSIGN_PATH = '/assets/{assetId}/custody-assignment'
-const CUSTODY_TRANSFER_PATH = '/custodies/{custodyId}/transfer' satisfies keyof paths
+const CUSTODY_TRANSFER_PATH = '/custodies/{custodyId}/transfer'
 
 function pathWithId(path: string, placeholder: string, value: string): string {
   return path.replace(placeholder, encodeURIComponent(value))
 }
 
 /**
- * Contract-shaped custody transport (e19-t01). Read-only list plus the two
- * idempotent mutations.
+ * Sends a list query through the ONE shared pagination clamp.
+ *
+ * `page` is ONE-based on both sides (`useServerPagination` and the wire
+ * `PaginationQueryParameters.Page` is `Range(1, 21474836)`), so the helper
+ * only clamps it. The previous `pageIndex` was forwarded verbatim, which put
+ * `pageIndex=0` on the wire — a parameter the server does not bind, so every
+ * custody list stayed on its first page.
+ */
+function withWirePagination<TQuery extends { readonly page?: number; readonly pageSize?: number }>(
+  query: TQuery,
+): Record<string, string | number | boolean | undefined> {
+  const { page, pageSize, ...filters } = query
+  return {
+    ...toWireOneBasedPaginationParams({ page, pageSize }),
+    ...(filters as Record<string, string | number | boolean | undefined>),
+  }
+}
+
+/**
+ * Custody transport: the scoped list, the warehouse-scoped pending list, and
+ * the two mutations.
  *
  * `assignCustody` lives at `POST /assets/{assetId}/custody-assignment` in the
- * live API (verified 2026-10-20). The previous `POST /custodies/assign` does
- * not exist; the snapshot shape `CustodyMutationRequest` is not what the live
- * controller accepts (the asset id is in the path, not the body).
+ * live API — the asset id is in the path, not the body.
  *
  * `transferCustody` stays at `POST /custodies/{custodyId}/transfer`; its live
  * request body (`TransferCustodyRequest`) differs from the assign body and is
- * its own handwritten type.
+ * its own handwritten type. The live controller answers 200 with an empty
+ * payload, so the mutation carries no result.
  *
- * The assign controller does NOT accept an `Idempotency-Key` header — verified
- * against `src/Web.Api/Controllers/Custodies/AssignAssetCustodyController.cs` on
- * 2026-10-20; the transfer controller does not declare one either. No header
- * is forwarded for either call.
+ * The assign controller does NOT accept an `Idempotency-Key` header - verified
+ * against `src/Web.Api/Controllers/Custodies/AssignAssetCustodyController.cs`;
+ * the transfer controller does not declare one either. No header is forwarded
+ * for either call.
  */
 export interface CustodyService {
-  listCustodies: (query: ListCustodiesQuery) => Promise<CustodyPage>
+  listCustodies: (query: ListCustodiesQuery) => Promise<ApiPage<Custody>>
+  listPendingCustodies: (query: ListPendingCustodiesQuery) => Promise<ApiPage<PendingCustody>>
   assignCustody: (
     assetId: string,
     request: AssignAssetCustodyRequest,
   ) => Promise<CustodyAssignmentCreated>
-  transferCustody: (custodyId: string, request: TransferCustodyRequest) => Promise<Custody>
+  transferCustody: (custodyId: string, request: TransferCustodyRequest) => Promise<void>
 }
 
 export function createCustodyService(transport: ApiTransport): CustodyService {
   return {
     async listCustodies(query) {
-      const page = await transport.requestPage<Custody>({
+      return transport.requestPage<Custody>({
         path: CUSTODIES_PATH,
         method: 'GET',
-        query: query as Record<string, string | number | boolean | undefined>,
+        query: withWirePagination(query),
       })
-      return {
-        items: page.items,
-        meta: {
-          pageIndex: page.page - 1,
-          page: page.page,
-          pageSize: page.pageSize,
-          itemCount: page.totalItems,
-          totalItems: page.totalItems,
-          totalCount: page.totalItems,
-          totalPages: page.totalPages,
-          hasNextPage: page.hasNextPage,
-          hasPreviousPage: page.hasPreviousPage,
-        },
-      } as CustodyPage
+    },
+    async listPendingCustodies(query) {
+      return transport.requestPage<PendingCustody>({
+        path: CUSTODIES_PENDING_PATH,
+        method: 'GET',
+        query: withWirePagination(query),
+      })
     },
     async assignCustody(assetId, request) {
-      const response = await transport.request<CustodyAssignmentCreated>({
+      return transport.request<CustodyAssignmentCreated>({
         path: pathWithId(CUSTODY_ASSIGN_PATH, '{assetId}', assetId),
         method: 'POST',
         body: request,
       })
-      return response
     },
     async transferCustody(custodyId, request) {
-      const response = await transport.request<Custody>({
+      await transport.requestEmpty({
         path: pathWithId(CUSTODY_TRANSFER_PATH, '{custodyId}', custodyId),
         method: 'POST',
         body: request,
       })
-      return response
     },
   }
 }

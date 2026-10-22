@@ -3,7 +3,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { Link, useParams } from 'react-router'
 
 import { useAssetCustodyTimelineQuery } from '@/modules/asset/hooks/use-asset-queries'
-import type { AssetCustodyTimelineRow } from '@/modules/asset/services/asset.service'
+import type { AssetCustodyTimelineRow } from '@/modules/asset/types/asset.types'
 import { ROUTE_PATHS } from '@/config/routes'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'

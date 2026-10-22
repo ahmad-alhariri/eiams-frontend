@@ -453,7 +453,11 @@ export const ROUTE_METADATA: RouteMetaMap = {
   custodyPending: {
     labelAr: 'الأصول بانتظار التكليف',
     group: 'assets-custody',
-    permissions: ['asset.view', 'custody.assign'],
+    // The pending list is a READ: the server serves `GET /custodies/pending`
+    // with the same `asset.view` permission as every other custody read (see
+    // `PermissionCodes.Custodies.View`). `custody.assign` gates the WRITE
+    // affordance on the page (the assignment button), not the route.
+    permissions: ['asset.view'],
     parent: 'assets',
   },
   custodyActive: {
