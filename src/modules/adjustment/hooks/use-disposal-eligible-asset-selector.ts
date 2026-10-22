@@ -2,8 +2,10 @@ import { useCallback } from 'react'
 
 import { useQueryClient } from '@tanstack/react-query'
 
+import { ASSET_STATUS_LABELS_AR } from '@/modules/asset/asset-status-labels'
 import { adjustmentQueryKeys } from '@/modules/adjustment/hooks/use-adjustment-queries'
 import { adjustmentService } from '@/modules/adjustment/services/adjustment.service'
+import type { DisposalEligibleAsset } from '@/modules/adjustment/types/adjustment.types'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import {
   createEntitySelectorAdapter,
@@ -12,19 +14,27 @@ import {
   type EntitySelectorResult,
 } from '@/shared/selectors/selector-adapter'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
-import type { Asset } from '@/shared/types/generated/eiams-v1'
 
 const DEFAULT_MAX_RESULTS = 10
 
-const disposalEligibleAssetAdapter = createEntitySelectorAdapter<Asset>({
+/**
+ * One picker option per eligible asset, built from the LIVE row the endpoint
+ * serves (`id`, `assetNumber`, `materialNameAr`, `currentStatus`, …).
+ *
+ * The status is part of the label because it decides the effect the SERVER
+ * will apply: an `InStock` asset moves the balance by −1, an already `Issued`
+ * or `InCustody` one by 0. A manager who cannot see the status cannot tell
+ * which of the two they are about to dispose of.
+ */
+const disposalEligibleAssetAdapter = createEntitySelectorAdapter<DisposalEligibleAsset>({
   toOption: (asset) => ({
-    value: asset.assetId,
-    label: `${asset.assetNumber} — ${asset.material.displayName}`,
+    value: asset.id,
+    label: `${asset.assetNumber} — ${asset.materialNameAr} — ${ASSET_STATUS_LABELS_AR[asset.currentStatus]}`,
     payload: asset,
   }),
 })
 
-export interface DisposalEligibleAssetSelectorResult extends EntitySelectorResult<Asset> {
+export interface DisposalEligibleAssetSelectorResult extends EntitySelectorResult<DisposalEligibleAsset> {
   /** False until both an active scope and a warehouse are available. */
   scopeReady: boolean
 }
@@ -42,7 +52,7 @@ export function useDisposalEligibleAssetSelector(
   const queryClient = useQueryClient()
   const scopeReady = scope !== undefined && warehouseId !== ''
 
-  const loadAssets = useCallback<EntityLoader<Asset>>(
+  const loadAssets = useCallback<EntityLoader<DisposalEligibleAsset>>(
     async (search) => {
       if (scope === undefined || warehouseId === '') {
         return []

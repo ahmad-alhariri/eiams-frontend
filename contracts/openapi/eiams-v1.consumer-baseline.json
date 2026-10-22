@@ -88,6 +88,16 @@
       ]
     },
     {
+      "path": "/adjustments/disposals",
+      "method": "POST",
+      "sources": [
+        "src/modules/adjustment/services/adjustment.service.ts"
+      ],
+      "responseProperties": [
+        "id"
+      ]
+    },
+    {
       "path": "/adjustments",
       "method": "GET",
       "sources": [

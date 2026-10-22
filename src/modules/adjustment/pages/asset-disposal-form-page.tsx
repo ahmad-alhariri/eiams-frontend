@@ -5,38 +5,46 @@ import { useNavigate } from 'react-router'
 import { z } from 'zod'
 
 import { useDisposalEligibleAssetSelector } from '@/modules/adjustment/hooks/use-disposal-eligible-asset-selector'
-import { useCreateAdjustmentMutation } from '@/modules/adjustment/hooks/use-adjustment-queries'
+import { useCreateDisposalMutation } from '@/modules/adjustment/hooks/use-adjustment-queries'
 import { useRoutePermission } from '@/modules/auth/hooks/use-permission'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import { ROUTE_PATHS } from '@/config/routes'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
-import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
+import { AsyncSelect } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
 import { Label } from '@/shared/ui/label'
 import { Textarea } from '@/shared/ui/textarea'
-import type { Asset } from '@/shared/types/generated/eiams-v1'
+import { normalizeApiError } from '@/shared/services/api-error'
 
 /**
  * Disposal adjustment form (e21-t08). D-ADJ-01 terminal flow:
  *
- * - exactly ONE line, backed by an asset selected ONLY from the server's
- *   disposal-eligible lookup (`GET /adjustments/disposal-eligible-assets`);
- *   free-text asset identities are never accepted;
- * - the line effect is exactly −1 (the canonical signed quantity);
+ * - exactly ONE asset, chosen ONLY from the server's disposal-eligible
+ *   lookup (`GET /adjustments/disposal-eligible-assets`); free-text asset
+ *   identities are never accepted, and the server refuses a request that
+ *   carries two or more assets (`DISPOSALS_SINGLE_ASSET_REQUIRED`);
+ * - the draft is created through the LIVE disposal endpoint
+ *   (`POST /adjustments/disposals`) with the body `{ warehouseId, assetIds,
+ *   reason }` — the client sends NO effect, because the SERVER derives the
+ *   signed difference itself: −1 for an InStock asset, 0 for one that is
+ *   already Issued or InCustody;
  * - the reason records the disposal authorization;
  * - the posted result is TERMINAL — the asset becomes Disposed and no
  *   reversal action ever exists for it.
  */
 
-const DISPOSAL_REASON_MAX = 500
+/**
+ * The LIVE disposal endpoint's own bound on the reason
+ * (`CreateDisposalCommandValidator`: `Reason … MaximumLength(200)`). It is NOT
+ * the sibling adjustment draft's 500 — a reason the server would refuse with a
+ * 400 must not be accepted here in the first place.
+ */
+const DISPOSAL_REASON_MAX = 200
 
 const disposalFormSchema = z.object({
   warehouseId: z.uuid('يجب اختيار مستودع صالح من القائمة.'),
   assetId: z.uuid('يجب اختيار أصل صالح من القائمة.'),
-  materialId: z.uuid('يجب اختيار أصل صالح من القائمة.'),
-  /** Canonical signed quantity: always exactly −1 for a disposal. */
-  quantityDelta: z.literal(-1),
   reason: z
     .string()
     .trim()
@@ -50,7 +58,7 @@ export default function AssetDisposalFormPage() {
   const navigate = useNavigate()
   const canCreate = useRoutePermission('assetDisposalNew')
   const warehouseSelector = useScopedWarehouseSelector()
-  const createMutation = useCreateAdjustmentMutation()
+  const createMutation = useCreateDisposalMutation()
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -82,7 +90,7 @@ function AssetDisposalFormInner({
 }: {
   navigate: ReturnType<typeof useNavigate>
   warehouseSelector: ReturnType<typeof useScopedWarehouseSelector>
-  createMutation: ReturnType<typeof useCreateAdjustmentMutation>
+  createMutation: ReturnType<typeof useCreateDisposalMutation>
 }) {
   const [warehouseId, setWarehouseId] = useState('')
   const eligibleAssetSelector = useDisposalEligibleAssetSelector(warehouseId)
@@ -100,20 +108,14 @@ function AssetDisposalFormInner({
       event.preventDefault()
       if (createMutation.isPending) return
       void form.handleSubmit((values) => {
+        // The LIVE disposal body: the warehouse, exactly ONE asset id and the
+        // reason. No effect, no material, no lines, no rowVersion — the server
+        // derives all of that and refuses anything else.
         createMutation.mutate(
           {
             warehouseId: values.warehouseId,
-            purpose: 'Disposal',
+            assetIds: [values.assetId],
             reason: values.reason,
-            lines: [
-              {
-                materialId: values.materialId,
-                assetId: values.assetId,
-                quantityDelta: -1,
-                reason: values.reason,
-              },
-            ],
-            rowVersion: 0,
           },
           {
             onSuccess: () => {
@@ -143,7 +145,6 @@ function AssetDisposalFormInner({
                       field.onChange(value ?? '')
                       setWarehouseId(value ?? '')
                       form.setValue('assetId', '', { shouldValidate: false })
-                      form.setValue('materialId', '', { shouldValidate: false })
                     }}
                     loadOptions={warehouseSelector.loadOptions}
                     disabled={!warehouseSelector.scopeReady || isSubmitting}
@@ -168,12 +169,7 @@ function AssetDisposalFormInner({
                   <AsyncSelect
                     key={warehouseId}
                     value={field.value || null}
-                    onValueChange={(value, option: AsyncSelectOption<Asset> | undefined) => {
-                      field.onChange(value ?? '')
-                      form.setValue('materialId', option?.payload?.material.id ?? '', {
-                        shouldValidate: false,
-                      })
-                    }}
+                    onValueChange={(value) => field.onChange(value ?? '')}
                     loadOptions={eligibleAssetSelector.loadOptions}
                     disabled={!eligibleAssetSelector.scopeReady || isSubmitting}
                     placeholder={
@@ -188,11 +184,6 @@ function AssetDisposalFormInner({
               {form.formState.errors.assetId ? (
                 <p role="alert" className="text-sm text-destructive">
                   {form.formState.errors.assetId.message}
-                </p>
-              ) : null}
-              {form.formState.errors.materialId && !form.formState.errors.assetId ? (
-                <p role="alert" className="text-sm text-destructive">
-                  {form.formState.errors.materialId.message}
                 </p>
               ) : null}
             </div>
@@ -217,13 +208,18 @@ function AssetDisposalFormInner({
         </ContentCard>
 
         <p className="rounded-md bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          الكمية الثابتة لهذا السند هي ‎-1‎ (أصل واحد). لا يمكن إعداد أكثر من أصل في السند نفسه،
-          والترحيل نهائي.
+          أثر السند يحدّده الخادم وحده: ‎-1‎ للأصل الموجود في المخزون، و‎0‎ للأصل المصروف أو المحتفظ
+          به في العهدة. لا يرسل النموذج أي كمية، ولا يمكن إعداد أكثر من أصل في السند نفسه، والترحيل
+          نهائي.
         </p>
 
         {createMutation.error !== null ? (
           <p role="alert" className="text-sm text-destructive">
-            تعذّر حفظ مسودة الإعدام. تحقق من البيانات وحاول مرة أخرى.
+            {/* The server's own code decides the wording: an asset that is no
+                longer eligible, a second asset in the same draft and a
+                forbidden scope each name themselves instead of collapsing into
+                one generic sentence. */}
+            {normalizeApiError(createMutation.error).titleAr}
           </p>
         ) : null}
 
@@ -249,8 +245,6 @@ function createDisposalDefaultValues(): DisposalFormValues {
   return {
     warehouseId: '',
     assetId: '',
-    materialId: '',
-    quantityDelta: -1,
     reason: '',
   }
 }
