@@ -1,3 +1,4 @@
+import type { Asset } from '@/modules/asset/types/asset.types'
 import type { AdjustmentPurpose, AdjustmentStatus } from '@/shared/types/generated/eiams-v1'
 import type { DocumentStatus } from '@/shared/documents/types/document-wire.types'
 
@@ -11,8 +12,8 @@ export type { AdjustmentPurpose }
  * family, the lifecycle `Draft → Posted → Reversed` only — there is no
  * Submitted/Approved/Cancelled state — and three purposes: `CountVariance`
  * (count-linked variance lines), `DirectCorrection` (signed stock-difference
- * lines), and `Disposal` (exactly one asset-backed line at quantity −1;
- * terminal and never reversible in v1).
+ * lines), and `Disposal` (exactly one asset; terminal and never reversible in
+ * v1).
  *
  * Transcribed from the live backend DTOs
  * (`Application.InventoryAdjustments.{GetList,GetById}`): flat camelCase rows —
@@ -62,6 +63,55 @@ export type ListDisposalEligibleAssetsQuery = {
   search?: string
   warehouseId?: string
 }
+
+/**
+ * The body of `POST /api/v1/adjustments/disposals` — the LIVE disposal
+ * endpoint, which is NOT the generic `POST /api/v1/adjustments` draft
+ * endpoint (that one takes `purpose`/`lines`/`countId`/`rowVersion` and is
+ * reserved for the count-variance and direct-correction forms).
+ *
+ * The body carries NO effect, NO material and NO line: the server derives the
+ * signed difference itself (−1 for an `InStock` asset, 0 for an already
+ * `Issued` or `InCustody` one) and refuses anything else. A client that sends
+ * a `quantityDelta` is sending a field the server does not bind.
+ *
+ * `assetIds` holds EXACTLY ONE id: the server refuses two or more with HTTP
+ * 400 `DISPOSALS_SINGLE_ASSET_REQUIRED` (`details.asset_count`).
+ */
+export type DisposalDraftRequest = {
+  warehouseId: string
+  assetIds: readonly string[]
+  reason: string
+}
+
+/**
+ * One row of `GET /api/v1/adjustments/disposal-eligible-assets`.
+ *
+ * This is the LIVE flat asset row (`id`, `assetNumber`, `materialNameAr`,
+ * `currentStatus`, …) projected onto the fields that endpoint serves: it
+ * returns no `activeCustodyId`, `holderType`, `holderId`, `acquisitionDate`
+ * or `warrantyExpiry`. The projection is a `Pick` of the asset module's live
+ * `Asset` type rather than a second declaration, so the asset vocabulary stays
+ * owned by the asset module.
+ *
+ * `currentStatus` is the SERVER's derived state and it is what decides the
+ * disposal effect: `InStock` → −1, `Issued`/`InCustody` → 0. A `Disposed`
+ * asset is never served here — the endpoint filters it out.
+ */
+export type DisposalEligibleAsset = Pick<
+  Asset,
+  | 'id'
+  | 'assetNumber'
+  | 'serialNumber'
+  | 'materialId'
+  | 'materialCode'
+  | 'materialNameAr'
+  | 'warehouseId'
+  | 'warehouseCode'
+  | 'warehouseName'
+  | 'currentStatus'
+  | 'rowVersion'
+>
 
 /** `Application.InventoryAdjustments.GetList.InventoryAdjustmentResponse`. */
 export type AdjustmentListItem = {

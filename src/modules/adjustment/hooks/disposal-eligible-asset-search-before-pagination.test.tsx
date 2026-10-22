@@ -5,9 +5,10 @@ import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
+import { ASSET_STATUS_LABELS_AR } from '@/modules/asset/asset-status-labels'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { Asset } from '@/shared/types/generated/eiams-v1'
-import { createAsset, createNamedReference, fixtureUuid } from '@/test/msw/factories'
+import type { DisposalEligibleAsset } from '@/modules/adjustment/types/adjustment.types'
+import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -47,21 +48,34 @@ import { useDisposalEligibleAssetSelector } from './use-disposal-eligible-asset-
 
 const ENDPOINT = '*/api/v1/adjustments/disposal-eligible-assets'
 
-const TARGET_WAREHOUSE = createNamedReference({
-  id: fixtureUuid(30),
-  displayName: 'المستودع المركزي',
-})
-const OTHER_WAREHOUSE = createNamedReference({
-  id: fixtureUuid(31),
-  displayName: 'المستودع الثاني',
-})
+const TARGET_WAREHOUSE = { id: fixtureUuid(30), name: 'المستودع المركزي' }
+const OTHER_WAREHOUSE = { id: fixtureUuid(31), name: 'المستودع الثاني' }
+
+/**
+ * One row of the LIVE picker endpoint: flat, camelCase, the item's own `id`
+ * IS the asset id, and the status field is `currentStatus`.
+ */
+function createEligibleAsset(
+  overrides: Partial<DisposalEligibleAsset> & Pick<DisposalEligibleAsset, 'id' | 'assetNumber'>,
+): DisposalEligibleAsset {
+  return {
+    serialNumber: null,
+    materialId: fixtureUuid(24),
+    materialCode: 'IT-HW-PC-001',
+    materialNameAr: 'حاسوب مكتبي',
+    warehouseId: TARGET_WAREHOUSE.id,
+    warehouseCode: 'WH-CENTRAL',
+    warehouseName: TARGET_WAREHOUSE.name,
+    currentStatus: 'InStock',
+    rowVersion: 1,
+    ...overrides,
+  }
+}
 
 /** The asset under search: eligible, in the selected warehouse, and buried. */
-const TARGET = createAsset({
-  assetId: fixtureUuid(7000),
+const TARGET = createEligibleAsset({
+  id: fixtureUuid(7000),
   assetNumber: 'AST-TARGET-9001',
-  currentWarehouse: TARGET_WAREHOUSE,
-  derivedStatus: 'InStock',
 })
 
 /**
@@ -71,11 +85,9 @@ const TARGET = createAsset({
  * assertion below exists to make impossible to satisfy silently.
  */
 const NON_MATCHING = Array.from({ length: 50 }, (_, index) =>
-  createAsset({
-    assetId: fixtureUuid(7100 + index),
+  createEligibleAsset({
+    id: fixtureUuid(7100 + index),
     assetNumber: `BEFORE-${index.toString().padStart(3, '0')}`,
-    currentWarehouse: TARGET_WAREHOUSE,
-    derivedStatus: 'InStock',
   }),
 )
 
@@ -91,14 +103,14 @@ interface EligibleAssetsRequest {
 
 /**
  * The `Search` parameter's own projection: asset number, manufacturer serial,
- * and material display name — the three strings an operator can plausibly type
- * off a physical label. Deliberately written from the contract's meaning rather
- * than copied from any server's implementation of it.
+ * and material name — the three strings an operator can plausibly type off a
+ * physical label. Deliberately written from the contract's meaning rather than
+ * copied from any server's implementation of it.
  */
-function matchesSearch(asset: Asset, search: string | null): boolean {
+function matchesSearch(asset: DisposalEligibleAsset, search: string | null): boolean {
   const needle = search?.trim() ?? ''
   if (needle === '') return true
-  return `${asset.assetNumber} ${asset.serialNumber ?? ''} ${asset.material.displayName}`
+  return `${asset.assetNumber} ${asset.serialNumber ?? ''} ${asset.materialNameAr}`
     .toLowerCase()
     .includes(needle.toLowerCase())
 }
@@ -114,7 +126,7 @@ type ApplyOrder = 'filter-then-slice' | 'slice-then-filter'
  * is well-formed in every respect except that the operator's match is absent.
  */
 function serveEligibleAssets(
-  assets: readonly Asset[],
+  assets: readonly DisposalEligibleAsset[],
   seen: EligibleAssetsRequest[],
   order: ApplyOrder = 'filter-then-slice',
 ) {
@@ -132,11 +144,9 @@ function serveEligibleAssets(
       const pageIndex = Math.max(1, Number(page ?? '1')) - 1
       const size = Math.max(1, Number(pageSize ?? '20'))
 
-      const isEligible = (asset: Asset) =>
-        asset.derivedStatus !== 'Disposed' &&
-        (warehouseId === null ||
-          warehouseId === '' ||
-          asset.currentWarehouse?.id === warehouseId) &&
+      const isEligible = (asset: DisposalEligibleAsset) =>
+        asset.currentStatus !== 'Disposed' &&
+        (warehouseId === null || warehouseId === '' || asset.warehouseId === warehouseId) &&
         matchesSearch(asset, search)
 
       const matched = assets.filter(isEligible)
@@ -205,7 +215,7 @@ describe('disposal eligible assets: filter before page (D-ADJ-01)', () => {
     const unfiltered = await result.current.loadOptions('')
 
     expect(unfiltered).toHaveLength(10)
-    expect(unfiltered.map((option) => option.value)).not.toContain(TARGET.assetId)
+    expect(unfiltered.map((option) => option.value)).not.toContain(TARGET.id)
   })
 
   it('returns a matching asset that an unfiltered first page would have hidden', async () => {
@@ -216,8 +226,9 @@ describe('disposal eligible assets: filter before page (D-ADJ-01)', () => {
 
     expect(options).toEqual([
       {
-        value: TARGET.assetId,
-        label: `${TARGET.assetNumber} — ${TARGET.material.displayName}`,
+        // The item's own `id` IS the asset id — there is no `assetId` property.
+        value: TARGET.id,
+        label: `${TARGET.assetNumber} — ${TARGET.materialNameAr} — ${ASSET_STATUS_LABELS_AR.InStock}`,
         payload: TARGET,
       },
     ])

@@ -1,15 +1,17 @@
 ﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { apiJson, okPageJson } from '@/test/msw/envelope'
+import { apiJson, errJson, okPageJson } from '@/test/msw/envelope'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
+import { ASSET_STATUS_LABELS_AR } from '@/modules/asset/asset-status-labels'
 import AssetDisposalFormPage from '@/modules/adjustment/pages/asset-disposal-form-page'
+import type { DisposalEligibleAsset } from '@/modules/adjustment/types/adjustment.types'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
-import { createSession } from '@/test/msw/factories'
+import { createSession, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { toast } from '@/shared/ui/toast-manager'
 
@@ -31,9 +33,34 @@ vi.mock('@/modules/warehouse/hooks/use-scoped-warehouse-selector', () => ({
 }))
 
 const scenario = createCrossModuleScenario()
-const asset = scenario.assets.available
 const warehouse = scenario.warehouses.source
 const manager = ['document.view', 'document.create', 'document.post']
+
+/**
+ * One row of the LIVE picker endpoint
+ * (`GET /api/v1/adjustments/disposal-eligible-assets`): flat, camelCase, with
+ * the item's own `id` AS the asset id. There is no `material` object, no
+ * `currentWarehouse` and no `derivedStatus` — the status field is
+ * `currentStatus`.
+ */
+const asset: DisposalEligibleAsset = {
+  id: fixtureUuid(950),
+  assetNumber: 'AST-2026-1003',
+  serialNumber: 'SN-889900',
+  materialId: fixtureUuid(906),
+  materialCode: 'IT-HW-PC-001',
+  materialNameAr: 'حاسوب مكتبي',
+  warehouseId: warehouse.id,
+  warehouseCode: warehouse.code,
+  warehouseName: warehouse.name,
+  currentStatus: 'InStock',
+  rowVersion: 1,
+}
+
+/** The picker label carries the status: it is what decides the server's effect. */
+const assetLabel = `${asset.assetNumber} — ${asset.materialNameAr} — ${ASSET_STATUS_LABELS_AR.InStock}`
+
+const REASON = 'محضر لجنة الفحص رقم ١٢'
 
 function renderForm(permissions = manager) {
   const client = new QueryClient({
@@ -70,7 +97,7 @@ async function fillForm(user: ReturnType<typeof userEvent.setup>) {
   await waitFor(() => expect(input).toBeEnabled())
   await user.type(input, asset.assetNumber)
   await user.click(await screen.findByRole('option', { name: new RegExp(asset.assetNumber) }))
-  await user.type(screen.getByLabelText('سبب الإعدام ومرجع المحضر'), 'محضر لجنة الفحص رقم ١٢')
+  await user.type(screen.getByLabelText('سبب الإعدام ومرجع المحضر'), REASON)
 }
 
 describe('asset disposal draft contract', () => {
@@ -86,19 +113,19 @@ describe('asset disposal draft contract', () => {
   it('requires actual selections and a reason, not free-text identities', async () => {
     eligibleHandler()
     const create = vi.fn()
-    server.use(http.post('*/api/v1/adjustments', create))
+    server.use(http.post('*/api/v1/adjustments/disposals', create))
     const user = renderForm()
     await chooseWarehouse(user)
     const input = screen.getByRole('combobox', { name: 'الأصل المستبعد' })
     await waitFor(() => expect(input).toBeEnabled())
-    await user.type(input, asset.assetId)
+    await user.type(input, asset.id)
     await user.click(screen.getByRole('button', { name: 'حفظ مسودة الإعدام' }))
     expect(await screen.findByText('سبب الإعدام مطلوب.')).toBeInTheDocument()
     expect(screen.getByText('يجب اختيار أصل صالح من القائمة.')).toBeInTheDocument()
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('sends the selected material separately from the asset and blocks duplicate submits while pending', async () => {
+  it('sends the LIVE disposal body and nothing else, and blocks duplicate submits while pending', async () => {
     eligibleHandler()
     let release: () => void = () => undefined
     const pending = new Promise<void>((resolve) => {
@@ -106,31 +133,27 @@ describe('asset disposal draft contract', () => {
     })
     const bodies: unknown[] = []
     server.use(
-      http.post('*/api/v1/adjustments', async ({ request }) => {
+      http.post('*/api/v1/adjustments/disposals', async ({ request }) => {
         bodies.push(await request.json())
         await pending
-        return apiJson({ ...scenario.adjustments.disposal, status: 'Draft' }, { status: 201 })
+        // 201 `{ id }` — the shared resource-id projection the endpoint answers.
+        return apiJson({ id: fixtureUuid(951) }, { status: 201 })
       }),
     )
     const user = renderForm()
     await fillForm(user)
     await user.click(screen.getByRole('button', { name: 'حفظ مسودة الإعدام' }))
     await waitFor(() => expect(bodies).toHaveLength(1))
+    // The LIVE disposal body: the warehouse, EXACTLY ONE asset id and the
+    // reason. `toEqual` is exact, so this also proves the absence of every
+    // field the old generic draft carried — `purpose`, `lines`,
+    // `rowVersion`, `materialId`, `quantityDelta` — and of any effect the
+    // client must never send: the server derives it.
     expect(bodies[0]).toEqual({
       warehouseId: warehouse.id,
-      purpose: 'Disposal',
-      reason: 'محضر لجنة الفحص رقم ١٢',
-      lines: [
-        {
-          materialId: asset.material.id,
-          assetId: asset.assetId,
-          quantityDelta: -1,
-          reason: 'محضر لجنة الفحص رقم ١٢',
-        },
-      ],
-      rowVersion: 0,
+      assetIds: [asset.id],
+      reason: REASON,
     })
-    expect(asset.assetId).not.toBe(asset.material.id)
     expect(screen.getByRole('button', { name: 'جارٍ الحفظ...' })).toBeDisabled()
     expect(screen.getByRole('combobox', { name: 'مستودع الإعدام' })).toBeDisabled()
     fireEvent.submit(screen.getByRole('button', { name: 'جارٍ الحفظ...' }).closest('form')!)
@@ -139,10 +162,28 @@ describe('asset disposal draft contract', () => {
     expect(await screen.findByText('تم حفظ المسودة')).toBeInTheDocument()
   })
 
-  it('clears the asset and material when the warehouse changes', async () => {
+  it('rejects a reason longer than the live endpoint accepts (200 characters)', async () => {
     eligibleHandler()
     const create = vi.fn()
-    server.use(http.post('*/api/v1/adjustments', create))
+    server.use(http.post('*/api/v1/adjustments/disposals', create))
+    const user = renderForm()
+    await chooseWarehouse(user)
+    const input = screen.getByRole('combobox', { name: 'الأصل المستبعد' })
+    await waitFor(() => expect(input).toBeEnabled())
+    await user.type(input, asset.assetNumber)
+    await user.click(await screen.findByRole('option', { name: new RegExp(asset.assetNumber) }))
+    // The disposal validator caps the reason at 200; the sibling adjustment
+    // draft allows 500, so this bound belongs to THIS screen.
+    await user.type(screen.getByLabelText('سبب الإعدام ومرجع المحضر'), 'م'.repeat(201))
+    await user.click(screen.getByRole('button', { name: 'حفظ مسودة الإعدام' }))
+    expect(await screen.findByText('يجب ألا يتجاوز سبب الإعدام 200 محرفاً.')).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('clears the asset when the warehouse changes', async () => {
+    eligibleHandler()
+    const create = vi.fn()
+    server.use(http.post('*/api/v1/adjustments/disposals', create))
     const user = renderForm()
     await fillForm(user)
     await chooseWarehouse(user, scenario.warehouses.destination.name)
@@ -150,6 +191,21 @@ describe('asset disposal draft contract', () => {
     await user.click(screen.getByRole('button', { name: 'حفظ مسودة الإعدام' }))
     expect(await screen.findByText('يجب اختيار أصل صالح من القائمة.')).toBeInTheDocument()
     expect(create).not.toHaveBeenCalled()
+  })
+
+  it('shows the asset status in the picker so the derived effect is visible', async () => {
+    eligibleHandler()
+    const user = renderForm()
+    await chooseWarehouse(user)
+
+    const input = screen.getByRole('combobox', { name: 'الأصل المستبعد' })
+    await user.type(input, asset.assetNumber)
+    const option = await screen.findByRole('option', { name: new RegExp(asset.assetNumber) })
+
+    // The status travels with the option: `InStock` means the server will
+    // apply −1, `Issued`/`InCustody` mean 0.
+    expect(option).toHaveTextContent(ASSET_STATUS_LABELS_AR.InStock)
+    expect(option).not.toHaveTextContent(ASSET_STATUS_LABELS_AR.Disposed)
   })
 
   it('sends warehouse-scoped server search so an asset beyond the first 50 remains selectable', async () => {
@@ -186,7 +242,7 @@ describe('asset disposal draft contract', () => {
       search: asset.assetNumber,
       warehouseId: warehouse.id,
     })
-    expect(input).toHaveValue(`${asset.assetNumber} — ${asset.material.displayName}`)
+    expect(input).toHaveValue(assetLabel)
   })
 
   it('shows an Arabic lookup error and recovers on the next search', async () => {
@@ -207,21 +263,39 @@ describe('asset disposal draft contract', () => {
     expect(await screen.findByRole('option', { name: new RegExp(asset.assetNumber) })).toBeVisible()
   })
 
-  it('retains the draft and allows retry after a create failure', async () => {
+  it('shows the server Arabic copy for the single-asset refusal instead of a generic message', async () => {
     eligibleHandler()
-    server.use(http.post('*/api/v1/adjustments', () => new HttpResponse(null, { status: 500 })))
+    server.use(
+      http.post('*/api/v1/adjustments/disposals', () =>
+        // 400 `DISPOSALS_SINGLE_ASSET_REQUIRED` — the server refuses a draft
+        // that carries two assets.
+        errJson(400, { code: 'DISPOSALS_SINGLE_ASSET_REQUIRED', details: { asset_count: 2 } }),
+      ),
+    )
     const user = renderForm()
     await fillForm(user)
     await user.click(screen.getByRole('button', { name: 'حفظ مسودة الإعدام' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('تعذّر حفظ مسودة الإعدام')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'سند الإهلاك يتطلّب أصلاً واحداً بالضبط.',
+    )
+  })
+
+  it('retains the draft and allows retry after a create failure', async () => {
+    eligibleHandler()
+    server.use(
+      http.post('*/api/v1/adjustments/disposals', () => new HttpResponse(null, { status: 500 })),
+    )
+    const user = renderForm()
+    await fillForm(user)
+    await user.click(screen.getByRole('button', { name: 'حفظ مسودة الإعدام' }))
+    // The server's own copy, not a generic "the draft could not be saved".
+    expect(await screen.findByRole('alert')).toHaveTextContent('تعذر إتمام العملية حالياً.')
     expect(toast.error).toHaveBeenCalledWith({
       title: 'تعذر إتمام العملية حالياً.',
       description: 'حاول مجدداً بعد قليل، أو تواصل مع الدعم الفني إذا استمرت المشكلة.',
     })
-    expect(screen.getByLabelText('سبب الإعدام ومرجع المحضر')).toHaveValue('محضر لجنة الفحص رقم ١٢')
-    expect(screen.getByRole('combobox', { name: 'الأصل المستبعد' })).toHaveValue(
-      `${asset.assetNumber} — ${asset.material.displayName}`,
-    )
+    expect(screen.getByLabelText('سبب الإعدام ومرجع المحضر')).toHaveValue(REASON)
+    expect(screen.getByRole('combobox', { name: 'الأصل المستبعد' })).toHaveValue(assetLabel)
     expect(screen.getByRole('button', { name: 'حفظ مسودة الإعدام' })).toBeEnabled()
   })
 })

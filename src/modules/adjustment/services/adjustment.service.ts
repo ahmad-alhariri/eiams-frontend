@@ -6,6 +6,8 @@ import type {
   AdjustmentDetail,
   AdjustmentListItem,
   AdjustmentUpdateRequest,
+  DisposalDraftRequest,
+  DisposalEligibleAsset,
   ListAdjustmentsQuery,
   ListDisposalEligibleAssetsQuery,
 } from '@/modules/adjustment/types/adjustment.types'
@@ -13,13 +15,22 @@ import { toWirePaginationParams } from '@/shared/api/pagination'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
 import type { ApiPage, ResourceIdResponse } from '@/shared/api/api-contracts'
 import type { PostDocumentResponse } from '@/shared/documents/types/document-wire.types'
-import type { AssetPage, paths } from '@/shared/types/generated/eiams-v1'
+import type { paths } from '@/shared/types/generated/eiams-v1'
 
 const ADJUSTMENTS_PATH = '/adjustments' satisfies keyof paths
 const ADJUSTMENT_PATH = '/adjustments/{adjustmentId}' satisfies keyof paths
 const ADJUSTMENT_POST_PATH = '/adjustments/{adjustmentId}/post' satisfies keyof paths
 const ADJUSTMENT_REVERSE_PATH = '/adjustments/{adjustmentId}/reverse' satisfies keyof paths
 const DISPOSAL_ELIGIBLE_ASSETS_PATH = '/adjustments/disposal-eligible-assets' satisfies keyof paths
+
+/**
+ * The LIVE disposal endpoint.
+ *
+ * It is not in the frozen generated snapshot (that artifact describes the
+ * provisional design, not the served API), so the path is spelled out here
+ * rather than asserted against `keyof paths`.
+ */
+const DISPOSALS_PATH = '/adjustments/disposals'
 
 function pathWithAdjustmentId(path: string, adjustmentId: string): string {
   return path.replace('{adjustmentId}', encodeURIComponent(adjustmentId))
@@ -78,7 +89,18 @@ export interface AdjustmentService {
   ) => Promise<ResourceIdResponse>
   listDisposalEligibleAssets: (
     query: Readonly<ListDisposalEligibleAssetsQuery>,
-  ) => Promise<AssetPage>
+  ) => Promise<ApiPage<DisposalEligibleAsset>>
+  /**
+   * Creates the disposal DRAFT through the LIVE disposal endpoint
+   * (`POST /adjustments/disposals`).
+   *
+   * The body is `{ warehouseId, assetIds, reason }` and nothing else — the
+   * server derives the signed effect itself, and it refuses a request that
+   * carries two or more assets. The response is the shared `{ id }`
+   * projection; the adjustment's own id also travels in the `Location`
+   * header.
+   */
+  createDisposalDraft: (request: Readonly<DisposalDraftRequest>) => Promise<ResourceIdResponse>
 }
 
 /**
@@ -143,25 +165,19 @@ export function createAdjustmentService(transport: ApiTransport): AdjustmentServ
     },
 
     async listDisposalEligibleAssets(query) {
-      const page = await transport.requestPage<AssetPage['items'][number]>({
+      return transport.requestPage<DisposalEligibleAsset>({
         path: DISPOSAL_ELIGIBLE_ASSETS_PATH,
         method: 'GET',
         query: toDisposalEligibleParams(query),
       })
-      return {
-        items: page.items,
-        meta: {
-          pageIndex: page.page - 1,
-          page: page.page,
-          pageSize: page.pageSize,
-          itemCount: page.totalItems,
-          totalItems: page.totalItems,
-          totalCount: page.totalItems,
-          totalPages: page.totalPages,
-          hasNextPage: page.hasNextPage,
-          hasPreviousPage: page.hasPreviousPage,
-        },
-      } as AssetPage
+    },
+
+    async createDisposalDraft(request) {
+      return transport.request<ResourceIdResponse>({
+        path: DISPOSALS_PATH,
+        method: 'POST',
+        body: request,
+      })
     },
   }
 }

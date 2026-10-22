@@ -5,6 +5,7 @@ import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-con
 import type {
   AdjustmentDraftRequest,
   AdjustmentUpdateRequest,
+  DisposalDraftRequest,
   ListAdjustmentsQuery,
   ListDisposalEligibleAssetsQuery,
 } from '@/modules/adjustment/types/adjustment.types'
@@ -133,6 +134,30 @@ export function useCreateAdjustmentMutation() {
     onSuccess: () => {
       invalidate()
       toast.success({ title: 'تم حفظ مسودة سند التسوية' })
+    },
+    onError: (error) => {
+      const apiError = normalizeApiError(error)
+      toast.error({ title: apiError.titleAr, description: apiError.detailAr ?? undefined })
+    },
+  })
+}
+
+/**
+ * Creates the disposal DRAFT through the LIVE disposal endpoint
+ * (`POST /adjustments/disposals`).
+ *
+ * A disposal is NOT a generic adjustment draft: it has its own endpoint, its
+ * own body (`{ warehouseId, assetIds, reason }`) and its own server-derived
+ * effect. Posting one still needs the shared document engine's SignedOriginal
+ * gate, so this mutation only creates the draft.
+ */
+export function useCreateDisposalMutation() {
+  const invalidate = useAdjustmentInvalidation()
+  return useMutation({
+    mutationFn: (request: DisposalDraftRequest) => adjustmentService.createDisposalDraft(request),
+    onSuccess: () => {
+      invalidate()
+      toast.success({ title: 'تم حفظ مسودة سند الإعدام' })
     },
     onError: (error) => {
       const apiError = normalizeApiError(error)
