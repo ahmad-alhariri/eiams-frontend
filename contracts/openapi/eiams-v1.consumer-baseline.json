@@ -335,6 +335,27 @@
       ]
     },
     {
+      "path": "/assets/{assetId}/current-status",
+      "method": "GET",
+      "sources": [
+        "src/modules/asset/services/asset.service.ts"
+      ],
+      "responseProperties": [
+        "activeCustodyId",
+        "assetId",
+        "assetNumber",
+        "currentStatus",
+        "custodyKind",
+        "holderId",
+        "holderType",
+        "latestMovementAtUtc",
+        "latestMovementType",
+        "materialId",
+        "serialNumber",
+        "warehouseId"
+      ]
+    },
+    {
       "path": "/assets/{assetId}/custody-assignment",
       "method": "POST",
       "sources": [
@@ -828,6 +849,24 @@
         "src/modules/custody/services/custody.service.ts"
       ],
       "responseProperties": []
+    },
+    {
+      "path": "/custodies/pending",
+      "method": "GET",
+      "sources": [
+        "src/modules/custody/services/custody.service.ts"
+      ],
+      "responseProperties": [
+        "assetId",
+        "assetNumber",
+        "custodyId",
+        "fromUtc",
+        "holderId",
+        "holderType",
+        "issueDocumentId",
+        "materialId",
+        "rowVersion"
+      ]
     },
     {
       "path": "/custodies",
