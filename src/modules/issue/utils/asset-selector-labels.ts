@@ -1,4 +1,4 @@
-import type { Asset } from '@/shared/types/generated/eiams-v1'
+import type { Asset } from '@/modules/asset/types/asset.types'
 
 /**
  * Accessible label for one asset chip in the t05 issued-asset selector:

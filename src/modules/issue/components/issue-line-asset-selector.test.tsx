@@ -11,7 +11,7 @@ import { IssueLineAssetSelector } from './issue-line-asset-selector'
 import type { DocumentLinesContainer } from '@/shared/documents/schemas/document-lines.schemas'
 import { createEmptyQuantityLine } from '@/shared/documents/schemas/document-lines.schemas'
 import { createQueryClient } from '@/shared/services/query.client'
-import { createAsset, fixtureUuid } from '@/test/msw/factories'
+import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const API_BASE_URL = '/api/v1'
@@ -49,27 +49,35 @@ function createHarness(lineOverrides: Partial<DocumentLinesContainer['lines'][nu
   return Harness
 }
 
+/** The LIVE `GET /assets` row: flat, camelCase, no nested references. */
+function inStockAsset(id: string, assetNumber: string, serialNumber: string) {
+  return {
+    id,
+    assetNumber,
+    serialNumber,
+    materialId: MATERIAL_ID,
+    materialCode: 'IT-HW-PC-001',
+    materialNameAr: 'حاسوب مكتبي',
+    warehouseId: WAREHOUSE_ID,
+    warehouseCode: 'WH-CENTRAL',
+    warehouseName: 'المستودع المركزي',
+    currentStatus: 'InStock' as const,
+    activeCustodyId: null,
+    holderType: null,
+    holderId: null,
+    acquisitionDate: '2026-08-24',
+    warrantyExpiry: null,
+    rowVersion: 1,
+  }
+}
+
 function useTwoInStockAssetsHandler() {
   server.use(
     http.get(`${API_BASE_URL}/assets`, () =>
       okPageJson(
         [
-          createAsset({
-            assetId: fixtureUuid(230),
-            assetNumber: 'AST-2024-C01',
-            serialNumber: 'SN-PC-0001',
-            derivedStatus: 'InStock',
-            material: { id: MATERIAL_ID, displayName: 'حاسوب مكتبي' },
-            currentWarehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي' },
-          }),
-          createAsset({
-            assetId: fixtureUuid(231),
-            assetNumber: 'AST-2024-C02',
-            serialNumber: 'SN-PC-0002',
-            derivedStatus: 'InStock',
-            material: { id: MATERIAL_ID, displayName: 'حاسوب مكتبي' },
-            currentWarehouse: { id: WAREHOUSE_ID, displayName: 'المستودع المركزي' },
-          }),
+          inStockAsset(fixtureUuid(230), 'AST-2024-C01', 'SN-PC-0001'),
+          inStockAsset(fixtureUuid(231), 'AST-2024-C02', 'SN-PC-0002'),
         ],
         { page: 1, pageSize: 50, totalCount: 2, totalPages: 1 },
       ),

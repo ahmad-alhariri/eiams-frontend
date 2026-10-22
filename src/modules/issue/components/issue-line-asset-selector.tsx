@@ -62,10 +62,10 @@ export function IssueLineAssetSelector({
       ) : (
         <div className="flex flex-wrap gap-2">
           {assets.map((asset) => {
-            const checked = selected.includes(asset.assetId)
+            const checked = selected.includes(asset.id)
             return (
               <label
-                key={asset.assetId}
+                key={asset.id}
                 className={cn(
                   'flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm',
                   checked && 'border-primary bg-primary/10',
@@ -78,7 +78,7 @@ export function IssueLineAssetSelector({
                   aria-label={assetChipLabel(asset)}
                   checked={checked}
                   disabled={disabled}
-                  onChange={(event) => toggle(asset.assetId, event.target.checked)}
+                  onChange={(event) => toggle(asset.id, event.target.checked)}
                 />
                 <span dir="ltr" className="font-mono text-xs">
                   {asset.assetNumber}
