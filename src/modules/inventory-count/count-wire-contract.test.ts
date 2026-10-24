@@ -173,11 +173,7 @@ function recordingTransport(): { transport: ApiTransport; captures: CapturedRequ
     }) => {
       capture(request as never)
     },
-    requestPage: async <TItem,>(request: {
-      path: string
-      method: string
-      query?: unknown
-    }) => {
+    requestPage: async <TItem>(request: { path: string; method: string; query?: unknown }) => {
       capture(request as never)
       const sample: InventoryCountListItem | InventoryCountLine =
         request.path.split('/').length > 2 ? COUNT_LINE_SAMPLE : COUNT_LIST_ITEM_SAMPLE

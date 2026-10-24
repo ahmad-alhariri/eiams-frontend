@@ -5,7 +5,10 @@ import { ActiveCountWarning } from '@/modules/inventory-count/components/active-
 import { CountQuantityWorkspace } from '@/modules/inventory-count/components/count-quantity-workspace'
 import { CountToAdjustmentLaunch } from '@/modules/inventory-count/components/count-to-adjustment-launch'
 import { CountVarianceReview } from '@/modules/inventory-count/components/count-variance-review'
-import { CountMaterialName, CountWarehouseName } from '@/modules/inventory-count/components/count-name-fields'
+import {
+  CountMaterialName,
+  CountWarehouseName,
+} from '@/modules/inventory-count/components/count-name-fields'
 import {
   useCancelCountMutation,
   useCloseCountMutation,
@@ -65,7 +68,9 @@ export default function CountDetailPage() {
   const [cancelError, setCancelError] = useState<string | null>(null)
 
   // Freeze-policy draft (count.plan): reason required unless SoftFreeze.
-  const [freezePolicy, setFreezePolicy] = useState<CountFreezePolicy>(count?.freezePolicy ?? 'SoftFreeze')
+  const [freezePolicy, setFreezePolicy] = useState<CountFreezePolicy>(
+    count?.freezePolicy ?? 'SoftFreeze',
+  )
   const [freezePolicyReason, setFreezePolicyReason] = useState('')
   const [freezeError, setFreezeError] = useState<string | null>(null)
 
@@ -372,7 +377,9 @@ export default function CountDetailPage() {
                   : 'تعذّر إكمال الجلسة. تحقق من تسجيل أسباب الفروقات أو حدّث الصفحة.'
               }
               closeError={
-                closeMutation.error === null ? null : 'تعذّر إغلاق الجلسة. حدّث الصفحة وحاول مجدداً.'
+                closeMutation.error === null
+                  ? null
+                  : 'تعذّر إغلاق الجلسة. حدّث الصفحة وحاول مجدداً.'
               }
             />
           </ContentCard>

@@ -17,7 +17,9 @@ const MANAGER_PERMISSIONS = ['count.view', 'document.view', 'document.create', '
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: createSessionUser({ firstName: '\u0645\u062F\u064A\u0631 \u0627\u0644\u0645\u0633\u062A\u0648\u062F\u0639' }),
+    user: createSessionUser({
+      firstName: '\u0645\u062F\u064A\u0631 \u0627\u0644\u0645\u0633\u062A\u0648\u062F\u0639',
+    }),
     role: createSessionRole(),
     activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
@@ -64,7 +66,8 @@ function renderLaunch(
 }
 
 const CREATE_DRAFT = /\u0625\u0646\u0634\u0627\u0621 \u0645\u0633\u0648\u062F\u0629/
-const GO_TO_DRAFT = /\u0627\u0644\u0627\u0646\u062A\u0642\u0627\u0644 \u0625\u0644\u0649 \u0645\u0633\u0648\u062F\u0629/
+const GO_TO_DRAFT =
+  /\u0627\u0644\u0627\u0646\u062A\u0642\u0627\u0644 \u0625\u0644\u0649 \u0645\u0633\u0648\u062F\u0629/
 
 describe('CountToAdjustmentLaunch (F8 - settlement drives the CTA)', () => {
   it.each(['Planned', 'InProgress'] as const)(
@@ -84,7 +87,9 @@ describe('CountToAdjustmentLaunch (F8 - settlement drives the CTA)', () => {
 
   it('links to the existing draft instead of creating a second one', () => {
     renderLaunch(
-      count({ settlement: { status: 'Pending', adjustmentId: ADJUSTMENT_ID, adjustmentStatus: 'Draft' } }),
+      count({
+        settlement: { status: 'Pending', adjustmentId: ADJUSTMENT_ID, adjustmentStatus: 'Draft' },
+      }),
     )
     const link = screen.getByRole('link', { name: GO_TO_DRAFT })
     expect(link.getAttribute('href')).toBe('/adjustments/' + ADJUSTMENT_ID)

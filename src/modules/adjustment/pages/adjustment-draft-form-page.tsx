@@ -72,9 +72,7 @@ export default function AdjustmentDraftFormPage() {
     [countLinesQuery.data],
   )
   const { names: seedNames, namesResolved: seedNamesResolved } = useCountVarianceSeeds(
-    countSummary === undefined
-      ? []
-      : countSummary.variance.map((line) => line.materialId),
+    countSummary === undefined ? [] : countSummary.variance.map((line) => line.materialId),
   )
 
   const varianceSeed = useMemo<AdjustmentLineValues[] | undefined>(() => {
@@ -94,12 +92,13 @@ export default function AdjustmentDraftFormPage() {
 
   // Both warehouse identity and Arabic label come from the fetched count.
   const countQuery = useInventoryCountQuery(canCreate && launchedFromCount ? launchCountId : null)
-  const launchWarehouseId = launchedFromCount ? (countQuery.data?.warehouseId ?? undefined) : undefined
+  const launchWarehouseId = launchedFromCount
+    ? (countQuery.data?.warehouseId ?? undefined)
+    : undefined
   // Resolution per id (`GET /warehouses/{id}`); the raw id falls back, never crashes.
   const launchWarehouseName = useWarehouseName(launchWarehouseId)
-  const launchWarehouseLabel = launchedFromCount && countQuery.data !== undefined
-    ? launchWarehouseName
-    : undefined
+  const launchWarehouseLabel =
+    launchedFromCount && countQuery.data !== undefined ? launchWarehouseName : undefined
 
   // Readiness gates BOTH seeds: the variance rows AND the launch-warehouse
   // label must be resolved before the form component mounts, so its

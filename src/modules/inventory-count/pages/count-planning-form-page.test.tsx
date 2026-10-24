@@ -49,18 +49,20 @@ function useHandlers() {
   postedBody = undefined
   postStatus = 201
   const warehouse = createWarehouse({ id: WAREHOUSE_ID, name: 'المستودع المركزي' })
-    server.use(
-    http.get(
-      `${API_BASE_URL}/warehouses/:warehouseId/inventory-freeze-status`,
-      () => apiJson({ warehouseId: 'w1', isPostingBlocked: false, isProvisional: true, hasSoftFreezeWarning: false, activeCounts: [] }),
+  server.use(
+    http.get(`${API_BASE_URL}/warehouses/:warehouseId/inventory-freeze-status`, () =>
+      apiJson({
+        warehouseId: 'w1',
+        isPostingBlocked: false,
+        isProvisional: true,
+        hasSoftFreezeWarning: false,
+        activeCounts: [],
+      }),
     ),
     http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
     http.post(`${API_BASE_URL}/inventory-counts`, async ({ request }) => {
       postedBody = (await request.json()) as Record<string, unknown>
-      return apiJson(
-        { id: COUNT_ID },
-        { status: postStatus },
-      )
+      return apiJson({ id: COUNT_ID }, { status: postStatus })
     }),
   )
 }

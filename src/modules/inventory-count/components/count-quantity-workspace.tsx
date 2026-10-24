@@ -325,9 +325,7 @@ export function CountQuantityWorkspace({
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-popover px-4 py-3 text-sm">
         <span>
           إجمالي البنود:{' '}
-          <strong className="text-foreground">
-            {toArabicDigits(serverPage?.totalItems ?? 0)}
-          </strong>
+          <strong className="text-foreground">{toArabicDigits(serverPage?.totalItems ?? 0)}</strong>
         </span>
         <span>
           في هذه الصفحة — أُدخلت:{' '}
@@ -367,9 +365,7 @@ export function CountQuantityWorkspace({
             <Button
               type="button"
               onClick={() => void handleSave()}
-              disabled={
-                updateMutation.isPending || reasonMutation.isPending || sendableCount === 0
-              }
+              disabled={updateMutation.isPending || reasonMutation.isPending || sendableCount === 0}
             >
               {updateMutation.isPending || reasonMutation.isPending
                 ? 'جارٍ الحفظ...'

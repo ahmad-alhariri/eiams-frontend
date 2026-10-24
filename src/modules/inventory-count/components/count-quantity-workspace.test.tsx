@@ -97,7 +97,9 @@ function countHeader(rowVersion: number) {
 /** The count DTO carries no names, so the UI resolves them one id at a time. */
 function nameHandlersFor(seed: readonly TestLine[]) {
   return countNameHandlers({
-    materials: Object.fromEntries(seed.map((line) => [line.material.id, line.material.displayName])),
+    materials: Object.fromEntries(
+      seed.map((line) => [line.material.id, line.material.displayName]),
+    ),
     warehouses: { w1: 'مستودع' },
   })
 }
@@ -183,11 +185,14 @@ function usePagedLinesHandlers(seed: readonly TestLine[]) {
     }),
     // F3: a typed variance reason travels through its own endpoint, never on
     // the actuals batch.
-    http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines/:lineId/variance-reason`, async ({ request }) => {
-      savedReasonBody = (await request.json()) as SavedReasonBody
-      savedReasonUrl = request.url
-      return apiJson({})
-    }),
+    http.put(
+      `${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines/:lineId/variance-reason`,
+      async ({ request }) => {
+        savedReasonBody = (await request.json()) as SavedReasonBody
+        savedReasonUrl = request.url
+        return apiJson({})
+      },
+    ),
     // The workspace observes the count header as well as its lines, so the
     // conflict-recovery path can reload the session rowVersion
     // (eiams-frontend-3wv1). MSW runs with `onUnhandledRequest: 'error'`, so
@@ -522,7 +527,7 @@ describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () =>
   function useConflictingSaveHandlers(seed: readonly TestLine[], attemptLog: number[]) {
     const store = seed.map((entry) => ({ ...entry }))
     server.use(
-    ...nameHandlersFor(seed),
+      ...nameHandlersFor(seed),
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
         const url = new URL(request.url)
         const page = Number(url.searchParams.get('page') ?? '1')

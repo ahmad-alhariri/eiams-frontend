@@ -20,7 +20,9 @@ const FREEZE_PATH = API_BASE_URL + '/warehouses/' + WAREHOUSE_ID + '/inventory-f
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: createSessionUser({ firstName: '\u0645\u062f\u064A\u0631 \u0627\u0644\u062C\u0631\u062F' }),
+    user: createSessionUser({
+      firstName: '\u0645\u062f\u064A\u0631 \u0627\u0644\u062C\u0631\u062F',
+    }),
     role: createSessionRole(),
     activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
@@ -51,15 +53,19 @@ function renderWarning(warehouseId: string = WAREHOUSE_ID) {
 
 describe('ActiveCountWarning (live freeze-status contract)', () => {
   it('warns that a SoftFreeze count is running for the warehouse', async () => {
-    server.use(
-      http.get(FREEZE_PATH, () => freezeStatus()),
-    )
+    server.use(http.get(FREEZE_PATH, () => freezeStatus()))
     renderWarning()
 
     expect(
-      await screen.findByText(/\u062A\u0646\u0628\u064A\u0647 \u062A\u062C\u0645\u064A\u062F \u0645\u0631\u0646/),
+      await screen.findByText(
+        /\u062A\u0646\u0628\u064A\u0647 \u062A\u062C\u0645\u064A\u062F \u0645\u0631\u0646/,
+      ),
     ).toBeInTheDocument()
-    expect(screen.getByText(/\u062C\u0631\u062F \u062C\u0627\u0631\u064D \u0628\u0633\u064A\u0627\u0633\u0629/)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /\u062C\u0631\u062F \u062C\u0627\u0631\u064D \u0628\u0633\u064A\u0627\u0633\u0629/,
+      ),
+    ).toBeInTheDocument()
   }, 15000)
 
   it('says the stock movement is blocked while a HardFreeze count is active', async () => {
@@ -75,7 +81,9 @@ describe('ActiveCountWarning (live freeze-status contract)', () => {
     renderWarning()
 
     expect(
-      await screen.findByText(/\u062D\u0631\u0643\u0629 \u0627\u0644\u0645\u062E\u0632\u0648\u0646/),
+      await screen.findByText(
+        /\u062D\u0631\u0643\u0629 \u0627\u0644\u0645\u062E\u0632\u0648\u0646/,
+      ),
     ).toBeInTheDocument()
   }, 15000)
 

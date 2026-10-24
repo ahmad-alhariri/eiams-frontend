@@ -30,7 +30,9 @@ import { IconX } from '@tabler/icons-react'
 
 const COUNT_TYPES = Object.keys(INVENTORY_COUNT_TYPE_LABELS_AR) as readonly CountType[]
 const SCOPE_TYPES = Object.keys(INVENTORY_COUNT_SCOPE_LABELS_AR) as readonly CountScopeType[]
-const FREEZE_POLICIES = Object.keys(INVENTORY_COUNT_FREEZE_POLICY_LABELS_AR) as readonly CountFreezePolicy[]
+const FREEZE_POLICIES = Object.keys(
+  INVENTORY_COUNT_FREEZE_POLICY_LABELS_AR,
+) as readonly CountFreezePolicy[]
 
 /** Contract ceiling on `materialIds` for SelectedMaterials plans. */
 const MAX_SELECTED_MATERIALS = 100
@@ -459,7 +461,10 @@ export default function CountPlanningFormPage() {
               name="freezePolicyReason"
               render={({ field }) => (
                 <div className="grid gap-2">
-                  <label htmlFor="count-freeze-reason" className="text-sm font-medium text-foreground">
+                  <label
+                    htmlFor="count-freeze-reason"
+                    className="text-sm font-medium text-foreground"
+                  >
                     سبب سياسة التجميد (مطلوب)
                   </label>
                   <Textarea

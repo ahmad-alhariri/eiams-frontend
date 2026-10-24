@@ -145,7 +145,7 @@ export function countDirtyLineIndexes(
  */
 export type CountLineSaveBlock =
   /** The quantity is blank or not a valid decimal, so there is no actual to record. */
-  | { readonly index: number; readonly kind: 'no-quantity' }
+  { readonly index: number; readonly kind: 'no-quantity' }
 
 export interface CountLineReasonSave {
   /** The line id on the wire (`InventoryCountLine.id`). */

@@ -214,7 +214,8 @@ export function usePlanCountMutation() {
 export function useStartCountMutation(countId: string) {
   const invalidate = useCountInvalidation()
   return useMutation({
-    mutationFn: (expectedRowVersion: number) => countService.startCount(countId, expectedRowVersion),
+    mutationFn: (expectedRowVersion: number) =>
+      countService.startCount(countId, expectedRowVersion),
     onSuccess: invalidate,
   })
 }
@@ -273,7 +274,8 @@ export function useCancelCountMutation(countId: string) {
 export function useSetFreezePolicyMutation(countId: string) {
   const invalidate = useCountInvalidation()
   return useMutation({
-    mutationFn: (request: UpdateFreezePolicyRequest) => countService.setFreezePolicy(countId, request),
+    mutationFn: (request: UpdateFreezePolicyRequest) =>
+      countService.setFreezePolicy(countId, request),
     onSuccess: invalidate,
   })
 }
@@ -298,7 +300,8 @@ export function useCompleteCountMutation(countId: string) {
 export function useCloseCountMutation(countId: string) {
   const invalidate = useCountInvalidation()
   return useMutation({
-    mutationFn: (expectedRowVersion: number) => countService.closeCount(countId, expectedRowVersion),
+    mutationFn: (expectedRowVersion: number) =>
+      countService.closeCount(countId, expectedRowVersion),
     onSuccess: invalidate,
   })
 }

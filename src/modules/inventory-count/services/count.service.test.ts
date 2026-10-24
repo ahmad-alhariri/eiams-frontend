@@ -243,7 +243,17 @@ describe('createCountService (IC-FE-1 live wire)', () => {
 
   it('reads lists of lines paged with the normalization on the lines route', async () => {
     mockedRequest.mockReturnValue(
-      pagedEnvelope([{ id: LINE_ID, materialId: 'm', assetId: null, snapshotQuantity: 1, actualQuantity: null, difference: null, varianceReason: null }]) as never,
+      pagedEnvelope([
+        {
+          id: LINE_ID,
+          materialId: 'm',
+          assetId: null,
+          snapshotQuantity: 1,
+          actualQuantity: null,
+          difference: null,
+          varianceReason: null,
+        },
+      ]) as never,
     )
     const service = createCountService(testTransport)
 

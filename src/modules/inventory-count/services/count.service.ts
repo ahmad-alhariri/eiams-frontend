@@ -32,8 +32,7 @@ const COUNT_STATUS_PATH = '/inventory-counts/{countId}/status'
 const COUNT_FREEZE_POLICY_PATH = '/inventory-counts/{countId}/freeze-policy'
 const COUNT_LINES_PATH = '/inventory-counts/{countId}/lines'
 const COUNT_LINE_ACTUAL_PATH = '/inventory-counts/{countId}/lines/{lineId}/actual'
-const COUNT_LINE_VARIANCE_REASON_PATH =
-  '/inventory-counts/{countId}/lines/{lineId}/variance-reason'
+const COUNT_LINE_VARIANCE_REASON_PATH = '/inventory-counts/{countId}/lines/{lineId}/variance-reason'
 const COUNT_ACTUALS_PATH = '/inventory-counts/{countId}/actuals'
 const COUNT_ADJUSTMENT_PATH = '/inventory-counts/{countId}/adjustment'
 const FREEZE_STATUS_PATH = '/warehouses/{warehouseId}/inventory-freeze-status'
@@ -45,7 +44,11 @@ export interface CountService {
   startCount: (countId: string, expectedRowVersion: number) => Promise<void>
   listLines: (countId: string, query: ListCountLinesQuery) => Promise<CountPage<InventoryCountLine>>
   updateLines: (countId: string, request: UpdateCountLinesRequest) => Promise<void>
-  updateLineActual: (countId: string, lineId: string, request: UpdateLineActualRequest) => Promise<void>
+  updateLineActual: (
+    countId: string,
+    lineId: string,
+    request: UpdateLineActualRequest,
+  ) => Promise<void>
   setLineVarianceReason: (
     countId: string,
     lineId: string,
