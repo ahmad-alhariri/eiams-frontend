@@ -1527,7 +1527,7 @@ export function buildCompleteDraftDocument(
       : {
           receivingInfo: {
             receivingType: 'Supplier',
-            supplierRef: request.receivingInfo.supplierPartyId,
+            supplierRef: request.receivingInfo.supplierRef,
             supplierInvoiceRef: request.receivingInfo.supplierInvoiceRef ?? null,
           },
         }),

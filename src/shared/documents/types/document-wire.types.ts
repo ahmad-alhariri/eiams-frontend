@@ -382,7 +382,7 @@ export interface CompleteDraftLine {
 }
 
 export interface ReceivingDraftDetails {
-  readonly supplierPartyId: Uuid
+  readonly supplierRef: string
   readonly supplierInvoiceRef?: string | null
 }
 

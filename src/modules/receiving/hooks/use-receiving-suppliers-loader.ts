@@ -15,6 +15,9 @@ const RECEIVING_RESOURCE = 'receiving'
 /** The contract's minimum suggestion query length; AsyncSelect enforces it too. */
 export const SUPPLIER_SEARCH_MIN_LENGTH = 2
 
+/** The contract's maximum suggestion query length (`GetSupplierSuggestionsQueryValidator`). */
+const SUPPLIER_SEARCH_MAX_LENGTH = 200
+
 export const receivingQueryKeys = {
   suppliers: (scope: ScopeCacheKey, search: string) =>
     queryKeys.scoped(scope, RECEIVING_RESOURCE, 'suppliers', search),
@@ -39,9 +42,9 @@ export interface ReceivingSuppliersLoaderResult {
  * loader guards both defensively and stays inert until a session scope is
  * active, so the petal never offers suppliers outside the active scope.
  *
- * Each suggestion carries the external-party id the draft write binds as
- * `SupplierPartyId`, so the combobox commits an id rather than a label — there is
- * no free-text create row, because a typed name would never bind server-side.
+ * Each suggestion carries the supplier NAME the draft write stores as
+ * `supplier_ref`; the combobox commits that name, and a typed name binds the
+ * same way whether or not it appears in the suggestions.
  *
  * Suppliers are operational (not master) data — an active count session may
  * hide them — so responses use the operational stale window.
@@ -53,7 +56,8 @@ export function useReceivingSuppliersLoader(): ReceivingSuppliersLoaderResult {
 
   const loadOptions = useCallback<OptionLoader<SupplierSuggestion>>(
     async (query) => {
-      const trimmed = query.trim()
+      // Capped at the contract's maximum: a longer query is a guaranteed 400.
+      const trimmed = query.trim().slice(0, SUPPLIER_SEARCH_MAX_LENGTH)
       if (activeScopeCacheKey === undefined || trimmed.length < SUPPLIER_SEARCH_MIN_LENGTH) {
         return []
       }
@@ -62,7 +66,7 @@ export function useReceivingSuppliersLoader(): ReceivingSuppliersLoaderResult {
         queryFn: () => receivingService.searchReceivingSuppliers(trimmed),
         staleTime: OPERATIONAL_STALE_TIME,
       })
-      return suppliers.map((supplier) => ({ value: supplier.id, label: supplier.nameAr }))
+      return suppliers.map((supplier) => ({ value: supplier.name, label: supplier.name }))
     },
     [activeScopeCacheKey, queryClient],
   )

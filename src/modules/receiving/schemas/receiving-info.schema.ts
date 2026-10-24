@@ -4,11 +4,11 @@ import type { ReceivingDraftDetails } from '@/shared/documents/types/document-wi
 import type { ReceivingInfoResponse } from '@/shared/documents/types/document-wire.types'
 
 /**
- * ReceivingInfo petal capture (e13-t01, corrected against the live API).
+ * ReceivingInfo petal capture (e13-t01).
  *
- * The real write is `ReceivingDraftDetails(SupplierPartyId, SupplierInvoiceRef)`:
- * the supplier is an EXTERNAL PARTY ID, not a free-text reference, and the
- * receiving type is NOT part of the write at all —
+ * The draft write is `ReceivingDraftDetails(SupplierRef, SupplierInvoiceRef)`:
+ * `supplierRef` is V1 FREE TEXT — the supplier NAME, typed or picked from the
+ * suggestions — and the receiving type is NOT part of the write at all:
  * `CompleteWarehouseDocumentDraftCommandHandler` passes
  * `ReceivingType.Supplier` for every receiving draft it creates. The read side
  * does return `receivingType` (`ReceivingInfoResponse`), so the label vocabulary
@@ -37,13 +37,16 @@ export function receivingTypeLabelAr(receivingType: string): string {
 
 /** schema.md: `supplier_invoice_ref` VARCHAR(100). */
 const SUPPLIER_INVOICE_REF_MAX_LENGTH = 100
+/** schema.md: `supplier_ref` VARCHAR(200). */
+const SUPPLIER_REF_MAX_LENGTH = 200
 
 export const receivingInfoSchema = z.object({
-  /**
-   * The supplier's external-party id. A UUID, not free text: the live route
-   * binds `Guid SupplierPartyId`, and a name here would never bind server-side.
-   */
-  supplierPartyId: z.uuid('يجب اختيار مورد صالح من القائمة.'),
+  /** The supplier NAME, captured as V1 free text; suggestions only aid typing. */
+  supplierRef: z
+    .string()
+    .trim()
+    .min(1, 'اسم المورد مطلوب.')
+    .max(SUPPLIER_REF_MAX_LENGTH, `يجب ألا يتجاوز اسم المورد ${SUPPLIER_REF_MAX_LENGTH} محرفاً.`),
   supplierInvoiceRef: z
     .string()
     .trim()
@@ -63,7 +66,7 @@ export type ReceivingInfoFormValues = z.infer<typeof receivingInfoSchema>
 export function toReceivingInfo(values: ReceivingInfoFormValues): ReceivingDraftDetails {
   const supplierInvoiceRef = values.supplierInvoiceRef?.trim()
   return {
-    supplierPartyId: values.supplierPartyId,
+    supplierRef: values.supplierRef,
     ...(supplierInvoiceRef === undefined || supplierInvoiceRef === ''
       ? {}
       : { supplierInvoiceRef }),
@@ -71,19 +74,17 @@ export function toReceivingInfo(values: ReceivingInfoFormValues): ReceivingDraft
 }
 
 /**
- * Seeds form values from a server record (edit mode). The read projection has no
- * party id — it carries a display reference — so the id starts empty and the
- * keeper re-picks the supplier rather than being shown a value the wire cannot
- * round-trip.
+ * Seeds form values from a server record (edit mode). The read projection
+ * carries the stored supplier NAME, so it seeds directly.
  */
 export function fromReceivingInfo(
   info: ReceivingInfoResponse | undefined,
 ): ReceivingInfoFormValues {
   if (info === undefined) {
-    return { supplierPartyId: '', supplierInvoiceRef: undefined }
+    return { supplierRef: '', supplierInvoiceRef: undefined }
   }
   return {
-    supplierPartyId: '',
+    supplierRef: info.supplierRef ?? '',
     supplierInvoiceRef: info.supplierInvoiceRef ?? undefined,
   }
 }

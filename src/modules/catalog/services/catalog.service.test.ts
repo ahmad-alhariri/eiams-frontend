@@ -101,8 +101,8 @@ describe('CatalogService', () => {
     )
 
     // Query filters are the ones the controllers actually bind. The old
-    // `domainId` / `search` / `materialKind` parameters were fiction no catalog
-    // list accepts, so they were dropped rather than asserted.
+    // `domainId` / `materialKind` parameters were fiction no catalog list
+    // accepts, so they were dropped rather than asserted.
     await expect(service.listMaterialDomains({ status: 'Active' })).resolves.toMatchObject({
       items: [domain],
     })
@@ -115,6 +115,9 @@ describe('CatalogService', () => {
     await expect(
       service.listMaterials({ materialDomainId: domain.id, page: 2, pageSize: 10 }),
     ).resolves.toMatchObject({ items: [material] })
+    await expect(service.listMaterials({ search: 'حاسوب' })).resolves.toMatchObject({
+      items: [material],
+    })
     await expect(service.listUnitsOfMeasure({})).resolves.toMatchObject({ items: [unit] })
     await expect(service.listMaterialUnitConversions(material.id, {})).resolves.toMatchObject({
       items: [conversion],
@@ -127,6 +130,7 @@ describe('CatalogService', () => {
       // The pagination params lead the query because the service spreads
       // `toWireOneBasedPaginationParams` first and appends the bound filters.
       `${MATERIALS_PATH}?page=2&pageSize=10&materialDomainId=${domain.id}`,
+      `${MATERIALS_PATH}?search=${encodeURIComponent('حاسوب')}`,
       `${UNITS_PATH}`,
       `${MATERIALS_PATH}/${material.id}/unit-conversions`,
     ])

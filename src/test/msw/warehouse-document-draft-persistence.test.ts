@@ -68,7 +68,7 @@ function draftRequest(overrides: Partial<CompleteDraftRequest> = {}): CompleteDr
   return {
     documentType: 'Receiving',
     lines: [],
-    receivingInfo: { supplierPartyId: MATERIAL_ID },
+    receivingInfo: { supplierRef: 'مورد دمشق' },
     warehouseId: WAREHOUSE_ID,
     ...overrides,
   }
@@ -86,7 +86,7 @@ describe('buildCompleteDraftDocument', () => {
       documentId: DOCUMENT_ID,
       documentStatus: 'Draft',
       documentType: 'Receiving',
-      receivingInfo: { supplierRef: MATERIAL_ID, receivingType: 'Supplier' },
+      receivingInfo: { supplierRef: 'مورد دمشق', receivingType: 'Supplier' },
       rowVersion: 1,
       systemReferenceNumber: 'EIAMS-RCV-2024-0004',
       warehouse: { id: WAREHOUSE_ID, displayName: warehouse.name },
@@ -203,7 +203,7 @@ describe('draft persistence handlers', () => {
     expect(store).toHaveLength(1)
     expect(store[0]?.documentId).toBe(created.id)
     expect(created.receivingInfo).toEqual({
-      supplierRef: MATERIAL_ID,
+      supplierRef: 'مورد دمشق',
       supplierInvoiceRef: null,
       receivingType: 'Supplier',
     })

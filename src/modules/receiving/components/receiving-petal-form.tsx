@@ -58,8 +58,8 @@ export interface ReceivingPetalFormProps {
 }
 
 /**
- * Supplier selector control props. The combobox commits the supplier's
- * external-party id, which is what the draft write binds as `SupplierPartyId`.
+ * Supplier selector control props. The combobox commits the supplier NAME,
+ * which is the free-text `supplierRef` the draft write binds.
  */
 interface SupplierSelectorControlProps {
   loadOptions: OptionLoader<SupplierSuggestion>
@@ -70,12 +70,13 @@ interface SupplierSelectorControlProps {
 }
 
 /**
- * AsyncSelect wiring the shared FormItem owns: the combobox inputs a raw id and
- * aria attributes itself, so the control wires them from `useFormField()`
+ * AsyncSelect wiring the shared FormItem owns: the combobox inputs a raw name
+ * and aria attributes itself, so the control wires them from `useFormField()`
  * instead of going through FormControl's cloneElement.
  *
- * There is deliberately no `onCreate` row: a typed free-text supplier has no
- * external-party id, so committing it would save a draft the server cannot bind.
+ * Tab commits either the highlighted suggestion or the typed name, and blur
+ * commits the typed name when nothing was selected yet, so the keeper can submit
+ * a supplier the suggestion list does not carry without pressing Tab first.
  */
 function SupplierSelectorControl({
   loadOptions,
@@ -91,14 +92,26 @@ function SupplierSelectorControl({
       loadOptions={loadOptions}
       onValueChange={(nextValue) => onValueChange(nextValue ?? '')}
       disabled={disabled || !scopeReady}
+      commitOnTab
+      allowFreeText
       inputProps={{
         id: formItemId,
         'aria-invalid': error ? true : undefined,
         'aria-required': required || undefined,
         'aria-describedby':
           [formDescriptionId, error ? formMessageId : ''].filter(Boolean).join(' ') || undefined,
+        // Free text otherwise binds only on a suggestion click or a Tab commit;
+        // committing the typed name on blur keeps Save from reporting "supplier
+        // required" while the typed name is still visible in the combobox. A
+        // clicked suggestion still wins: it writes the field after the blur.
+        onBlur: (event) => {
+          const typed = event.currentTarget.value.trim()
+          if (value === '' && typed !== '') {
+            onValueChange(typed)
+          }
+        },
       }}
-      placeholder={scopeReady ? 'ابحث عن مورد ضمن نطاقك...' : 'بانتظار اختيار النطاق...'}
+      placeholder={scopeReady ? 'اكتب اسم المورد أو ابحث عنه...' : 'بانتظار اختيار النطاق...'}
       emptyMessage="لا توجد نتائج مطابقة."
       errorMessage="تعذر البحث عن الموردين."
     />
@@ -107,9 +120,9 @@ function SupplierSelectorControl({
 
 /**
  * ReceivingInfo petal editor (e13-t03). Composes the shared header spine via
- * the `petalSlot` render prop of {@link DocumentHeaderSection}; the supplier is
- * picked from the live `GET /receiving-infos/suppliers` suggestions, which carry
- * the external-party id the write binds.
+ * the `petalSlot` render prop of {@link DocumentHeaderSection}; the supplier
+ * NAME comes from the live `GET /receiving-infos/suppliers` suggestions or from
+ * the typed text, which the V1 draft stores as free text.
  *
  * RHF contract: reads and writes the page's form context through the
  * `petal.receivingInfo.` name prefix, mirroring `DocumentPetals<Receiving>`.
@@ -128,7 +141,7 @@ export function ReceivingPetalForm({ disabled = false }: ReceivingPetalFormProps
       <div className="grid gap-5 md:grid-cols-2">
         <FormField
           control={form.control}
-          name="petal.receivingInfo.supplierPartyId"
+          name="petal.receivingInfo.supplierRef"
           rules={{ required: true }}
           render={({ field }) => (
             <FormItem>
