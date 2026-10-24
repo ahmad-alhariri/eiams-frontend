@@ -83,10 +83,12 @@ function pathWithId(path: string, parameter: string, id: string): string {
  * with 400 `REQUEST_VALIDATION_FAILED`.
  *
  * Every list query is built by the six builders below rather than by casting
- * the caller's object. The casts these replaced (`query as Record<string,
- * string | number | boolean | undefined>`) are how `search` — a parameter no
- * catalog list binds and no `List*Query` type carried — reached the wire
- * anyway, and how the page wrapper got its `as unknown as XPage` companion.
+ * the caller's object. The casts these replaced
+ * (`query as Record<string, string | number | boolean | undefined>`) are how a
+ * parameter no catalog list binds reached the wire anyway, and how the page
+ * wrapper got its `as unknown as XPage` companion. Each builder now declares
+ * exactly the filters its contract route accepts (materials, for instance,
+ * carries a typed `search`).
  */
 
 /** Binds no filter at all — pagination only. */
@@ -124,6 +126,7 @@ function materialFamiliesQuery(query: ListMaterialFamiliesQuery): WireQuery {
 function materialsQuery(query: ListMaterialsQuery): WireQuery {
   return {
     ...toWireOneBasedPaginationParams(query),
+    ...(query.search === undefined ? {} : { search: query.search }),
     ...(query.familyId === undefined ? {} : { familyId: query.familyId }),
     ...(query.materialDomainId === undefined ? {} : { materialDomainId: query.materialDomainId }),
     ...(query.status === undefined ? {} : { status: query.status }),

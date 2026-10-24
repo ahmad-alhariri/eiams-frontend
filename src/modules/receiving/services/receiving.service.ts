@@ -5,13 +5,12 @@ const RECEIVING_SUPPLIERS_PATH = '/receiving-infos/suppliers'
 
 /**
  * `Application.ReceivingInfos.SupplierSuggestionResponse` — the live supplier
- * picker row. `id` is the external-party id the draft write binds as
- * `SupplierPartyId`; the snapshot's `string[]` suggestion shape was invented.
+ * picker row. The V1 draft binds the supplier NAME, so the row carries only
+ * `name`; the combobox commits it as text and the server stores it as
+ * `supplier_ref`.
  */
 export interface SupplierSuggestion {
-  readonly id: string
-  readonly nameAr: string
-  readonly code: string | null
+  readonly name: string
 }
 
 export interface ReceivingService {

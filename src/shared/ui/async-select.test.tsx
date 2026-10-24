@@ -347,6 +347,67 @@ describe('AsyncSelect', () => {
     expect(input()).toHaveValue('مستودع حلب')
   })
 
+  it('commits the highlighted suggestion on Tab when commitOnTab is on', async () => {
+    const onValueChange = vi.fn()
+    render(
+      <AsyncSelect<WarehousePayload>
+        loadOptions={vi.fn(async () => warehouseOptions)}
+        onValueChange={onValueChange}
+        commitOnTab
+      />,
+    )
+
+    await typeQuery('مستودع')
+    pressKey('ArrowDown')
+    pressKey('Tab')
+
+    expect(onValueChange).toHaveBeenCalledExactlyOnceWith(
+      'wh-damascus',
+      expect.objectContaining({ value: 'wh-damascus', label: 'مستودع دمشق' }),
+    )
+    expect(input()).toHaveValue('مستودع دمشق')
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+
+  it('commits the typed text on Tab when allowFreeText is on and nothing is highlighted', async () => {
+    const onValueChange = vi.fn()
+    render(
+      <AsyncSelect<WarehousePayload>
+        loadOptions={vi.fn(async () => [])}
+        onValueChange={onValueChange}
+        commitOnTab
+        allowFreeText
+      />,
+    )
+
+    await typeQuery('  مورد جديد  ')
+    pressKey('Tab')
+
+    expect(onValueChange).toHaveBeenCalledExactlyOnceWith('مورد جديد', {
+      value: 'مورد جديد',
+      label: 'مورد جديد',
+    })
+    expect(input()).toHaveValue('مورد جديد')
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+
+  it('only closes the panel on Tab when both commit props are off', async () => {
+    const onValueChange = vi.fn()
+    render(
+      <AsyncSelect<WarehousePayload>
+        loadOptions={vi.fn(async () => warehouseOptions)}
+        onValueChange={onValueChange}
+      />,
+    )
+
+    await typeQuery('مستودع')
+    pressKey('ArrowDown')
+    pressKey('Tab')
+
+    expect(onValueChange).not.toHaveBeenCalled()
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+
   it('renders a custom renderOption result', async () => {
     render(
       <AsyncSelect<WarehousePayload>

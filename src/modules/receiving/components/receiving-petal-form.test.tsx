@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { FormProvider, useForm } from 'react-hook-form'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -15,11 +15,10 @@ import {
 } from './receiving-petal-form'
 
 /**
- * The petal writes `ReceivingDraftDetails(SupplierPartyId, SupplierInvoiceRef)`.
- * There is deliberately no `receivingType` control (the backend fixes
- * `ReceivingType.Supplier` server-side) and no free-text "create supplier" row
- * (a typed name has no external-party id, so committing it would save a draft the
- * server cannot bind). Both controls here are the ones the real write carries.
+ * The petal writes `ReceivingDraftDetails(SupplierRef, SupplierInvoiceRef)`.
+ * `supplierRef` is V1 free text — the supplier NAME — so the combobox commits a
+ * suggestion or the typed name on Tab. There is deliberately no `receivingType`
+ * control: the backend fixes `ReceivingType.Supplier` server-side.
  */
 
 const activeScope = vi.hoisted(() => ({
@@ -30,7 +29,7 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
 }))
 
-function createWrapper() {
+function createWrapper(onSubmit?: (values: ReceivingPetalFormValues) => void) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -40,14 +39,17 @@ function createWrapper() {
       resolver: zodResolver(receivingPetalFormSchema),
       defaultValues: {
         petal: {
-          receivingInfo: { supplierPartyId: '', supplierInvoiceRef: '' },
+          receivingInfo: { supplierRef: '', supplierInvoiceRef: '' },
         },
       },
     })
     return (
       <QueryClientProvider client={client}>
         <FormProvider {...form}>
-          <form onSubmit={(event) => void form.handleSubmit(() => undefined)(event)} noValidate>
+          <form
+            onSubmit={(event) => void form.handleSubmit((values) => onSubmit?.(values))(event)}
+            noValidate
+          >
             <ReceivingPetalForm />
             <button type="submit">حفظ</button>
           </form>
@@ -80,7 +82,7 @@ describe('ReceivingPetalForm', () => {
 
     await user.click(screen.getByRole('button', { name: 'حفظ' }))
 
-    expect(await screen.findByText('يجب اختيار مورد صالح من القائمة.')).toBeInTheDocument()
+    expect(await screen.findByText('اسم المورد مطلوب.')).toBeInTheDocument()
   })
 
   it('selects a supplier suggestion and accepts an optional invoice reference', async () => {
@@ -95,21 +97,58 @@ describe('ReceivingPetalForm', () => {
     await user.type(screen.getByLabelText('رقم فاتورة المورد'), 'INV-2025-01')
     await user.click(screen.getByRole('button', { name: 'حفظ' }))
 
-    expect(screen.queryByText('يجب اختيار مورد صالح من القائمة.')).not.toBeInTheDocument()
+    expect(screen.queryByText('اسم المورد مطلوب.')).not.toBeInTheDocument()
   })
 
-  it('offers no free-text create row: a typed name carries no external-party id', async () => {
+  it('commits a typed supplier NAME on Tab and submits it as supplierRef', async () => {
     const user = userEvent.setup()
+    const submitted: ReceivingPetalFormValues[] = []
     server.use(...createReceivingSuppliersHandler(['Sham Co']))
-    render(<ReceivingPetalForm />, { wrapper: createWrapper() })
+    render(<ReceivingPetalForm />, { wrapper: createWrapper((values) => submitted.push(values)) })
 
     const supplierCombo = screen.getByRole('combobox', { name: 'المورد' })
-    await user.click(supplierCombo)
     await user.type(supplierCombo, 'NewProvider')
+    // Tab commits the typed name as free text, so the suggestion list does not
+    // have to carry a supplier the keeper already knows.
+    await user.tab()
+    await user.click(screen.getByRole('button', { name: 'حفظ' }))
 
-    expect(
-      screen.queryByRole('button', { name: 'استخدام "NewProvider" كمورد' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByText('اسم المورد مطلوب.')).not.toBeInTheDocument()
+    expect(submitted).toHaveLength(1)
+    expect(submitted[0]?.petal.receivingInfo.supplierRef).toBe('NewProvider')
+  })
+
+  it('commits the typed supplier NAME on blur so Save works without Tab', async () => {
+    const user = userEvent.setup()
+    const submitted: ReceivingPetalFormValues[] = []
+    server.use(...createReceivingSuppliersHandler(['Sham Co']))
+    render(<ReceivingPetalForm />, { wrapper: createWrapper((values) => submitted.push(values)) })
+
+    const supplierCombo = screen.getByRole('combobox', { name: 'المورد' })
+    await user.type(supplierCombo, '  NewProvider  ')
+    // Blur alone (no Tab, no suggestion) must bind the trimmed typed name;
+    // submitting the form directly keeps the pointer from blurring the input.
+    fireEvent.blur(supplierCombo)
+    fireEvent.submit(screen.getByText('حفظ').closest('form')!)
+
+    await waitFor(() => expect(submitted).toHaveLength(1))
+    expect(screen.queryByText('اسم المورد مطلوب.')).not.toBeInTheDocument()
+    expect(submitted[0]?.petal.receivingInfo.supplierRef).toBe('NewProvider')
+  })
+
+  it('keeps the clicked suggestion when the typed query also blurs', async () => {
+    const user = userEvent.setup()
+    const submitted: ReceivingPetalFormValues[] = []
+    server.use(...createReceivingSuppliersHandler(['Sham Co']))
+    render(<ReceivingPetalForm />, { wrapper: createWrapper((values) => submitted.push(values)) })
+
+    const supplierCombo = screen.getByRole('combobox', { name: 'المورد' })
+    await user.type(supplierCombo, 'Sham')
+    await user.click(await screen.findByRole('option', { name: 'Sham Co' }))
+    await user.click(screen.getByRole('button', { name: 'حفظ' }))
+
+    expect(submitted).toHaveLength(1)
+    expect(submitted[0]?.petal.receivingInfo.supplierRef).toBe('Sham Co')
   })
 
   it('disables the supplier autocomplete until a scope is active', () => {

@@ -43,8 +43,9 @@
  *  5. `factor` on a unit conversion is a JSON NUMBER, even though the column
  *     is `DECIMAL(18,6)`. See {@link MaterialUnitConversion}.
  *  6. `requiresAssetNumber` is SERVER-DERIVED — readable, never sendable.
- *  7. No catalog list binds `search` or any sort parameter, and the
- *     units-of-measure list binds no filter at all — not even `status`.
+ *  7. The materials list is the ONE catalog list that binds `search`; no list
+ *     binds a sort parameter, and the units-of-measure list binds no filter at
+ *     all — not even `status`.
  */
 
 // ---------------------------------------------------------------------------
@@ -571,10 +572,9 @@ export type MaterialUnitConversionPage = ApiPage<MaterialUnitConversion>
  * `pageSize` is bounded by the backend at `[1, 100]` (default 20), clamped the
  * same way.
  *
- * There is NO `search` and NO sort parameter on ANY catalog list — verified
- * against all six controllers. The old `search` fields were fiction the
- * server silently ignored; a call site that still sends one (e.g. the scoped
- * material selector) is consulting this slice's breakage report.
+ * The materials list binds `search` (name/code); no other catalog list does, and
+ * no catalog list binds a sort parameter. A call site that sends an unbound
+ * filter is consulting this slice's breakage report.
  *
  * `status` filters are STRING enum names even though `Set*Status` bodies are
  * ordinals — query binding and body binding are separate paths.
@@ -621,14 +621,16 @@ export interface ListMaterialFamiliesQuery {
 }
 
 /**
- * `GET /catalog/materials` filters: `familyId?`, `materialDomainId?`,
- * `status?` — the material domain filter is `materialDomainId`, not
- * `domainId`/`categoryId`. `status` is {@link MaterialStatus}, so `Archived`
- * is expressible here.
+ * `GET /catalog/materials` filters: `search?`, `familyId?`,
+ * `materialDomainId?`, `status?` — the material domain filter is
+ * `materialDomainId`, not `domainId`/`categoryId`, and `search` matches the
+ * material name/code server-side. `status` is {@link MaterialStatus}, so
+ * `Archived` is expressible here.
  */
 export interface ListMaterialsQuery {
   readonly page?: number
   readonly pageSize?: number
+  readonly search?: string
   readonly familyId?: Uuid
   readonly materialDomainId?: Uuid
   readonly status?: MaterialStatus

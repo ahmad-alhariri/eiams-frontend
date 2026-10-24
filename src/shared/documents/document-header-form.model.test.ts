@@ -187,7 +187,7 @@ describe('buildCompleteDraftRequest', () => {
   it('maps a Receiving document to receivingInfo', () => {
     const receivingInfo = {
       supplierInvoiceRef: 'INV-2024-01',
-      supplierPartyId: '77777777-7777-4777-8777-777777777777',
+      supplierRef: 'شركة الأثاث للتوريدات',
     }
     const request = buildCompleteDraftRequest({
       documentType: 'Receiving',
@@ -291,7 +291,7 @@ describe('buildCompleteDraftRequest', () => {
       documentType: 'Receiving',
       header: validHeader(),
       lines: lines(),
-      petals: { receivingInfo: { supplierPartyId: WAREHOUSE_ID } },
+      petals: { receivingInfo: { supplierRef: 'مورد نقدي' } },
     })
     expect('openingAsOfDate' in receivingRequest).toBe(false)
 
@@ -322,7 +322,7 @@ describe('buildCompleteDraftRequest', () => {
       documentType: 'Receiving',
       header: validHeader(),
       lines: assetLines,
-      petals: { receivingInfo: { supplierPartyId: WAREHOUSE_ID } },
+      petals: { receivingInfo: { supplierRef: 'مورد نقدي' } },
     })
 
     expect(request.lines).toEqual(assetLines)

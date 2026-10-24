@@ -32,7 +32,6 @@ import ReceivingDocumentFormPage from './receiving-document-form-page'
 const API_BASE_URL = '/api/v1'
 const WAREHOUSE_ID = fixtureUuid(300)
 const MATERIAL_ID = fixtureUuid(401)
-const SUPPLIER_PARTY_ID = fixtureUuid(600)
 const ASSET_MATERIAL_ID = fixtureUuid(402)
 const MATERIAL_DOMAIN_ID = fixtureUuid(20)
 const MATERIAL_BASE_UNIT_ID = fixtureUuid(23)
@@ -174,9 +173,14 @@ function unitsOfMeasureHandler() {
 }
 
 function usePageHandlers(store: WarehouseDocument[], nextSystemReference: () => string) {
+  /** The `search` value each material-list request carried, per test. */
+  const materialSearches: Array<string | null> = []
   server.use(
     http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
-    http.get(`${API_BASE_URL}/catalog/materials`, () => okPageJson([material, assetMaterial])),
+    http.get(`${API_BASE_URL}/catalog/materials`, ({ request }) => {
+      materialSearches.push(new URL(request.url).searchParams.get('search'))
+      return okPageJson([material, assetMaterial])
+    }),
     http.get(`${API_BASE_URL}/warehouses/:warehouseId/capabilities`, () => okJson([capability])),
     http.get(`${API_BASE_URL}/catalog/materials/:materialId/unit-conversions`, () => okJson([])),
     unitsOfMeasureHandler(),
@@ -190,6 +194,7 @@ function usePageHandlers(store: WarehouseDocument[], nextSystemReference: () => 
     // afterwards through its own guarded route.
     paperReferenceHandler(store),
   )
+  return materialSearches
 }
 
 /** Applies the `paper-reference` write to the store, mirroring the live route. */
@@ -242,7 +247,7 @@ describe('ReceivingDocumentFormPage', () => {
 
     expect(await screen.findByText('يجب اختيار مستودع صالح من القائمة.')).toBeInTheDocument()
     expect(screen.getByText('رقم المستند الورقي مطلوب.')).toBeInTheDocument()
-    expect(screen.getByText('يجب اختيار مورد صالح من القائمة.')).toBeInTheDocument()
+    expect(await screen.findByText('اسم المورد مطلوب.')).toBeInTheDocument()
     expect(screen.getAllByText('يجب اختيار مادة صالحة.')).not.toHaveLength(0)
   })
 
@@ -259,7 +264,7 @@ describe('ReceivingDocumentFormPage', () => {
 
   it('creates a Receiving draft from header + petal + lines and navigates to the detail page', async () => {
     const store: WarehouseDocument[] = []
-    usePageHandlers(store, () => 'EIAMS-RCV-2024-0007')
+    const materialSearches = usePageHandlers(store, () => 'EIAMS-RCV-2024-0007')
 
     const user = userEvent.setup()
     render(<ReceivingDocumentFormPage />, { wrapper: createWrapper() })
@@ -276,11 +281,12 @@ describe('ReceivingDocumentFormPage', () => {
     expect(created.paperDocumentNumber).toBe('2024/101')
     expect(created.paperDocumentYear).toBe(2024)
     expect(created.warehouse.id).toBe(WAREHOUSE_ID)
-    // The write carries the supplier's EXTERNAL-PARTY ID, never its display
-    // name: the route binds `Guid SupplierPartyId`, and the server fixes the
+    // The write carries the supplier NAME as V1 free text; the server fixes the
     // receiving type to `Supplier` for every receiving draft.
     expect(created.receivingInfo).toMatchObject({ receivingType: 'Supplier' })
-    expect(created.receivingInfo?.supplierRef).toBe(SUPPLIER_PARTY_ID)
+    expect(created.receivingInfo?.supplierRef).toBe('Sham Co')
+    // The material picker sends the typed query to the catalog list.
+    expect(materialSearches).toContain('pc')
     expect(created.lines).toHaveLength(1)
     expect(created.lines[0]).toMatchObject({
       lineType: 'Normal',

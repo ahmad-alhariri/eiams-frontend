@@ -189,7 +189,7 @@ describe('document transport', () => {
     const draftRequest: CompleteDraftRequest = {
       documentType: 'Receiving',
       lines: [{ assetInputs: [{ serialNumber: null }], materialId: fixtureUuid(24), quantity: 5 }],
-      receivingInfo: { supplierInvoiceRef: 'INV-1', supplierPartyId: fixtureUuid(80) },
+      receivingInfo: { supplierInvoiceRef: 'INV-1', supplierRef: 'مورد دمشق' },
       warehouseId: WAREHOUSE_ID,
     }
     const received: Array<{ body: unknown; idempotencyKey: string | null }> = []

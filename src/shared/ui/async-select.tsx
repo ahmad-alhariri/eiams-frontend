@@ -35,6 +35,16 @@ export interface AsyncSelectProps<T> {
   disabled?: boolean
   /** Shows the selected value while blocking any interaction. */
   readOnly?: boolean
+  /**
+   * When true, pressing Tab commits the currently highlighted suggestion.
+   * Default: false (Tab only closes the panel, as before).
+   */
+  commitOnTab?: boolean
+  /**
+   * When true, the trimmed typed text is committed as the value if no
+   * suggestion is highlighted (free-text entry). Default: false.
+   */
+  allowFreeText?: boolean
   /** Empty results message. Default: "لا توجد نتائج". */
   emptyMessage?: string
   /** Error message inside the panel. Default: "تعذر البحث في الخيارات". */
@@ -119,6 +129,8 @@ function AsyncSelect<T>({
   placeholder = 'اكتب للبحث...',
   disabled = false,
   readOnly = false,
+  commitOnTab = false,
+  allowFreeText = false,
   emptyMessage = 'لا توجد نتائج',
   errorMessage = 'تعذر البحث في الخيارات',
   onCreate,
@@ -158,6 +170,9 @@ function AsyncSelect<T>({
   // skipped only then; real dismissals (Escape, outside-press, selection) run
   // it and clear the query as intended.
   const retypingRef = useRef(false)
+  // The option Base UI currently highlights (hover or ArrowDown). Kept in a ref
+  // because Tab reads it inside a keydown handler, not during render.
+  const highlightedOptionRef = useRef<AsyncSelectOption<T> | null>(null)
 
   useEffect(() => {
     loadOptionsRef.current = loadOptions
@@ -350,6 +365,9 @@ function AsyncSelect<T>({
         onInputValueChange={handleInputValueChange}
         itemToStringLabel={(option) => option.label}
         isItemEqualToValue={(itemValue, value) => itemValue?.value === value?.value}
+        onItemHighlighted={(option) => {
+          highlightedOptionRef.current = option ?? null
+        }}
       >
         <Combobox.Input
           data-slot="async-select-input"
@@ -386,6 +404,18 @@ function AsyncSelect<T>({
               }
             }
             if (e.key === 'Tab') {
+              const trimmed = inputText.trim()
+              const highlighted = openRef.current ? highlightedOptionRef.current : null
+              const commitOption =
+                commitOnTab && !disabled && !readOnly && trimmed !== ''
+                  ? (highlighted ?? (allowFreeText ? { value: trimmed, label: trimmed } : null))
+                  : null
+              if (commitOption) {
+                setCreateRowFocused(false)
+                // No preventDefault: focus still moves to the next field.
+                handleRootValueChange(commitOption)
+                return
+              }
               openRef.current = false
               setOpen(false)
               onOpenChangeProp?.(false)

@@ -1,6 +1,5 @@
 import { createAxiosTransport } from '@/shared/api/axios-transport'
 import { errJson, okJson } from '@/test/msw/envelope'
-import { fixtureUuid } from '@/test/msw/factories'
 import { http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -38,19 +37,16 @@ afterEach(() => {
   for (const bundle of bundles.splice(0)) bundle.dispose()
 })
 
-/** `SupplierSuggestionResponse` as the backend serves it, not the invented `string[]`. */
+/** `SupplierSuggestionResponse` as the backend serves it — the supplier NAME only. */
 function createSupplierSuggestion(overrides: Partial<SupplierSuggestion> = {}): SupplierSuggestion {
-  return { id: fixtureUuid(600), nameAr: 'مورد الشام', code: null, ...overrides }
+  return { name: 'مورد الشام', ...overrides }
 }
 
 describe('ReceivingService', () => {
   it('maps the supplier-suggestion query to the contract endpoint and returns the typed rows', async () => {
     const service = setupService()
     const requestedUrls: string[] = []
-    const suppliers = [
-      createSupplierSuggestion(),
-      createSupplierSuggestion({ id: fixtureUuid(601), nameAr: 'مورد النور', code: 'SUP-02' }),
-    ]
+    const suppliers = [createSupplierSuggestion(), createSupplierSuggestion({ name: 'مورد النور' })]
 
     server.use(
       http.get(SUPPLIERS_PATH, ({ request }) => {
