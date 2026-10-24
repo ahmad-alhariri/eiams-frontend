@@ -93,8 +93,7 @@ export default function InventoryCountListPage() {
         columnHelper.accessor('plannedAtUtc', {
           id: 'plannedAtUtc',
           header: 'أُخططت في',
-          cell: ({ getValue }) =>
-            getValue() === null ? '—' : <span dir="ltr">{getValue()}</span>,
+          cell: ({ getValue }) => (getValue() === null ? '—' : <span dir="ltr">{getValue()}</span>),
         }),
         columnHelper.display({
           id: 'open',

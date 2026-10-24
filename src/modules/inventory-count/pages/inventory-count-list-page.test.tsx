@@ -63,10 +63,10 @@ function useCountHandlers() {
           abortedAtUtc: null,
         },
       ])
-      }),
-      ...countNameHandlers({ warehouses: { [fixtureUuid(30)]: 'W1' } }),
-    )
-  }
+    }),
+    ...countNameHandlers({ warehouses: { [fixtureUuid(30)]: 'W1' } }),
+  )
+}
 
 function renderPage(permissionCodes: readonly string[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -90,8 +90,10 @@ describe('InventoryCountListPage (e20-t02)', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'جلسات الجرد' }),
     ).toBeInTheDocument()
-        expect(await screen.findByText(INVENTORY_COUNT_TYPE_LABELS_AR.Cycle)).toBeInTheDocument()
-    expect(await screen.findByText(INVENTORY_COUNT_SCOPE_LABELS_AR.EntireWarehouse)).toBeInTheDocument()
+    expect(await screen.findByText(INVENTORY_COUNT_TYPE_LABELS_AR.Cycle)).toBeInTheDocument()
+    expect(
+      await screen.findByText(INVENTORY_COUNT_SCOPE_LABELS_AR.EntireWarehouse),
+    ).toBeInTheDocument()
     const detailLink = screen.getByRole('link', { name: /\u0641\u062A\u062D/ })
     expect(detailLink.getAttribute('href')).toBe(`/counts/${COUNT_ID}`)
   })

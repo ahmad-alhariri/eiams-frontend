@@ -162,7 +162,10 @@ describe('cross-module scenario data', () => {
   it('links a completed count variance to its posted adjustment and immutable audit evidence', () => {
     const scenario = createCrossModuleScenario()
 
-    expect(scenario.adjustments.count).toMatchObject({ status: 'Completed', summary: { varianceLines: 1 } })
+    expect(scenario.adjustments.count).toMatchObject({
+      status: 'Completed',
+      summary: { varianceLines: 1 },
+    })
     expect(scenario.adjustments.countLines[0]).toMatchObject({ difference: 2, snapshotQuantity: 7 })
     expect(scenario.adjustments.countVariance).toMatchObject({
       countId: scenario.adjustments.count.id,

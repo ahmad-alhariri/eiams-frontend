@@ -186,22 +186,27 @@ export function CountVarianceReview({
       {/* The four totals are the server's summary, verbatim (F7). */}
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-popover px-4 py-3 text-sm">
         <span>
-          إجمالي البنود: <strong className="text-foreground">{toArabicDigits(summary.totalLines)}</strong>
+          إجمالي البنود:{' '}
+          <strong className="text-foreground">{toArabicDigits(summary.totalLines)}</strong>
         </span>
         <span>
-          أُدخلت: <strong className="text-foreground">{toArabicDigits(summary.countedLines)}</strong>
+          أُدخلت:{' '}
+          <strong className="text-foreground">{toArabicDigits(summary.countedLines)}</strong>
         </span>
         <span>
-          ذات فرق: <strong className="text-foreground">{toArabicDigits(summary.varianceLines)}</strong>
+          ذات فرق:{' '}
+          <strong className="text-foreground">{toArabicDigits(summary.varianceLines)}</strong>
         </span>
         <span>
-          إجمالي الفرق (مطلق): <strong className="text-foreground">
+          إجمالي الفرق (مطلق):{' '}
+          <strong className="text-foreground">
             {toArabicDigits(summary.totalAbsoluteDifference)}
           </strong>
         </span>
         {missingReason.length > 0 ? (
           <span>
-            دون سبب: <strong className="text-destructive">{toArabicDigits(missingReason.length)}</strong>
+            دون سبب:{' '}
+            <strong className="text-destructive">{toArabicDigits(missingReason.length)}</strong>
           </span>
         ) : null}
       </div>

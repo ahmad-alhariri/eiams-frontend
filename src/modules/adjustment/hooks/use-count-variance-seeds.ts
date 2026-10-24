@@ -18,10 +18,7 @@ import { queryKeys } from '@/shared/services/query-keys'
 export function useCountVarianceSeeds(materialIds: readonly string[]) {
   const { activeScopeCacheKey } = useActiveScopeContext()
 
-  const uniqueIds = useMemo(
-    () => [...new Set(materialIds)],
-    [materialIds],
-  )
+  const uniqueIds = useMemo(() => [...new Set(materialIds)], [materialIds])
   const nameQueries = useQueries({
     queries: uniqueIds.map((materialId) => ({
       queryKey: queryKeys.scoped(

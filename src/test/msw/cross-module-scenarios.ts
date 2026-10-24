@@ -8,7 +8,10 @@ import type {
   NamedReference,
   WarehouseDocument,
 } from '@/shared/types/generated/eiams-v1'
-import type { InventoryCount, InventoryCountLine } from '@/modules/inventory-count/types/inventory-count.types'
+import type {
+  InventoryCount,
+  InventoryCountLine,
+} from '@/modules/inventory-count/types/inventory-count.types'
 import type { AdjustmentDetail } from '@/modules/adjustment/types/adjustment.types'
 // `Warehouse` is typed against the handwritten contract, NOT the frozen generated
 // snapshot: the wire record serves `id` + `name` and a FLAT `siteId`, so the

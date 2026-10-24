@@ -47,13 +47,17 @@ function useHandlers(lines: unknown[]) {
   currentLines = typed
   server.use(
     http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, () =>
-      okPageJson(
-        typed.map(toWireLine),
-        { page: 1, pageSize: 200, totalCount: typed.length, totalPages: 1 },
-      ),
+      okPageJson(typed.map(toWireLine), {
+        page: 1,
+        pageSize: 200,
+        totalCount: typed.length,
+        totalPages: 1,
+      }),
     ),
     ...countNameHandlers({
-      materials: Object.fromEntries(typed.map((line) => [line.material.id, line.material.displayName])),
+      materials: Object.fromEntries(
+        typed.map((line) => [line.material.id, line.material.displayName]),
+      ),
     }),
   )
 }
@@ -77,7 +81,12 @@ function renderReview(opts: {
   onComplete: () => void
   isCompleting?: boolean
   completeError?: string | null
-  summary?: { totalLines: number; countedLines: number; varianceLines: number; totalAbsoluteDifference: number }
+  summary?: {
+    totalLines: number
+    countedLines: number
+    varianceLines: number
+    totalAbsoluteDifference: number
+  }
   canClose?: boolean
   onClose?: () => void
   isClosing?: boolean
@@ -200,7 +209,8 @@ describe('CountVarianceReview (e20-t07)', () => {
       ...matchingLine,
       countLineId: `matching-${index}`,
     }))
-    server.use(...countNameHandlers({ materials: { m1: 'ورق تصوير A4', m3: 'طابعة ليزر' } }),
+    server.use(
+      ...countNameHandlers({ materials: { m1: 'ورق تصوير A4', m3: 'طابعة ليزر' } }),
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
         const page = Number(new URL(request.url).searchParams.get('page') ?? '1')
         const pageIndex = page - 1
@@ -213,7 +223,12 @@ describe('CountVarianceReview (e20-t07)', () => {
         })
       }),
     )
-    renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn(), summary: { totalLines: 201, countedLines: 201, varianceLines: 1, totalAbsoluteDifference: 3 } })
+    renderReview({
+      permissions: ['count.complete'],
+      canComplete: true,
+      onComplete: vi.fn(),
+      summary: { totalLines: 201, countedLines: 201, varianceLines: 1, totalAbsoluteDifference: 3 },
+    })
 
     // The whole session is read (server pages 0 and 1), so the gate and the
     // summary both account for all 201 lines. The 200 seeded lines share one
@@ -236,19 +251,24 @@ describe('CountVarianceReview (e20-t07)', () => {
   it('does not publish a partial count when a later page fails and permits retry', async () => {
     let failLaterPage = true
     server.use(
-      ...countNameHandlers({ materials: { m1: 'ورق تصوير A4', m2: 'حاسوب مكتبي', m3: 'طابعة ليزر' } }),
+      ...countNameHandlers({
+        materials: { m1: 'ورق تصوير A4', m2: 'حاسوب مكتبي', m3: 'طابعة ليزر' },
+      }),
       http.get(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/lines`, ({ request }) => {
         const page = Number(new URL(request.url).searchParams.get('page') ?? '1')
         const pageIndex = page - 1
         if (pageIndex === 1 && failLaterPage) {
           return new HttpResponse(null, { status: 500 })
         }
-        return okPageJson((pageIndex === 0 ? [matchingLine] : [varianceWithReason]).map(toWireLine), {
-          page: pageIndex + 1,
-          pageSize: 1,
-          totalCount: 2,
-          totalPages: 2,
-        })
+        return okPageJson(
+          (pageIndex === 0 ? [matchingLine] : [varianceWithReason]).map(toWireLine),
+          {
+            page: pageIndex + 1,
+            pageSize: 1,
+            totalCount: 2,
+            totalPages: 2,
+          },
+        )
       }),
     )
     renderReview({ permissions: ['count.complete'], canComplete: true, onComplete: vi.fn() })

@@ -23,7 +23,9 @@ const WAREHOUSE_ID = 'w1'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
-    user: createSessionUser({ firstName: '\u0645\u062F\u064A\u0631 \u0627\u0644\u062C\u0631\u062F' }),
+    user: createSessionUser({
+      firstName: '\u0645\u062F\u064A\u0631 \u0627\u0644\u062C\u0631\u062F',
+    }),
     role: createSessionRole(),
     activeScope: createSessionScope(),
     permissionCodes: [...permissionCodes],
@@ -56,12 +58,19 @@ function countDetail(rowVersion: number, status: string) {
 function useHandlers() {
   startedBody = undefined
   server.use(
-    http.get(API_BASE_URL + '/inventory-counts/' + COUNT_ID, () => okJson(countDetail(1, 'Planned'))),
+    http.get(API_BASE_URL + '/inventory-counts/' + COUNT_ID, () =>
+      okJson(countDetail(1, 'Planned')),
+    ),
     http.post(API_BASE_URL + '/inventory-counts/' + COUNT_ID + '/start', async ({ request }) => {
       startedBody = (await request.json()) as { expectedRowVersion?: number }
       return okJson(countDetail(2, 'InProgress'))
     }),
-    ...countNameHandlers({ warehouses: { [WAREHOUSE_ID]: '\u0627\u0644\u0645\u0633\u062A\u0648\u062F\u0639 \u0627\u0644\u0645\u0631\u0643\u0632\u064A' } }),
+    ...countNameHandlers({
+      warehouses: {
+        [WAREHOUSE_ID]:
+          '\u0627\u0644\u0645\u0633\u062A\u0648\u062F\u0639 \u0627\u0644\u0645\u0631\u0643\u0632\u064A',
+      },
+    }),
   )
 }
 
@@ -80,7 +89,8 @@ function renderPage(permissionCodes: readonly string[] = ['count.view', 'count.p
 }
 
 const START = /\u0628\u062F\u0621 \u0627\u0644\u062C\u0644\u0633\u0629/
-const SPINE = /\u062C\u0631\u062F \u062F\u0648\u0631\u064A — \u0627\u0644\u0645\u0633\u062A\u0648\u062F\u0639 \u0643\u0627\u0645\u0644\u0627\u064B/
+const SPINE =
+  /\u062C\u0631\u062F \u062F\u0648\u0631\u064A — \u0627\u0644\u0645\u0633\u062A\u0648\u062F\u0639 \u0643\u0627\u0645\u0644\u0627\u064B/
 
 describe('CountDetailPage (live count detail contract)', () => {
   it('shows the planned session spine, the warehouse name and the freeze policy', async () => {
@@ -88,8 +98,14 @@ describe('CountDetailPage (live count detail contract)', () => {
     renderPage()
 
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(SPINE)
-    expect(await screen.findByText('\u0627\u0644\u0645\u0633\u062A\u0648\u062F\u0639 \u0627\u0644\u0645\u0631\u0643\u0632\u064A')).toBeInTheDocument()
-    expect(screen.getAllByText('\u062A\u062C\u0645\u064A\u062F \u0645\u0631\u0646 (SoftFreeze)').length).toBeGreaterThan(0)
+    expect(
+      await screen.findByText(
+        '\u0627\u0644\u0645\u0633\u062A\u0648\u062F\u0639 \u0627\u0644\u0645\u0631\u0643\u0632\u064A',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByText('\u062A\u062C\u0645\u064A\u062F \u0645\u0631\u0646 (SoftFreeze)').length,
+    ).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: START })).toBeInTheDocument()
   }, 20000)
 

@@ -38,7 +38,11 @@ export function CountToAdjustmentLaunch({ count }: { count: InventoryCount }) {
   }
   // Defensive `settlement` guard: until the backend serves the frozen detail
   // projection there is nothing settlement-driven to render, never a crash.
-  if (settlement === undefined || settlement.status === 'NotRequired' || settlement.status === 'Settled') {
+  if (
+    settlement === undefined ||
+    settlement.status === 'NotRequired' ||
+    settlement.status === 'Settled'
+  ) {
     return null
   }
 

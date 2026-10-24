@@ -212,11 +212,7 @@ describe('planCountLineSaves', () => {
   })
 
   it('keeps sendable and blocked rows separate within one page', () => {
-    const lines = [
-      line({ id: 'L1' }),
-      line({ id: 'L2', actualQuantity: 2 }),
-      line({ id: 'L3' }),
-    ]
+    const lines = [line({ id: 'L1' }), line({ id: 'L2', actualQuantity: 2 }), line({ id: 'L3' })]
     const { request, blocked } = planCountLineSaves(5, lines, {
       lines: [
         { actualQuantity: '3', reason: '' }, // L1 changed, sendable
