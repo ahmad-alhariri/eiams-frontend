@@ -16,8 +16,9 @@ import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { dataTableFeatures, type DataTableSortState } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
-import { Input } from '@/shared/ui/input'
+import { DatePicker } from '@/shared/ui/date-picker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
+import { normalizeApiError } from '@/shared/services/api-error'
 import { pageRows } from '@/shared/utils/table-data'
 import { formatDateTime, formatIdentifier, formatNumber, formatUuid } from '@/shared/utils/format'
 import type { StockMovement } from '@/modules/inventory/types/inventory.types'
@@ -58,13 +59,28 @@ function isMovementSortField(value: string): value is StockMovementSortField {
   return (MOVEMENT_SORT_FIELDS as readonly string[]).includes(value)
 }
 
-function toIsoDateTime(value: string): string | undefined {
-  if (value === '') {
+function startOfLocalDayIso(date: Date | undefined): string | undefined {
+  if (date === undefined) {
     return undefined
   }
 
-  const date = new Date(value)
-  return Number.isNaN(date.valueOf()) ? undefined : date.toISOString()
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).toISOString()
+}
+
+function endOfLocalDayIso(date: Date | undefined): string | undefined {
+  if (date === undefined) {
+    return undefined
+  }
+
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    23,
+    59,
+    59,
+    999,
+  ).toISOString()
 }
 
 function formatSignedDelta(quantityDelta: number): string {
@@ -96,14 +112,15 @@ function StockMovementsPage() {
   const [warehouseId, setWarehouseId] = useState<string | undefined>()
   const [materialId, setMaterialId] = useState<string | undefined>()
   const [movementType, setMovementType] = useState<MovementType | undefined>()
-  const [dateFromInput, setDateFromInput] = useState('')
-  const [dateToInput, setDateToInput] = useState('')
+  const [postedFrom, setPostedFrom] = useState<Date | undefined>()
+  const [postedTo, setPostedTo] = useState<Date | undefined>()
+  const [pickerResetKey, setPickerResetKey] = useState(0)
   const [sortBy, setSortBy] = useState<StockMovementSortField>('PostedAt')
   const [sortDirection, setSortDirection] = useState<SortDirection>('Descending')
   const warehouseSelector = useScopedWarehouseSelector()
   const materialSelector = useScopedMaterialSelector(true)
-  const dateFrom = toIsoDateTime(dateFromInput)
-  const dateTo = toIsoDateTime(dateToInput)
+  const dateFrom = startOfLocalDayIso(postedFrom)
+  const dateTo = endOfLocalDayIso(postedTo)
 
   const query = useMemo<ListStockMovementsQuery>(
     () => ({
@@ -177,16 +194,16 @@ function StockMovementsPage() {
   )
 
   const handleDateFromChange = useCallback(
-    (value: string) => {
-      setDateFromInput(value)
+    (date: Date | undefined) => {
+      setPostedFrom(date)
       resetPage()
     },
     [resetPage],
   )
 
   const handleDateToChange = useCallback(
-    (value: string) => {
-      setDateToInput(value)
+    (date: Date | undefined) => {
+      setPostedTo(date)
       resetPage()
     },
     [resetPage],
@@ -196,8 +213,9 @@ function StockMovementsPage() {
     setWarehouseId(undefined)
     setMaterialId(undefined)
     setMovementType(undefined)
-    setDateFromInput('')
-    setDateToInput('')
+    setPostedFrom(undefined)
+    setPostedTo(undefined)
+    setPickerResetKey((key) => key + 1)
     resetPage()
   }, [resetPage])
 
@@ -280,6 +298,10 @@ function StockMovementsPage() {
     direction: sortDirection === 'Ascending' ? 'asc' : 'desc',
   }
   const page = movementsQuery.data
+  // The shared normalizer already selected the table's Arabic by wire code;
+  // rendering its `titleAr` is what stops a 401 from wearing a connection
+  // message when only `detailAr` is null.
+  const movementsError = movementsQuery.isError ? normalizeApiError(movementsQuery.error) : null
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -328,19 +350,17 @@ function StockMovementsPage() {
               </Select>
             </FilterField>
             <FilterField label="من تاريخ الترحيل">
-              <Input
-                type="datetime-local"
-                aria-label="من تاريخ الترحيل"
-                value={dateFromInput}
-                onChange={(event) => handleDateFromChange(event.currentTarget.value)}
+              <DatePicker
+                key={`posted-from-${pickerResetKey}`}
+                ariaLabel="من تاريخ الترحيل"
+                onChange={handleDateFromChange}
               />
             </FilterField>
             <FilterField label="إلى تاريخ الترحيل">
-              <Input
-                type="datetime-local"
-                aria-label="إلى تاريخ الترحيل"
-                value={dateToInput}
-                onChange={(event) => handleDateToChange(event.currentTarget.value)}
+              <DatePicker
+                key={`posted-to-${pickerResetKey}`}
+                ariaLabel="إلى تاريخ الترحيل"
+                onChange={handleDateToChange}
               />
             </FilterField>
             <div className="flex items-end">
@@ -363,7 +383,11 @@ function StockMovementsPage() {
           isError={movementsQuery.isError}
           onRetry={() => void movementsQuery.refetch()}
           errorTitle="تعذّر تحميل حركات المخزون"
-          errorMessage="تعذّر جلب سجل الحركات من الخادم. تحقق من الاتصال ثم أعد المحاولة."
+          errorMessage={
+            movementsError === null
+              ? 'تعذّر جلب سجل الحركات من الخادم. تحقق من الاتصال ثم أعد المحاولة.'
+              : (movementsError.detailAr ?? movementsError.titleAr)
+          }
           emptyTitle="لا توجد حركات مخزون"
           emptyDescription="لم يتم العثور على حركات تطابق عوامل التصفية الحالية ضمن نطاق العمل."
           page={currentPage}

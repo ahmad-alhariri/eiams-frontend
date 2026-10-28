@@ -8,7 +8,6 @@ import {
   normalizeWireErrorCode,
   readApiError,
   unwrapData,
-  unwrapPage,
 } from '@/shared/api/envelope'
 
 /**
@@ -88,31 +87,6 @@ describe('EIAMS response envelope (real backend shape)', () => {
     }
 
     expect(unwrapData(response).accessToken).toBe('token')
-  })
-
-  it('unwraps a paged list with top-level pagination, not data.pageInfo', () => {
-    const page = unwrapPage(PAGE_SUCCESS)
-
-    // Snake_case, exactly as the live API sends it, and rows under `data`.
-    expect(page.data).toHaveLength(1)
-    expect(page.page).toBe(1)
-    expect(page.page_size).toBe(2)
-    expect(page.total_count).toBe(1)
-    expect(page.total_pages).toBe(1)
-    expect(page.has_next_page).toBe(false)
-  })
-
-  it('treats a missing pagination block as a single page rather than an error', () => {
-    const page = unwrapPage({
-      success: true,
-      data: [{ id: 'a' }, { id: 'b' }],
-      pagination: null,
-      meta: { request_id: 'r', timestamp: 't' },
-    })
-
-    expect(page.data).toHaveLength(2)
-    expect(page.total_count).toBe(2)
-    expect(page.page).toBe(1)
   })
 
   it('throws rather than handing back an envelope that forgot to unwrap', () => {

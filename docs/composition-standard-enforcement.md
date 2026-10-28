@@ -82,7 +82,11 @@ so the repo has one way to scan source instead of a third style.
    the correct shape, so the rule cannot itself go stale when `scopeParts`
    changes. This class is a silent correctness hazard, not a style nit: keys
    built by hand are invisible to `clearScopedQueries` and to the module's own
-   invalidation. `eiams-frontend-jkel` is exactly this bug.
+   invalidation. `eiams-frontend-jkel` is exactly this bug. The full convention
+   — factory-built keys, factory-built invalidation prefixes, owning-module
+   resource constants, exact resources per mutation, and the scan window that
+   looks both ways — is recorded in
+   [`feature-service-composition-standard.md`](feature-service-composition-standard.md#query-keys-and-invalidation-targets).
 2. **A failed secondary read stays distinguishable.** The defect class this
    workstream shipped four times. A bare `?? null` scan is useless — 172 hits, no
    discriminating power — so the check correlates the collapse with the

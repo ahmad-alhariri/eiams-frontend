@@ -1,48 +1,66 @@
 import { createColumnHelper } from '@tanstack/react-table'
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useId, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import { ROUTE_PATHS } from '@/config/routes'
 import { getAuditActionDisplay } from '@/modules/audit/types/audit-display'
+import { auditRangeError } from '@/modules/audit/types/audit.types'
 import { useAuditLogsQuery } from '@/modules/audit/hooks/use-audit-queries'
 import { AuditDetail } from '@/modules/audit/components/audit-detail'
 import type { ListAuditLogsQuery } from '@/modules/audit/types/audit.types'
+import type { AuditLogHeader } from '@/modules/audit/types/audit.api-types'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
+import { DatePicker } from '@/shared/ui/date-picker'
 import { Input } from '@/shared/ui/input'
 import { pageRows } from '@/shared/utils/table-data'
 import { formatDateTime, formatUuid } from '@/shared/utils/format'
-import type { AuditLog } from '@/shared/types/generated/eiams-v1'
 
-const auditColumnHelper = createColumnHelper<typeof dataTableFeatures, AuditLog>()
+const auditColumnHelper = createColumnHelper<typeof dataTableFeatures, AuditLogHeader>()
 
 type FilterFieldProps = {
   children: ReactNode
   label: string
+  /** Inline Arabic error shown under the control (the repo's field-error style). */
+  error?: { id: string; messageAr: string } | undefined
 }
 
-function FilterField({ children, label }: FilterFieldProps) {
+function FilterField({ children, label, error }: FilterFieldProps) {
   return (
     <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
       <span>{label}</span>
       {children}
+      {error ? (
+        <p id={error.id} role="alert" className="text-sm font-medium text-destructive">
+          {error.messageAr}
+        </p>
+      ) : null}
     </div>
   )
 }
 
-function toIsoDateTime(value: string): string | undefined {
-  if (value === '') return undefined
-
-  const date = new Date(value)
-  return Number.isNaN(date.valueOf()) ? undefined : date.toISOString()
-}
-
 function toAuditDetailLocation(auditLogId: string): string {
   return `${ROUTE_PATHS.audit}?auditLogId=${encodeURIComponent(auditLogId)}`
+}
+
+/**
+ * The accessible name that tells two audit rows apart.
+ *
+ * The audit log id alone cannot do it: the row shows it truncated, so every
+ * row read out loud starts with the same prefix and a shortened identifier.
+ * The name is built from what the row actually shows — the translated action,
+ * the entity it touched and when it happened — and falls back to the audit log
+ * id for a row that shows no entity at all.
+ */
+function toAuditRowAccessibleName(header: AuditLogHeader): string {
+  const action = getAuditActionDisplay(header.action, header.actionDisplayAr)
+  const entity = header.entityId === '' ? header.id : `${header.entityType} ${header.entityId}`
+
+  return `عرض تفاصيل سجل التدقيق: ${action.text} — ${entity} — ${formatDateTime(header.createdAtUtc)}`
 }
 
 /**
@@ -56,22 +74,36 @@ function AuditLogExplorerPageImpl() {
   const [search, setSearch] = useState('')
   const [entityType, setEntityType] = useState('')
   const [entityId, setEntityId] = useState('')
-  const [dateFromInput, setDateFromInput] = useState('')
-  const [dateToInput, setDateToInput] = useState('')
+  const [dateFrom, setDateFrom] = useState<Date | undefined>()
+  const [dateTo, setDateTo] = useState<Date | undefined>()
+  const [pickerResetKey, setPickerResetKey] = useState(0)
+  const rangeErrorId = useId()
 
-  const dateFrom = toIsoDateTime(dateFromInput)
-  const dateTo = toIsoDateTime(dateToInput)
+  /**
+   * The server refuses a range that is half filled, inverted or longer than
+   * 366 days (`DateRangeLimits.IsValid`) with a 400 the list cannot explain,
+   * so the pair is checked here first and a broken range is never sent.
+   */
+  const rangeError = useMemo(
+    () => auditRangeError({ from: dateFrom, to: dateTo }),
+    [dateFrom, dateTo],
+  )
+
+  const dateFromIso = dateFrom ? dateFrom.toISOString() : undefined
+  const dateToIso = dateTo ? dateTo.toISOString() : undefined
   const query = useMemo<ListAuditLogsQuery>(
     () => ({
-      pageIndex: currentPage - 1,
+      // The wire page is ONE-based (`PaginationQueryParameters.Page`), and the
+      // date range is `fromUtc` / `toUtc` (`GetAuditLogsRequest.FromUtc`).
+      page: currentPage,
       pageSize,
       ...(search === '' ? {} : { search }),
       ...(entityType === '' ? {} : { entityType }),
       ...(entityId === '' ? {} : { entityId }),
-      ...(dateFrom === undefined ? {} : { dateFrom }),
-      ...(dateTo === undefined ? {} : { dateTo }),
+      ...(rangeError !== null || dateFromIso === undefined ? {} : { fromUtc: dateFromIso }),
+      ...(rangeError !== null || dateToIso === undefined ? {} : { toUtc: dateToIso }),
     }),
-    [currentPage, dateFrom, dateTo, entityId, entityType, pageSize, search],
+    [currentPage, dateFromIso, dateToIso, entityId, entityType, pageSize, rangeError, search],
   )
   const auditLogsQuery = useAuditLogsQuery(query)
 
@@ -98,15 +130,15 @@ function AuditLogExplorerPageImpl() {
     [resetPage],
   )
   const handleDateFromChange = useCallback(
-    (value: string) => {
-      setDateFromInput(value)
+    (date: Date | undefined) => {
+      setDateFrom(date)
       resetPage()
     },
     [resetPage],
   )
   const handleDateToChange = useCallback(
-    (value: string) => {
-      setDateToInput(value)
+    (date: Date | undefined) => {
+      setDateTo(date)
       resetPage()
     },
     [resetPage],
@@ -115,22 +147,23 @@ function AuditLogExplorerPageImpl() {
     setSearch('')
     setEntityType('')
     setEntityId('')
-    setDateFromInput('')
-    setDateToInput('')
+    setDateFrom(undefined)
+    setDateTo(undefined)
+    setPickerResetKey((key) => key + 1)
     resetPage()
   }, [resetPage])
 
   const columns = useMemo(
     () =>
       auditColumnHelper.columns([
-        auditColumnHelper.accessor('occurredAt', {
-          id: 'occurredAt',
-          header: 'وقت الحدث',
+        auditColumnHelper.accessor('createdAtUtc', {
+          id: 'createdAtUtc',
+          header: 'تاريخ الإنشاء',
           enableSorting: false,
           cell: ({ getValue, row }) => (
             <Link
-              to={toAuditDetailLocation(row.original.auditLogId)}
-              aria-label={`عرض تفاصيل سجل التدقيق ${formatUuid(row.original.auditLogId)}`}
+              to={toAuditDetailLocation(row.original.id)}
+              aria-label={toAuditRowAccessibleName(row.original)}
               className="font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <span dir="rtl">{formatDateTime(getValue())}</span>
@@ -141,8 +174,8 @@ function AuditLogExplorerPageImpl() {
           id: 'action',
           header: 'الإجراء',
           enableSorting: false,
-          cell: ({ getValue }) => {
-            const action = getAuditActionDisplay(getValue())
+          cell: ({ getValue, row }) => {
+            const action = getAuditActionDisplay(getValue(), row.original.actionDisplayAr)
             return action.isKnown ? (
               <span>{action.text}</span>
             ) : (
@@ -152,16 +185,11 @@ function AuditLogExplorerPageImpl() {
             )
           },
         }),
-        auditColumnHelper.accessor((auditLog) => auditLog.entityDisplay ?? auditLog.entityId, {
-          id: 'entity',
+        auditColumnHelper.accessor('entityId', {
+          id: 'entityId',
           header: 'السجل المتأثر',
           enableSorting: false,
-          cell: ({ getValue, row }) =>
-            row.original.entityDisplay === null || row.original.entityDisplay === undefined ? (
-              <span dir="ltr">{formatUuid(getValue())}</span>
-            ) : (
-              getValue()
-            ),
+          cell: ({ getValue }) => <span dir="ltr">{formatUuid(getValue())}</span>,
         }),
         auditColumnHelper.accessor('entityType', {
           id: 'entityType',
@@ -173,16 +201,29 @@ function AuditLogExplorerPageImpl() {
             </code>
           ),
         }),
-        auditColumnHelper.accessor((auditLog) => auditLog.occurredBy.displayName, {
-          id: 'occurredBy',
+        auditColumnHelper.accessor('userId', {
+          id: 'userId',
           header: 'بواسطة',
           enableSorting: false,
+          cell: ({ getValue }) => {
+            const userId = getValue()
+            return userId === null ? <span>—</span> : <span dir="ltr">{formatUuid(userId)}</span>
+          },
         }),
-        auditColumnHelper.accessor('summaryAr', {
-          id: 'summaryAr',
-          header: 'الملخص',
+        auditColumnHelper.accessor('commandName', {
+          id: 'commandName',
+          header: 'الأمر المنفَّذ',
           enableSorting: false,
-          cell: ({ getValue }) => getValue() ?? '—',
+          cell: ({ getValue }) => {
+            const commandName = getValue()
+            return commandName === null ? (
+              <span>—</span>
+            ) : (
+              <code dir="ltr" className="text-xs font-medium text-muted-foreground">
+                {commandName}
+              </code>
+            )
+          },
         }),
       ]),
     [],
@@ -215,20 +256,38 @@ function AuditLogExplorerPageImpl() {
                 dir="ltr"
               />
             </FilterField>
-            <FilterField label="من تاريخ الحدث">
-              <Input
-                type="datetime-local"
-                value={dateFromInput}
-                onChange={(event) => handleDateFromChange(event.currentTarget.value)}
-                aria-label="من تاريخ الحدث"
+            <FilterField
+              label="من تاريخ الإنشاء"
+              error={
+                rangeError?.field === 'from'
+                  ? { id: rangeErrorId, messageAr: rangeError.messageAr }
+                  : undefined
+              }
+            >
+              <DatePicker
+                key={`date-from-${pickerResetKey}`}
+                ariaLabel="من تاريخ الإنشاء"
+                {...(rangeError?.field === 'from'
+                  ? { 'aria-invalid': true, 'aria-describedby': rangeErrorId }
+                  : {})}
+                onChange={handleDateFromChange}
               />
             </FilterField>
-            <FilterField label="إلى تاريخ الحدث">
-              <Input
-                type="datetime-local"
-                value={dateToInput}
-                onChange={(event) => handleDateToChange(event.currentTarget.value)}
-                aria-label="إلى تاريخ الحدث"
+            <FilterField
+              label="إلى تاريخ الإنشاء"
+              error={
+                rangeError?.field === 'to'
+                  ? { id: rangeErrorId, messageAr: rangeError.messageAr }
+                  : undefined
+              }
+            >
+              <DatePicker
+                key={`date-to-${pickerResetKey}`}
+                ariaLabel="إلى تاريخ الإنشاء"
+                {...(rangeError?.field === 'to'
+                  ? { 'aria-invalid': true, 'aria-describedby': rangeErrorId }
+                  : {})}
+                onChange={handleDateToChange}
               />
             </FilterField>
             <div className="flex items-end">
@@ -242,7 +301,7 @@ function AuditLogExplorerPageImpl() {
 
       <ContentCard
         title="عمليات التدقيق"
-        description="يُطبَّق البحث على النص الظاهر فقط، ولا توجد أعمدة فرز لأن التسلسل الزمني دليل تدقيق يملكه الخادم."
+        description="يُطبَّق البحث على نص الإجراء أو نوع السجل أو الأمر أو معرّف الطلب، ولا توجد أعمدة فرز لأن التسلسل الزمني دليل تدقيق يملكه الخادم."
       >
         <DataTableServer
           columns={columns}
@@ -256,13 +315,13 @@ function AuditLogExplorerPageImpl() {
           emptyDescription="لم يتم العثور على عمليات تطابق عوامل التصفية الحالية ضمن نطاق العمل."
           page={currentPage}
           pageSize={pageSize}
-          totalCount={page?.meta.totalItems}
-          totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
+          totalCount={page?.totalItems}
+          totalPages={Math.max(page?.totalPages ?? 1, 1)}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           searchQuery={search}
           onSearchChange={handleSearchChange}
-          searchPlaceholder="ابحث في الملخص أو السجل أو المنفذ..."
+          searchPlaceholder="ابحث في الإجراء أو نوع السجل أو الأمر..."
         />
       </ContentCard>
     </div>

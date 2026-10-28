@@ -160,6 +160,13 @@ function AsyncSelect<T>({
   // which inerts the whole page behind it (Base UI aria-hidden) before any
   // user interaction.
   const interactedRef = useRef(false)
+  // True once the user LEFT the control. Base UI's combobox popup is a modal
+  // focus manager, so opening it marks the rest of the document aria-hidden.
+  // When the focus now sits in another field (the reason textarea of the
+  // document forms), the browser refuses to hide the focused element and logs
+  // «Blocked aria-hidden on an element because its descendant retained
+  // focus». The panel must therefore not open once the user has moved on.
+  const leftControlRef = useRef(false)
   // Set when the user selects an option so the label re-search that follows
   // (Base UI fills the input with the label) does not pop the panel open again.
   const selectionDismissedRef = useRef(false)
@@ -259,6 +266,9 @@ function AsyncSelect<T>({
         if (!interactedRef.current) {
           return
         }
+        if (leftControlRef.current) {
+          return
+        }
         if (!openRef.current && !selectionDismissedRef.current) {
           openRef.current = true
           setOpen(true)
@@ -272,6 +282,9 @@ function AsyncSelect<T>({
         setResult({ query, options: [], status: 'error' })
         retypingRef.current = false
         if (!interactedRef.current) {
+          return
+        }
+        if (leftControlRef.current) {
           return
         }
         if (!openRef.current && !selectionDismissedRef.current) {
@@ -376,6 +389,24 @@ function AsyncSelect<T>({
           disabled={disabled}
           readOnly={readOnly}
           aria-disabled={disabled || undefined}
+          onFocus={(event) => {
+            // The caller's own handler runs first — the shared control must
+            // never swallow what a form wires into `inputProps`.
+            inputProps?.onFocus?.(event)
+            leftControlRef.current = false
+            // Coming back to the control re-opens the panel with the results
+            // the loader already published for the current query — the panel
+            // stayed closed while the user was away.
+            if (resultMatchesQuery && !openRef.current && !selectionDismissedRef.current) {
+              openRef.current = true
+              setOpen(true)
+              onOpenChangeProp?.(true)
+            }
+          }}
+          onBlur={(event) => {
+            inputProps?.onBlur?.(event)
+            leftControlRef.current = true
+          }}
           className="h-10 w-full min-w-0 rounded-md border border-input bg-popover px-3 py-2 text-start text-base text-foreground transition-[color,box-shadow,background-color] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-50 read-only:cursor-default read-only:bg-muted/50"
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') {

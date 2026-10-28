@@ -143,7 +143,22 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // `custody/components/custody-status-badge.tsx`) and the custody status
     // label registry (`custody/custody-status-labels.ts`). They render the
     // live status vocabularies and introduce none of the three banned shapes.
-    assertScannedFiles(PRODUCTION_FILES, 404)
+    // +2 application files since 404: `modules/catalog/constants/material-kind-policy.ts`
+    // (another workstream's policy module) and
+    // `shared/documents/components/serial-capture-field.tsx` (bulk asset serial
+    // capture). Neither introduces any of the three banned shapes.
+    // -1 since 406: the generated OpenAPI artifact has been deleted, and it was
+    // counted as an application file. It never introduced any of the three
+    // banned shapes either.
+    // Re-measured at 406 on this branch: the number did not move, but the file
+    // set did. The reports module swapped `components/dashboard-charts.tsx` for
+    // the pure `dashboard-kpis.model.ts` (net 0) and the organization module
+    // added `components/organization-page-shell.tsx` (+1), while the audit range
+    // types that had their own `modules/audit/types/audit-range.ts` now ride in
+    // `modules/audit/types/audit.types.ts` (-1). None of them introduces any of
+    // the three banned shapes, so every "no offenders" assertion below stays
+    // green.
+    assertScannedFiles(PRODUCTION_FILES, 406)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

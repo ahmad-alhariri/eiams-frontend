@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { catalogQueryKeys } from '@/modules/catalog/hooks/use-catalog-queries'
 import { createQueryClient } from '@/shared/services/query.client'
 import { queryKeys } from '@/shared/services/query-keys'
-import { errJson } from '@/test/msw/envelope'
+import { errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({ key: { kind: 'enterprise' as const } }))
@@ -96,7 +96,7 @@ describe('catalog mutation hooks', () => {
     client.setQueryData(materialKey, {})
     client.setQueryData(organizationKey, [])
 
-    server.use(http.post(`${API_BASE_URL}/catalog/domains`, () => Response.json({ id: domain.id })))
+    server.use(http.post(`${API_BASE_URL}/catalog/domains`, () => okJson({ id: domain.id })))
 
     function QueryWrapper({ children }: PropsWithChildren) {
       return <QueryClientProvider client={client}>{children}</QueryClientProvider>

@@ -183,7 +183,11 @@ describe('AdjustmentActionBar (e21-t06)', () => {
     await vi.waitFor(() => expect(capturedPostBody).toMatchObject({ rowVersion: 7 }))
   })
 
-  it('disables Post with the server blocker message when SignedOriginal is unmet', () => {
+  it('disables Post and leaves the signed-original reason to the attachment gate row', () => {
+    // eiams-frontend-n31q: the signed-original reason is stated ONCE per
+    // screen, by the attachment gate row this bar is always mounted beside. The
+    // bar therefore omits that blocker instead of printing the same Arabic
+    // sentence twice.
     render(
       <Harness
         status="Draft"
@@ -199,8 +203,9 @@ describe('AdjustmentActionBar (e21-t06)', () => {
       />,
     )
 
-    expect(screen.getByText('يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'ترحيل السند' })).toBeDisabled()
+    expect(screen.queryByText('يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.')).toBeNull()
+    expect(document.querySelector('[role="alert"]')).toBeNull()
   })
 
   it('never renders Post for a Posted adjustment or Reverse for a disposal', () => {

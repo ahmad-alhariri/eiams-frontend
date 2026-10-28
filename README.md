@@ -34,15 +34,12 @@ pnpm run format
 pnpm run format:check
 pnpm run quality
 pnpm run ui:info
-pnpm run contract:validate
-pnpm run api:types:dry
-pnpm run api:types:generate
-pnpm run api:types:check
+pnpm run contract:drift
 pnpm run preview
 ```
 
-`pnpm run quality` is the CI-equivalent gate: generated API drift check, lint,
-typecheck, format check, Vitest, and production build.
+`pnpm run quality` is the CI-equivalent gate: lint, typecheck, format check,
+Vitest, and production build.
 
 ## Foundation reproducibility
 
@@ -148,21 +145,24 @@ This scaffold intentionally contains only the semantic React entry point and
 approved foundation configuration. Generated design primitives, routing, API
 clients, and business modules are implemented by their later Beads tasks.
 
-## API contract generation
+## API contracts
 
-`contracts/openapi/eiams-v1.openapi.json` is the only admitted frontend
-generation input. Its provenance, version, checksum, and coverage are recorded
-in `contracts/openapi/eiams-v1.provenance.json`.
+The frontend does NOT generate its API types. Every module owns handwritten
+per-module wire contracts (D-INT-02 / ADR-0001) that describe what the LIVE API
+serves, and every service reaches the network through the shared
+`ApiTransport`. The frozen OpenAPI-generated artifact, its generator, the
+provisional snapshot it was generated from, and the commands that generated and
+validated them have all been deleted.
 
-OpenAPI generation is configured by `scripts/openapi-generation.config.mjs` and
-runs through `scripts/generate-api-types.mjs`:
+The live contract is the backend's own OpenAPI export, and it is a HUMAN-ONLY
+reference — it is not a frontend build dependency. Two gates keep the frontend
+honest against it:
 
 ```bash
-pnpm run api:types:dry       # validate provenance and deterministic generation without writing
-pnpm run api:types:generate  # write generated types to src/shared/types/generated/eiams-v1.ts
-pnpm run api:types:check     # verify the generated output is current
+pnpm run contract:drift  # compare the live API against the committed consumer baseline
 ```
 
-Generated API files must not be edited by hand. Backend/API-owner ratification
-remains required before production integration; contract drift must be resolved
-with a versioned OpenAPI/provenance update and regeneration.
+`contracts/openapi/eiams-v1.consumer-baseline.json` records what the frontend
+actually consumes; the drift gate fails when the live API stops serving it.
+Contract drift must be resolved by hand, in the owning module's wire contract,
+against a versioned backend change — never by regenerating a snapshot.

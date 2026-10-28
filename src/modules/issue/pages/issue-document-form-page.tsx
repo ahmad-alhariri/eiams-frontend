@@ -33,12 +33,15 @@ import {
 } from '@/shared/documents/use-document-draft-mutations'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
+import { formatNumber } from '@/shared/utils/format'
 
 /**
  * The form mirrors the RHF groups the shared sections register: the spine
- * lives under `header.*`, the IssueTo petal under `petal.issueTo.*` (with its
- * selection-time display-name sibling `petal.issueToDisplayName`, e16-t03),
- * and the quantity lines under `lines.*`.
+ * lives under `header.*`, the IssueTo petal under `petal.issueTo.*` — with its
+ * selection-time display-name sibling `petal.issueToDisplayName` (e16-t03), a
+ * FORM-only value the responsibility preview reads; the live write body carries
+ * no display name, the server resolves the recipient itself — and the quantity
+ * lines under `lines.*`.
  *
  * Issue carries no asset-capture container: Asset-kind lines on an issue move
  * existing assets, and the specific-asset reference is pending a contract
@@ -127,7 +130,9 @@ export default function IssueDocumentFormPage() {
       if (balance === undefined) continue // unknown/loading → never blocks
       const available = balance === null ? 0 : balance
       if ((quantities[index] ?? 0) > available) {
-        return `الكمية المطلوبة في البند ${index + 1} تتجاوز الرصيد المتاح (${available}).`
+        // Same numeral policy as the per-line hint (`balanceHintAr` → formatNumber):
+        // alert and hint sit on one screen, so the balance must read identically.
+        return `الكمية المطلوبة في البند ${index + 1} تتجاوز الرصيد المتاح (${formatNumber(available)}).`
       }
     }
     return null
@@ -165,7 +170,7 @@ export default function IssueDocumentFormPage() {
         header: values.header,
         lines: toCompleteDraftLines(values.lines),
         petals: {
-          issueTo: toIssueInfo(values.petal.issueTo, values.petal.issueToDisplayName),
+          issueTo: toIssueInfo(values.petal.issueTo),
         },
       })
       createMutation.mutate(

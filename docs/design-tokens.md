@@ -173,3 +173,28 @@ Before adding UI, verify that it:
 - avoids literal values that duplicate an existing token;
 - supports the documented responsive page padding and layout behavior.
 
+## 11. Numerals (digits)
+
+Arabic user-facing copy renders numbers in **Arabic-Indic digits
+(٠١٢٣٤٥٦٧٨٩)**. Any quantity, balance, or count interpolated into an Arabic
+string goes through the shared formatters in `src/shared/utils/format.ts`;
+`formatNumber` defaults to the `arabic` digits.
+
+| Value | Formatter | Example |
+| --- | --- | --- |
+| Quantity / balance | `formatNumber(value)` | `١٢٬٣٤٥٫٦٧` |
+| Count / page number | `toArabicDigits(value)` | `١٢` |
+| Percentage | `formatPercent(value)` | `١٢٫٥٪` |
+| Date / time | `formatDate` / `formatTime` | `١٥ أغسطس ٢٠٢٦` |
+| File size | `formatFileSize(bytes)` | `٤٫٥ م.ب` |
+
+Never interpolate a raw number into Arabic copy: a raw interpolation renders
+Latin digits, so two messages stating the same quantity (the form-level
+over-balance alert and the per-line balance hint) appear on one screen with
+different glyphs and the user cannot tell whether they are the same value.
+`formatNumber` also groups with the Arabic separators `٬` (thousands) and `٫`
+(decimals).
+
+Line and ordinal numbers rendered by the shared line editors (`البند 1`,
+`بند الأصول 1`) stay Latin, because the sibling UI renders them that way.
+

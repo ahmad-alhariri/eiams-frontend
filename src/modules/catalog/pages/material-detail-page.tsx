@@ -22,6 +22,10 @@ import {
   MATERIAL_KIND_LABELS,
   TRACKING_TYPE_LABELS,
 } from '@/modules/catalog/constants/catalog-labels'
+import {
+  assetNumberPolicy,
+  policyDescription,
+} from '@/modules/catalog/constants/material-kind-policy'
 import type { Material, MaterialStatus } from '@/modules/catalog/types/catalog.types'
 import { EmptyState } from '@/shared/feedback/empty-state'
 import { ErrorState } from '@/shared/feedback/error-state'
@@ -32,8 +36,6 @@ import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { toast } from '@/shared/ui/toast-manager'
-
-type MaterialKind = Material['materialKind']
 
 /** The two directions the status command can take, and the only two. */
 type ToggleableMaterialStatus = Exclude<MaterialStatus, 'Archived'>
@@ -50,21 +52,6 @@ function HierarchyStep({ label, value }: { label: string; value: string }) {
       <span className="font-semibold text-foreground">{value}</span>
     </li>
   )
-}
-
-function policyDescription(materialKind: MaterialKind): string {
-  switch (materialKind) {
-    case 'Consumable':
-      return 'لا تنشأ عهدة بعد الصرف؛ وتنتهي مسؤولية المستودع عند ترحيل سند الصرف.'
-    case 'Durable':
-      return 'يبقى الأصل ضمن عهدة الجهة حتى إعادته أو استبعاده، ويجوز صرفه أكثر من مرة دون استهلاكه.'
-    case 'Asset':
-      return 'تُنشأ عهدة إلزامية، ويُسجّل كل أصل في سجل الأصول بمعرّف داخلي للمؤسسة.'
-  }
-}
-
-function assetNumberPolicy(materialKind: MaterialKind): string {
-  return materialKind === 'Asset' ? 'مطلوب (رقم أصل داخلي)' : 'غير مطلوب'
 }
 
 /**

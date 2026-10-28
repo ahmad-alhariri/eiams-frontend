@@ -11,40 +11,38 @@ import type {
   ListAdjustmentsQuery,
   ListDisposalEligibleAssetsQuery,
 } from '@/modules/adjustment/types/adjustment.types'
-import { toWirePaginationParams } from '@/shared/api/pagination'
+import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
+import { pathWithId } from '@/shared/services/api-path'
 import type { ApiPage, ResourceIdResponse } from '@/shared/api/api-contracts'
 import type { PostDocumentResponse } from '@/shared/documents/types/document-wire.types'
-import type { paths } from '@/shared/types/generated/eiams-v1'
 
-const ADJUSTMENTS_PATH = '/adjustments' satisfies keyof paths
-const ADJUSTMENT_PATH = '/adjustments/{adjustmentId}' satisfies keyof paths
-const ADJUSTMENT_POST_PATH = '/adjustments/{adjustmentId}/post' satisfies keyof paths
-const ADJUSTMENT_REVERSE_PATH = '/adjustments/{adjustmentId}/reverse' satisfies keyof paths
-const DISPOSAL_ELIGIBLE_ASSETS_PATH = '/adjustments/disposal-eligible-assets' satisfies keyof paths
+const ADJUSTMENTS_PATH = '/adjustments'
+const ADJUSTMENT_PATH = '/adjustments/{adjustmentId}'
+const ADJUSTMENT_POST_PATH = '/adjustments/{adjustmentId}/post'
+const ADJUSTMENT_REVERSE_PATH = '/adjustments/{adjustmentId}/reverse'
+const DISPOSAL_ELIGIBLE_ASSETS_PATH = '/adjustments/disposal-eligible-assets'
 
 /**
  * The LIVE disposal endpoint.
  *
  * It is not in the frozen generated snapshot (that artifact describes the
- * provisional design, not the served API), so the path is spelled out here
- * rather than asserted against `keyof paths`.
+ * provisional design, not the served API), so every path here is a plain
+ * literal.
  */
 const DISPOSALS_PATH = '/adjustments/disposals'
-
-function pathWithAdjustmentId(path: string, adjustmentId: string): string {
-  return path.replace('{adjustmentId}', encodeURIComponent(adjustmentId))
-}
 
 /**
  * Builds axios params so optional filters never leak `undefined` keys onto the
  * wire, keeping the request exactOptional-safe (mirrors the shared document
- * transport). Page conversion is delegated to the shared boundary so the
- * one-based UI model and the zero-based wire index are converted in one place.
+ * transport). The page is ONE-based on both sides — `useServerPagination`
+ * produces a one-based page and `PaginationQueryParameters.Page` is
+ * `[Range(1, 21474836)]` — so the shared boundary only clamps it, and a
+ * `page=0` can no longer be typed at a call site.
  */
 function toListParams(query: Readonly<ListAdjustmentsQuery>) {
   return {
-    ...toWirePaginationParams(query),
+    ...toWireOneBasedPaginationParams(query),
     ...(query.purpose === undefined ? {} : { purpose: query.purpose }),
     ...(query.status === undefined ? {} : { status: query.status }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
@@ -53,7 +51,7 @@ function toListParams(query: Readonly<ListAdjustmentsQuery>) {
 
 function toDisposalEligibleParams(query: Readonly<ListDisposalEligibleAssetsQuery>) {
   return {
-    ...toWirePaginationParams(query),
+    ...toWireOneBasedPaginationParams(query),
     ...(query.search === undefined ? {} : { search: query.search }),
     ...(query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId }),
   }
@@ -125,7 +123,7 @@ export function createAdjustmentService(transport: ApiTransport): AdjustmentServ
 
     async getAdjustment(adjustmentId) {
       return transport.request<AdjustmentDetail>({
-        path: pathWithAdjustmentId(ADJUSTMENT_PATH, adjustmentId),
+        path: pathWithId(ADJUSTMENT_PATH, '{adjustmentId}', adjustmentId),
         method: 'GET',
       })
     },
@@ -140,15 +138,27 @@ export function createAdjustmentService(transport: ApiTransport): AdjustmentServ
 
     async updateAdjustment(adjustmentId, request) {
       return transport.request<AdjustmentDetail>({
-        path: pathWithAdjustmentId(ADJUSTMENT_PATH, adjustmentId),
+        path: pathWithId(ADJUSTMENT_PATH, '{adjustmentId}', adjustmentId),
         method: 'PUT',
         body: request,
       })
     },
 
+    /**
+     * The adjustment endpoints bind the version under `rowVersion`, NOT the
+     * `expectedRowVersion` the shared document engine uses:
+     * `PostInventoryAdjustmentController.cs:18` and
+     * `ReverseInventoryAdjustmentController.cs:12-14` both declare
+     * `[property: JsonRequired] int RowVersion`. Measured live on 2026-10-27:
+     * `{"rowVersion":1}` binds and reaches the handler (404 for a ghost id),
+     * while `{"expectedRowVersion":1}` fails model binding with 400
+     * `REQUEST_VALIDATION_FAILED`. The shared document transport sends
+     * `expectedRowVersion` because `PostDocumentController.cs:17` binds that
+     * name — the two families differ, and so do their body keys.
+     */
     async postAdjustment(adjustmentId, rowVersion, idempotencyKey) {
       return transport.request<PostDocumentResponse>({
-        path: pathWithAdjustmentId(ADJUSTMENT_POST_PATH, adjustmentId),
+        path: pathWithId(ADJUSTMENT_POST_PATH, '{adjustmentId}', adjustmentId),
         method: 'POST',
         body: { rowVersion },
         headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
@@ -157,7 +167,7 @@ export function createAdjustmentService(transport: ApiTransport): AdjustmentServ
 
     async reverseAdjustment(adjustmentId, rowVersion, reason, idempotencyKey) {
       return transport.request<ResourceIdResponse>({
-        path: pathWithAdjustmentId(ADJUSTMENT_REVERSE_PATH, adjustmentId),
+        path: pathWithId(ADJUSTMENT_REVERSE_PATH, '{adjustmentId}', adjustmentId),
         method: 'POST',
         body: { reason, rowVersion },
         headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },

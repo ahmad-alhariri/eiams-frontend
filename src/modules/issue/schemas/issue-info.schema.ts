@@ -1,21 +1,25 @@
 import { z } from 'zod'
 
-import type { IssueTo } from '@/shared/types/generated/eiams-v1'
+import type { IssueDraftDetails } from '@/shared/documents/types/document-wire.types'
 
 /**
  * IssueTo petal capture (e16-t01), contract-shaped with no v2 behavior: the
- * form vocabulary mirrors the contract `CounterpartType` quartet exactly, so
- * every server record is representable and no unknown-value fallback path is
+ * form vocabulary mirrors the live `PartyType` quartet exactly, so every
+ * server record is representable and no unknown-value fallback path is
  * needed beyond the label helper's defensive default.
  *
  * NOTE: there is deliberately NO `src/modules/issue/services/` file. The
- * contract defines no issue-specific endpoints — issue draft CRUD rides the
- * shared document engine (`src/shared/documents/document-transport.ts`) via
- * the generic `WarehouseDocumentDraftRequest.issueTo` petal, exactly like the
- * other five document types.
+ * frontend consumes no issue-specific endpoint — the consumer baseline
+ * (`contracts/openapi/eiams-v1.consumer-baseline.json`, 134 endpoints) lists
+ * none — so issue draft CRUD rides the shared document engine
+ * (`src/shared/documents/document-transport.ts`) via the generic
+ * `CompleteDraftRequest.issueTo` petal, exactly like the other five document
+ * types. The sibling receiving module states the rule in its own service:
+ * "Draft persistence is deliberately NOT duplicated here — the shared
+ * document engine owns the `complete-draft` write".
  */
 
-/** Contract `CounterpartType` values an issue recipient may take. */
+/** Live `Domain.Common.PartyType` values an issue recipient may take. */
 export const ISSUE_RECIPIENT_TYPES = ['Employee', 'OrganizationalUnit', 'Site', 'External'] as const
 
 export type IssueRecipientType = (typeof ISSUE_RECIPIENT_TYPES)[number]
@@ -38,9 +42,11 @@ export function recipientTypeLabelAr(recipientType: string): string {
 }
 
 /**
- * 200-char cap on `issueReason` is presentation-level only — schema.md types
- * it as an open text column; the cap matches sibling petals' VARCHAR caps and
- * keeps the reason box readable in the UI.
+ * 200-char cap on `issueReason` is the LIVE backend's own cap, not a
+ * presentation choice: `Domain/IssueTos/IssueTo.cs` rejects a trimmed reason
+ * that is empty or longer than 200 characters
+ * (`IssueToErrors.IssueReasonInvalid`). The sibling transfer petal has the
+ * same cap (`Domain/TransferInfos/TransferInfo.cs`).
  */
 export const ISSUE_REASON_MAX_LENGTH = 200
 
@@ -57,41 +63,21 @@ export const issueInfoSchema = z.object({
 export type IssueInfoFormValues = z.infer<typeof issueInfoSchema>
 
 /**
- * Seeds form values from a server record (edit mode). A missing petal defaults
- * to blank fields — a fresh issue draft whose empty `recipientType` fails
- * validation until the user picks a recipient.
- */
-export function fromIssueInfo(info?: IssueTo | null): IssueInfoFormValues {
-  if (info === undefined || info === null) {
-    return {
-      recipientType: '' as IssueInfoFormValues['recipientType'],
-      recipientId: '',
-      issueReason: '',
-    }
-  }
-  return {
-    recipientType: info.recipientType,
-    recipientId: info.recipientId,
-    issueReason: info.issueReason,
-  }
-}
-
-/**
- * Maps form values to the contract `IssueTo`, trimming the reason.
+ * Maps form values to the live `IssueDraftDetails` petal, trimming the reason.
  *
- * `recipientDisplayName` handling (e16-t01 decision): the dev mock persists
- * `issueTo` verbatim (`buildDraftDocument` / `applyDraftToDocument` spread
- * `request.issueTo` through untouched), so whatever the client sends is what
- * comes back — the UI must therefore always pass the selected option's
- * displayName here when one was chosen. The production server derives the
- * display name from `recipient_type` + `recipient_id` on persistence, so the
- * `''` default is a safe placeholder whenever no option displayName exists.
+ * The live write body is `{ recipientType, recipientId, issueReason }` and
+ * nothing else: `Application.WarehouseDocuments.CompleteDraft.IssueDraftDetails`,
+ * mirrored by `Web.Api.Controllers.IssueTos.UpsertIssueToController.RequestBody`
+ * (the same three members plus `expectedRowVersion`). The frozen snapshot's
+ * writable `recipientDisplayName` is gone — the server resolves the recipient
+ * itself and serves the resolved name on the read projection
+ * (`WarehouseDocumentDetailsResponse.IssueToResponse`), so the client never
+ * sends one.
  */
-export function toIssueInfo(values: IssueInfoFormValues, recipientDisplayName?: string): IssueTo {
+export function toIssueInfo(values: IssueInfoFormValues): IssueDraftDetails {
   return {
-    issueReason: values.issueReason.trim(),
-    recipientDisplayName: recipientDisplayName ?? '',
-    recipientId: values.recipientId,
     recipientType: values.recipientType,
+    recipientId: values.recipientId,
+    issueReason: values.issueReason.trim(),
   }
 }

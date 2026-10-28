@@ -21,10 +21,11 @@ import type { ScopeCacheKey } from '@/shared/services/query-keys'
 import { toArabicDigits } from '@/shared/utils/format'
 import type {
   Asset,
-  AssetCustody,
-  AssetMovement,
-  WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
+  AssetCustodyTimelineRow,
+  AssetDetails,
+} from '@/modules/asset/types/asset.types'
+import type { PendingCustody } from '@/modules/custody/types/custody.types'
+import type { WarehouseDocument } from '@/test/msw/document-engine.types'
 import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
@@ -53,93 +54,52 @@ const returnDocument = scenario.documents.return
 const issueWire = wireDocumentDetails(issue)
 const returnedAsset = scenario.assets.returned
 const pendingAsset = scenario.assets.pending
-const returnedCustody = findCustody(returnedAsset.assetId)
-const pendingCustody = findCustody(pendingAsset.assetId)
+const returnedCustody = findCustody(returnedAsset.id)
+const pendingCustody = findCustody(pendingAsset.id)
 
 /**
- * The custody-timeline handler must serve the live wire row
- * (`AssetCustodyTimelineRow`: flat `holderType`/`holderId`, `fromUtc`/`toUtc`,
- * no embedded holder object), while the scenario keeps the legacy generated
- * shape — so the projection happens here, at the consumer of the scenario.
+ * The asset detail endpoint serves the live wire row (`AssetDetails`): the flat
+ * list row plus the detail-only members. The scenario already mints the live
+ * flat row, so only the detail-only members are added here.
  */
-function toCustodyTimelineRow(custody: AssetCustody) {
+function toAssetDetails(asset: Asset): AssetDetails {
   return {
-    custodyId: custody.custodyId,
-    assetId: custody.assetId,
-    holderType: custody.holder.type,
-    holderId: custody.holder.id,
-    custodyKind: custody.custodyKind,
-    issueDocumentId: custody.issueDocumentId,
-    returnDocumentId: custody.returnDocumentId ?? null,
-    status: custody.status,
-    fromUtc: custody.fromTs,
-    toUtc: custody.toTs ?? null,
-    rowVersion: custody.rowVersion,
-  }
-}
-
-/**
- * The asset detail endpoint serves the live wire row (flat, camelCase:
- * `id`, `materialNameAr`, `warehouseName`, `currentStatus`); the scenario
- * keeps the legacy generated shape, so the projection happens here too.
- */
-function toAssetDetails(asset: Asset, currentStatus: string) {
-  return {
-    id: asset.assetId,
-    assetNumber: asset.assetNumber,
-    serialNumber: asset.serialNumber ?? null,
-    materialId: asset.material.id,
-    materialCode: asset.material.code ?? '',
-    materialNameAr: asset.material.displayName,
+    ...asset,
     materialNameEn: null,
-    warehouseId: asset.currentWarehouse?.id ?? '',
-    warehouseCode: '',
-    warehouseName: asset.currentWarehouse?.displayName ?? '',
-    currentStatus,
-    activeCustodyId: null,
-    holderType: null,
-    holderId: null,
     custodyKind: null,
     latestMovementType: null,
     latestMovementAtUtc: null,
-    receiptLineId: asset.receiptLineId ?? null,
+    receiptLineId: null,
     receiptDocumentId: null,
     receiptDocumentReference: null,
-    acquisitionDate: asset.acquisitionDate ?? '2026-08-24',
-    warrantyExpiry: asset.warrantyExpiry ?? null,
-    rowVersion: asset.rowVersion,
   }
 }
 
-/** The live `GET /custodies/pending` row. */
-function toPendingCustody(custody: AssetCustody, materialId: string) {
+/**
+ * The live `GET /custodies/pending` row (`PendingCustodyResponse`).
+ *
+ * It carries the asset number and the material id — neither of which the
+ * custody-timeline row has — so those two travel in from the asset.
+ */
+function toPendingCustody(
+  custody: AssetCustodyTimelineRow,
+  assetNumber: string,
+  materialId: string,
+): PendingCustody {
   return {
     custodyId: custody.custodyId,
     assetId: custody.assetId,
-    assetNumber: custody.assetNumber,
+    assetNumber,
     materialId,
-    holderType: custody.holder.type,
-    holderId: custody.holder.id,
+    holderType: custody.holderType,
+    holderId: custody.holderId,
     issueDocumentId: custody.issueDocumentId,
-    fromUtc: custody.fromTs,
+    fromUtc: custody.fromUtc,
     rowVersion: custody.rowVersion,
   }
 }
 
-/** The live movement row (`AssetMovementResponse`). */
-function toAssetMovement(movement: AssetMovement) {
-  return {
-    id: movement.movementId,
-    assetId: movement.assetId,
-    documentId: movement.documentId,
-    documentReferenceNumber: movement.documentReference,
-    documentType: movement.eventType,
-    movementType: movement.eventType,
-    movedAtUtc: movement.occurredAt,
-  }
-}
-
-const returnedTimelineRow = toCustodyTimelineRow(returnedCustody)
+const returnedTimelineRow = returnedCustody
 const issueMovement = findStockMovement(issue, 'Issue')
 const returnMovement = findStockMovement(returnDocument, 'Receipt')
 const pendingFilters = {
@@ -148,6 +108,14 @@ const pendingFilters = {
   subjectType: 'Asset' as const,
   status: 'Active' as const,
 }
+
+/**
+ * The hook below transforms seven lazy page graphs before a single assertion
+ * runs. Under full-suite parallel load that transform outlasts Vitest's DEFAULT
+ * 10 s `hookTimeout` and the file fails with "Hook timed out in 10000ms", so
+ * the budget is scoped to THIS hook.
+ */
+const WARM_LAZY_ROUTES_TIMEOUT = 60_000
 
 beforeAll(async () => {
   await Promise.all([
@@ -159,7 +127,7 @@ beforeAll(async () => {
     import('@/modules/asset/pages/asset-custody-history-page'),
     import('@/modules/inventory/pages/stock-movements-page'),
   ])
-})
+}, WARM_LAZY_ROUTES_TIMEOUT)
 
 afterEach(() => {
   activeScope.key = { kind: 'enterprise' }
@@ -176,13 +144,15 @@ describe('issue custody and return chain', () => {
     // The shared scenario handlers predate the timeline rename, so the
     // custody-timeline read is served here, in this file, on the live path.
     server.use(
-      http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.assetId}/custody-timeline`, () =>
+      http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.id}/custody-timeline`, () =>
         apiJson([returnedTimelineRow]),
       ),
       // The pending queue is served by the live warehouse-scoped endpoint.
       http.get(`${environment.apiBaseUrl}/custodies/pending`, ({ request }) => {
         pendingQueries.push(Object.fromEntries(new URL(request.url).searchParams))
-        return okPageJson([toPendingCustody(pendingCustody, pendingAsset.material.id)])
+        return okPageJson([
+          toPendingCustody(pendingCustody, pendingAsset.assetNumber, pendingAsset.materialId),
+        ])
       }),
     )
 
@@ -220,7 +190,7 @@ describe('issue custody and return chain', () => {
     // The live pending row carries the holder TYPE and ID — no display name.
     expect(
       within(pendingRow as HTMLElement).getByText(
-        `${pendingCustody.holder.type}:${pendingCustody.holder.id}`,
+        `${pendingCustody.holderType}:${pendingCustody.holderId}`,
       ),
     ).toBeInTheDocument()
     expect(
@@ -267,7 +237,7 @@ describe('issue custody and return chain', () => {
       screen.getByRole('link', { name: new RegExp(issue.systemReferenceNumber) }),
     ).toHaveAttribute('href', issueDetailPath())
     expect(
-      screen.getAllByRole('link', { name: toArabicDigits(returnedAsset.assetId) }).length,
+      screen.getAllByRole('link', { name: toArabicDigits(returnedAsset.id) }).length,
     ).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /ترحيل|عكس|رفض/ })).not.toBeInTheDocument()
 
@@ -325,7 +295,6 @@ describe('issue custody and return chain', () => {
     }
     const warehousePending = {
       ...pendingCustody,
-      holder: { ...pendingCustody.holder, displayName: 'مديرية المعلوماتية - نطاق المستودع' },
       rowVersion: pendingCustody.rowVersion + 1,
     }
     let responseScope: 'enterprise' | 'warehouse' = 'enterprise'
@@ -336,11 +305,11 @@ describe('issue custody and return chain', () => {
         requestCounts.document += 1
         return apiJson(responseScope === 'enterprise' ? issueWire : warehouseIssueWire)
       }),
-      http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.assetId}`, () => {
+      http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.id}`, () => {
         requestCounts.asset += 1
         return apiJson(responseScope === 'enterprise' ? returnedAsset : warehouseAsset)
       }),
-      http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.assetId}/custody-timeline`, () => {
+      http.get(`${environment.apiBaseUrl}/assets/${returnedAsset.id}/custody-timeline`, () => {
         requestCounts.custodyTimeline += 1
         return apiJson([responseScope === 'enterprise' ? returnedTimelineRow : warehouseCustody])
       }),
@@ -353,9 +322,9 @@ describe('issue custody and return chain', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const { result, rerender } = renderHook(
       () => ({
-        asset: useAssetQuery(returnedAsset.assetId).data,
+        asset: useAssetQuery(returnedAsset.id).data,
         custodyList: useCustodiesQuery(pendingFilters).data,
-        custodyTimeline: useAssetCustodyTimelineQuery(returnedAsset.assetId).data,
+        custodyTimeline: useAssetCustodyTimelineQuery(returnedAsset.id).data,
         document: useDocumentDetailQuery(issue.documentId).data,
       }),
       { wrapper: createQueryWrapper(client) },
@@ -386,18 +355,18 @@ describe('issue custody and return chain', () => {
     expect(
       client.getQueryData(documentQueryKeys.document(warehouseScope, issue.documentId)),
     ).toEqual(warehouseIssueWire)
-    expect(
-      client.getQueryData(assetQueryKeys.asset(enterpriseScope, returnedAsset.assetId)),
-    ).toEqual(returnedAsset)
-    expect(
-      client.getQueryData(assetQueryKeys.asset(warehouseScope, returnedAsset.assetId)),
-    ).toEqual(warehouseAsset)
-    expect(
-      client.getQueryData(assetQueryKeys.custody(enterpriseScope, returnedAsset.assetId)),
-    ).toEqual([returnedTimelineRow])
-    expect(
-      client.getQueryData(assetQueryKeys.custody(warehouseScope, returnedAsset.assetId)),
-    ).toEqual([warehouseCustody])
+    expect(client.getQueryData(assetQueryKeys.asset(enterpriseScope, returnedAsset.id))).toEqual(
+      returnedAsset,
+    )
+    expect(client.getQueryData(assetQueryKeys.asset(warehouseScope, returnedAsset.id))).toEqual(
+      warehouseAsset,
+    )
+    expect(client.getQueryData(assetQueryKeys.custody(enterpriseScope, returnedAsset.id))).toEqual([
+      returnedTimelineRow,
+    ])
+    expect(client.getQueryData(assetQueryKeys.custody(warehouseScope, returnedAsset.id))).toEqual([
+      warehouseCustody,
+    ])
     expect(
       client.getQueryData(custodyQueryKeys.custodies(enterpriseScope, pendingFilters)),
     ).toMatchObject({ items: [pendingCustody] })
@@ -496,25 +465,25 @@ function useScenarioHandlers(
     }),
     http.get(`${environment.apiBaseUrl}/assets/:assetId`, ({ params }) => {
       const asset = Object.values(scenario.assets).find(
-        (candidate) => candidate.assetId === params['assetId'],
+        (candidate) => candidate.id === params['assetId'],
       )
       return asset === undefined
         ? new HttpResponse(null, { status: 404 })
-        : apiJson(toAssetDetails(asset, asset.derivedStatus))
+        : apiJson(toAssetDetails(asset))
     }),
     http.get(`${environment.apiBaseUrl}/assets/:assetId/current-status`, ({ params }) => {
       const asset = Object.values(scenario.assets).find(
-        (candidate) => candidate.assetId === params['assetId'],
+        (candidate) => candidate.id === params['assetId'],
       )
       return asset === undefined
         ? new HttpResponse(null, { status: 404 })
         : apiJson({
-            assetId: asset.assetId,
-            materialId: asset.material.id,
-            warehouseId: asset.currentWarehouse?.id ?? null,
+            assetId: asset.id,
+            materialId: asset.materialId,
+            warehouseId: asset.warehouseId,
             assetNumber: asset.assetNumber,
-            serialNumber: asset.serialNumber ?? null,
-            currentStatus: asset.derivedStatus,
+            serialNumber: asset.serialNumber,
+            currentStatus: asset.currentStatus,
             activeCustodyId: null,
             holderType: null,
             holderId: null,
@@ -525,17 +494,15 @@ function useScenarioHandlers(
     }),
     http.get(`${environment.apiBaseUrl}/assets/:assetId/custody-timeline`, ({ params }) =>
       apiJson(
-        scenario.ledgers.custodies
-          .filter((custody) => custody.assetId === params['assetId'])
-          .map(toCustodyTimelineRow),
+        scenario.ledgers.custodies.filter((custody) => custody.assetId === params['assetId']),
       ),
     ),
     http.get(`${environment.apiBaseUrl}/assets/:assetId/movements`, ({ params, request }) => {
       assetMovementQueries.push(Object.fromEntries(new URL(request.url).searchParams))
       return okPageJson(
-        scenario.ledgers.assetMovements
-          .filter((movement) => movement.assetId === params['assetId'])
-          .map(toAssetMovement),
+        scenario.ledgers.assetMovements.filter(
+          (movement) => movement.assetId === params['assetId'],
+        ),
       )
     }),
     http.get(`${environment.apiBaseUrl}/inventory/movements`, ({ request }) => {
@@ -545,7 +512,7 @@ function useScenarioHandlers(
   )
 }
 
-function findCustody(assetId: string): AssetCustody {
+function findCustody(assetId: string): AssetCustodyTimelineRow {
   const custody = scenario.ledgers.custodies.find((candidate) => candidate.assetId === assetId)
   if (custody === undefined) throw new Error(`Missing custody for asset ${assetId}`)
   return custody
@@ -574,11 +541,11 @@ function returnDetailPath() {
 }
 
 function assetDetailPath() {
-  return ROUTE_PATHS.assetDetail.replace(':assetId', returnedAsset.assetId)
+  return ROUTE_PATHS.assetDetail.replace(':assetId', returnedAsset.id)
 }
 
 function custodyHistoryPath() {
-  return ROUTE_PATHS.assetCustodyHistory.replace(':assetId', returnedAsset.assetId)
+  return ROUTE_PATHS.assetCustodyHistory.replace(':assetId', returnedAsset.id)
 }
 
 async function navigate(router: ReturnType<typeof createMemoryRouter>, path: string) {

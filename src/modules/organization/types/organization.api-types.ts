@@ -8,8 +8,8 @@
  * against the C# response DTOs and `RequestBody` records (bead
  * `eiams-frontend-whhu.14`, slice S1).
  *
- * Do NOT "tidy" these back toward the frozen generated types in
- * `@/shared/types/generated/eiams-v1`. That file was fictional for these
+ * Do NOT "tidy" these back toward the frozen generated types. That deleted
+ * artifact was fictional for these
  * aggregates: it named the identifier `siteId`/`orgUnitId`/`employeeId` (the wire
  * says `id`), the label `nameAr` (the wire says `name`), declared a `rowVersion`
  * on Site/OrgUnit/Employee that the backend never serves, and nested

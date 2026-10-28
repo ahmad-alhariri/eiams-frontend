@@ -1,10 +1,11 @@
-import type { RouteKey } from '@/config/routes'
+import { ROUTE_PATHS, type RouteKey } from '@/config/routes'
 import type { DocumentType } from '@/shared/documents/types/document-wire.types'
 
 /**
  * Pinned document-list entries shared by the route-driven shared list page
  * and the per-module page seams (receiving, issue, ...). Kept outside the
- * component file so both stay fast-refresh compatible.
+ * component file so both stay fast-refresh compatible — and it is the ONE
+ * place the route → document-type mapping lives.
  */
 export type DocumentRouteEntry = {
   documentType: DocumentType
@@ -41,4 +42,37 @@ export const ISSUE_DOCUMENT_LIST_ENTRY: DocumentRouteEntry = {
   createRouteKey: 'documentIssueNew',
   createLabelAr: 'سند إصدار جديد',
   documentType: 'Issue',
+}
+
+/** Transfer list entry — owned by the transfer module seam (e17). */
+export const TRANSFER_DOCUMENT_LIST_ENTRY: DocumentRouteEntry = {
+  routeKey: 'documentTransfer',
+  detailRouteKey: 'documentTransferDetail',
+  createRouteKey: 'documentTransferNew',
+  createLabelAr: 'سند تحويل جديد',
+  documentType: 'Transfer',
+}
+
+/** Return list entry — owned by the return module seam (e19). */
+export const RETURN_DOCUMENT_LIST_ENTRY: DocumentRouteEntry = {
+  routeKey: 'documentReturn',
+  detailRouteKey: 'documentReturnDetail',
+  createRouteKey: 'documentReturnNew',
+  createLabelAr: 'سند إرجاع جديد',
+  documentType: 'Return',
+}
+
+/**
+ * Every document-list route the shared page serves, keyed by its path.
+ *
+ * The single source of truth for "which document type does this list URL
+ * show". The shared page used to keep its own copy of this map, which
+ * duplicated the entries above and drifted from them.
+ */
+export const DOCUMENT_LIST_ROUTE_ENTRIES: Readonly<Record<string, DocumentRouteEntry>> = {
+  [ROUTE_PATHS.documentReceiving]: RECEIVING_DOCUMENT_LIST_ENTRY,
+  [ROUTE_PATHS.documentIssue]: ISSUE_DOCUMENT_LIST_ENTRY,
+  [ROUTE_PATHS.documentTransfer]: TRANSFER_DOCUMENT_LIST_ENTRY,
+  [ROUTE_PATHS.documentOpening]: OPENING_DOCUMENT_LIST_ENTRY,
+  [ROUTE_PATHS.documentReturn]: RETURN_DOCUMENT_LIST_ENTRY,
 }

@@ -1,8 +1,22 @@
 import type { Asset } from '@/modules/asset/types/asset.types'
-import type { AdjustmentPurpose, AdjustmentStatus } from '@/shared/types/generated/eiams-v1'
 import type { DocumentStatus } from '@/shared/documents/types/document-wire.types'
 
-export type { AdjustmentPurpose }
+/**
+ * The adjustment's purpose — the wire's `AdjustmentKind`
+ * (`Domain.Common.AdjustmentKind`): the count-variance draft, the
+ * direct-correction draft and the terminal disposal.
+ */
+export type AdjustmentPurpose = 'CountVariance' | 'DirectCorrection' | 'Disposal'
+
+/**
+ * The adjustment's OWN lifecycle — the wire's `InventoryAdjustmentStatus`
+ * (`Domain.Common.InventoryAdjustmentStatus`): `Draft → Posted → Reversed`.
+ *
+ * It is NOT the shared document engine's `DocumentStatus`, which the same
+ * payload carries separately under `documentStatus` (a wider vocabulary that
+ * also holds `Submitted`, `Cancelled` and `Rejected`).
+ */
+export type AdjustmentStatus = 'Draft' | 'Posted' | 'Reversed'
 
 /**
  * Handwritten wire contract for the adjustment module (D-INT-02).
@@ -20,6 +34,10 @@ export type { AdjustmentPurpose }
  * NO embedded policy, attachments, documentId, documentReference or createdBy.
  * Policy and attachments are separate reads keyed by the shared document
  * engine, whose `documentId` equals the adjustment's own `id`.
+ *
+ * The purpose and lifecycle strings are the Domain enums' own `ToString()`
+ * values: `Domain.Common.AdjustmentKind` and
+ * `Domain.Common.InventoryAdjustmentStatus`.
  */
 
 export type AdjustmentLineRequest = {
@@ -49,16 +67,27 @@ export type AdjustmentUpdateRequest = {
   /** Purpose and countId are IMMUTABLE after create — they are not accepted here. */
 }
 
+/**
+ * `GET /adjustments` filters.
+ *
+ * `page` is the WIRE page and it is ONE-based: the backend binds
+ * `PaginationQueryParameters.Page` (`[Range(1, 21474836)]`, default 1), and
+ * `useServerPagination` produces one-based pages, so the number crosses the
+ * boundary unchanged. There is deliberately no `pageIndex` and no `- 1` here:
+ * subtracting one is what put `page=0` on the wire, which the backend answers
+ * with 400 `REQUEST_VALIDATION_FAILED`.
+ */
 export type ListAdjustmentsQuery = {
-  pageIndex?: number
+  page?: number
   pageSize?: number
   purpose?: AdjustmentPurpose
   status?: AdjustmentStatus
   warehouseId?: string
 }
 
+/** `GET /adjustments/disposal-eligible-assets` filters; `page` is ONE-based. */
 export type ListDisposalEligibleAssetsQuery = {
-  pageIndex?: number
+  page?: number
   pageSize?: number
   search?: string
   warehouseId?: string

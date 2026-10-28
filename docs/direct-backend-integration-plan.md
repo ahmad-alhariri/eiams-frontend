@@ -3,6 +3,8 @@
 **Decision:** D-INT-02  
 **Status:** Architectural direction accepted; execution plan awaiting review  
 **Date:** 2026-09-02  
+**Owner:** ahmad-alhariri  
+**Scope:** Integrate the React frontend directly with the running .NET backend, beginning at `http://localhost:5000`, without any OpenAPI-to-TypeScript generation: build one reliable transport foundation, then reconcile and migrate one EIAMS domain module at a time.  
 **Beads:** `eiams-frontend-vi65`, `eiams-frontend-vi65.1`  
 **Repositories:** `eiams-frontend` and `eiams-backend/EIAMS`
 
@@ -73,17 +75,19 @@ hide real incompatibility in a broad compatibility adapter.
 
 - React 19, TypeScript 6 strict mode, Vite 8, Axios, TanStack Query, React Hook
   Form, Zod, Vitest, Testing Library, and MSW.
-- 251 source files currently import `src/shared/types/generated/eiams-v1.ts`:
-  177 production files and 74 test/mock files.
+- 251 source files imported the frozen generated artifact when this plan was
+  written: 177 production files and 74 test/mock files. The migration is
+  complete and the artifact, its generator, and its provisional snapshot have
+  been deleted.
 - Existing module `types/*.types.ts` files mostly alias generated `operations`
   rather than owning useful module interfaces.
 - Feature services usually call `client.get<T>()` or `client.post<T>()` and
   return `response.data` as if the server returned a bare entity/page.
 - Development mocks default to enabled. The Vite proxy assumes `/api/v1` and a
   backend target at port 8080, while the live launch profile uses port 5000.
-- The quality gate runs `api:types:check`; package scripts, dependencies,
-  architecture tests, runbooks, and many design documents enforce the old
-  generator strategy.
+- The quality gate ran `api:types:check`; package scripts, dependencies,
+  architecture tests, runbooks, and many design documents enforced the old
+  generator strategy. All of that has been removed.
 - The frontend has 15 implemented domain directories. The backend also exposes
   reports, but there is no matching `src/modules/reports` directory yet.
 
@@ -350,20 +354,23 @@ Before auth/module migration:
 
 ## 6. Safe retirement of OpenAPI generation
 
+> **EXECUTED.** The sequence below has been carried out: every module reached
+> zero generated imports, the artifact and its generator are deleted, and
+> `src/test/no-new-generated-imports.test.ts` now guards the deletion.
+
 Use a strangler sequence so the app continues to compile:
 
 1. Ratify D-INT-02 and mark D-INT-01's generation strategy superseded.
 2. Remove `api:types:*` and `contract:validate` from the active quality gate so
    no generator runs after the decision.
 3. Remove `openapi-typescript` and generator-only Redocly dependencies.
-4. Add an architecture test that forbids new imports from
-   `@/shared/types/generated/eiams-v1`.
+4. Add an architecture test that forbids imports from the generated artifact.
 5. Keep the current generated file frozen only as temporary migration
    scaffolding. Each module task must reduce its import count to zero.
 6. Rewrite snapshot-dependent behavioral tests as module contract/service tests.
 7. When repository-wide generated imports reach zero, delete:
-   - `src/shared/types/generated/`;
-   - `contracts/openapi/` snapshot/provenance/evidence files;
+   - the generated artifact directory;
+   - the provisional snapshot under `contracts/openapi/`;
    - `scripts/generate-api-types.mjs`;
    - `scripts/openapi-generation.config.mjs`;
    - `scripts/validate-contract.mjs`;

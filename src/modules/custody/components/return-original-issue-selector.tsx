@@ -18,8 +18,10 @@ const MAX_RESULTS = 20
 /* eslint-disable react-refresh/only-export-components */
 
 /** Human-readable reference of a posted Issue: the system reference plus the
- * paper pair when present (`paperDocumentNumber` is a SQL `Contains` filter,
- * so searching matches either form). A bare UUID is never rendered as a label.
+ * paper pair when present. The label LEADS with the system reference, and the
+ * picker searches the system reference — the identifier the user copies off
+ * the label is the one the server filters on. A bare UUID is never rendered
+ * as a label.
  */
 export function originalIssueOptionLabel(document: WarehouseDocumentSummary): string {
   const paper =
@@ -60,7 +62,10 @@ export interface ReturnOriginalIssueSelectorProps {
  * Server-authoritative posted-Issue selector for the Return petal (FIX-R3).
  * Options come from `GET /warehouse-documents?documentType=Issue&
  * documentStatus=Posted` — never free text — and the empty query lists the
- * most recent posted issues. The document's own warehouse is deliberately NOT
+ * most recent posted issues. A typed query filters on the SYSTEM REFERENCE
+ * (`systemReferenceNumber`, a bound `Contains` filter), because that is the
+ * identifier the option label leads with: a user who copies what the label
+ * shows must find the row. The document's own warehouse is deliberately NOT
  * a filter: a wrong-warehouse issue must stay selectable so the client-side
  * mismatch guard (and the server's `WrongWarehouse`) can be exercised.
  */
@@ -84,7 +89,11 @@ export function ReturnOriginalIssueSelector({
         documentStatus: 'Posted' as const,
         page: 1,
         pageSize: MAX_RESULTS,
-        ...(trimmed === '' ? {} : { paperDocumentNumber: trimmed }),
+        // The search binds the identifier the option label LEADS with (the
+        // system reference), so the visible reference is the searchable one.
+        // `systemReferenceNumber` is already a bound query parameter of
+        // `GET /warehouse-documents` — no new parameter is needed.
+        ...(trimmed === '' ? {} : { systemReferenceNumber: trimmed }),
       }
       const page = await queryClient.fetchQuery({
         queryKey: documentQueryKeys.documents(scope, filters),
@@ -101,11 +110,11 @@ export function ReturnOriginalIssueSelector({
       value={value === null || value === '' ? null : value}
       onValueChange={onValueChange}
       loadOptions={loadOptions}
-      // An empty query lists recent posted issues; typing searches the paper
-      // number (server-side `Contains`).
+      // An empty query lists recent posted issues; typing searches the system
+      // reference (server-side `Contains`).
       minQueryLength={0}
       maxResults={MAX_RESULTS}
-      placeholder="ابحث برقم سند الصرف الورقي أو المرجع..."
+      placeholder="ابحث برقم المرجع النظامي لسند الصرف..."
       emptyMessage="لا توجد سندات صرف مُرصدة مطابقة."
       errorMessage="تعذر البحث عن سندات الصرف."
       disabled={disabled || scope === undefined}

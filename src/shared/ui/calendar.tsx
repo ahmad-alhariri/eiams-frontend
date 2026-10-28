@@ -199,7 +199,7 @@ function Calendar({ className, ...props }: CalendarProps) {
   const weekdaysFull = arWeekdaysFull()
 
   return (
-    <div data-slot="calendar" className={cn('w-fit', className)}>
+    <div data-slot="calendar" dir="rtl" className={cn('w-fit', className)}>
       <div
         data-slot="calendar-caption"
         aria-live="polite"

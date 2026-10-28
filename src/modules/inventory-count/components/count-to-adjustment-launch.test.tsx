@@ -34,7 +34,7 @@ function count(overrides: Partial<InventoryCount> = {}): InventoryCount {
     countType: 'Cycle',
     scopeType: 'EntireWarehouse',
     freezePolicy: 'SoftFreeze',
-    status: 'Completed',
+    status: 'Closed',
     rowVersion: 3,
     plannedAtUtc: '2026-08-20T08:00:00.000Z',
     startedAtUtc: '2026-08-20T09:00:00.000Z',
@@ -70,14 +70,29 @@ const GO_TO_DRAFT =
   /\u0627\u0644\u0627\u0646\u062A\u0642\u0627\u0644 \u0625\u0644\u0649 \u0645\u0633\u0648\u062F\u0629/
 
 describe('CountToAdjustmentLaunch (F8 - settlement drives the CTA)', () => {
-  it.each(['Planned', 'InProgress'] as const)(
-    'hides the launch for %s even for an adjustment manager',
+  // `NotRequired` is a SETTLEMENT state, never a count status: the statuses the
+  // backend guard refuses are the real lifecycle ones.
+  it.each(['Planned', 'InProgress', 'Completed', 'Aborted'] as const)(
+    'hides the active launch for %s and shows the disabled explanation',
     (status) => {
       renderLaunch(count({ status }))
-      expect(screen.queryByRole('button', { name: CREATE_DRAFT })).toBeNull()
+      expect(screen.getByRole('button', { name: CREATE_DRAFT })).toBeDisabled()
+      expect(
+        screen.getByText(/يتطلب إنشاء سند التسوية أن تكون جلسة الجرد مغلقة/),
+      ).toBeInTheDocument()
       expect(screen.queryByRole('link', { name: GO_TO_DRAFT })).toBeNull()
     },
   )
+
+  it('shows nothing for a closed count with no variance to settle', () => {
+    renderLaunch(
+      count({
+        settlement: { status: 'NotRequired', adjustmentId: null, adjustmentStatus: null },
+      }),
+    )
+    expect(screen.queryByRole('button', { name: CREATE_DRAFT })).toBeNull()
+    expect(screen.queryByRole('link', { name: GO_TO_DRAFT })).toBeNull()
+  })
 
   it('offers to create the settlement draft while the variance is unsettled', () => {
     renderLaunch(count())
@@ -96,10 +111,8 @@ describe('CountToAdjustmentLaunch (F8 - settlement drives the CTA)', () => {
     expect(screen.queryByRole('button', { name: CREATE_DRAFT })).toBeNull()
   })
 
-  it('shows nothing when the count has no variance to settle', () => {
-    renderLaunch(
-      count({ settlement: { status: 'NotRequired', adjustmentId: null, adjustmentStatus: null } }),
-    )
+  it('hides the CTA from a keeper who may not create adjustments', () => {
+    renderLaunch(count(), ['count.view', 'document.view', 'document.create'])
     expect(screen.queryByRole('button', { name: CREATE_DRAFT })).toBeNull()
     expect(screen.queryByRole('link', { name: GO_TO_DRAFT })).toBeNull()
   })
@@ -107,16 +120,9 @@ describe('CountToAdjustmentLaunch (F8 - settlement drives the CTA)', () => {
   it('shows nothing once the adjustment settled the variance', () => {
     renderLaunch(
       count({
-        status: 'Closed',
         settlement: { status: 'Settled', adjustmentId: ADJUSTMENT_ID, adjustmentStatus: 'Posted' },
       }),
     )
-    expect(screen.queryByRole('button', { name: CREATE_DRAFT })).toBeNull()
-    expect(screen.queryByRole('link', { name: GO_TO_DRAFT })).toBeNull()
-  })
-
-  it('hides the CTA from a keeper who may not create adjustments', () => {
-    renderLaunch(count(), ['count.view', 'document.view', 'document.create'])
     expect(screen.queryByRole('button', { name: CREATE_DRAFT })).toBeNull()
     expect(screen.queryByRole('link', { name: GO_TO_DRAFT })).toBeNull()
   })

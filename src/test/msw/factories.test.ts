@@ -1,3 +1,4 @@
+import { errJson, okPageJson } from '@/test/msw/envelope'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -9,9 +10,7 @@ import {
   createInventoryBalance,
   createLifecycleEvent,
   createMaterial,
-  createPage,
   createPolicyBlocker,
-  createProblemDetails,
   createScopeContext,
   createSession,
   createStockMovement,
@@ -21,6 +20,102 @@ import {
   fixtureUuid,
   DOCUMENT_TRANSITIONS,
 } from '@/test/msw/factories'
+
+/**
+ * The live Material wire, copied verbatim from the running API.
+ *
+ * `GET /api/v1/catalog/materials?page=1&pageSize=2` against the container
+ * `eiams-api-ic-be1` (2026-10-27), first row of `data`, with the response's
+ * own pagination block beside it. The OpenAPI snapshot
+ * (`eiams-backend-v1.openapi.json`, schema
+ * `Application.Materials.GetList.MaterialResponse`) declares the SAME sixteen
+ * members (fourteen required plus the nullable `nameEn` and `attributes`) and
+ * `additionalProperties: false`, so this snippet is the shape the factory is
+ * pinned to — not a shape remembered from a contract that moved.
+ */
+const LIVE_MATERIAL_WIRE = {
+  id: 'c42171a4-2f7b-4458-b465-c561066bdc7a',
+  familyId: '49a3fd91-99ac-4d8c-854c-525ffb5c249c',
+  nameAr: 'مادة أصول E2E',
+  nameEn: 'E2E Asset Material',
+  code: 'E2E-ASSET-01',
+  materialKind: 'Asset',
+  trackingType: 'Serial',
+  hasExpiry: false,
+  requiresAssetNumber: true,
+  catalogVersion: 1,
+  attributes: null,
+  status: 'Active',
+  materialDomainId: '814869fb-2f4f-437f-959b-aa0b36caa2cd',
+  materialDomainName: 'Test domain 45590',
+  baseUnitId: '4fa18d4e-523d-4dc2-befd-d93c0f03f6cc',
+  baseUnitSymbol: 'pcs',
+} as const
+
+const LIVE_MATERIAL_PAGINATION = {
+  page: 1,
+  page_size: 2,
+  total_items: 8,
+  total_pages: 4,
+  has_previous_page: false,
+  has_next_page: true,
+  total_count: 8,
+} as const
+
+/**
+ * The two members the live wire declares NULLABLE
+ * (`"nameEn": {"type":"string","nullable":true}` and the same for
+ * `attributes`), so a factory default of `null` is legal for them and one
+ * live row's value says nothing about theirs.
+ */
+const NULLABLE_ON_THE_WIRE: readonly string[] = ['nameEn', 'attributes']
+
+describe('createMaterial matches the live Material wire', () => {
+  it('carries exactly the members the live MaterialResponse declares', () => {
+    // A member the wire does not have (`materialDomainCode`) or a nested
+    // `materialDomain` / `unit` reference would both show up here.
+    expect(Object.keys(createMaterial()).sort()).toEqual(Object.keys(LIVE_MATERIAL_WIRE).sort())
+  })
+
+  it('gives every member the type the live wire gives it', () => {
+    const material = createMaterial()
+
+    // Every member the live row fills must hold the same JS type here.
+    for (const [key, liveValue] of Object.entries(LIVE_MATERIAL_WIRE)) {
+      if (liveValue === null || NULLABLE_ON_THE_WIRE.includes(key)) continue
+      expect(typeof material[key as keyof typeof material], key).toBe(typeof liveValue)
+    }
+    // The wire serves `attributes: null` for a material that carries none, and
+    // `nameEn` is nullable in the same way — but both still accept a value.
+    expect(material.attributes).toBeNull()
+    expect(material.nameEn).toBeNull()
+    expect(createMaterial({ nameEn: 'E2E Asset Material' }).nameEn).toBe('E2E Asset Material')
+    expect(createMaterial({ attributes: '{}' }).attributes).toBe('{}')
+  })
+
+  it('mints the live row verbatim when the wire row is handed in', () => {
+    expect(createMaterial(LIVE_MATERIAL_WIRE)).toEqual(LIVE_MATERIAL_WIRE)
+  })
+
+  it('serves the status as the STRING the wire serves, never the ordinal', () => {
+    // The ordinal belongs to `PUT /catalog/materials/{id}/status`, which is a
+    // different contract; a read never carries it.
+    expect(createMaterial().status).toBe('Active')
+    expect(typeof createMaterial().status).toBe('string')
+  })
+
+  it('pages the materials list one-based, the way the live envelope does', async () => {
+    const body = (await okPageJson([createMaterial(), createMaterial({ id: fixtureUuid(25) })], {
+      pageSize: 2,
+      totalCount: 8,
+      totalPages: 4,
+    }).json()) as Record<string, unknown>
+
+    // The wire page is ONE-based: the first page is `1`, and `has_next_page`
+    // follows the server's own `page < total_pages` rule.
+    expect(body['pagination']).toEqual(LIVE_MATERIAL_PAGINATION)
+  })
+})
 
 describe('contract-derived MSW factories', () => {
   it('creates valid, deterministic UUIDs for fixture identifiers', () => {
@@ -45,14 +140,26 @@ describe('contract-derived MSW factories', () => {
     expect(response.session.permissionCodes).toEqual(['audit.view'])
   })
 
-  it('uses the shared v1 paging envelope and derives its totals from items', () => {
-    const page = createPage([createWarehouse(), createWarehouse({ id: fixtureUuid(32) })])
+  it('uses the shared wire paging envelope and derives pagination from items', async () => {
+    const body = (await okPageJson([createWarehouse(), createWarehouse({ id: fixtureUuid(32) })], {
+      pageSize: 20,
+    }).json()) as Record<string, unknown>
 
-    expect(page.meta).toMatchObject({ pageIndex: 1, pageSize: 20, totalItems: 2, totalPages: 1 })
-    expect(page.items).toHaveLength(2)
+    expect(body['success']).toBe(true)
+    expect(body['data'] as unknown[]).toHaveLength(2)
+    expect(body['pagination']).toMatchObject({
+      page: 1,
+      page_size: 20,
+      total_items: 2,
+      total_pages: 1,
+      has_previous_page: false,
+      has_next_page: false,
+      total_count: 2,
+    })
+    expect(body['meta']).toMatchObject({ request_id: 'test-request-id' })
   })
 
-  it('returns contract-shaped operational entities and problem details', () => {
+  it('returns contract-shaped operational entities and problem details', async () => {
     const material = createMaterial({ materialKind: 'Asset', requiresAssetNumber: true })
     const balance = createInventoryBalance({
       materialId: material.id,
@@ -62,7 +169,6 @@ describe('contract-derived MSW factories', () => {
       materialId: balance.materialId,
       materialNameAr: balance.materialNameAr,
     })
-    const problem = createProblemDetails({ status: 409, code: 'conflict.version' })
 
     expect(balance.materialId).toBe(material.id)
     expect(balance.lowStock).toEqual({ state: 1, thresholdQuantity: 5 })
@@ -73,7 +179,9 @@ describe('contract-derived MSW factories', () => {
       quantityDelta: 5,
     })
     expect(material.requiresAssetNumber).toBe(true)
-    expect(problem).toMatchObject({ status: 409, code: 'conflict.version' })
+    const errorBody = await errJson(409, { code: 'conflict.version' }).json()
+    expect(errorBody['success']).toBe(false)
+    expect((errorBody['error'] as Record<string, unknown>)['code']).toBe('CONFLICT_VERSION')
   })
 })
 

@@ -1,18 +1,29 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCallback, useState, type FormEvent } from 'react'
-import { FormProvider, useForm, Controller, type Resolver } from 'react-hook-form'
+import {
+  FormProvider,
+  useForm,
+  Controller,
+  type DefaultValues,
+  type Resolver,
+} from 'react-hook-form'
 import { useNavigate } from 'react-router'
 import { z } from 'zod'
 
 import { useDisposalEligibleAssetSelector } from '@/modules/adjustment/hooks/use-disposal-eligible-asset-selector'
-import { useCreateDisposalMutation } from '@/modules/adjustment/hooks/use-adjustment-queries'
+import {
+  DisposalPaperReferenceError,
+  useCreateDisposalMutation,
+} from '@/modules/adjustment/hooks/use-adjustment-queries'
 import { useRoutePermission } from '@/modules/auth/hooks/use-permission'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import { ROUTE_PATHS } from '@/config/routes'
+import { documentHeaderSchema } from '@/shared/documents/document-header-form'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
+import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Textarea } from '@/shared/ui/textarea'
 import { normalizeApiError } from '@/shared/services/api-error'
@@ -29,6 +40,11 @@ import { normalizeApiError } from '@/shared/services/api-error'
  *   reason }` — the client sends NO effect, because the SERVER derives the
  *   signed difference itself: −1 for an InStock asset, 0 for one that is
  *   already Issued or InCustody;
+ * - the PAPER REFERENCE (the authorisation reference of the disposal) is
+ *   collected here and written on the created draft through the shared
+ *   document engine's own `paper-reference` route, because the live disposal
+ *   endpoint binds no such field. A disposal is terminal and irreversible, so
+ *   it must be auditable afterwards (F-33);
  * - the reason records the disposal authorization;
  * - the posted result is TERMINAL — the asset becomes Disposed and no
  *   reversal action ever exists for it.
@@ -42,7 +58,23 @@ import { normalizeApiError } from '@/shared/services/api-error'
  */
 const DISPOSAL_REASON_MAX = 200
 
-const disposalFormSchema = z.object({
+/**
+ * Matches the un-exported constant in `document-header-form.tsx`.
+ */
+const PAPER_DOCUMENT_NUMBER_MAX_LENGTH = 15
+
+/**
+ * The paper pair, taken from the SHARED document schema — the same Arabic
+ * labels, the same pattern and the same year bounds every other document
+ * form validates against. Reusing it is what keeps one paper-reference
+ * vocabulary across the whole system instead of a second one here.
+ */
+const disposalPaperReferenceSchema = documentHeaderSchema.pick({
+  paperDocumentNumber: true,
+  paperDocumentYear: true,
+})
+
+const disposalFormSchema = disposalPaperReferenceSchema.extend({
   warehouseId: z.uuid('يجب اختيار مستودع صالح من القائمة.'),
   assetId: z.uuid('يجب اختيار أصل صالح من القائمة.'),
   reason: z
@@ -110,12 +142,20 @@ function AssetDisposalFormInner({
       void form.handleSubmit((values) => {
         // The LIVE disposal body: the warehouse, exactly ONE asset id and the
         // reason. No effect, no material, no lines, no rowVersion — the server
-        // derives all of that and refuses anything else.
+        // derives all of that and refuses anything else. The paper reference is
+        // NOT in this body: the live endpoint binds no such field, so it is
+        // written afterwards through the shared document engine's own route.
         createMutation.mutate(
           {
-            warehouseId: values.warehouseId,
-            assetIds: [values.assetId],
-            reason: values.reason,
+            request: {
+              warehouseId: values.warehouseId,
+              assetIds: [values.assetId],
+              reason: values.reason,
+            },
+            paperReference: {
+              paperDocumentNumber: values.paperDocumentNumber,
+              paperDocumentYear: values.paperDocumentYear,
+            },
           },
           {
             onSuccess: () => {
@@ -188,6 +228,53 @@ function AssetDisposalFormInner({
               ) : null}
             </div>
 
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="disposal-paper-number">رقم المستند الورقي</Label>
+              <Input
+                id="disposal-paper-number"
+                dir="ltr"
+                maxLength={PAPER_DOCUMENT_NUMBER_MAX_LENGTH}
+                placeholder="مثال: 2024/000123"
+                {...form.register('paperDocumentNumber')}
+                disabled={isSubmitting}
+                aria-invalid={form.formState.errors.paperDocumentNumber ? true : undefined}
+              />
+              {form.formState.errors.paperDocumentNumber ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {form.formState.errors.paperDocumentNumber.message}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="disposal-paper-year">السنة الورقية</Label>
+              <Controller
+                control={form.control}
+                name="paperDocumentYear"
+                render={({ field }) => (
+                  <Input
+                    id="disposal-paper-year"
+                    dir="ltr"
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="مثال: 2026"
+                    value={field.value === undefined ? '' : String(field.value)}
+                    onChange={(event) => {
+                      const digits = event.target.value.replace(/\D/g, '').slice(0, 4)
+                      field.onChange(digits === '' ? undefined : Number(digits))
+                    }}
+                    disabled={isSubmitting}
+                    aria-invalid={form.formState.errors.paperDocumentYear ? true : undefined}
+                  />
+                )}
+              />
+              {form.formState.errors.paperDocumentYear ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {form.formState.errors.paperDocumentYear.message}
+                </p>
+              ) : null}
+            </div>
+
             <div className="flex flex-col gap-2 sm:col-span-2">
               <Label htmlFor="disposal-reason">سبب الإعدام ومرجع المحضر</Label>
               <Textarea
@@ -213,13 +300,22 @@ function AssetDisposalFormInner({
           نهائي.
         </p>
 
+        <p className="rounded-md bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          رقم المستند الورقي هو مرجع محضر الإعدام؛ يُحفظ على المسودة فور إنشائها ليكون السند قابلاً
+          للتدقيق بعد الترحيل النهائي.
+        </p>
+
         {createMutation.error !== null ? (
           <p role="alert" className="text-sm text-destructive">
             {/* The server's own code decides the wording: an asset that is no
                 longer eligible, a second asset in the same draft and a
                 forbidden scope each name themselves instead of collapsing into
-                one generic sentence. */}
-            {normalizeApiError(createMutation.error).titleAr}
+                one generic sentence. A failed PAPER-REFERENCE write is the one
+                failure the client itself classifies: the draft exists, only its
+                audit trail is missing. */}
+            {createMutation.error instanceof DisposalPaperReferenceError
+              ? createMutation.error.message
+              : normalizeApiError(createMutation.error).titleAr}
           </p>
         ) : null}
 
@@ -241,10 +337,14 @@ function AssetDisposalFormInner({
   )
 }
 
-function createDisposalDefaultValues(): DisposalFormValues {
+function createDisposalDefaultValues(): DefaultValues<DisposalFormValues> {
   return {
     warehouseId: '',
     assetId: '',
     reason: '',
+    paperDocumentNumber: '',
+    // The paper year starts EMPTY: the shared schema requires a number
+    // between its own bounds, and an empty year must fail validation instead
+    // of pre-filling a value the user never chose.
   }
 }

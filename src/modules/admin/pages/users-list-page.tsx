@@ -18,6 +18,7 @@ import { useRolesQuery, useUsersQuery } from '@/modules/admin/hooks/use-admin-qu
 import type { ListUsersQuery } from '@/modules/admin/types/admin.types'
 import { userDisplayName, type UserDirectoryRow } from '@/modules/admin/types/user.types'
 import { buildRoleLabelMap, resolveRoleLabelAr } from '@/modules/admin/utils/role-labels'
+import { ErrorState } from '@/shared/feedback/error-state'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
@@ -75,6 +76,18 @@ function UsersListPage() {
   const statusMutation = useSetUserStatusMutation()
   const submitFeedback = useSubmitFeedback()
   const { confirm, element: confirmElement } = useConfirm()
+  /**
+   * The role catalogue is a SECONDARY read: the directory comes from
+   * `usersQuery`, and the roles only fill the create dialog's role picker. The
+   * list is collapsed into an empty array, so a FAILED read used to render
+   * exactly like "no roles are configured" — the picker came up empty and
+   * disabled, with no Arabic reason and no retry, and nothing on the page
+   * said the catalogue never arrived. A failed secondary read must stay
+   * DISTINGUISHABLE from an empty one, so the failure gets its OWN surface,
+   * independent of the directory read, and the create action stays closed
+   * until the catalogue is readable.
+   */
+  const rolesUnavailable = rolesQuery.isError
 
   const handleSearchChange = useCallback(
     (nextSearch: string) => {
@@ -224,7 +237,7 @@ function UsersListPage() {
         subtitle="إدارة حسابات المستخدمين على نطاق المؤسسة بالكامل."
         toolbar={
           canManage ? (
-            <Button type="button" onClick={openCreate}>
+            <Button type="button" onClick={openCreate} disabled={rolesUnavailable}>
               <IconPlus aria-hidden data-icon="inline-start" />
               مستخدم جديد
             </Button>
@@ -236,6 +249,17 @@ function UsersListPage() {
         title="قائمة المستخدمين"
         description="ابحث بالبريد الإلكتروني أو الاسم، ثم تنقّل بين صفحات الخادم."
       >
+        {rolesUnavailable ? (
+          <ErrorState
+            title="تعذّر تحميل الأدوار"
+            description="تعذّر جلب قائمة الأدوار، فلا يمكن إنشاء مستخدم جديد حتى تُحمَّل. حاول مرة أخرى."
+            action={
+              <Button type="button" onClick={() => void rolesQuery.refetch()}>
+                إعادة المحاولة
+              </Button>
+            }
+          />
+        ) : null}
         <DataTableServer
           columns={columns}
           data={pageRows(page, usersQuery.isError)}

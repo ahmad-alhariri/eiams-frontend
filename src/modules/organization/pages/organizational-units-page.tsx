@@ -23,7 +23,7 @@ import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { useDebounce } from '@/shared/hooks/use-debounce'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { ContentCard } from '@/shared/layout/content-card'
-import { PageHeader } from '@/shared/layout/page-header'
+import { OrganizationPageShell } from '@/modules/organization/components/organization-page-shell'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { Input } from '@/shared/ui/input'
@@ -142,20 +142,18 @@ function OrganizationalUnitsPage() {
   )
 
   return (
-    <div dir="rtl" className="min-w-0">
-      <PageHeader
-        title="الوحدات التنظيمية"
-        subtitle="استعرض التسلسل الإداري للوحدات ضمن نطاق العمل الحالي."
-        toolbar={
-          canManage ? (
-            <Button type="button" onClick={() => setDialogUnit(null)}>
-              <IconPlus aria-hidden data-icon="inline-start" />
-              إضافة وحدة تنظيمية
-            </Button>
-          ) : undefined
-        }
-      />
-
+    <OrganizationPageShell
+      titleAr="الوحدات التنظيمية"
+      subtitle="استعرض التسلسل الإداري للوحدات ضمن نطاق العمل الحالي."
+      actions={
+        canManage ? (
+          <Button type="button" onClick={() => setDialogUnit(null)}>
+            <IconPlus aria-hidden data-icon="inline-start" />
+            إضافة وحدة تنظيمية
+          </Button>
+        ) : undefined
+      }
+    >
       <ContentCard
         title="الهيكل التنظيمي"
         description="تُعرض الوحدات بحسب العلاقة الإدارية المعتمدة في النظام."
@@ -247,7 +245,7 @@ function OrganizationalUnitsPage() {
         busy={statusMutation.isPending}
         onConfirm={() => void confirmStatusChange()}
       />
-    </div>
+    </OrganizationPageShell>
   )
 }
 

@@ -16,6 +16,7 @@ import { server } from '@/test/msw/server'
 import { countNameHandlers } from '@/test/msw/count-wire-fixtures'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
+import { formatDateTime } from '@/shared/utils/format'
 
 const API_BASE_URL = '/api/v1'
 const COUNT_ID = '773e4567-e89b-42d3-a456-426614174099'
@@ -107,6 +108,30 @@ describe('CountDetailPage (live count detail contract)', () => {
       screen.getAllByText('\u062A\u062C\u0645\u064A\u062F \u0645\u0631\u0646 (SoftFreeze)').length,
     ).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: START })).toBeInTheDocument()
+  }, 20000)
+
+  it('renders every session timestamp through the shared formatter, never the raw wire value', async () => {
+    server.use(
+      http.get(API_BASE_URL + '/inventory-counts/' + COUNT_ID, () =>
+        okJson({
+          ...countDetail(5, 'Closed'),
+          startedAtUtc: '2026-08-25T10:00:00Z',
+          completedAtUtc: '2026-08-25T11:30:00Z',
+          closedAtUtc: '2026-08-25T12:00:00Z',
+        }),
+      ),
+    )
+    renderPage()
+
+    await screen.findByRole('heading', { level: 1 })
+
+    // The raw ISO value never reaches the user (defect 2).
+    for (const raw of ['2026-08-25T10:00:00Z', '2026-08-25T11:30:00Z', '2026-08-25T12:00:00Z']) {
+      expect(screen.queryByText(raw)).toBeNull()
+    }
+    expect(screen.getByText(formatDateTime('2026-08-25T10:00:00Z'))).toBeInTheDocument()
+    expect(screen.getByText(formatDateTime('2026-08-25T11:30:00Z'))).toBeInTheDocument()
+    expect(screen.getByText(formatDateTime('2026-08-25T12:00:00Z'))).toBeInTheDocument()
   }, 20000)
 
   it('hides the start action from a keeper without count.plan', async () => {

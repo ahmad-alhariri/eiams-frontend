@@ -2,7 +2,7 @@
  * Handwritten wire contracts for the Asset module (D-INT-02 / ADR-0001).
  *
  * These types describe what the LIVE API serves, not the frozen design
- * snapshot (`src/shared/types/generated/eiams-v1.ts`). The snapshot's rows were
+ * snapshot (the generated artifact, since deleted). The snapshot's rows were
  * nested (`material: { displayName }`, `currentWarehouse: { displayName }`,
  * `holder: { displayName }`) and carried a `derivedStatus` field; the live
  * rows are FLAT and camelCase, and the status field is `currentStatus`. Every

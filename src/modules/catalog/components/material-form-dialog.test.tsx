@@ -170,6 +170,13 @@ describe('MaterialFormDialog', () => {
       expect(within(dialog).getByLabelText('نوع المادة')).toHaveTextContent('أصل ثابت'),
     )
     expect(within(dialog).getByLabelText('نوع المادة')).not.toHaveTextContent('Asset')
+    // The policy helper under the selector states the custody consequence and
+    // the asset-number consequence of the kind currently chosen.
+    expect(
+      within(dialog).getByText(
+        'تُنشأ عهدة إلزامية، ويُسجّل كل أصل في سجل الأصول بمعرّف داخلي للمؤسسة. رقم الأصل: مطلوب (رقم أصل داخلي)',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('confirms a tracking-type change too, because it also bumps the catalog version', async () => {

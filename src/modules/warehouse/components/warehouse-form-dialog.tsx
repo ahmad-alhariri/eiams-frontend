@@ -14,6 +14,7 @@ import {
 } from '@/modules/warehouse/schemas/warehouse.schemas'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
+import { ErrorState } from '@/shared/feedback/error-state'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import {
@@ -88,10 +89,23 @@ export function WarehouseFormDialog({
     return siteId === '' ? items : items.filter((unit) => unit.siteId === siteId)
   }, [organizationalUnitsQuery.data, siteId])
 
+  /**
+   * The organizational-unit list is a SECONDARY read: the warehouse itself is
+   * saved with the fields below, and the units only supply the picker that
+   * fills `organizationalUnitId`. It used to be collapsed into an empty list,
+   * so a FAILED read rendered exactly like "no organizational unit exists" —
+   * an empty picker with no Arabic reason and no retry, and the save silently
+   * unreachable. A failed read must stay DISTINGUISHABLE from an empty one,
+   * so the failure gets its OWN surface and the picker stays closed until the
+   * units are readable again.
+   */
+  const organizationalUnitsUnavailable = organizationalUnitsQuery.isError
+
   const isSubmittable =
     name.trim() !== '' &&
     warehouseType.trim() !== '' &&
     organizationalUnitId !== '' &&
+    !organizationalUnitsUnavailable &&
     (!isCreate || (siteId !== '' && code.trim() !== ''))
 
   const submit = async (values: WarehouseFormValues) => {
@@ -128,6 +142,22 @@ export function WarehouseFormDialog({
                 {CREATE_ONLY_NOTE}
               </p>
             )}
+            {organizationalUnitsUnavailable ? (
+              <ErrorState
+                className="min-h-48"
+                title="تعذّر تحميل الوحدات التنظيمية"
+                description="تعذّر جلب قائمة الوحدات التنظيمية، فلا يمكن اختيار الوحدة ولا حفظ المستودع. حاول مرة أخرى."
+                action={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void organizationalUnitsQuery.refetch()}
+                  >
+                    إعادة المحاولة
+                  </Button>
+                }
+              />
+            ) : null}
             <FormField
               control={form.control}
               name="siteId"
@@ -208,7 +238,11 @@ export function WarehouseFormDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>الوحدة التنظيمية</FormLabel>
-                  <Select value={field.value} disabled={isPending} onValueChange={field.onChange}>
+                  <Select
+                    value={field.value}
+                    disabled={isPending || organizationalUnitsUnavailable}
+                    onValueChange={field.onChange}
+                  >
                     <FormControl>
                       <SelectTrigger aria-label="الوحدة التنظيمية">
                         <SelectValue>

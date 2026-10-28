@@ -304,6 +304,45 @@ describe('MaterialCategoriesPage', () => {
     expect(screen.getByText(orphan.name)).toBeInTheDocument()
   })
 
+  it('keeps a failed domain read distinguishable from an empty one, and retries it', async () => {
+    // The domains list is a SECONDARY read: the tree comes from the categories
+    // read, and the domains only supply the names. A failed read used to
+    // render as "no domains are configured" — an empty domain picker with no
+    // Arabic reason and no retry.
+    permissions.canManage = true
+    const category = makeCategory()
+    const domain = makeDomain()
+    let domainAttempts = 0
+    const user = userEvent.setup()
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/categories`, () => okPageJson([category])),
+      http.get(`${API_BASE_URL}/catalog/domains`, () => {
+        domainAttempts += 1
+        return domainAttempts === 1 ? new HttpResponse(null, { status: 500 }) : okPageJson([domain])
+      }),
+    )
+
+    render(<MaterialCategoriesPage />, { wrapper: createWrapper() })
+
+    expect(
+      await screen.findByRole('heading', { name: 'تعذّر تحميل مجالات المواد' }),
+    ).toBeInTheDocument()
+    // The action that would consume the empty list stays closed until the
+    // domains are readable again.
+    expect(screen.getByRole('button', { name: 'إضافة تصنيف' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
+
+    await waitFor(() => expect(domainAttempts).toBe(2))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'تعذّر تحميل مجالات المواد' }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('button', { name: 'إضافة تصنيف' })).toBeEnabled()
+    expect(await screen.findByRole('heading', { name: domain.name })).toBeInTheDocument()
+  })
+
   it('deactivates a tree node through the integer status command', async () => {
     permissions.canManage = true
     const category = makeCategory()

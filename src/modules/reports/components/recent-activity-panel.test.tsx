@@ -7,6 +7,7 @@ import { HttpResponse, http } from 'msw'
 
 import { createAuditLog, createInventoryBalance } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import { formatDateTime } from '@/shared/utils/format'
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' },
@@ -92,6 +93,51 @@ describe('RecentActivityPanel', () => {
 
     expect(await screen.findByRole('heading', { level: 3, name: 'نشاط حديث' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 3, name: 'تنبيهات تشغيلية' })).toBeInTheDocument()
+  })
+
+  it('renders the audit row from the LIVE wire shape', async () => {
+    session.codes = ['audit.view']
+    // The live header (`AuditLogListItemResponse`) carries `id`, `createdAtUtc`,
+    // `entityId` and `userId` — never `auditLogId`, `occurredAt`,
+    // `entityDisplay` or `occurredBy`.
+    const auditLog = createAuditLog({
+      id: '11111111-1111-4111-8111-111111111111',
+      entityId: '22222222-2222-4222-8222-222222222222',
+      userId: '33333333-3333-4333-8333-333333333333',
+      createdAtUtc: '2026-09-01T08:30:00.000Z',
+    })
+    server.use(
+      http.get(`${API_BASE_URL}/audit-logs`, () =>
+        HttpResponse.json({
+          success: true,
+          data: [auditLog],
+          pagination: {
+            page: 1,
+            page_size: 10,
+            total_items: 1,
+            total_pages: 1,
+            has_previous_page: false,
+            has_next_page: false,
+            total_count: 1,
+          },
+          meta: { requestId: 'test', timestampUtc: '2026-09-01T00:00:00.000Z' },
+        }),
+      ),
+    )
+
+    render(<RecentActivityPanel />, { wrapper: createWrapper() })
+
+    expect(await screen.findByText(formatDateTime('2026-09-01T08:30:00.000Z'))).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'عرض تفاصيل سجل التدقيق 11111111…' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('22222222…')).toBeInTheDocument()
+    expect(screen.getByText('33333333…')).toBeInTheDocument()
+
+    // eiams-frontend-050j / 919b. The column reads `createdAtUtc` — the
+    // CREATION time — so the panel must not label it as an event time.
+    expect(screen.getByRole('columnheader', { name: 'تاريخ الإنشاء' })).toBeInTheDocument()
+    expect(screen.queryByText('وقت الحدث')).not.toBeInTheDocument()
   })
 
   it('hides the audit section when audit.view is missing, and the inventory section when inventory.view is missing', async () => {

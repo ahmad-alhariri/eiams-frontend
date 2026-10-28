@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -16,9 +17,39 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
 }))
 
+import { formatNumber } from '@/shared/utils/format'
+import { formatArabicDate } from '@/shared/ui/calendar-utils'
+
+import type { CountAdjustmentsReportRow } from '@/modules/reports/types/reports.types'
 import { CountAdjustmentReportTable } from '@/modules/reports/components/count-adjustment-report-table'
 
 const API_BASE_URL = '/api/v1'
+
+/**
+ * The live row: `GET /reports/count-adjustments` answers with one row per
+ * warehouse, aggregating the counts and the adjustments of that warehouse
+ * inside the requested date window
+ * (`Application/Reports/CountAdjustments/CountAdjustmentsReportRow.cs:3-13`).
+ * There is no adjustment document, no count reference and no purpose on the
+ * wire — only the server's counters and sums.
+ */
+function createCountAdjustmentsReportRow(
+  overrides: Partial<CountAdjustmentsReportRow> = {},
+): CountAdjustmentsReportRow {
+  return {
+    warehouseId: '373ba70c-aa2c-466d-b9b5-a9df47abf8da',
+    warehouseCode: 'MAIN',
+    warehouseName: 'Main Store',
+    countCount: 13,
+    closedCountCount: 7,
+    varianceLineCount: 3,
+    netVariance: -41,
+    adjustmentCount: 24,
+    postedAdjustmentCount: 8,
+    adjustmentDifference: 20,
+    ...overrides,
+  }
+}
 
 function createWrapper() {
   const client = new QueryClient({
@@ -38,41 +69,11 @@ afterEach(() => {
 })
 
 describe('CountAdjustmentReportTable', () => {
-  it('renders Arabic headers and Arabic adjustment labels', async () => {
+  it('renders Arabic headers and the server counters for the warehouse', async () => {
+    const row = createCountAdjustmentsReportRow()
     server.use(
       http.get(`${API_BASE_URL}/reports/count-adjustments`, () =>
-        okPageJson(
-          [
-            {
-              adjustmentId: 'a1',
-              documentId: 'd1',
-              documentReference: 'ADJ-2026-0001',
-              purpose: 'CountVariance',
-              status: 'Posted',
-              reason: 'فروقات جرد دوري',
-              countReference: 'CNT-2026-0001',
-              warehouse: { id: 'w1', displayName: 'المستودع المركزي' },
-              createdAt: '2026-09-01T00:00:00.000Z',
-              createdBy: { id: 'u1', displayName: 'مدير الجرد' },
-              postedAt: '2026-09-01T00:00:00.000Z',
-              lines: [],
-              policy: {
-                actions: [],
-                advisories: [],
-                blockers: [],
-                documentId: 'd1',
-                documentStatus: 'Posted',
-                evaluatedAt: '2026-09-01T00:00:00.000Z',
-                policyKind: 'Adjustment',
-                rowVersion: 1,
-                signedOriginalSatisfied: true,
-              },
-              rowVersion: 1,
-              attachments: [],
-            },
-          ],
-          { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 },
-        ),
+        okPageJson([row], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 }),
       ),
     )
 
@@ -81,10 +82,15 @@ describe('CountAdjustmentReportTable', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'تقرير الجرد والتسويات' }),
     ).toBeInTheDocument()
-    expect(await screen.findByText('ADJ-2026-0001')).toBeInTheDocument()
-    expect(screen.getByText('تسوية فروقات الجرد')).toBeInTheDocument()
-    expect(screen.getByText('مرحّل')).toBeInTheDocument()
-    expect(screen.getByText('CNT-2026-0001')).toBeInTheDocument()
+    expect(await screen.findByText(row.warehouseName)).toBeInTheDocument()
+    expect(screen.getByText(row.warehouseCode)).toBeInTheDocument()
+    // The server's counters — the client renders them, it never recomputes them.
+    expect(screen.getByText(formatNumber(row.countCount))).toBeInTheDocument()
+    expect(screen.getByText(formatNumber(row.closedCountCount))).toBeInTheDocument()
+    expect(screen.getByText(formatNumber(row.adjustmentCount))).toBeInTheDocument()
+    expect(screen.getByText(formatNumber(row.postedAdjustmentCount))).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'صافي الفروقات' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'فرق التسويات' })).toBeInTheDocument()
   })
 
   it('forwards the documented warehouse and date filters verbatim', async () => {
@@ -98,7 +104,7 @@ describe('CountAdjustmentReportTable', () => {
 
     render(<CountAdjustmentReportTable />, { wrapper: createWrapper() })
 
-    await screen.findByRole('heading', { level: 1, name: 'تقرير الجرد والتسويات' })
+    await screen.findByRole('heading', { name: 'تقرير الجرد والتسويات' })
 
     const last = requests.at(-1) ?? {}
     expect(last).toMatchObject({ page: '1', pageSize: '10' })
@@ -107,6 +113,34 @@ describe('CountAdjustmentReportTable', () => {
     expect(last).not.toHaveProperty('warehouseId')
     expect(last).not.toHaveProperty('fromUtc')
     expect(last).not.toHaveProperty('toUtc')
+  })
+
+  it('uses the Arabic DatePicker instead of native datetime-local and keeps the wire contract', async () => {
+    const user = userEvent.setup()
+    const requests: Record<string, string>[] = []
+    server.use(
+      http.get(`${API_BASE_URL}/reports/count-adjustments`, ({ request }) => {
+        requests.push(Object.fromEntries(new URL(request.url).searchParams))
+        return okPageJson([])
+      }),
+    )
+
+    render(<CountAdjustmentReportTable />, { wrapper: createWrapper() })
+    await screen.findByRole('heading', { name: 'تقرير الجرد والتسويات' })
+
+    expect(document.querySelector('input[type="datetime-local"]')).toBeNull()
+    expect(screen.getByRole('button', { name: 'تصفية حسب تاريخ البداية' })).toBeInTheDocument()
+
+    const today = new Date()
+    const fromDate = new Date(today.getFullYear(), today.getMonth(), 15)
+    await user.click(screen.getByRole('button', { name: 'تصفية حسب تاريخ البداية' }))
+    await user.click(screen.getByRole('button', { name: formatArabicDate(fromDate) }))
+
+    await waitFor(() =>
+      expect(requests.at(-1)).toMatchObject({
+        fromUtc: fromDate.toISOString(),
+      }),
+    )
   })
 
   it('renders the Arabic empty state when the server returns no adjustments', async () => {

@@ -471,6 +471,10 @@ export function DocumentDetailBody({
   timelineSlot,
 }: DocumentDetailBodyProps) {
   const [busyAction, setBusyAction] = useState<string | null>(null)
+  // The routed page passes `null` for a non-draft, so only a real node may
+  // claim the paper reference is editable.
+  const paperReferenceIsEditable =
+    paperReferenceEditor !== undefined && paperReferenceEditor !== null
 
   // readOnly presentation still registers nothing, but the section reads the
   // form context; the page seeds the header values from the server document so
@@ -673,9 +677,9 @@ export function DocumentDetailBody({
       <ContentCard
         title="بيانات المستند"
         description={
-          paperReferenceEditor === undefined
-            ? 'رأس السند المشترك (المستودع، رقم السند الورقي وسنته) في وضع القراءة فقط.'
-            : 'رأس السند المشترك؛ رقم المستند الورقي وسنته قابلة للتحرير لأن السند مسوّدة.'
+          paperReferenceIsEditable
+            ? 'رأس السند المشترك؛ رقم المستند الورقي وسنته قابلة للتحرير لأن السند مسوّدة.'
+            : 'رأس السند المشترك (المستودع، رقم السند الورقي وسنته) في وضع القراءة فقط.'
         }
       >
         <FormProvider {...form}>

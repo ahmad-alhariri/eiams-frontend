@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { QueryClientProvider } from '@tanstack/react-query'
+import dayjs from 'dayjs'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { http } from 'msw'
@@ -9,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import { okPageJson } from '@/test/msw/envelope'
+import { errJson, okPageJson } from '@/test/msw/envelope'
 import { createWarehouseCapability, fixtureUuid } from '@/test/msw/factories'
 import {
   wireMaterial,
@@ -17,6 +18,7 @@ import {
   wireUnitOfMeasure,
 } from '@/test/msw/catalog-wire-fixtures'
 import { server } from '@/test/msw/server'
+import { formatArabicDate } from '@/shared/ui/calendar-utils'
 import {
   documentLinesSchema,
   createEmptyQuantityLine,
@@ -45,6 +47,7 @@ const API_BASE_URL = '/api/v1'
 const DURABLE = wireMaterial({
   id: fixtureUuid(24),
   nameAr: 'قماش قطني',
+  materialKind: 'Durable',
   materialDomainId: fixtureUuid(20),
   baseUnitId: fixtureUuid(23),
   baseUnitSymbol: 'متر',
@@ -138,6 +141,33 @@ function useCatalogHandlers() {
   )
 }
 
+/**
+ * Holds the unit-conversions response until the returned function releases it.
+ *
+ * The conversions read is the SECONDARY read the unit selector depends on, and
+ * the states under test (pending, failed, loaded) are all states of THAT read.
+ * Releasing the response by hand makes each of them observable instead of
+ * racing the fetch.
+ */
+function holdConversions(response: () => Response) {
+  let release: () => void = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  server.use(
+    http.get(`${API_BASE_URL}/catalog/materials/${DURABLE.id}/unit-conversions`, async () => {
+      await held
+      return response()
+    }),
+  )
+  return () => release()
+}
+
+/** The Arabic the editor shows for each state of the conversions read. */
+const UNIT_CONVERSIONS_LOADING_AR = 'جارٍ تحميل الوحدات البديلة للمادة...'
+const UNIT_CONVERSIONS_FAILED_AR =
+  'تعذّر جلب الوحدات البديلة لهذه المادة. أعد المحاولة قبل اختيار الوحدة.'
+
 function linesValue(): DocumentLinesContainer['lines'] {
   const slot = document.querySelector('[data-slot="document-lines-values"]')
   return slot === null
@@ -180,8 +210,19 @@ describe('QuantityLineEditor', () => {
     expect(screen.getByText('وحدة القياس')).toBeInTheDocument()
     expect(screen.getByLabelText('سعر الوحدة (اختياري)')).toBeInTheDocument()
     expect(screen.getByLabelText('رقم الدفعة (اختياري)')).toBeInTheDocument()
-    expect(screen.getByLabelText('تاريخ الانتهاء (اختياري)')).toBeInTheDocument()
+    expect(screen.getByText('تاريخ الانتهاء (اختياري)')).toBeInTheDocument()
+    // D2: the expiry date uses the shared Arabic RTL picker, not a native
+    // `<input type="date">` that renders English month/day/year segments.
+    expect(screen.getByRole('button', { name: 'تاريخ انتهاء البند 1' })).toBeInTheDocument()
+    expect(document.querySelector('input[type="date"]')).toBeNull()
     expect(screen.queryByText('نوع الافتتاحية')).not.toBeInTheDocument()
+
+    const selected = new Date()
+    await user.click(screen.getByRole('button', { name: 'تاريخ انتهاء البند 1' }))
+    await user.click(screen.getByRole('button', { name: formatArabicDate(selected) }))
+    await waitFor(() =>
+      expect(linesValue()[0]?.expiryDate).toBe(dayjs(selected).format('YYYY-MM-DD')),
+    )
   })
 
   it('renders the opening-type selector for Opening documents only', async () => {
@@ -228,6 +269,9 @@ describe('QuantityLineEditor', () => {
       expect(line?.baseUnitNameAr).toBe('متر')
     })
     expect(screen.getByText('متر')).toBeInTheDocument()
+    // The line states the picked material's kind; only Durable/Asset carry the
+    // custody consequence sentence.
+    expect(screen.getByText(/^نوع المادة: معمرة — يبقى الأصل ضمن عهدة الجهة/)).toBeInTheDocument()
   })
 
   /**
@@ -276,6 +320,9 @@ describe('QuantityLineEditor', () => {
     await user.clear(quantityInput)
     await user.type(quantityInput, '5')
 
+    // The selector stays disabled until the conversions read lands, so the
+    // click below must wait for the options to be known.
+    await waitFor(() => expect(screen.getByLabelText('وحدة البند 1')).toBeEnabled())
     await user.click(screen.getByLabelText('وحدة البند 1'))
     const rollOption = await screen.findByRole('option', { name: /لفة/ })
     await user.click(rollOption)
@@ -404,5 +451,96 @@ describe('QuantityLineEditor', () => {
     expect(screen.getByLabelText('الكمية')).toBeDisabled()
     expect(screen.getByRole('button', { name: 'حذف البند 1' })).toBeDisabled()
     expect(screen.getByPlaceholderText('ابحث عن مادة...')).toBeDisabled()
+  })
+
+  /**
+   * The unit selector's read is a SECONDARY read, and a failed one used to be
+   * indistinguishable from an empty one: the selector simply rendered with
+   * fewer options, so the keeper could pick a unit that was never verified
+   * and save the document with a silently wrong unit. These four tests pin the
+   * three states apart — pending, failed, loaded.
+   */
+  describe('the unit selector reports the state of its conversions read', () => {
+    it('disables the selector and shows a loading hint while the read is pending', async () => {
+      const user = userEvent.setup()
+      useCatalogHandlers()
+      holdConversions(() => okPageJson([CARTON_CONVERSION]))
+      const { host } = createTestHost()
+      render(host(() => <QuantityLineEditor documentType="Receiving" warehouseId={undefined} />))
+      await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
+      await selectMaterial('قماش قطني')
+
+      await waitFor(() => expect(screen.getByText(UNIT_CONVERSIONS_LOADING_AR)).toBeInTheDocument())
+      // A pending read must not offer the base unit as if it were the only one.
+      expect(screen.getByLabelText('وحدة البند 1')).toBeDisabled()
+      // A pending read is not a failure: no error copy.
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it('disables the selector and shows an Arabic error when the read fails', async () => {
+      const user = userEvent.setup()
+      useCatalogHandlers()
+      // A scope denial is a permanent answer, so the query does not retry it.
+      const release = holdConversions(() =>
+        errJson(403, { code: 'FORBIDDEN', message: 'Scope denied.' }),
+      )
+      const { host } = createTestHost()
+      render(host(() => <QuantityLineEditor documentType="Receiving" warehouseId={undefined} />))
+      await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
+      await selectMaterial('قماش قطني')
+
+      await waitFor(() => expect(screen.getByText(UNIT_CONVERSIONS_LOADING_AR)).toBeInTheDocument())
+      release()
+
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent(UNIT_CONVERSIONS_FAILED_AR),
+      )
+      // No unit may be picked from a list that was never read.
+      expect(screen.getByLabelText('وحدة البند 1')).toBeDisabled()
+      expect(screen.queryByText(UNIT_CONVERSIONS_LOADING_AR)).not.toBeInTheDocument()
+    })
+
+    it('keeps an empty conversions list distinct from a failed one', async () => {
+      const user = userEvent.setup()
+      useCatalogHandlers()
+      const release = holdConversions(() => okPageJson([]))
+      const { host } = createTestHost()
+      render(host(() => <QuantityLineEditor documentType="Receiving" warehouseId={undefined} />))
+      await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
+      await selectMaterial('قماش قطني')
+
+      await waitFor(() => expect(screen.getByText(UNIT_CONVERSIONS_LOADING_AR)).toBeInTheDocument())
+      release()
+
+      await waitFor(() => expect(screen.getByLabelText('وحدة البند 1')).toBeEnabled())
+      // The material simply has no alternative units — that is an answer, not
+      // a failure, so it gets no error copy.
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.queryByText(UNIT_CONVERSIONS_LOADING_AR)).not.toBeInTheDocument()
+
+      await user.click(screen.getByLabelText('وحدة البند 1'))
+      expect(await screen.findByRole('option', { name: 'متر' })).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: /لفة/ })).not.toBeInTheDocument()
+    })
+
+    it('shows the conversions and no error when the read succeeds', async () => {
+      const user = userEvent.setup()
+      useCatalogHandlers()
+      const release = holdConversions(() => okPageJson([CARTON_CONVERSION]))
+      const { host } = createTestHost()
+      render(host(() => <QuantityLineEditor documentType="Receiving" warehouseId={undefined} />))
+      await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
+      await selectMaterial('قماش قطني')
+
+      await waitFor(() => expect(screen.getByText(UNIT_CONVERSIONS_LOADING_AR)).toBeInTheDocument())
+      release()
+
+      await waitFor(() => expect(screen.getByLabelText('وحدة البند 1')).toBeEnabled())
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.queryByText(UNIT_CONVERSIONS_LOADING_AR)).not.toBeInTheDocument()
+
+      await user.click(screen.getByLabelText('وحدة البند 1'))
+      expect(await screen.findByRole('option', { name: /لفة/ })).toBeInTheDocument()
+    })
   })
 })

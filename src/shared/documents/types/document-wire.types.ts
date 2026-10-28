@@ -3,7 +3,7 @@
  *
  * ## Why these exist
  *
- * The generated snapshot (`@/shared/types/generated/eiams-v1`) describes a
+ * The generated snapshot (the deleted generated artifact) describes a
  * provisional design-first contract that the live API never shipped. Every
  * document write path differs from it:
  *

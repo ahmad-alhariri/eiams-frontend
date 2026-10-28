@@ -9,8 +9,8 @@
  * Materials,MaterialUnitConversions,UnitsOfMeasure}/*Controller.cs` and the
  * `*Response` records under `src/Application/<aggregate>/{GetList,GetById}`.
  *
- * Do NOT "tidy" these back toward the frozen generated types in
- * `@/shared/types/generated/eiams-v1`. That file was fictional for this module:
+ * Do NOT "tidy" these back toward the frozen generated types. That deleted
+ * artifact was fictional for this module:
  * it named the identifiers `materialDomainId`/`materialCategoryId`/
  * `materialFamilyId`/`materialUnitConversionId`/`unitId` (the wire says `id`
  * on every one of them), the labels `nameAr` (the wire says `name` on domain,

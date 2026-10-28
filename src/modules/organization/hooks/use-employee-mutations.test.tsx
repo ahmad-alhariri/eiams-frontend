@@ -1,4 +1,4 @@
-﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
@@ -70,7 +70,7 @@ describe('employee mutation cache invalidation', () => {
     await act(async () => {
       await result.current.create.mutateAsync({
         orgUnitId: employee.orgUnitId,
-        fullName: 'Ù…ÙˆØ¸Ù Ø¬Ø¯ÙŠØ¯',
+        fullName: 'موظف جديد',
         employeeNumber: 'EMP-NEW',
         jobTitle: null,
       })
@@ -83,7 +83,7 @@ describe('employee mutation cache invalidation', () => {
     expect(createBodies).toEqual([
       {
         orgUnitId: employee.orgUnitId,
-        fullName: 'Ù…ÙˆØ¸Ù Ø¬Ø¯ÙŠØ¯',
+        fullName: 'موظف جديد',
         employeeNumber: 'EMP-NEW',
         jobTitle: null,
       },
@@ -136,7 +136,7 @@ describe('employee mutation cache invalidation', () => {
 
     // `[JsonRequired] int Status`: the ORDINAL, never the status name the read
     // served, and NOTHING else. Employee is not a versioned aggregate, so there
-    // is no `expectedRowVersion` to send â€” and the body is
+    // is no `expectedRowVersion` to send — and the body is
     // `additionalProperties: false`, so sending one would be a 400.
     expect(statusBodies).toEqual([{ status: 1 }, { status: 0 }])
     for (const body of statusBodies) {

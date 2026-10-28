@@ -7,7 +7,7 @@ import type {
   CompleteDraftRequest,
   WarehouseDocumentDetails,
 } from '@/shared/documents/types/document-wire.types'
-import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseDocument } from '@/test/msw/document-engine.types'
 import {
   createMaterial,
   createNamedReference,

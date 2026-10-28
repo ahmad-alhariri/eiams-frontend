@@ -34,6 +34,7 @@ import type {
   ListExternalPartiesQuery,
 } from '@/modules/organization/types/organization.api-types'
 import type { ResourceIdResponse } from '@/shared/api/api-contracts'
+import { pathWithId } from '@/shared/services/api-path'
 
 const ORGANIZATIONS_PATH = '/organizations'
 const ORGANIZATION_PATH = '/organizations/{organizationId}'
@@ -48,10 +49,6 @@ const EXTERNAL_PARTY_PATH = '/external-parties/{externalPartyId}'
 
 /** The query shape `ApiRequest.query` accepts. */
 type WireQuery = Readonly<Record<string, string | number | boolean | undefined>>
-
-function pathWithId(path: string, parameter: string, id: string): string {
-  return path.replace(parameter, encodeURIComponent(id))
-}
 
 /**
  * THE PAGINATION BOUNDARY, and it is deliberately an IDENTITY.
@@ -92,6 +89,8 @@ function organizationalUnitsQuery(query: ListOrganizationalUnitsQuery): WireQuer
     ...toWireOneBasedPaginationParams(query),
     ...(query.parentId === undefined ? {} : { parentId: query.parentId }),
     ...(query.search === undefined ? {} : { search: query.search }),
+    // `GET /organizational-units` DOES bind `siteId`
+    // (`GetOrganizationalUnitsController.cs:23`), so this key is correct here.
     ...(query.siteId === undefined ? {} : { siteId: query.siteId }),
     ...(query.status === undefined ? {} : { status: query.status }),
   }
@@ -100,9 +99,13 @@ function organizationalUnitsQuery(query: ListOrganizationalUnitsQuery): WireQuer
 function employeesQuery(query: ListEmployeesQuery): WireQuery {
   return {
     ...toWireOneBasedPaginationParams(query),
+    // `GET /employees` binds `orgUnitId` and no site parameter at all
+    // (`GetEmployeesController.cs:23`). The `siteId` key that used to be sent
+    // here matched no property, so ASP.NET discarded it and the screen's site
+    // filter silently filtered nothing. `orgUnitId` is the scope parameter the
+    // server actually reads.
     ...(query.orgUnitId === undefined ? {} : { orgUnitId: query.orgUnitId }),
     ...(query.search === undefined ? {} : { search: query.search }),
-    ...(query.siteId === undefined ? {} : { siteId: query.siteId }),
     ...(query.status === undefined ? {} : { status: query.status }),
   }
 }

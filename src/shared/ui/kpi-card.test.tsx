@@ -3,7 +3,7 @@ import type { ComponentProps } from 'react'
 import { describe, expect, it } from 'vitest'
 
 import { KpiCard } from '@/shared/ui/kpi-card'
-import type { KpiValue } from '@/shared/types/generated/eiams-v1'
+import type { KpiValue } from '@/shared/ui/kpi-card'
 
 // Canonical KpiValue fixtures matching the ratified vocabulary in D-RPT-02.
 const fixtures = {

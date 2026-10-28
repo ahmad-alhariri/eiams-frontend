@@ -49,6 +49,11 @@ function ServerPaginationControls({
   const isPrevDisabled = page <= 1
   const isNextDisabled = page >= totalPages
   const hasRangeText = totalCount !== undefined && totalCount > 0
+  // The page count is derived from a total that may not have loaded yet:
+  // `pageCount(undefined)` answers 1, so a pending page transition rendered
+  // "صفحة ٢ من ١" — a total LOWER than the page being shown. The total is
+  // rendered only once the server has actually sent the count.
+  const hasTotal = totalCount !== undefined
 
   return (
     <nav
@@ -107,7 +112,9 @@ function ServerPaginationControls({
             aria-live="polite"
             className="min-w-14 text-center text-sm font-medium text-foreground"
           >
-            صفحة {toArabicDigits(page)} من {toArabicDigits(totalPages)}
+            {hasTotal
+              ? `صفحة ${toArabicDigits(page)} من ${toArabicDigits(totalPages)}`
+              : `صفحة ${toArabicDigits(page)}`}
           </span>
           <Button
             type="button"

@@ -17,7 +17,7 @@ import {
 import { documentQueryKeys, useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
-import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseDocument } from '@/test/msw/document-engine.types'
 import type { InventoryBalance, StockMovement } from '@/modules/inventory/types/inventory.api-types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
@@ -44,6 +44,14 @@ const openingMovement = findMovement(opening)
 const receivingBalance = findSourceBalance(receiving)
 const openingBalance = findSourceBalance(opening)
 
+/**
+ * The hook below transforms six lazy page graphs before a single assertion
+ * runs. Under full-suite parallel load that transform outlasts Vitest's DEFAULT
+ * 10 s `hookTimeout` and the file fails with "Hook timed out in 10000ms", so
+ * the budget is scoped to THIS hook.
+ */
+const WARM_LAZY_ROUTES_TIMEOUT = 60_000
+
 beforeAll(async () => {
   // Warm the exact lazy routes in this cross-module journey so parallel suite
   // transforms cannot outlive Testing Library's query timeout.
@@ -55,7 +63,7 @@ beforeAll(async () => {
     import('@/modules/inventory/pages/inventory-balances-page'),
     import('@/modules/inventory/pages/inventory-balance-detail-page'),
   ])
-})
+}, WARM_LAZY_ROUTES_TIMEOUT)
 
 afterEach(() => {
   activeScope.key = { kind: 'enterprise' }

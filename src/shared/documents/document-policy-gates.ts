@@ -12,7 +12,7 @@ import type {
   DocumentType,
 } from '@/shared/documents/types/document-wire.types'
 import { formatFileSize, formatNumber } from '@/shared/utils/format'
-import { isSignedOriginalBlockerCode } from '@/shared/documents/policy-blocker-codes'
+import { isSignedOriginalBlocker } from '@/shared/documents/policy-blocker-codes'
 
 /**
  * Pure preflight-gate model of the shared document policy-gate coordinator
@@ -241,18 +241,28 @@ export function evaluateBalanceGate(
 const SIGNED_GATE_PENDING = 'بانتظار تقييم سياسة الخادم للنسخة الموقعة...'
 const SIGNED_GATE_DEFAULT_BLOCKED = 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.'
 
+/**
+ * The canonical Arabic reason for a signed-original blocker — the ONE sentence
+ * the signed-original gate and the attachment gate row state.
+ *
+ * The server's own Arabic sentence wins (F-15); otherwise the governed copy
+ * table answers for the code; otherwise the canonical default speaks, so the
+ * screen never falls back to the server's English prose. One resolution, so the
+ * gate and the row can never state two different reasons for one blocker.
+ */
+export function signedOriginalBlockerReasonAr(blocker: {
+  readonly code: string
+  readonly message?: string | null
+}): string {
+  return policyBlockerMessageAr(blocker) ?? SIGNED_GATE_DEFAULT_BLOCKED
+}
+
 /** Statuses where posting is no longer possible: the gate is moot there. */
 export const SIGNED_GATE_MOOT_STATUSES: ReadonlySet<DocumentStatus> = new Set([
   'Posted',
   'Reversed',
   'Cancelled',
 ])
-
-function isSignedOriginalBlocker(code: string): boolean {
-  // Accepts both the canonical machine codes and the `document.*`-prefixed
-  // vocabulary the contract producers serve (e24-t07).
-  return isSignedOriginalBlockerCode(code)
-}
 
 export function signedOriginalGate(
   policy: DocumentPolicy | null,
@@ -275,13 +285,12 @@ export function signedOriginalGate(
   if (policy.signedOriginalSatisfied) {
     return { gate: 'signedOriginal', status: 'pass', messageAr: null, blockerCode: null }
   }
-  const blocker = policy.blockers.find((entry) => isSignedOriginalBlocker(entry.code))
+  const blocker = policy.blockers.find((entry) => isSignedOriginalBlocker(entry))
   return {
     gate: 'signedOriginal',
     status: 'blocked',
     messageAr:
-      (blocker === undefined ? null : policyBlockerMessageAr(blocker)) ??
-      SIGNED_GATE_DEFAULT_BLOCKED,
+      blocker === undefined ? SIGNED_GATE_DEFAULT_BLOCKED : signedOriginalBlockerReasonAr(blocker),
     // Exposed so a consumer can suppress this gate when the server already
     // renders the same blocker, matching on code instead of Arabic text.
     blockerCode: blocker?.code ?? null,

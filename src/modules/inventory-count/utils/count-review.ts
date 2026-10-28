@@ -3,9 +3,9 @@ import type {
   InventoryCountLine,
 } from '@/modules/inventory-count/types/inventory-count.types'
 
-/** Count adjustment launch follows completion/review, never quantity entry. */
+/** Count adjustment launch requires a CLOSED count (backend guard). */
 export function isCountAdjustmentEligible(status: CountStatus): boolean {
-  return status === 'Completed' || status === 'Closed'
+  return status === 'Closed'
 }
 
 /**

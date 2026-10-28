@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import dayjs from 'dayjs'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -11,7 +12,8 @@ import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
 import { ROUTE_PATHS } from '@/config/routes'
 import type { WarehouseInitializationStatus } from '@/modules/warehouse/types/warehouse.api-types'
 import type { QuantityLineCapabilityGate } from '@/shared/documents/components/quantity-line-editor'
-import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseDocument } from '@/test/msw/document-engine.types'
+import { formatArabicDate } from '@/shared/ui/calendar-utils'
 import {
   createMaterial,
   createWarehouse,
@@ -206,7 +208,7 @@ function paperReferenceHandler(store: WarehouseDocument[]) {
 }
 
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
-  await fillHeader(user)
+  const openingAsOfDate = await fillHeader(user)
 
   const materialCombo = screen.getByRole('combobox', { name: 'المادة' })
   await user.click(materialCombo)
@@ -216,6 +218,8 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
 
   await user.click(screen.getByLabelText('نوع الافتتاحية للبند 1'))
   await user.click(await screen.findByRole('option', { name: 'افتتاحية أولية' }))
+
+  return openingAsOfDate
 }
 
 async function fillHeader(user: ReturnType<typeof userEvent.setup>) {
@@ -227,13 +231,13 @@ async function fillHeader(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('رقم المستند الورقي'), '2024/151')
   await user.type(screen.getByLabelText('السنة الورقية'), '2024')
   // D-OPEN-02 / PRD §6.4: the cut-off date the inventory represents is
-  // mandatory for every Opening document. Native date inputs do not accept
-  // `user.type` character-by-character; dispatch a bubbling input event so
-  // RHF's Controller onChange fires and the form state updates.
-  const asOfDateInput = screen.getByLabelText('تاريخ الرصيد الافتتاحي')
-  asOfDateInput.focus()
-  fireEvent.input(asOfDateInput, { target: { value: '2024-01-01' } })
-  fireEvent.change(asOfDateInput, { target: { value: '2024-01-01' } })
+  // mandatory for every Opening document. It is captured through the shared
+  // Arabic picker, which stores the wire `YYYY-MM-DD` string in the form.
+  const selected = new Date()
+  await user.click(screen.getByRole('button', { name: 'تاريخ الرصيد الافتتاحي' }))
+  await user.click(screen.getByRole('button', { name: formatArabicDate(selected) }))
+
+  return dayjs(selected).format('YYYY-MM-DD')
 }
 
 async function fillAssetLine(user: ReturnType<typeof userEvent.setup>) {
@@ -287,6 +291,33 @@ describe('OpeningDocumentFormPage', () => {
     expect(await screen.findByText('يجب اختيار مستودع صالح من القائمة.')).toBeInTheDocument()
     expect(screen.getByText('رقم المستند الورقي مطلوب.')).toBeInTheDocument()
     expect(screen.getAllByText('يجب اختيار مادة صالحة.')).not.toHaveLength(0)
+  })
+
+  // Live API (2026-10-26): an Opening line is refused unless it carries
+  // `openingType`; the first line therefore starts on `Initial`.
+  it('preselects Initial on the first line so the common path needs no extra click', () => {
+    render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+    expect(screen.getByLabelText('نوع الافتتاحية للبند 1')).toHaveTextContent('افتتاحية أولية')
+  })
+
+  it('refuses to save when a line carries no openingType', async () => {
+    const store: WarehouseDocument[] = []
+    usePageHandlers(store, () => 'OPEN-2026-0006')
+    const user = userEvent.setup()
+    render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
+
+    await fillValidForm(user)
+
+    // A freshly added row starts blank; the requirement — not the first-line
+    // default — is what has to stop the submit on it.
+    await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
+    expect(screen.getByLabelText('نوع الافتتاحية للبند 2')).toHaveTextContent('اختر النوع')
+
+    await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
+
+    expect(await screen.findByText('يجب اختيار نوع الافتتاحية لكل بند.')).toBeInTheDocument()
+    expect(store).toHaveLength(0)
   })
 
   it('posts the Opening spine and selected opening type as a draft, then navigates to detail', async () => {
@@ -349,7 +380,7 @@ describe('OpeningDocumentFormPage', () => {
     const user = userEvent.setup()
     render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
 
-    await fillValidForm(user)
+    const openingAsOfDate = await fillValidForm(user)
     await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
 
     await waitFor(() => expect(screen.getByTestId('detail-stub')).toBeInTheDocument())
@@ -357,8 +388,9 @@ describe('OpeningDocumentFormPage', () => {
     expect(payloadBodies[0]).toMatchObject({
       documentType: 'Opening',
       warehouseId: WAREHOUSE_ID,
-      openingAsOfDate: '2024-01-01',
+      openingAsOfDate,
     })
+    expect(openingAsOfDate).toMatch(/^\d{4}-\d{2}-\d{2}$/u)
   }, 10_000)
 
   it('saves an asset-only Opening draft, sending only what the contract can carry', async () => {
@@ -693,6 +725,9 @@ describe('OpeningDocumentFormPage', () => {
     // gate status is not `ready`.
     expect(screen.getByText('سياسة الرصيد الافتتاحي')).toBeInTheDocument()
     expect(screen.getByLabelText('تاريخ الرصيد الافتتاحي')).toBeInTheDocument()
+    // D2: the as-of date uses the shared Arabic RTL picker, not a native
+    // `<input type="date">` that renders English month/day/year segments.
+    expect(document.querySelector('input[type="date"]')).toBeNull()
     expect(screen.queryByTestId('opening-capability-notice')).toBeNull()
   })
 

@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import dayjs from 'dayjs'
 import { useCallback, useState, type FormEvent } from 'react'
 import type { DeepPartial, Resolver } from 'react-hook-form'
 import { FormProvider, useForm, useWatch } from 'react-hook-form'
@@ -40,6 +41,7 @@ import {
 } from '@/shared/documents/use-document-draft-mutations'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
+import { DatePicker } from '@/shared/ui/date-picker'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 
 /**
@@ -48,12 +50,14 @@ import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shar
  * Asset identifiers are captured by the shared AssetLineEditor beside the
  * quantity-only lines; both map into the one contract `lines` payload.
  */
-// D-OPEN-02 (PRD §6.3, §6.6, §6.10): the Opening form only ever posts `Initial`
-// lines (Correction is superseded and rejected server-side) and every line
-// must carry a strictly positive base quantity. The local schema tightens
-// the shared `quantityLineSchema`; the shared schema stays as-is for
+// D-OPEN-02 (PRD §6.3, §6.6, §6.10): the Opening form posts `Initial` lines
+// (Correction is superseded and rejected server-side), every line must carry a
+// strictly positive base quantity, and every line must name its opening type —
+// the live API refuses an Opening line without `openingType`. The local schema
+// tightens the shared `quantityLineSchema`; the shared schema stays as-is for
 // Receiving/Issue/Transfer.
 const openingQuantityLineSchema = quantityLineSchema.extend({
+  openingType: z.enum(['Initial', 'Correction'], 'يجب اختيار نوع الافتتاحية لكل بند.'),
   baseQuantity: z
     .number()
     .refine((value) => Number.isFinite(value) && value > 0, {
@@ -83,7 +87,9 @@ const DEFAULT_VALUES: DeepPartial<OpeningDocumentFormValues> = {
     paperDocumentNumber: '',
     openingAsOfDate: '',
   },
-  lines: [createEmptyQuantityLine()],
+  // The first line starts on `Initial`: the live API refuses a line without an
+  // opening type, and the common one-line draft should not need an extra click.
+  lines: [{ ...createEmptyQuantityLine(), openingType: 'Initial' }],
   assetLines: [],
 }
 
@@ -133,7 +139,8 @@ function combineCapabilityGates(
  * The form enforces the D-OPEN-02 invariants the backend requires:
  *  - `header.openingAsOfDate` is mandatory (PRD §6.4).
  *  - Every quantity line carries a strictly positive `baseQuantity` (PRD §6.6).
- *  - The `openingType` per line is fixed to `Initial`; `Correction` is
+ *  - The `openingType` per line is required (the live API refuses a line
+ *    without it); the first line defaults to `Initial`, and `Correction` is
  *    superseded and rejected server-side (CONFLICT-104 / PRD §6.3).
  *  - The per-line capability gate is shown as a chip when a material's
  *    domain is not granted the Opening operation (CONFLICT-106 / PRD §6.7).
@@ -278,16 +285,13 @@ export default function OpeningDocumentFormPage() {
               <FormItem>
                 <FormLabel>تاريخ الرصيد الافتتاحي</FormLabel>
                 <FormControl>
-                  <input
-                    type="date"
-                    dir="ltr"
+                  <DatePicker
+                    ariaLabel="تاريخ الرصيد الافتتاحي"
                     disabled={isSaving}
-                    data-slot="opening-as-of-date"
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-                    value={field.value ?? ''}
-                    onChange={(event) => field.onChange(event.target.value)}
-                    onBlur={field.onBlur}
-                    ref={field.ref}
+                    {...(field.value ? { value: dayjs(field.value).toDate() } : {})}
+                    onChange={(date) =>
+                      field.onChange(date === undefined ? '' : dayjs(date).format('YYYY-MM-DD'))
+                    }
                   />
                 </FormControl>
                 <p className="text-xs text-muted-foreground">

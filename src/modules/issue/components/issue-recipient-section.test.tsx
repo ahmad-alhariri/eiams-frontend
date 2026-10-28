@@ -4,7 +4,7 @@ import { http } from 'msw'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Resolver } from 'react-hook-form'
-import { FormProvider, useForm } from 'react-hook-form'
+import { FormProvider, useForm, useWatch } from 'react-hook-form'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -140,11 +140,13 @@ describe('IssueRecipientSection', () => {
     expect(submitted?.petal.issueTo.recipientId).toBe(RECIPIENT.id)
     expect(submitted?.petal.issueToDisplayName).toBe('أحمد محمد')
     expect(submitted?.petal.issueTo.issueReason).toBe('تجهيز مكتب إدارة التقنية')
-    // The page maps out with the captured sibling name.
-    expect(
-      toIssueInfo(submitted!.petal.issueTo, submitted!.petal.issueToDisplayName),
-    ).toMatchObject({
-      recipientDisplayName: 'أحمد محمد',
+    // The live write body carries the recipient kind, id and reason — and NO
+    // display name: the server resolves the recipient itself
+    // (`IssueDraftDetails`).
+    expect(toIssueInfo(submitted!.petal.issueTo)).toEqual({
+      recipientType: 'Employee',
+      recipientId: RECIPIENT.id,
+      issueReason: 'تجهيز مكتب إدارة التقنية',
     })
   })
 
@@ -170,8 +172,8 @@ describe('IssueRecipientSection', () => {
           },
         },
       })
-      const recipientId = form.watch('petal.issueTo.recipientId')
-      const displayName = form.watch('petal.issueToDisplayName')
+      const recipientId = useWatch({ control: form.control, name: 'petal.issueTo.recipientId' })
+      const displayName = useWatch({ control: form.control, name: 'petal.issueToDisplayName' })
       return (
         <QueryClientProvider client={createQueryClient()}>
           <FormProvider {...form}>
@@ -224,6 +226,12 @@ describe('IssueRecipientSection', () => {
     await user.click(screen.getByRole('button', { name: 'حفظ' }))
 
     expect(await screen.findByText('يجب اختيار الجهة المستلمة من القائمة.')).toBeInTheDocument()
+  })
+
+  it('caps the reason textarea at the 200-character domain limit', () => {
+    render(<IssueRecipientSection />, { wrapper: createWrapper() })
+
+    expect(screen.getByLabelText('سبب الصرف')).toHaveAttribute('maxlength', '200')
   })
 
   it('disables every control while disabled', () => {

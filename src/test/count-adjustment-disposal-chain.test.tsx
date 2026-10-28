@@ -26,7 +26,11 @@ import type {
   AdjustmentDetail,
   AdjustmentListItem,
 } from '@/modules/adjustment/types/adjustment.types'
-import type { Asset, AssetCustody, AssetMovement } from '@/shared/types/generated/eiams-v1'
+import type {
+  Asset,
+  AssetCustodyTimelineRow,
+  AssetDetails,
+} from '@/modules/asset/types/asset.types'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
 import { toWireDetails, toWirePolicy } from '@/test/msw/warehouse-document-handlers'
 import {
@@ -35,10 +39,11 @@ import {
   createActionAvailability,
   createSession,
 } from '@/test/msw/factories'
-import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseDocument } from '@/test/msw/document-engine.types'
 import { apiJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { countNameHandlers } from '@/test/msw/count-wire-fixtures'
 import { server } from '@/test/msw/server'
+import type { InventoryCount } from '@/modules/inventory-count/types/inventory-count.types'
 
 /**
  * The real post body is the shared document engine's `{ documentId, warnings }`
@@ -82,6 +87,14 @@ afterEach(() => {
   useAuthSessionStore.setState({ status: 'initializing' })
 })
 
+/**
+ * The hook below transforms five lazy page graphs before a single assertion
+ * runs. Under full-suite parallel load that transform outlasts Vitest's DEFAULT
+ * 10 s `hookTimeout` and the file fails with "Hook timed out in 10000ms", so
+ * the budget is scoped to THIS hook.
+ */
+const WARM_LAZY_ROUTES_TIMEOUT = 60_000
+
 beforeAll(async () => {
   await Promise.all([
     import('@/modules/inventory-count/pages/count-detail-page'),
@@ -90,7 +103,7 @@ beforeAll(async () => {
     import('@/modules/adjustment/pages/adjustments-list-page'),
     import('@/modules/asset/pages/asset-detail-page'),
   ])
-})
+}, WARM_LAZY_ROUTES_TIMEOUT)
 
 function setupJourney(path: string, permissions = manager) {
   const client = new QueryClient({
@@ -233,7 +246,16 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: { kind: 'enterprise' } }),
 }))
 
-function countHandlers() {
+/**
+ * The count session the launch runs from.
+ *
+ * The backend accepts an adjustment only from a CLOSED count
+ * (`CreateAdjustmentFromCountCommandHandler`), so the default fixture is
+ * `Closed` — the only status whose launch reaches
+ * `POST /api/v1/inventory-counts/{id}/adjustment`. A non-closed session is
+ * served explicitly by the test that proves the launch is refused.
+ */
+function countHandlers(status: InventoryCount['status'] = 'Closed') {
   server.use(
     ...countNameHandlers({
       warehouses: { [scenario.warehouses.source.id]: scenario.warehouses.source.name },
@@ -241,7 +263,13 @@ function countHandlers() {
         [scenario.catalog.consumableMaterial.id]: scenario.catalog.consumableMaterial.nameAr,
       },
     }),
-    http.get(`*/api/v1/inventory-counts/${count.id}`, () => apiJson(count)),
+    http.get(`*/api/v1/inventory-counts/${count.id}`, () =>
+      apiJson({
+        ...count,
+        status,
+        closedAtUtc: status === 'Closed' ? '2026-08-24T12:00:00.000Z' : null,
+      }),
+    ),
     http.get(`*/api/v1/inventory-counts/${count.id}/lines`, () =>
       okPageJson(scenario.adjustments.countLines),
     ),
@@ -358,6 +386,24 @@ describe('count adjustment and disposal chain', () => {
     expect(screen.getByText('+2')).toBeInTheDocument()
   })
 
+  it('refuses the count→adjustment launch for a non-closed count', async () => {
+    // A valid response, so the assertion below fails on the CALL, not on an
+    // opaque handler error, if the disabled button ever fires the request.
+    const create = vi.fn(() => apiJson({ id: adjustment.id }, { status: 201 }))
+    countHandlers('Completed')
+    server.use(http.post(`*/api/v1/inventory-counts/${count.id}/adjustment`, create))
+    const journey = setupJourney(ROUTE_PATHS.countDetail.replace(':countId', count.id))
+
+    const button = await screen.findByRole('button', { name: /إنشاء مسودة/ })
+    // A `Completed` session is not a valid launch: the backend refuses it, so
+    // the CTA is disabled and states the reason in Arabic instead of posting
+    // and 404-ing.
+    expect(button).toBeDisabled()
+    expect(screen.getByText(/يتطلب إنشاء سند التسوية أن تكون جلسة الجرد مغلقة/)).toBeInTheDocument()
+    await journey.user.click(button)
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it('blocks posting without a signed original, and hides it from keepers despite an enabled policy', async () => {
     const post = vi.fn()
     wireDocumentHandlers(draftDocumentOf(adjustment, false))
@@ -407,15 +453,16 @@ describe('count adjustment and disposal chain', () => {
       const issued = status === 'Issued'
       const originalAsset = issued
         ? scenario.assets.pending
-        : { ...scenario.assets.disposed, derivedStatus: 'InStock' as const }
+        : { ...scenario.assets.disposed, currentStatus: 'InStock' as const }
       const disposedAsset: Asset = {
-        assetId: originalAsset.assetId,
-        assetNumber: originalAsset.assetNumber,
-        material: originalAsset.material,
-        receiptLineId: originalAsset.receiptLineId!,
-        derivedStatus: 'Disposed',
+        ...originalAsset,
+        currentStatus: 'Disposed',
         rowVersion: originalAsset.rowVersion + 1,
       }
+      // The receipt line the asset was registered on. The live asset LIST row
+      // carries no receipt reference — it is a DETAIL-only member — so it is
+      // read off the receiving document the asset came in on.
+      const receiptLineId = scenario.documents.receiving.lines[0]!.lineId
       const draft = draftOf({
         ...disposal,
         lines: [
@@ -423,9 +470,9 @@ describe('count adjustment and disposal chain', () => {
             ...disposal.lines[0]!,
             assets: [
               {
-                id: originalAsset.assetId,
+                id: originalAsset.id,
                 assetNumber: originalAsset.assetNumber,
-                serialNumber: originalAsset.serialNumber ?? null,
+                serialNumber: originalAsset.serialNumber,
               },
             ],
           },
@@ -435,77 +482,32 @@ describe('count adjustment and disposal chain', () => {
         ? []
         : scenario.ledgers.stockMovements.filter((row) => row.documentId === disposal.id)
       const balance = scenario.ledgers.balances.find(
-        (row) => row.materialId === originalAsset.material.id,
+        (row) => row.materialId === originalAsset.materialId,
       )!
       const activeCustody = scenario.ledgers.custodies.find(
-        (row) => row.assetId === originalAsset.assetId && row.status === 'Active',
+        (row) => row.assetId === originalAsset.id && row.status === 'Active',
       )
-      const closedCustodies: AssetCustody[] = activeCustody
-        ? [{ ...activeCustody, status: 'Closed', toTs: disposal.postedAtUtc! }]
+      const closedCustodies: AssetCustodyTimelineRow[] = activeCustody
+        ? [{ ...activeCustody, status: 'Closed', toUtc: disposal.postedAtUtc! }]
         : []
-      // The custody-timeline endpoint serves the live wire row (flat
-      // `holderType`/`holderId`, `fromUtc`/`toUtc`); the scenario keeps the
-      // legacy generated shape, so the projection happens here, at the consumer.
-      const toCustodyTimelineRow = (custody: AssetCustody) => ({
-        custodyId: custody.custodyId,
-        assetId: custody.assetId,
-        holderType: custody.holder.type,
-        holderId: custody.holder.id,
-        custodyKind: custody.custodyKind,
-        issueDocumentId: custody.issueDocumentId,
-        returnDocumentId: custody.returnDocumentId ?? null,
-        status: custody.status,
-        fromUtc: custody.fromTs,
-        toUtc: custody.toTs ?? null,
-        rowVersion: custody.rowVersion,
-      })
-      // The asset detail endpoint serves the live wire row (flat, camelCase:
-      // `id`, `materialNameAr`, `warehouseName`, `currentStatus`); the scenario
-      // keeps the legacy generated shape, so the projection happens here too.
-      const toAssetDetails = (asset: Asset, currentStatus: string) => ({
-        id: asset.assetId,
-        assetNumber: asset.assetNumber,
-        serialNumber: asset.serialNumber ?? null,
-        materialId: asset.material.id,
-        materialCode: '',
-        materialNameAr: asset.material.displayName,
+      // The asset detail endpoint serves the live wire row: the flat list row
+      // plus the detail-only members.
+      const toAssetDetails = (asset: Asset): AssetDetails => ({
+        ...asset,
         materialNameEn: null,
-        warehouseId: asset.currentWarehouse?.id ?? '',
-        warehouseCode: '',
-        warehouseName: asset.currentWarehouse?.displayName ?? '',
-        currentStatus,
-        activeCustodyId: null,
-        holderType: null,
-        holderId: null,
         custodyKind: null,
         latestMovementType: null,
         latestMovementAtUtc: null,
-        receiptLineId: asset.receiptLineId ?? null,
+        receiptLineId,
         receiptDocumentId: null,
         receiptDocumentReference: null,
-        acquisitionDate: asset.acquisitionDate ?? '2026-08-24',
-        warrantyExpiry: asset.warrantyExpiry ?? null,
-        rowVersion: asset.rowVersion,
       })
-      // The movement ledger serves the live wire row (`movementType`,
-      // `documentReferenceNumber`, `movedAtUtc`).
-      const toAssetMovement = (movement: AssetMovement) => ({
-        id: movement.movementId,
-        assetId: movement.assetId,
-        documentId: movement.documentId,
-        documentReferenceNumber: movement.documentReference,
-        documentType: movement.eventType,
-        movementType: movement.eventType,
-        movedAtUtc: movement.occurredAt,
-      })
-      const existingEvents = scenario.ledgers.assetMovements
-        .filter((row) => row.assetId === originalAsset.assetId && row.eventType !== 'Disposed')
-        .map(toAssetMovement)
+      const existingEvents = scenario.ledgers.assetMovements.filter(
+        (row) => row.assetId === originalAsset.id && row.movementType !== 'Disposed',
+      )
       const disposedEvent = {
-        ...toAssetMovement(
-          scenario.ledgers.assetMovements.find((row) => row.eventType === 'Disposed')!,
-        ),
-        assetId: originalAsset.assetId,
+        ...scenario.ledgers.assetMovements.find((row) => row.movementType === 'Disposed')!,
+        assetId: originalAsset.id,
       }
       let posted = false
       const posts: unknown[] = []
@@ -535,18 +537,16 @@ describe('count adjustment and disposal chain', () => {
         http.get(`*/api/v1/warehouse-documents/${disposal.id}/policy`, () =>
           okJson(toWirePolicy(posted ? scenario.documents.disposal : draftDocumentOf(draft, true))),
         ),
-        http.get(`*/api/v1/assets/${originalAsset.assetId}`, () =>
-          apiJson(
-            toAssetDetails(posted ? disposedAsset : originalAsset, posted ? 'Disposed' : status),
-          ),
+        http.get(`*/api/v1/assets/${originalAsset.id}`, () =>
+          apiJson(toAssetDetails(posted ? disposedAsset : originalAsset)),
         ),
-        http.get(`*/api/v1/assets/${originalAsset.assetId}/current-status`, () =>
+        http.get(`*/api/v1/assets/${originalAsset.id}/current-status`, () =>
           apiJson({
-            assetId: originalAsset.assetId,
-            materialId: originalAsset.material.id,
-            warehouseId: originalAsset.currentWarehouse?.id ?? null,
+            assetId: originalAsset.id,
+            materialId: originalAsset.materialId,
+            warehouseId: originalAsset.warehouseId,
             assetNumber: originalAsset.assetNumber,
-            serialNumber: originalAsset.serialNumber ?? null,
+            serialNumber: originalAsset.serialNumber,
             currentStatus: posted ? 'Disposed' : status,
             activeCustodyId: null,
             holderType: null,
@@ -556,14 +556,10 @@ describe('count adjustment and disposal chain', () => {
             latestMovementAtUtc: null,
           }),
         ),
-        http.get(`*/api/v1/assets/${originalAsset.assetId}/custody-timeline`, () =>
-          okJson(
-            (posted ? closedCustodies : activeCustody ? [activeCustody] : []).map(
-              toCustodyTimelineRow,
-            ),
-          ),
+        http.get(`*/api/v1/assets/${originalAsset.id}/custody-timeline`, () =>
+          okJson(posted ? closedCustodies : activeCustody ? [activeCustody] : []),
         ),
-        http.get(`*/api/v1/assets/${originalAsset.assetId}/movements`, () =>
+        http.get(`*/api/v1/assets/${originalAsset.id}/movements`, () =>
           okPageJson(posted ? [...existingEvents, disposedEvent] : existingEvents),
         ),
         http.get('*/api/v1/custodies', () =>
@@ -577,10 +573,10 @@ describe('count adjustment and disposal chain', () => {
       const journey = setupJourney(detailPath(disposal))
       const projections = renderHook(
         () => ({
-          asset: useAssetQuery(originalAsset.assetId),
-          custody: useAssetCustodyTimelineQuery(originalAsset.assetId),
+          asset: useAssetQuery(originalAsset.id),
+          custody: useAssetCustodyTimelineQuery(originalAsset.id),
           pending: useCustodiesQuery({ status: 'Active' }),
-          history: useAssetMovementsQuery(originalAsset.assetId, { page: 1, pageSize: 20 }),
+          history: useAssetMovementsQuery(originalAsset.id, { page: 1, pageSize: 20 }),
           balance: useInventoryBalanceQuery(balance.id),
           stock: useStockMovementsQuery({ documentId: disposal.id }),
         }),
@@ -595,15 +591,9 @@ describe('count adjustment and disposal chain', () => {
       )
       await journey.user.click(await screen.findByRole('button', { name: 'ترحيل السند' }))
       await waitFor(() =>
-        expect(projections.result.current.asset.data).toEqual(
-          toAssetDetails(disposedAsset, 'Disposed'),
-        ),
+        expect(projections.result.current.asset.data).toEqual(toAssetDetails(disposedAsset)),
       )
-      await waitFor(() =>
-        expect(projections.result.current.custody.data).toEqual(
-          closedCustodies.map(toCustodyTimelineRow),
-        ),
-      )
+      await waitFor(() => expect(projections.result.current.custody.data).toEqual(closedCustodies))
       await waitFor(() => expect(projections.result.current.pending.data?.items).toEqual([]))
       await waitFor(() =>
         expect(projections.result.current.history.data?.items).toEqual([
@@ -621,7 +611,7 @@ describe('count adjustment and disposal chain', () => {
         expect(stockRows[0]).toMatchObject({
           documentId: disposal.id,
           lineId: scenario.documents.disposal.lines[0]!.lineId,
-          materialId: originalAsset.material.id,
+          materialId: originalAsset.materialId,
           quantityDelta: -1,
           movementType: 'AdjustmentOut',
         })
@@ -634,13 +624,11 @@ describe('count adjustment and disposal chain', () => {
       expect(disposedEvent.documentReferenceNumber).toBe(disposal.systemReferenceNumber)
       expect(disposedEvent.movementType).toBe('Disposed')
       await act(async () => {
-        await journey.router.navigate(
-          ROUTE_PATHS.assetDetail.replace(':assetId', originalAsset.assetId),
-        )
+        await journey.router.navigate(ROUTE_PATHS.assetDetail.replace(':assetId', originalAsset.id))
       })
       expect(await screen.findByText('مستبعد')).toBeInTheDocument()
       expect(await screen.findByText(disposal.systemReferenceNumber)).toBeInTheDocument()
-      expect(screen.getByText(originalAsset.receiptLineId!)).toBeInTheDocument()
+      expect(screen.getByText(receiptLineId)).toBeInTheDocument()
       expect(screen.getAllByText(originalAsset.assetNumber).length).toBeGreaterThan(0)
       expect(screen.queryByRole('button', { name: /تعديل|حذف|عكس/ })).not.toBeInTheDocument()
     },

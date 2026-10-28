@@ -134,6 +134,28 @@ describe('OrganizationService', () => {
     ])
   })
 
+  it('scopes the employee list by orgUnitId and never by siteId', async () => {
+    // `GET /employees` binds `orgUnitId` and no site parameter at all
+    // (`GetEmployeesController.cs:23`), so a `siteId` key is discarded by
+    // ASP.NET and filters nothing. `GET /organizational-units` is the opposite:
+    // it binds `siteId` (`GetOrganizationalUnitsController.cs:23`).
+    const service = setupService()
+    const employee = wireEmployee()
+    const requestedUrls: string[] = []
+
+    server.use(
+      http.get(`${API_BASE_URL}/employees`, ({ request }) => {
+        const url = new URL(request.url)
+        requestedUrls.push(`${url.pathname}${url.search}`)
+        return okPageJson([employee])
+      }),
+    )
+
+    await service.listEmployees({ orgUnitId: ORG_UNIT_ID, siteId: SITE_ID })
+
+    expect(requestedUrls).toEqual([`${API_BASE_URL}/employees?orgUnitId=${ORG_UNIT_ID}`])
+  })
+
   it('reads each aggregate through the flat wire shape: id/name, no nameAr and no rowVersion', async () => {
     const service = setupService()
     const site = wireSite({ location: null, governorateCode: null })

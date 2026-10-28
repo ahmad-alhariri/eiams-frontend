@@ -82,7 +82,7 @@ This eliminates synchronisation bugs between duplicated fields.
 ┌──────────────────▼──────────────────────────┐
 │              API Layer (ASP.NET)             │
 │  Controllers → Validation → Mapping          │
-│  openapi-typescript types (auto-generated)   │
+│  handwritten per-module wire types            │
 └──────────────────┬──────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────┐
@@ -373,7 +373,7 @@ On update: `UPDATE ... SET row_version = row_version + 1 WHERE row_version = :ol
 | Database | PostgreSQL 16 |
 | ORM | Entity Framework Core |
 | Auth | JWT (Access + Refresh tokens) |
-| API Types | openapi-typescript (auto-generated) |
+| API Types | Handwritten per-module wire types (D-INT-02 / ADR-0001) |
 | Testing | Vitest + Testing Library + MSW |
 
 ---

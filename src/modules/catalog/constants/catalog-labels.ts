@@ -31,6 +31,48 @@ export const TRACKING_TYPE_LABELS: Record<TrackingType, string> = {
   Serial: 'بالتسلسل',
 }
 
+/**
+ * Arabic labels for the unit types the catalog serves.
+ *
+ * `unitType` is a free-form string on the wire (backend `string`, max 50), so
+ * this map is keyed by the value the server sends and NOT by a closed union —
+ * there is no compile-time guard here, and the fallback in
+ * {@link unitTypeLabelAr} is what keeps an unmapped value honest.
+ *
+ * Only the types the catalog actually uses are listed. A type the server adds
+ * later is shown exactly as it arrives until a row is added here.
+ */
+export const UNIT_TYPE_LABELS_AR: Readonly<Record<string, string>> = {
+  Counting: 'العدّ',
+  Quantity: 'الكمية',
+  Weight: 'الوزن',
+}
+
+/** The same labels, keyed case-insensitively — the wire spells them freely. */
+const UNIT_TYPE_LABELS_BY_LOWER_KEY: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(UNIT_TYPE_LABELS_AR).map(([value, label]) => [value.toLowerCase(), label]),
+)
+
+/**
+ * The Arabic label for a unit type, or the raw value when the map has never
+ * heard of it: an unmapped type is shown as the server sent it rather than
+ * guessed at.
+ */
+/** Shown when the server sends no unit type at all: a missing field must not kill the page. */
+export const UNKNOWN_UNIT_TYPE_AR = 'غير محد'
+
+export function unitTypeLabelAr(unitType: string | null | undefined): string {
+  if (unitType === null || unitType === undefined) {
+    return UNKNOWN_UNIT_TYPE_AR
+  }
+  const trimmed = unitType.trim()
+  if (trimmed === '') {
+    return UNKNOWN_UNIT_TYPE_AR
+  }
+  const label = UNIT_TYPE_LABELS_BY_LOWER_KEY[trimmed.toLowerCase()]
+  return label ?? unitType
+}
+
 export interface MaterialKindOption {
   readonly value: MaterialKind
   readonly label: string

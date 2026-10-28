@@ -3,13 +3,17 @@ import { Link, useParams } from 'react-router'
 import { TransferCustodyDialog } from '@/modules/custody/components/transfer-custody-dialog'
 import { CustodyStatusBadge } from '@/modules/custody/components/custody-status-badge'
 import { useCustodyRowQuery } from '@/modules/custody/hooks/use-custody-row-query'
+import { MATERIAL_KIND_LABELS } from '@/modules/catalog/constants/catalog-labels'
+import { isMaterialKind, policyDescription } from '@/modules/catalog/constants/material-kind-policy'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
+import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
+import { normalizeApiError } from '@/shared/services/api-error'
 import { formatDateTime } from '@/shared/utils/format'
 
 /**
@@ -27,6 +31,24 @@ export default function CustodyDetailPage() {
   const row = rowQuery.data
   const { has } = usePermission()
   const canTransfer = has('custody.assign') && row?.status === 'Active'
+  const materialKind =
+    row !== null && row !== undefined && isMaterialKind(row.materialKind) ? row.materialKind : null
+
+  // A missing row and a failed load are DIFFERENT facts, and the shared copy
+  // table owns the Arabic for both: the server's `CUSTODIES_NOT_FOUND` for a
+  // row that does not exist, and the mapped copy of whatever 404 the server
+  // answered. The page's own "تعذّر تحميل العهدة" stays for a genuine load
+  // failure, so the two never wear the same sentence.
+  const custodyError = rowQuery.isError ? normalizeApiError(rowQuery.error) : null
+  const isNotFound = custodyError !== null ? custodyError.status === 404 : row === null
+  const custodyErrorTitle = isNotFound
+    ? (custodyError?.titleAr ??
+      arabicCopyForCode('CUSTODIES_NOT_FOUND')?.titleAr ??
+      'تعذّر تحميل العهدة')
+    : 'تعذّر تحميل العهدة'
+  const custodyErrorDescription = isNotFound
+    ? (custodyError?.detailAr ?? 'لا توجد عهدة بهذا المعرّف ضمن نطاق العمل الحالي.')
+    : 'تعذّر جلب تفاصيل هذه العهدة. حاول مرة أخرى.'
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -46,8 +68,8 @@ export default function CustodyDetailPage() {
         <LoadingSpinner className="min-h-48" label="جارٍ تحميل تفاصيل العهدة..." />
       ) : rowQuery.isError || row === null || row === undefined ? (
         <ErrorState
-          title="تعذّر تحميل العهدة"
-          description="تعذّر جلب تفاصيل هذه العهدة. حاول مرة أخرى."
+          title={custodyErrorTitle}
+          description={custodyErrorDescription}
           action={
             <button
               type="button"
@@ -81,16 +103,31 @@ export default function CustodyDetailPage() {
               <DetailField label="نوع الحفظ">
                 {row.custodyKind === 'Personal' ? 'حفظ شخصي' : 'حفظ تشغيلي'}
               </DetailField>
+              <DetailField label="تصنيف المادة">
+                {materialKind === null ? row.materialKind : MATERIAL_KIND_LABELS[materialKind]}
+              </DetailField>
               <DetailField label="بداية العهدة" ltr>
                 {formatDateTime(row.fromUtc)}
               </DetailField>
               <DetailField label="نهاية العهدة" ltr={row.toUtc !== null}>
                 {row.toUtc === null ? '—' : formatDateTime(row.toUtc)}
               </DetailField>
+              {/* The live custody row carries the issue document's REFERENCE
+                  number (`systemReferenceNumber`); the raw document guid is
+                  never rendered. */}
               <DetailField label="سند الصرف المرجعي" ltr>
-                <span className="font-mono text-sm">{row.issueDocumentId}</span>
+                {row.systemReferenceNumber === null ? (
+                  '—'
+                ) : (
+                  <span className="font-mono text-sm">{row.systemReferenceNumber}</span>
+                )}
               </DetailField>
             </dl>
+            {materialKind === null ? null : (
+              <p className="mt-4 text-sm text-muted-foreground">
+                {policyDescription(materialKind)}
+              </p>
+            )}
           </ContentCard>
 
           {canTransfer ? (

@@ -2,7 +2,7 @@ import { IconArrowRight, IconInfoCircle } from '@tabler/icons-react'
 
 import { getAuditActionDisplay, toAuditEntryDisplay } from '@/modules/audit/types/audit-display'
 import { useAuditLogQuery } from '@/modules/audit/hooks/use-audit-queries'
-import type { AuditLog, AuditLogEntry } from '@/shared/types/generated/eiams-v1'
+import type { AuditLogDetail, AuditLogEntry } from '@/modules/audit/types/audit.api-types'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { ErrorState } from '@/shared/feedback/error-state'
@@ -14,7 +14,7 @@ import { formatDateTime, formatUuid } from '@/shared/utils/format'
 /**
  * Immutable, read-only field diff for one audit operation. The server owns the
  * redaction projection; `toAuditEntryDisplay` already swaps old/new values for
- * the fixed placeholder when `redacted` is true, so this view never re-inspects
+ * the fixed placeholder when `isRedacted` is true, so this view never re-inspects
  * raw values for redacted entries (D-AUD-02).
  */
 function AuditDiffList({ entries }: { entries: readonly AuditLogEntry[] }) {
@@ -81,8 +81,8 @@ function AuditDiffList({ entries }: { entries: readonly AuditLogEntry[] }) {
   )
 }
 
-function AuditDetailBody({ auditLog }: { auditLog: AuditLog }) {
-  const action = getAuditActionDisplay(auditLog.action)
+function AuditDetailBody({ auditLog }: { auditLog: AuditLogDetail }) {
+  const action = getAuditActionDisplay(auditLog.action, auditLog.actionDisplayAr)
   return (
     <div className="grid gap-6">
       <ContentCard title="بيانات عملية التدقيق" description="سجل للقراءة فقط يرتبه الخادم.">
@@ -91,7 +91,7 @@ function AuditDetailBody({ auditLog }: { auditLog: AuditLog }) {
             {action.isKnown ? action.text : <code dir="ltr">{action.text}</code>}
           </DetailField>
           <DetailField label="السجل المتأثر">
-            {auditLog.entityDisplay ?? <span dir="ltr">{formatUuid(auditLog.entityId)}</span>}
+            <span dir="ltr">{formatUuid(auditLog.entityId)}</span>
           </DetailField>
           <DetailField label="نوع السجل">
             <code dir="ltr" className="text-xs font-medium text-muted-foreground">
@@ -99,21 +99,37 @@ function AuditDetailBody({ auditLog }: { auditLog: AuditLog }) {
             </code>
           </DetailField>
           <div className="hidden sm:block" />
-          <DetailField label="وقت الحدث">
-            <span dir="ltr">{formatDateTime(auditLog.occurredAt)}</span>
+          <DetailField label="تاريخ الإنشاء">
+            <span dir="ltr">{formatDateTime(auditLog.createdAtUtc)}</span>
           </DetailField>
-          <DetailField label="بواسطة">{auditLog.occurredBy.displayName}</DetailField>
-          {auditLog.summaryAr ? (
+          <DetailField label="بواسطة">
+            {auditLog.userId === null ? (
+              <span>—</span>
+            ) : (
+              <span dir="ltr">{formatUuid(auditLog.userId)}</span>
+            )}
+          </DetailField>
+          {auditLog.summary ? (
             <div className="sm:col-span-2">
-              <DetailField label="الملخص">{auditLog.summaryAr}</DetailField>
+              <DetailField label="الملخص">{auditLog.summary}</DetailField>
             </div>
           ) : null}
-          {auditLog.traceId ? (
-            <div className="sm:col-span-2">
-              <DetailField label="معرّف التتبّع">
-                <span dir="ltr">{auditLog.traceId}</span>
-              </DetailField>
-            </div>
+          {auditLog.commandName ? (
+            <DetailField label="الأمر المنفَّذ">
+              <code dir="ltr" className="text-xs font-medium text-muted-foreground">
+                {auditLog.commandName}
+              </code>
+            </DetailField>
+          ) : null}
+          {auditLog.requestId ? (
+            <DetailField label="معرّف الطلب">
+              <span dir="ltr">{auditLog.requestId}</span>
+            </DetailField>
+          ) : null}
+          {auditLog.ipAddress ? (
+            <DetailField label="عنوان IP">
+              <span dir="ltr">{auditLog.ipAddress}</span>
+            </DetailField>
           ) : null}
         </div>
       </ContentCard>

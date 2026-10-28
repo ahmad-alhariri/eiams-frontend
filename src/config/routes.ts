@@ -461,7 +461,7 @@ export const ROUTE_METADATA: RouteMetaMap = {
     parent: 'assets',
   },
   custodyActive: {
-    labelAr: 'العهد النشطة',
+    labelAr: 'سجل العهد',
     group: 'assets-custody',
     permissions: ['asset.view'],
     parent: 'assets',

@@ -1,4 +1,5 @@
 import { IconPlus, IconTrash } from '@tabler/icons-react'
+import dayjs from 'dayjs'
 import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
 
@@ -6,6 +7,8 @@ import {
   useMaterialUnitConversionsQuery,
   useUnitsOfMeasureQuery,
 } from '@/modules/catalog/hooks/use-catalog-queries'
+import { MATERIAL_KIND_LABELS } from '@/modules/catalog/constants/catalog-labels'
+import { isMaterialKind, policyDescription } from '@/modules/catalog/constants/material-kind-policy'
 import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
 import {
   useWarehouseCapabilityValidation,
@@ -33,6 +36,7 @@ import {
 import type { OptionLoader } from '@/shared/selectors/selector-adapter'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
+import { DatePicker } from '@/shared/ui/date-picker'
 import { cn } from '@/shared/utils/class-names'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
@@ -78,6 +82,14 @@ export interface QuantityLineEditorProps {
    * searchable, then pairs it with an `assetSlotForLine` picker.
    */
   includeAssetMaterials?: boolean
+  /**
+   * Optional narrowing of the material options. `undefined` (the default)
+   * keeps every active material offerable — the shared editor stays generic.
+   * A document module that may only carry SOME of the catalog's materials
+   * (the Return form: only what the selected original Issue can return) passes
+   * its own rule here; the editor never learns that rule.
+   */
+  materialFilter?: ((material: Material) => boolean) | undefined
 }
 
 /** Aggregate capability state for the currently selected quantity-line materials. */
@@ -87,6 +99,27 @@ export type QuantityLineCapabilityGate =
   | { status: 'unverified'; messageAr: string; reason?: string }
 
 const BASE_UNIT_VALUE = 'base'
+
+/**
+ * The unit selector's own read state, spelled out for the user.
+ *
+ * The conversions read is a SECONDARY read: the base unit is already known
+ * from the material payload, so a failed read used to leave the selector
+ * showing one option and no explanation — indistinguishable from "this
+ * material has no alternative units". That silence is what let a keeper save
+ * a document whose unit was never checked. A failed secondary read must stay
+ * DISTINGUISHABLE from an empty one (feature-service-composition-standard,
+ * scan 2), so the three states get three different presentations:
+ *
+ * - loading: a muted hint, the selector disabled (the list is not known yet);
+ * - failed: an Arabic error, the selector disabled (a partial list is not a
+ *   list, and picking from it would be a guess);
+ * - loaded: the options, no message at all — an EMPTY list is a legitimate
+ *   answer and needs no apology.
+ */
+const UNIT_CONVERSIONS_LOADING_AR = 'جارٍ تحميل الوحدات البديلة للمادة...'
+const UNIT_CONVERSIONS_FAILED_AR =
+  'تعذّر جلب الوحدات البديلة لهذه المادة. أعد المحاولة قبل اختيار الوحدة.'
 
 /** Inbound opening balances share the Receiving capability operation. */
 function capabilityOperationFor(
@@ -168,6 +201,8 @@ function UnitSelector({
   baseUnitNameAr,
   conversions,
   index,
+  isError,
+  isLoading,
   label,
   onValueChange,
   unitLabel,
@@ -176,6 +211,10 @@ function UnitSelector({
   baseUnitNameAr: string
   conversions: readonly MaterialUnitConversion[]
   index: number
+  /** The conversions read FAILED: no option may be picked from a partial list. */
+  isError: boolean
+  /** The conversions read is still in flight: the option list is not known yet. */
+  isLoading: boolean
   label: ReactNode
   onValueChange: (value: string | null) => void
   /** Label for a conversion's flat `fromUnitId`, resolved from the units list. */
@@ -185,7 +224,7 @@ function UnitSelector({
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <span className="text-sm font-medium text-foreground">{label}</span>
-      <Select value={value} onValueChange={onValueChange}>
+      <Select value={value} onValueChange={onValueChange} disabled={isLoading || isError}>
         <SelectTrigger aria-label={`وحدة البند ${index + 1}`}>
           <SelectValue>{value === BASE_UNIT_VALUE ? baseUnitNameAr : undefined}</SelectValue>
         </SelectTrigger>
@@ -203,6 +242,16 @@ function UnitSelector({
           ))}
         </SelectContent>
       </Select>
+      {isLoading ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {UNIT_CONVERSIONS_LOADING_AR}
+        </p>
+      ) : null}
+      {isError ? (
+        <p role="alert" className="text-sm text-destructive">
+          {UNIT_CONVERSIONS_FAILED_AR}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -251,6 +300,7 @@ function QuantityLineRow({
     activeMaterialId === '' ? undefined : activeMaterialId,
   )
   const capability = validates(line.materialDomainId, operation)
+  const materialKind = isMaterialKind(line.materialKind) ? line.materialKind : null
 
   return (
     <fieldset
@@ -307,6 +357,12 @@ function QuantityLineRow({
                 scopeReady={scopeReady}
                 disabled={disabled}
               />
+              {materialKind === null ? null : (
+                <p className="text-sm text-muted-foreground">
+                  نوع المادة: {MATERIAL_KIND_LABELS[materialKind]}
+                  {materialKind === 'Consumable' ? null : ` — ${policyDescription(materialKind)}`}
+                </p>
+              )}
               <FormMessage />
             </FormItem>
           )}
@@ -341,6 +397,8 @@ function QuantityLineRow({
           index={index}
           baseUnitNameAr={line.baseUnitNameAr || 'الوحدة الأساسية'}
           conversions={conversionsQuery.data?.items ?? []}
+          isError={conversionsQuery.isError}
+          isLoading={conversionsQuery.isLoading}
           value={line.conversionId ?? BASE_UNIT_VALUE}
           unitLabel={unitLabel}
           onValueChange={(nextValue) => {
@@ -417,15 +475,18 @@ function QuantityLineRow({
           <FormField
             control={control}
             name={`lines.${index}.expiryDate`}
-            render={({ field: expiryField, fieldState }) => (
+            render={({ field: expiryField }) => (
               <FormItem>
                 <FormLabel>تاريخ الانتهاء (اختياري)</FormLabel>
                 <FormControl>
-                  <Input
-                    type="date"
-                    aria-invalid={fieldState.invalid || undefined}
-                    value={expiryField.value ?? ''}
-                    onChange={expiryField.onChange}
+                  <DatePicker
+                    ariaLabel={`تاريخ انتهاء البند ${index + 1}`}
+                    {...(expiryField.value ? { value: dayjs(expiryField.value).toDate() } : {})}
+                    onChange={(date) =>
+                      expiryField.onChange(
+                        date === undefined ? '' : dayjs(date).format('YYYY-MM-DD'),
+                      )
+                    }
                   />
                 </FormControl>
                 <FormMessage />
@@ -528,10 +589,26 @@ export function QuantityLineEditor({
   balanceForLine,
   assetSlotForLine,
   includeAssetMaterials = false,
+  materialFilter,
 }: QuantityLineEditorProps) {
   const { control, formState } = useFormContext<DocumentLinesContainer>()
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
   const materialSelector = useScopedMaterialSelector(includeAssetMaterials)
+  const filteredLoadOptions = useCallback(
+    async (query: string) => {
+      const results = await materialSelector.loadOptions(query)
+      if (materialFilter === undefined) {
+        return results
+      }
+      // The rule belongs to the calling document module; the editor only
+      // applies it. An option without a material payload cannot be judged, so
+      // it is not offered.
+      return results.filter(
+        (option) => option.payload !== undefined && materialFilter(option.payload),
+      )
+    },
+    [materialSelector, materialFilter],
+  )
   const capabilityValidation = useWarehouseCapabilityValidation(warehouseId)
   const operation = capabilityOperationFor(documentType)
   const lines = useWatch({ control, name: 'lines' })
@@ -577,7 +654,7 @@ export function QuantityLineEditor({
             index={index}
             disabled={disabled}
             features={features}
-            loadMaterials={materialSelector.loadOptions}
+            loadMaterials={filteredLoadOptions}
             onRemove={() => remove(index)}
             operation={operation}
             scopeReady={materialSelector.scopeReady}

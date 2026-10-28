@@ -12,15 +12,12 @@ import type {
   PendingCustody,
   TransferCustodyRequest,
 } from '@/modules/custody/types/custody.types'
+import { pathWithId } from '@/shared/services/api-path'
 
 const CUSTODIES_PATH = '/custodies'
 const CUSTODIES_PENDING_PATH = '/custodies/pending'
 const CUSTODY_ASSIGN_PATH = '/assets/{assetId}/custody-assignment'
 const CUSTODY_TRANSFER_PATH = '/custodies/{custodyId}/transfer'
-
-function pathWithId(path: string, placeholder: string, value: string): string {
-  return path.replace(placeholder, encodeURIComponent(value))
-}
 
 /**
  * Sends a list query through the ONE shared pagination clamp.

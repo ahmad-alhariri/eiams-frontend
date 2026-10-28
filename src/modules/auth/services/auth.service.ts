@@ -8,12 +8,13 @@ import type {
 
 /**
  * The three auth paths, declared locally rather than checked against
- * `keyof paths` from `shared/types/generated/eiams-v1`.
+ * `keyof paths` from the deleted generated artifact.
  *
- * The generated path table is frozen migration scaffolding that `whhu.5` deletes
- * outright. `satisfies keyof paths` therefore guarded these constants against a
- * document that is meant to disappear: the check's passing meant nothing about the
- * live contract, and restoring it would drag a deleted dependency back in. The real
+ * The generated path table was frozen migration scaffolding and has now been
+ * deleted outright. `satisfies keyof paths` therefore guarded these constants
+ * against a document that was meant to disappear: the check's passing meant
+ * nothing about the live contract, and restoring it would drag a deleted
+ * dependency back in. The real
  * guard on a path is an integration test that exercises the endpoint, which is what
  * `auth.service.test.ts` does.
  */

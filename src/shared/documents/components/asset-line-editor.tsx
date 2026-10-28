@@ -1,5 +1,5 @@
 import { IconPlus, IconTrash } from '@tabler/icons-react'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
 
 import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
@@ -15,6 +15,12 @@ import {
   type AssetLinesContainer,
   type AssetLineValues,
 } from '@/shared/documents/schemas/document-lines.schemas'
+import {
+  SerialCaptureField,
+  serialsOfOtherLines,
+  serialsOfUnits,
+  type SerialCaptureResult,
+} from '@/shared/documents/components/serial-capture-field'
 import {
   FormControl,
   FormField,
@@ -277,6 +283,8 @@ interface AssetLineRowProps {
   namePrefix: AssetLineFieldName
   onRemove: () => void
   operation: CapabilityOperation
+  /** Serials already captured by the other lines of the same document. */
+  otherUsedSerials: readonly string[]
   scopeReady: boolean
   validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation
 }
@@ -296,6 +304,7 @@ function AssetLineRow({
   namePrefix,
   onRemove,
   operation,
+  otherUsedSerials,
   scopeReady,
   validates,
 }: AssetLineRowProps) {
@@ -304,6 +313,7 @@ function AssetLineRow({
   const line = (useWatch({ control, name: `${namePrefix}.${index}` }) ??
     {}) as Partial<AssetLineValues>
   const linePath = `${namePrefix}.${index}` as const
+  const [serialCaptureText, setSerialCaptureText] = useState('')
 
   const assetInputs = line.assetInputs ?? []
   const quantity = line.quantity ?? assetInputs.length
@@ -367,6 +377,28 @@ function AssetLineRow({
     setValue(`${linePath}.quantity`, remaining.length)
   }
 
+  /**
+   * Bulk serial capture: every accepted serial becomes ONE new unit carrying
+   * that serial, existing captured units keep their values, and the read-only
+   * quantity follows the new unit count (assetLineSchema requires the two to
+   * agree). The asset number stays empty — the server allocates it at post.
+   * Refused entries stay in the capture text with their reasons: clearing it
+   * erased the evidence and left the summary claiming nothing was refused,
+   * and kept only the accepted serials re-appliable.
+   */
+  const applySerialCapture = ({ serials, rejected }: SerialCaptureResult) => {
+    const current = getValues(`${linePath}.assetInputs`) ?? []
+    // Units that captured nothing (the blank row seeded on material selection)
+    // would otherwise stay behind as a phantom unit without a serial.
+    const kept = current.filter((unit) =>
+      Object.values(unit).some((value) => value !== undefined && value !== ''),
+    )
+    const next = [...kept, ...serials.map((serialNumber) => ({ serialNumber }))]
+    setValue(`${linePath}.assetInputs`, next)
+    setValue(`${linePath}.quantity`, next.length)
+    setSerialCaptureText(rejected.map((entry) => entry.value).join('\n'))
+  }
+
   return (
     <fieldset
       data-slot="asset-line-row"
@@ -419,6 +451,14 @@ function AssetLineRow({
           ))}
         </div>
       ) : null}
+      <SerialCaptureField
+        value={serialCaptureText}
+        alreadyUsed={otherUsedSerials}
+        usedOnThisLine={serialsOfUnits(assetInputs)}
+        disabled={disabled}
+        onValueChange={setSerialCaptureText}
+        onApply={applySerialCapture}
+      />
       <div className="flex flex-wrap items-center gap-3">
         <Button
           type="button"
@@ -493,6 +533,10 @@ export function AssetLineEditor({
   const capabilityValidation = useWarehouseCapabilityValidation(warehouseId)
   const operation = capabilityOperationFor(documentType)
   const lines = useWatch({ control, name: namePrefix })
+  const usedSerialsByLine = useMemo(() => {
+    const serialsByLine = (lines ?? []).map((line) => serialsOfUnits(line.assetInputs ?? []))
+    return serialsByLine.map((_serials, index) => serialsOfOtherLines(serialsByLine, index))
+  }, [lines])
   const capabilityGate = useMemo(
     () => capabilityGateForLines(lines ?? [], operation, capabilityValidation.validates),
     [lines, operation, capabilityValidation.validates],
@@ -535,6 +579,7 @@ export function AssetLineEditor({
             namePrefix={namePrefix}
             onRemove={() => remove(index)}
             operation={operation}
+            otherUsedSerials={usedSerialsByLine[index] ?? []}
             scopeReady={scopeReady}
             validates={capabilityValidation.validates}
           />

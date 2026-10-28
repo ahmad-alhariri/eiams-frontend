@@ -175,7 +175,7 @@ reads `response.data` style — it does not, it uses the typed methods.
 | `createPage` factory still produces `{items, meta: {pageIndex, ...}}` (zero-based); some test imports it and the assertion `toEqual(createPage([document]))` would now compare a `UiPage` to a zero-based `PageMeta` | Certain | Replace each `createPage([x])` with a literal `{items: [x], page: 1, pageSize: 1, totalCount: 1, totalPages: 1, hasNextPage: false}` in the affected tests; do NOT change `createPage` itself in this commit (it's consumed by 25+ pages that still read the old shape — a separate migration) |
 | `WarehouseDocument` shape itself contains nested `meta: PageMeta` fields | None verified, low | Verified by grep: only `meta.totalItems` / `meta.totalPages` reads at the page envelope level; document spine carries no `meta` |
 | `pageRows` helper in `src/shared/ui/data-table` reads `page.items` | Compatible | Verified: already used by document-list-page; the field name `items` is preserved |
-| Generated types will be regenerated someday, overwriting this handwritten file | N/A — handwritten file does not live under `src/shared/types/generated/` | Verified by path |
+| Generated types will be regenerated someday, overwriting this handwritten file | N/A — handwritten file is not generated output, and the generator has been deleted | Verified by path |
 | Activation order — what if another module lands before document-engine? | Low | Document-engine is the spine; everything else depends on it. Land it first or in isolation. |
 
 ## 5. Commit plan (Option B execution)

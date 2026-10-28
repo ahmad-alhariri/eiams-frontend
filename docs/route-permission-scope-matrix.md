@@ -25,7 +25,10 @@ behind `main` plus missing a ratified addendum.
 Consequences of the rule:
 
 - If this file and the system repository disagree, **the system repository
-  wins**, and this file is wrong until reconciled.
+  wins**, and this file is wrong until reconciled. As of 2026-10-26
+  (`eiams-frontend-whhu.19.10`, `eiams-frontend-whhu.19.11`) the two copies are
+  reconciled: the system-repository copy's role-seed rows match this body
+  (per-scope `WH_MGR`; `custody.assign` on `WH_KEEPER` only).
 - The body below (canonical vocabulary, route matrix, guard behavior, role seed
   reference) is owned and maintained **here**, and is kept accurate against the
   decisions it cites.

@@ -136,11 +136,14 @@ export function allowMarkersIn(source: string): AllowMarker[] {
 const ALLOW_WINDOW_LINES = 4
 
 /**
- * Drops lines excused by a `standard-allow` marker for `rule`, so a scan sees
- * only code that has not been explicitly reviewed and excused.
+ * The line indexes a `standard-allow` marker excuses for `rule`.
+ *
+ * `withoutAllowMarkers` DROPS those lines, which shifts every later line
+ * number — so a scan that reports `file:line` cannot use it and still report
+ * the right line. This returns the indexes instead, so the same four-line
+ * window is honoured without moving anything.
  */
-export function withoutAllowMarkers(source: string, rule: string): string {
-  const lines = source.split(/\r?\n/u)
+function excusedLines(source: string, rule: string): Set<number> {
   const dropped = new Set<number>()
   for (const marker of allowMarkersIn(source)) {
     if (marker.rule !== rule) continue
@@ -148,7 +151,92 @@ export function withoutAllowMarkers(source: string, rule: string): string {
       dropped.add(marker.line + offset)
     }
   }
-  return lines.filter((_line, index) => !dropped.has(index)).join('\n')
+  return dropped
+}
+
+/**
+ * Drops lines excused by a `standard-allow` marker for `rule`, so a scan sees
+ * only code that has not been explicitly reviewed and excused.
+ */
+export function withoutAllowMarkers(source: string, rule: string): string {
+  const dropped = excusedLines(source, rule)
+  return source
+    .split(/\r?\n/u)
+    .filter((_line, index) => !dropped.has(index))
+    .join('\n')
+}
+
+/**
+ * A collapsed read: a query's data replaced by a fallback with `??`.
+ *
+ * The shape is deliberately literal — `<query>.data ?? <fallback>` — because a
+ * wider net ("anything with a `??` in it") had no discriminating power at all:
+ * 172 bare `?? null` hits across the repository, every one of them harmless.
+ */
+const COLLAPSED_READ = /(\w+)\??\.data\s*\?\?\s*/gu
+
+/**
+ * Does the file consult THIS query's error state?
+ *
+ * The correlation is VARIABLE-SPECIFIC, never file-scoped. Eight files declare
+ * more than one component and handle `isError` somewhere, so a file-scoped
+ * check would clear a variable nobody handles — the exact false negative this
+ * detector exists to prevent.
+ */
+function handlesOwnError(source: string, variable: string): boolean {
+  return new RegExp(`\\b${variable}\\s*(?:\\??\\.\\s*)?(?:isError|error)\\b`, 'u').test(source)
+}
+
+/**
+ * The silent-secondary-read detector: a secondary read whose failure is
+ * indistinguishable from an empty result.
+ *
+ * A component that consumes a SECONDARY query's data with `X.data ?? Y` and
+ * never looks at `X.isError` / `X.error` renders a FAILED read exactly like an
+ * EMPTY one. A filter dropdown with no options then reads as "nothing is
+ * configured" rather than "the read failed", and the user acts on a silently
+ * partial view. This defect class shipped three times (e24-t08, e24-t09,
+ * e24-t10), so it gets a machine check instead of a reviewer's memory.
+ *
+ * ONE implementation, parameterised by source: the file scan and every
+ * negative control run through this function, because a control that exercises
+ * different code than production proves nothing about the detector it is
+ * meant to validate.
+ *
+ * A site is excused by a `standard-allow: silent-secondary-read` marker next to
+ * the code — the exclusion is recorded in the SOURCE and read by this scan,
+ * never in a filter inside a test.
+ *
+ * @param repoPath repo-relative path used in the reported offender.
+ * @param source the file's source.
+ * @returns one `path:line` entry per collapsed read with no error branch.
+ */
+export function silentSecondaryReadOffendersIn(repoPath: string, source: string): string[] {
+  const offenders: string[] = []
+  const excused = excusedLines(source, 'silent-secondary-read')
+  // A fresh lastIndex: the pattern carries /g, and a shared instance would
+  // skip matches on every second file.
+  COLLAPSED_READ.lastIndex = 0
+  for (const match of source.matchAll(COLLAPSED_READ)) {
+    const variable = match[1]
+    if (variable === undefined) continue
+    const lineIndex = source.slice(0, match.index).split(/\r?\n/u).length - 1
+    if (excused.has(lineIndex)) continue
+    if (handlesOwnError(source, variable)) continue
+    offenders.push(`${repoPath}:${lineIndex + 1}`)
+  }
+  return offenders
+}
+
+/**
+ * The same detector over a file set, reported as repo-relative `path:line`.
+ */
+export function silentSecondaryReadOffenders(files: readonly string[]): string[] {
+  const offenders: string[] = []
+  for (const file of files) {
+    offenders.push(...silentSecondaryReadOffendersIn(relativeToRepo(file), readSource(file)))
+  }
+  return offenders
 }
 
 /**

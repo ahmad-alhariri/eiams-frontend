@@ -235,6 +235,123 @@ describe('AssetLineEditor', () => {
     })
   })
 
+  it('captures a pasted serial list as one unit per serial and derives the quantity', async () => {
+    const user = userEvent.setup()
+    useCatalogHandlers()
+    const { host } = createTestHost()
+    render(host(() => <AssetLineEditor documentType="Receiving" warehouseId={undefined} />))
+    await user.click(screen.getByRole('button', { name: 'إضافة بند أصل' }))
+    await selectMaterial('طابعة ليزر')
+
+    fireEvent.change(screen.getByLabelText('التقاط الأرقام التسلسلية'), {
+      target: { value: 'SN-1001\nSN-1002,SN-1003' },
+    })
+    expect(screen.getByText('تم التقاط ٣ رقماً تسلسلياً، ورُفض ٠')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'تطبيق على الوحدات' }))
+
+    await waitFor(() => {
+      expect(linesValue()[0]?.assetInputs).toEqual([
+        { serialNumber: 'SN-1001' },
+        { serialNumber: 'SN-1002' },
+        { serialNumber: 'SN-1003' },
+      ])
+      expect(linesValue()[0]?.quantity).toBe(3)
+    })
+    expect(screen.getByText('الوحدة 3')).toBeInTheDocument()
+    expect(quantityText()).toBe('3 قطعة')
+    expect(screen.getAllByLabelText('الرقم التسلسلي (اختياري)')).toHaveLength(3)
+    expect(screen.getByLabelText('التقاط الأرقام التسلسلية')).toHaveValue('')
+  })
+
+  it('rejects a serial already captured on the same row instead of appending a second unit', async () => {
+    const user = userEvent.setup()
+    useCatalogHandlers()
+    const { host } = createTestHost()
+    render(host(() => <AssetLineEditor documentType="Receiving" warehouseId={undefined} />))
+    await user.click(screen.getByRole('button', { name: 'إضافة بند أصل' }))
+    await selectMaterial('طابعة ليزر')
+
+    fireEvent.change(screen.getByLabelText('التقاط الأرقام التسلسلية'), {
+      target: { value: 'SN-4001' },
+    })
+    await user.click(screen.getByRole('button', { name: 'تطبيق على الوحدات' }))
+    await waitFor(() => expect(linesValue()[0]?.assetInputs).toEqual([{ serialNumber: 'SN-4001' }]))
+
+    // The same serial again, in different case: the row already carries it.
+    fireEvent.change(screen.getByLabelText('التقاط الأرقام التسلسلية'), {
+      target: { value: 'sn-4001' },
+    })
+
+    expect(screen.getByText('sn-4001: مكرر في هذا البند')).toBeInTheDocument()
+    expect(screen.getByText('تم التقاط ٠ رقماً تسلسلياً، ورُفض ١')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'تطبيق على الوحدات' })).toBeDisabled()
+    expect(screen.getAllByLabelText('الرقم التسلسلي (اختياري)')).toHaveLength(1)
+    expect(linesValue()[0]?.assetInputs).toEqual([{ serialNumber: 'SN-4001' }])
+    expect(linesValue()[0]?.quantity).toBe(1)
+  })
+
+  it('keeps refused serials and their reasons visible after applying the accepted ones', async () => {
+    const user = userEvent.setup()
+    useCatalogHandlers()
+    const { host } = createTestHost()
+    render(host(() => <AssetLineEditor documentType="Receiving" warehouseId={undefined} />))
+    await user.click(screen.getByRole('button', { name: 'إضافة بند أصل' }))
+    await selectMaterial('طابعة ليزر')
+
+    const tooLong = 'S'.repeat(201)
+    fireEvent.change(screen.getByLabelText('التقاط الأرقام التسلسلية'), {
+      target: { value: `SN-5001\n${tooLong}` },
+    })
+    await user.click(screen.getByRole('button', { name: 'تطبيق على الوحدات' }))
+
+    await waitFor(() => expect(linesValue()[0]?.assetInputs).toEqual([{ serialNumber: 'SN-5001' }]))
+    // The refused entry keeps its evidence on screen; the summary cannot claim
+    // that nothing was refused, and the applied serial is not re-applicable.
+    expect(screen.getByText(`${tooLong}: أطول من الحد المسموح (200 حرف)`)).toBeInTheDocument()
+    expect(screen.getByText('تم التقاط ٠ رقماً تسلسلياً، ورُفض ١')).toBeInTheDocument()
+    expect(screen.getByLabelText('التقاط الأرقام التسلسلية')).toHaveValue(tooLong)
+    expect(screen.getByRole('button', { name: 'تطبيق على الوحدات' })).toBeDisabled()
+    expect(linesValue()[0]?.assetInputs).toHaveLength(1)
+  })
+
+  it('merges captured serials into existing units and rejects serials used by another line', async () => {
+    const user = userEvent.setup()
+    useCatalogHandlers()
+    const { host } = createTestHost()
+    render(host(() => <AssetLineEditor documentType="Opening" warehouseId={undefined} />))
+    await user.click(screen.getByRole('button', { name: 'إضافة بند أصل' }))
+    await selectMaterial('طابعة ليزر', 0)
+    await user.click(screen.getByRole('button', { name: 'إضافة بند أصل' }))
+    await selectMaterial('طابعة ليزر', 1)
+
+    await user.type(screen.getAllByLabelText('رقم الأصل (اختياري)')[0]!, 'A-1001')
+    fireEvent.change(screen.getAllByLabelText('التقاط الأرقام التسلسلية')[0]!, {
+      target: { value: 'SN-1001\nSN-1002' },
+    })
+    await user.click(screen.getAllByRole('button', { name: 'تطبيق على الوحدات' })[0]!)
+
+    await waitFor(() => {
+      expect(linesValue()[0]?.assetInputs).toEqual([
+        { assetNumber: 'A-1001' },
+        { serialNumber: 'SN-1001' },
+        { serialNumber: 'SN-1002' },
+      ])
+      expect(linesValue()[0]?.quantity).toBe(3)
+    })
+
+    fireEvent.change(screen.getAllByLabelText('التقاط الأرقام التسلسلية')[1]!, {
+      target: { value: 'SN-1002\nSN-2001' },
+    })
+    expect(screen.getByText('SN-1002: مستخدم في بند آخر')).toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('button', { name: 'تطبيق على الوحدات' })[1]!)
+    await waitFor(() => {
+      expect(linesValue()[1]?.assetInputs).toEqual([{ serialNumber: 'SN-2001' }])
+      expect(linesValue()[1]?.quantity).toBe(1)
+    })
+  })
+
   it('surfaces per-unit invalid dates as inline Arabic messages', async () => {
     const user = userEvent.setup()
     useCatalogHandlers()

@@ -9,7 +9,12 @@ import { resolveDevApiProxy } from './src/config/vite-dev-server.ts'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const devApiProxy = resolveDevApiProxy(loadEnv(mode, process.cwd(), ''))
+  const env = loadEnv(mode, process.cwd(), '')
+  const devApiProxy = resolveDevApiProxy(env)
+  const mockTarget =
+    env['EIAMS_DEV_USE_MOCK'] === '1' || env['EIAMS_DEV_USE_MOCK'] === 'true'
+      ? 'http://127.0.0.1:8787'
+      : null
 
   return {
     plugins: [react(), tailwindcss()],
@@ -23,7 +28,10 @@ export default defineConfig(({ mode }) => {
       ? {
           server: {
             proxy: {
-              [devApiProxy.context]: devApiProxy,
+              [devApiProxy.context]: {
+                ...devApiProxy,
+                ...(mockTarget ? { target: mockTarget } : {}),
+              },
             },
           },
         }

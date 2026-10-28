@@ -29,7 +29,12 @@ describe('Dev session fixture (auth bypass)', () => {
   it('carries a scope name rather than the old displayName field', () => {
     const session = createDevSession().session
 
-    expect(toSessionScopeLabel(session.activeScope)).toBe('نطاق التطوير')
+    // The projection still carries the server's own name for the scope...
+    expect(session.activeScope.scopeName.trim().length).toBeGreaterThan(0)
+    // ...but the label the user sees comes from the scope TYPE, using the same
+    // Arabic vocabulary as the scope Select — the server's name for the
+    // Enterprise scope is the English word "Enterprise" (session-display.ts).
+    expect(toSessionScopeLabel(session.activeScope)).toBe('مستوى المؤسسة')
     expect('displayName' in session.activeScope).toBe(false)
   })
 

@@ -18,8 +18,8 @@ import {
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
+import { OrganizationPageShell } from '@/modules/organization/components/organization-page-shell'
 import { ContentCard } from '@/shared/layout/content-card'
-import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { dataTableFeatures } from '@/shared/ui/data-table'
@@ -202,37 +202,35 @@ function OrganizationsListPage() {
   const isStatusTargetActive = statusTarget?.status === 'Active'
 
   return (
-    <div dir="rtl" className="min-w-0">
-      <PageHeader
-        title="الجهات"
-        subtitle="دليل الجهات المعتمد ضمن نطاق العمل الحالي؛ الجهة هي المستوى الأعلى الذي تتفرّع عنه المواقع."
-        toolbar={
-          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end">
-            <div className="flex w-full flex-col gap-2 sm:w-52">
-              <span className="text-sm font-medium text-foreground">حالة الجهة</span>
-              <Select value={status ?? 'all'} onValueChange={handleStatusChange}>
-                <SelectTrigger aria-label="تصفية حسب حالة الجهة">
-                  <SelectValue>
-                    {status === undefined ? 'كل الحالات' : status === 'Active' ? 'نشط' : 'غير نشط'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الحالات</SelectItem>
-                  <SelectItem value="Active">نشط</SelectItem>
-                  <SelectItem value="Inactive">غير نشط</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {canManage ? (
-              <Button type="button" onClick={openCreate}>
-                <IconPlus aria-hidden data-icon="inline-start" />
-                إضافة جهة
-              </Button>
-            ) : null}
+    <OrganizationPageShell
+      titleAr="الجهات"
+      subtitle="دليل الجهات المعتمد ضمن نطاق العمل الحالي؛ الجهة هي المستوى الأعلى الذي تتفرّع عنه المواقع."
+      actions={
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end">
+          <div className="flex w-full flex-col gap-2 sm:w-52">
+            <span className="text-sm font-medium text-foreground">حالة الجهة</span>
+            <Select value={status ?? 'all'} onValueChange={handleStatusChange}>
+              <SelectTrigger aria-label="تصفية حسب حالة الجهة">
+                <SelectValue>
+                  {status === undefined ? 'كل الحالات' : status === 'Active' ? 'نشط' : 'غير نشط'}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل الحالات</SelectItem>
+                <SelectItem value="Active">نشط</SelectItem>
+                <SelectItem value="Inactive">غير نشط</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        }
-      />
-
+          {canManage ? (
+            <Button type="button" onClick={openCreate}>
+              <IconPlus aria-hidden data-icon="inline-start" />
+              إضافة جهة
+            </Button>
+          ) : null}
+        </div>
+      }
+    >
       <ContentCard
         title="قائمة الجهات"
         description="صفِّ النتائج حسب الحالة، ثم تنقّل بين صفحات الخادم."
@@ -283,7 +281,7 @@ function OrganizationsListPage() {
         busy={statusMutation.isPending}
         onConfirm={() => void confirmStatusChange()}
       />
-    </div>
+    </OrganizationPageShell>
   )
 }
 

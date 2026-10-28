@@ -7,6 +7,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { errJson, okJson } from '@/test/msw/envelope'
+import { createAuthTokenResponse } from '@/test/msw/factories'
 import { INVENTORY_BALANCE_ID, wireInventoryBalance } from '@/test/msw/inventory-wire-fixtures'
 import { server } from '@/test/msw/server'
 
@@ -110,6 +111,9 @@ describe('InventoryBalanceDetailPage', () => {
 
     render(<InventoryBalanceDetailPage />, { wrapper: PageWrapper })
 
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'تفاصيل الرصيد' }),
+    ).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'الرصيد غير متاح' })).toBeInTheDocument()
     expect(
       screen.getByText('لا يتوفر هذا الرصيد ضمن نطاق العمل الحالي، أو لم يعد موجوداً.'),
@@ -135,11 +139,31 @@ describe('InventoryBalanceDetailPage', () => {
     render(<InventoryBalanceDetailPage />, { wrapper: PageWrapper })
 
     expect(
+      await screen.findByRole('heading', { level: 1, name: 'تفاصيل الرصيد' }),
+    ).toBeInTheDocument()
+    expect(
       await screen.findByRole('heading', { name: 'تعذّر تحميل تفاصيل الرصيد' }),
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
     await waitFor(() => expect(attempts).toBe(2))
     expect(await screen.findByText(balance.warehouseName)).toBeInTheDocument()
+  })
+
+  it('renders the shared session-expired copy for a 401 instead of a connection message', async () => {
+    server.use(
+      http.post(`${API_BASE_URL}/auth/refresh`, () => okJson(createAuthTokenResponse())),
+      http.get(`${API_BASE_URL}/inventory/balances/${BALANCE_ID}`, () =>
+        errJson(401, { code: 'AUTHENTICATION_REQUIRED', message: 'Unauthorized.' }),
+      ),
+    )
+
+    render(<InventoryBalanceDetailPage />, { wrapper: PageWrapper })
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'تفاصيل الرصيد' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('انتهت الجلسة. يرجى تسجيل الدخول مجدداً.')).toBeInTheDocument()
+    expect(screen.queryByText(/تحقق من الاتصال/)).not.toBeInTheDocument()
   })
 
   it('does not request a balance when the route has no identifier', () => {

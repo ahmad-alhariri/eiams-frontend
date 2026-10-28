@@ -12,10 +12,17 @@ const movementsQuery = vi.hoisted(() => ({
   data: undefined as
     | {
         items: ReadonlyArray<Record<string, unknown>>
-        page: number
-        pageSize: number
-        totalItems: number
-        totalPages: number
+        meta: {
+          page: number
+          pageIndex: number
+          pageSize: number
+          itemCount: number
+          totalItems: number
+          totalCount: number
+          totalPages: number
+          hasNextPage: boolean
+          hasPreviousPage: boolean
+        }
       }
     | undefined,
   isLoading: false,
@@ -67,10 +74,29 @@ describe('StockMovementReportTable', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: 'تقرير حركات المخزون' }),
     ).toBeInTheDocument()
+
+    expect(document.querySelector('input[type="datetime-local"]')).toBeNull()
+    expect(screen.getByRole('button', { name: 'تصفية حسب تاريخ البداية' })).toBeInTheDocument()
   })
 
   it('renders the Arabic empty state when the underlying query returns no rows', () => {
-    movementsQuery.data = { items: [], page: 1, pageSize: 10, totalItems: 0, totalPages: 0 }
+    // The stub mirrors the REAL hook's page shape
+    // (`StockMovementPage` → `{ items, meta }`), which is what the inventory
+    // module's own pages read.
+    movementsQuery.data = {
+      items: [],
+      meta: {
+        page: 1,
+        pageIndex: 1,
+        pageSize: 10,
+        itemCount: 0,
+        totalItems: 0,
+        totalCount: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    }
     render(<StockMovementReportTable />, { wrapper: createWrapper() })
     expect(screen.getByRole('heading', { name: 'لا توجد حركات' })).toBeInTheDocument()
   })

@@ -5,12 +5,13 @@ export interface DetailFieldProps {
   label: string
   /** Renders the value in a left-to-right reading direction (codes, IDs). */
   ltr?: boolean
+  className?: string
 }
 
 /** Read-only labeled value row used by contract-backed detail pages. */
-export function DetailField({ children, label, ltr = false }: DetailFieldProps) {
+export function DetailField({ children, label, ltr = false, className = '' }: DetailFieldProps) {
   return (
-    <div className="border-b border-border pb-4 last:border-b-0 sm:border-b-0">
+    <div className={`border-b border-border pb-4 last:border-b-0 sm:border-b-0 ${className}`}>
       <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
       <dd className="mt-1.5 text-base font-medium text-foreground" dir={ltr ? 'ltr' : undefined}>
         {children}

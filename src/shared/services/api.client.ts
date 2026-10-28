@@ -13,12 +13,20 @@ import {
   type RefreshSessionRequest,
   type SessionAdapter,
 } from '@/shared/services/session-adapter'
-import type { ApiSuccessResponse } from '@/shared/api/envelope'
-import type { paths } from '@/shared/types/generated/eiams-v1'
+import { unwrapData, type ApiSuccessResponse } from '@/shared/api/envelope'
 import type { AuthTokenResponse } from '@/modules/auth/types/session.types'
 
-const AUTH_LOGIN_PATH = '/auth/login' satisfies keyof paths
-const AUTH_REFRESH_PATH = '/auth/refresh' satisfies keyof paths
+/**
+ * The two auth paths, declared locally rather than checked against
+ * `keyof paths` from the deleted generated artifact.
+ *
+ * `satisfies keyof paths` guarded these constants against a document that was
+ * scheduled for deletion, so its passing said nothing about the live contract;
+ * restoring it would drag a deleted dependency back in. The real guard on a path
+ * is an integration test that exercises the endpoint.
+ */
+const AUTH_LOGIN_PATH = '/auth/login'
+const AUTH_REFRESH_PATH = '/auth/refresh'
 
 type RetriableRequestConfig = InternalAxiosRequestConfig & {
   _eiamsAuthRetry?: true
@@ -48,7 +56,7 @@ function requestPath(url: string | undefined): string {
   }
 }
 
-function pathEndsWith(url: string | undefined, endpoint: keyof paths): boolean {
+function pathEndsWith(url: string | undefined, endpoint: string): boolean {
   return requestPath(url).endsWith(endpoint)
 }
 
@@ -191,7 +199,7 @@ export function createApiClient({
         // the reason the envelope guard scopes to service files — the envelope
         // is unwrapped at every layer that has to unwrap it, exactly once each.
         const response = await client.post<ApiSuccessResponse<AuthTokenResponse>>(AUTH_REFRESH_PATH)
-        return response.data.data
+        return unwrapData(response.data)
       }),
   )
 

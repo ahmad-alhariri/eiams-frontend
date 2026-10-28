@@ -13,7 +13,7 @@ import {
   FormMessage,
 } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
-import type { FieldError } from '@/shared/types/generated/eiams-v1'
+import type { FieldError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 

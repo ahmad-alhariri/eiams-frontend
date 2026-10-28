@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { AcquisitionProvenancePanel } from './acquisition-provenance-panel'
 import type { AssetDetails } from '@/modules/asset/types/asset.types'
+import { formatDate } from '@/shared/utils/format'
 
 /** The LIVE `GET /assets/{assetId}` row. */
 function assetDetails(overrides: Partial<AssetDetails> = {}): AssetDetails {
@@ -50,8 +51,12 @@ describe('AcquisitionProvenancePanel', () => {
 
     expect(screen.getByText('EIAMS-RCV-2026-0001')).toBeInTheDocument()
     expect(screen.getByText('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBeInTheDocument()
-    expect(screen.getByText('2024-03-01')).toBeInTheDocument()
-    expect(screen.getByText('2027-03-01')).toBeInTheDocument()
+    // The DateOnly fields go through the shared date formatter, like every
+    // other date surface in the module.
+    expect(screen.getByText(formatDate('2024-03-01'))).toBeInTheDocument()
+    expect(screen.getByText(formatDate('2027-03-01'))).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('2024-03-01')
+    expect(document.body.textContent).not.toContain('2027-03-01')
   })
 
   it('renders em-dash placeholders for the receipt fields the server sends as null', () => {

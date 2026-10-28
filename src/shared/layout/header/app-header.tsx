@@ -35,6 +35,10 @@ type AppHeaderProps = {
  * initials on golden wheat, name + role) followed by the dropdown caret that
  * opens the injected user menu. Until a session exists neither the user block
  * nor the caret is rendered, and the bell shows no badge.
+ *
+ * Every control in the bar carries the documented 2px Mountain Teal focus ring
+ * (`focus-visible:ring-2 focus-visible:ring-ring`, design-tokens.md §8) — the
+ * same treatment the session trigger in this bar already had.
  */
 function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHeaderProps) {
   const collapsed = useUiStore((state) => state.sidebarCollapsed)
@@ -51,7 +55,7 @@ function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHe
       <button
         type="button"
         aria-label="فتح قائمة التنقل"
-        className="flex size-9 items-center justify-center rounded-md hover:bg-forest-light lg:hidden"
+        className="flex size-9 items-center justify-center rounded-md hover:bg-forest-light focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
         onClick={() => setDrawerOpen(true)}
       >
         <IconMenu2 size={20} aria-hidden />
@@ -59,7 +63,7 @@ function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHe
       <button
         type="button"
         aria-label={collapsed ? 'توسيع القائمة الجانبية' : 'طي القائمة الجانبية'}
-        className="hidden size-9 items-center justify-center rounded-md hover:bg-forest-light lg:flex"
+        className="hidden size-9 items-center justify-center rounded-md hover:bg-forest-light focus-visible:ring-2 focus-visible:ring-ring lg:flex"
         onClick={toggleCollapsed}
       >
         <IconMenu2
@@ -71,7 +75,7 @@ function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHe
 
       <a
         href={ROUTE_PATHS.dashboard}
-        className="flex items-center gap-2 text-lg font-bold"
+        className="flex items-center gap-2 rounded-md text-lg font-bold focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="الرئيسية"
       >
         <span className="flex size-8 items-center justify-center rounded-md bg-golden-wheat text-sm font-black text-forest">
@@ -91,7 +95,7 @@ function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHe
         <button
           type="button"
           aria-label="الإشعارات"
-          className="relative flex size-9 items-center justify-center rounded-md hover:bg-forest-light"
+          className="relative flex size-9 items-center justify-center rounded-md hover:bg-forest-light focus-visible:ring-2 focus-visible:ring-ring"
         >
           <IconBell size={20} aria-hidden />
           {notificationsCount > 0 ? (

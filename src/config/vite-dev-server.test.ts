@@ -80,9 +80,10 @@ describe('development API proxy configuration', () => {
   })
 
   it('wires the proxy into the Vite dev server from the environment', () => {
-    expect(viteConfigRaw).toMatch(/loadEnv\(mode/)
+    expect(viteConfigRaw).toMatch(/const env = loadEnv\(mode, process\.cwd\(\), ''\)/)
+    expect(viteConfigRaw).toMatch(/resolveDevApiProxy\(env\)/)
     expect(viteConfigRaw).toMatch(/\.\.\.\(devApiProxy\s*\?/)
-    expect(viteConfigRaw).toContain("resolveDevApiProxy(loadEnv(mode, process.cwd(), ''))")
+    expect(viteConfigRaw).toMatch(/mockTarget \? \{ target: mockTarget \}/)
   })
 
   it('documents the proxy target as a server-side-only environment variable', () => {

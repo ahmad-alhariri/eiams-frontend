@@ -85,6 +85,24 @@ document. `e10-t09` owns the catalog UI behavior once the generated contract
 exposes the required fields. `e01-t02` owns the contract inventory and the
 Custody extension is required before the downstream custody work (`e19`).
 
+### Contract-change note (D-MAT-02, 2026-10-26)
+
+The editable `requiresAssetNumber` boolean is **removed** from the catalog
+contract in its next version: the policy is derived from (`materialKind`,
+`trackingType`) and must be published machine-readable, with the kind/tracking
+matrix above as its source of truth. The frontend already derives the flag
+read-only — `MATERIAL_TRACKING_POLICIES` and `getMaterialTrackingPolicy` in
+`src/modules/catalog/schemas/material.schemas.ts`, rendered as plain text
+(«يحدده الخادم») by `material-form-dialog.tsx`, and never present in a create or
+update body — so nothing a user enters can disagree with the kind, and the only
+`superRefine` in that schema validates the `attributes` JSON shape.
+
+- The institutional asset number is server-owned: the client can neither supply
+  nor derive it, and the server allocates it when the document is posted.
+- Open contract item: the backend/contract owner must publish the derived policy
+  and drop the boolean in the next contract version; until then the frontend
+  keeps deriving it locally and the server remains authoritative.
+
 ## Rejected alternatives
 
 | Alternative | Rejection rationale |

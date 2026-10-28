@@ -1,84 +1,65 @@
-﻿import { z } from 'zod'
+import { z } from 'zod'
 
-import type { TransferInfo } from '@/shared/types/generated/eiams-v1'
+import type { TransferDraftDetails } from '@/shared/documents/types/document-wire.types'
 
 /**
- * 500-char cap on `transferReason` is presentation-level only â€” schema.md
- * types it as an open text column; the cap matches sibling petals' VARCHAR
- * caps and keeps the reason box readable in the UI.
+ * 200-char cap on `transferReason` is the LIVE backend's own cap, not a
+ * presentation choice: `Domain/TransferInfos/TransferInfo.cs` rejects a
+ * trimmed reason that is empty or longer than 200 characters
+ * (`TransferInfoErrors.TransferReasonInvalid`). The sibling issue petal has
+ * the same cap (`Domain/IssueTos/IssueTo.cs`).
  */
-const TRANSFER_REASON_MAX_LENGTH = 200
+export const TRANSFER_REASON_MAX_LENGTH = 200
 
 /**
- * TransferInfo petal schema (e17-t01 / contract `TransferInfo`): the
+ * TransferInfo petal schema (e17-t01 / live `TransferDraftDetails`): the
  * destination warehouse is mandatory and must come from the scoped picker
  * (uuid), with a mandatory Arabic reason for the audit trail.
  */
 export const transferInfoSchema = z.object({
-  destinationWarehouseId: z
-    .string()
-    .uuid('ÙŠØ¬Ø¨ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø³ØªÙˆØ¯Ø¹ Ø§Ù„ÙˆØ¬Ù‡Ø© Ù…Ù† Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.'),
+  destinationWarehouseId: z.string().uuid('يجب اختيار مستودع الوجهة من القائمة.'),
   transferReason: z
     .string()
     .trim()
-    .min(1, 'ÙŠØ¬Ø¨ Ø¥Ø¯Ø®Ø§Ù„ Ø³Ø¨Ø¨ Ø§Ù„ØªØ­ÙˆÙŠÙ„.')
+    .min(1, 'يجب إدخال سبب التحويل.')
     .max(
       TRANSFER_REASON_MAX_LENGTH,
-      `ÙŠØ¬Ø¨ Ø£Ù„Ø§ ÙŠØªØ¬Ø§ÙˆØ² Ø³Ø¨Ø¨ Ø§Ù„ØªØ­ÙˆÙŠÙ„ ${TRANSFER_REASON_MAX_LENGTH} Ù…Ø­Ø±ÙØ§Ù‹.`,
+      `يجب ألا يتجاوز سبب التحويل ${TRANSFER_REASON_MAX_LENGTH} محرفاً.`,
     ),
 })
 
 export type TransferInfoFormValues = z.infer<typeof transferInfoSchema>
 
 /**
- * Seeds form values from a server record (edit mode). A missing petal defaults
- * to blank fields â€” a fresh transfer draft whose empty destination fails
- * validation until the user picks a warehouse.
- */
-export function fromTransferInfo(info?: TransferInfo | null): TransferInfoFormValues {
-  if (info === undefined || info === null) {
-    return {
-      destinationWarehouseId: '',
-      transferReason: '',
-    }
-  }
-  return {
-    destinationWarehouseId: info.destinationWarehouseId,
-    transferReason: info.transferReason,
-  }
-}
-
-/**
- * Maps form values to the contract `TransferInfo`, trimming the reason.
+ * Maps form values to the live `TransferDraftDetails` petal, trimming the
+ * reason.
  *
- * `destinationWarehouseName` handling (e17-t01 decision, mirrors e16-t01):
- * the dev mock persists `transferInfo` verbatim, so whatever the client sends
- * comes back â€” the UI must therefore always pass the selected option's name
- * here when one was chosen. The production server derives the name from
- * `destination_warehouse_id` on persistence, so the `''` default is a safe
- * placeholder whenever no option name exists.
+ * The live write body is `{ destinationWarehouseId, transferReason }` and
+ * nothing else: `Application.WarehouseDocuments.CompleteDraft.TransferDraftDetails`,
+ * mirrored by `Web.Api.Controllers.TransferInfos.UpsertTransferInfoController.RequestBody`
+ * (the same two members plus `expectedRowVersion`). The frozen snapshot's
+ * `destinationWarehouseName` is gone — the live server never accepts it on a
+ * write and never serves it on a read
+ * (`WarehouseDocumentDetailsResponse.TransferInfoResponse` carries the id
+ * alone), so the client had nothing to send and nothing to receive.
  */
-export function toTransferInfo(
-  values: TransferInfoFormValues,
-  destinationWarehouseName?: string,
-): TransferInfo {
+export function toTransferInfo(values: TransferInfoFormValues): TransferDraftDetails {
   return {
     destinationWarehouseId: values.destinationWarehouseId,
-    destinationWarehouseName: destinationWarehouseName ?? '',
     transferReason: values.transferReason.trim(),
   }
 }
 
 /**
  * The petal group of the transfer document form (header + lines + petal).
- * `destinationWarehouseName` rides alongside the petal as a selection-time
- * sibling (e16-t01 pattern): the mock persists the petal verbatim, so the
- * chosen warehouse's display name must be captured when picked.
+ *
+ * There is no selection-time display-name sibling: the live petal carries the
+ * destination warehouse as an ID, so capturing a name would be state nothing
+ * ever reads.
  */
 export interface TransferPetalContainer {
   petal: {
     transferInfo: z.infer<typeof transferInfoSchema>
-    destinationWarehouseName: string
   }
 }
 
@@ -86,16 +67,12 @@ export interface TransferPetalContainer {
 export const transferPetalFormSchema = z.object({
   petal: z.object({
     transferInfo: transferInfoSchema,
-    destinationWarehouseName: z.string(),
   }),
 })
 
 export type TransferPetalFormValues = z.infer<typeof transferPetalFormSchema>
 
-/** Flattens the page's petal group into the contract `TransferInfo`. */
-export function buildTransferPetal(values: TransferPetalContainer['petal']): TransferInfo {
-  return toTransferInfo(
-    values.transferInfo,
-    values.destinationWarehouseName === '' ? undefined : values.destinationWarehouseName,
-  )
+/** Flattens the page's petal group into the live `TransferDraftDetails`. */
+export function buildTransferPetal(values: TransferPetalContainer['petal']): TransferDraftDetails {
+  return toTransferInfo(values.transferInfo)
 }

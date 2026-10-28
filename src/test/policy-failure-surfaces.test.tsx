@@ -285,7 +285,7 @@ describe('permission denial hides rather than disables', () => {
   })
 })
 
-describe('the attachment gate row owns the requirement, not the reason (e24-t07 finding)', () => {
+describe('the attachment gate row owns the signed-original reason (eiams-frontend-n31q)', () => {
   function renderGate(policy: DocumentPolicy) {
     return renderWithSession(
       <AttachmentPanel
@@ -304,50 +304,85 @@ describe('the attachment gate row owns the requirement, not the reason (e24-t07 
     )
   }
 
-  it('shows the requirement badge without echoing the reason for the namespaced spelling', () => {
-    // Recorded rather than changed: widening this row's blocker match to the
-    // `document.`-prefixed vocabulary the contract producers emit would make the
-    // identical Arabic sentence render here *and* in the action bar alert above,
-    // on every document screen. See docs/policy-failure-matrix-verification.md.
+  /**
+   * The spellings the producers emit for the same requirement, each with the
+   * sentence the row states for it: the bare D-ATT-01 code and the
+   * `document.`-prefixed vocabulary the MSW factories serve have no governed
+   * copy of their own, so the canonical policy-gate copy speaks; the backend's
+   * dotted signed-copy code does have one.
+   */
+  const SPELLINGS: ReadonlyArray<readonly [string, string]> = [
+    ['signed_original_missing', 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.'],
+    ['document.signed_original_missing', 'النسخة الموقعة من المستند مطلوبة قبل الترحيل.'],
+    ['WarehouseDocuments.SignedCopyRequired', SIGNED_ORIGINAL_REASON_AR],
+  ]
+
+  it.each(SPELLINGS)('states the reason for the %s spelling', (code, reasonAr) => {
     const policy = wirePolicy({
       documentId: DOCUMENT_ID,
       status: 'Submitted',
       signedOriginalSatisfied: false,
-      blockers: [
-        {
-          action: 'Post',
-          code: 'document.signed_original_missing',
-          message: 'The signed copy is required.',
-        },
-      ],
+      blockers: [{ action: 'Post', code, message: 'The signed copy is required.' }],
     })
     renderGate(policy)
-    expect(screen.getByTestId('attachment-gate-missing')).toBeInTheDocument()
-    expect(screen.queryByText(SIGNED_ORIGINAL_REASON_AR)).toBeNull()
+
+    const gate = screen.getByTestId('attachment-gate-missing')
+    expect(gate).toHaveTextContent('النسخة الأصلية الموقعة مطلوبة للترحيل')
+    expect(gate).toHaveTextContent(reasonAr)
+    // The server's English prose is never surfaced.
+    expect(screen.queryByText('The signed copy is required.')).toBeNull()
   })
 
-  it('matches the bare spelling too, and still echoes nothing: the gate codes have no governed copy', () => {
-    // The bare code IS matched by the row (that is why this case exists at all),
-    // but `error-copy-ar.ts` carries no entry for `SIGNED_ORIGINAL_MISSING`, so
-    // the resolved sentence is `null` and only the requirement badge renders.
-    // The assertion is on the outcome, not on the matcher's internal branch.
-    const policy = wirePolicy({
-      documentId: DOCUMENT_ID,
-      status: 'Submitted',
-      signedOriginalSatisfied: false,
-      blockers: [
-        {
-          action: 'Post',
-          code: 'signed_original_missing',
-          message: 'The signed copy is required.',
-        },
-      ],
-    })
-    renderGate(policy)
-    expect(screen.getByTestId('attachment-gate-missing')).toBeInTheDocument()
-    expect(screen.getByText('النسخة الأصلية الموقعة مطلوبة للترحيل')).toBeInTheDocument()
-    expect(screen.queryByText(SIGNED_ORIGINAL_REASON_AR)).toBeNull()
-  })
+  it.each(SPELLINGS)(
+    'states the reason exactly once when the gate row and both action bars are mounted together (%s)',
+    (code) => {
+      // The bar/panel co-existence invariant: both bars are only ever mounted
+      // alongside the attachment panel (`document-detail-page`,
+      // `adjustment-detail-page`), so the gate row can own the reason without
+      // leaving a screen that states none.
+      const reasonAr = 'يجب إرفاق النسخة الموقعة من المستند قبل الرصد.'
+      const policy = wirePolicy({
+        documentId: DOCUMENT_ID,
+        status: 'Submitted',
+        signedOriginalSatisfied: false,
+        blockers: [{ action: 'Post', code, message: reasonAr }],
+      })
+      const slices = adjustmentBarProps(policy)
+      renderWithSession(
+        <>
+          <AttachmentPanel
+            attachments={[]}
+            pendingUploads={[]}
+            onUpload={() => undefined}
+            onRemove={() => undefined}
+            onCancelPending={() => undefined}
+            isUploading={false}
+            policy={{
+              signedOriginalSatisfied: policy.signedOriginalSatisfied,
+              blockers: policy.blockers,
+            }}
+            documentStatus="Submitted"
+          />
+          <LifecycleActionBar policy={policy} busyAction={null} onExecute={noop} />
+          <AdjustmentActionBar
+            adjustmentId={DOCUMENT_ID}
+            status="Draft"
+            purpose="DirectCorrection"
+            rowVersion={1}
+            actions={slices.actions}
+            blockers={slices.blockers}
+            advisories={slices.advisories}
+          />
+        </>,
+      )
+
+      // The reason is stated by the gate row, and by nothing else: neither bar
+      // alerts the blocker, and neither states the reason a second time.
+      expect(screen.getAllByText(reasonAr)).toHaveLength(1)
+      expect(screen.getByTestId('attachment-gate-missing')).toHaveTextContent(reasonAr)
+      expect(document.querySelector('[role="alert"]')).toBeNull()
+    },
+  )
 })
 
 describe('a disposal adjustment never offers reversal', () => {

@@ -20,10 +20,9 @@
  * Status type
  * -----------
  * `RecordStatus` is the only contract status enum in v1, so the badge slot
- * is typed against it directly. The import comes from the generated type
- * artifact at `@/shared/types/generated/eiams-v1`; once that artifact is
- * retired (per `whhu.5`) the import path will move to `@/shared/types` and
- * the public API of this component is unchanged.
+ * is typed against it directly. The import comes from the shared contract
+ * seam (`@/shared/api/api-contracts`); the public API of this component is
+ * unchanged.
  *
  * Generic forest builder
  * ----------------------

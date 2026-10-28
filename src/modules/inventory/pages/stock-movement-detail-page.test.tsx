@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
 import { errJson, okJson } from '@/test/msw/envelope'
+import { createAuthTokenResponse } from '@/test/msw/factories'
 import {
   INVENTORY_MOVEMENT_ID,
   INVENTORY_POSTED_BY_ID,
@@ -125,6 +126,9 @@ describe('StockMovementDetailPage', () => {
 
     render(<StockMovementDetailPage />, { wrapper: PageWrapper })
 
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'تفاصيل حركة المخزون' }),
+    ).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'الحركة غير متاحة' })).toBeInTheDocument()
     expect(
       screen.getByText('لا تتوفر هذه الحركة ضمن نطاق العمل الحالي، أو لم تعد موجودة.'),
@@ -150,11 +154,31 @@ describe('StockMovementDetailPage', () => {
     render(<StockMovementDetailPage />, { wrapper: PageWrapper })
 
     expect(
+      await screen.findByRole('heading', { level: 1, name: 'تفاصيل حركة المخزون' }),
+    ).toBeInTheDocument()
+    expect(
       await screen.findByRole('heading', { name: 'تعذّر تحميل تفاصيل الحركة' }),
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
     await waitFor(() => expect(attempts).toBe(2))
     expect(await screen.findByText(movement.warehouseName)).toBeInTheDocument()
+  })
+
+  it('renders the shared session-expired copy for a 401 instead of a connection message', async () => {
+    server.use(
+      http.post(`${API_BASE_URL}/auth/refresh`, () => okJson(createAuthTokenResponse())),
+      http.get(`${API_BASE_URL}/inventory/movements/${MOVEMENT_ID}`, () =>
+        errJson(401, { code: 'AUTHENTICATION_REQUIRED', message: 'Unauthorized.' }),
+      ),
+    )
+
+    render(<StockMovementDetailPage />, { wrapper: PageWrapper })
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'تفاصيل حركة المخزون' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('انتهت الجلسة. يرجى تسجيل الدخول مجدداً.')).toBeInTheDocument()
+    expect(screen.queryByText(/تحقق من الاتصال/)).not.toBeInTheDocument()
   })
 
   it('does not request a movement when the route has no identifier', () => {

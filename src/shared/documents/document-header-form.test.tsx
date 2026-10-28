@@ -5,12 +5,12 @@ import { FormProvider } from 'react-hook-form'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { http } from 'msw'
 import { z } from 'zod'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import { createPage } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -95,7 +95,7 @@ describe('DocumentHeaderSection', () => {
 
   it('enables the warehouse control once the scope is ready', async () => {
     const { host } = createTestHost()
-    server.use(http.get(`${API_BASE_URL}/warehouses`, () => HttpResponse.json(createPage([]))))
+    server.use(http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])))
     render(host(() => <DocumentHeaderSection documentType="Issue" />))
 
     await waitFor(() => expect(screen.getByRole('combobox')).toBeEnabled())

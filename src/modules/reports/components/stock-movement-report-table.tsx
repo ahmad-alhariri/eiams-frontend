@@ -6,6 +6,7 @@ import { ROUTE_PATHS } from '@/config/routes'
 import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
 import { stockMovementTypeLabelAr } from '@/modules/inventory/components/stock-movement-labels'
 import { useStockMovementsQuery } from '@/modules/inventory/hooks/use-inventory-queries'
+import type { MovementType } from '@/modules/inventory/types/inventory.api-types'
 import type {
   ListStockMovementsQuery,
   StockMovement,
@@ -16,18 +17,17 @@ import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
+import { DatePicker } from '@/shared/ui/date-picker'
 import { AsyncSelect } from '@/shared/ui/async-select'
-import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { ExportButton } from '@/shared/ui/export-button'
 import { PrintButton } from '@/shared/ui/print-button'
 import { pageRows } from '@/shared/utils/table-data'
 import { formatDateTime, formatNumber, formatUuid } from '@/shared/utils/format'
-import type { StockMovementType } from '@/shared/types/generated/eiams-v1'
 
 const movementColumnHelper = createColumnHelper<typeof dataTableFeatures, StockMovement>()
 
-const MOVEMENT_TYPE_OPTIONS: ReadonlyArray<{ value: StockMovementType; label: string }> = [
+const MOVEMENT_TYPE_OPTIONS: ReadonlyArray<{ value: MovementType; label: string }> = [
   { value: 'Receipt', label: stockMovementTypeLabelAr('Receipt') },
   { value: 'Issue', label: stockMovementTypeLabelAr('Issue') },
   { value: 'TransferIn', label: stockMovementTypeLabelAr('TransferIn') },
@@ -40,12 +40,6 @@ const MOVEMENT_TYPE_OPTIONS: ReadonlyArray<{ value: StockMovementType; label: st
 function formatSignedDelta(quantityDelta: number): string {
   const formatted = formatNumber(quantityDelta, { maxFractionDigits: 3 })
   return quantityDelta > 0 ? `+${formatted}` : formatted
-}
-
-function toIsoDateTime(value: string): string | undefined {
-  if (value === '') return undefined
-  const date = new Date(value)
-  return Number.isNaN(date.valueOf()) ? undefined : date.toISOString()
 }
 
 /**
@@ -61,12 +55,11 @@ function StockMovementReportTableImpl() {
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [warehouseId, setWarehouseId] = useState<string | undefined>()
   const [materialId, setMaterialId] = useState<string | undefined>()
-  const [movementType, setMovementType] = useState<StockMovementType | undefined>()
-  const [dateFromInput, setDateFromInput] = useState('')
-  const [dateToInput, setDateToInput] = useState('')
-
-  const dateFrom = toIsoDateTime(dateFromInput)
-  const dateTo = toIsoDateTime(dateToInput)
+  const [movementType, setMovementType] = useState<MovementType | undefined>()
+  const [dateFrom, setDateFrom] = useState<Date | undefined>()
+  const [dateTo, setDateTo] = useState<Date | undefined>()
+  const dateFromIso = dateFrom ? dateFrom.toISOString() : undefined
+  const dateToIso = dateTo ? dateTo.toISOString() : undefined
 
   const warehouseSelector = useScopedWarehouseSelector()
   const materialSelector = useScopedMaterialSelector(true)
@@ -79,10 +72,10 @@ function StockMovementReportTableImpl() {
       ...(warehouseId === undefined ? {} : { warehouseId }),
       ...(materialId === undefined ? {} : { materialId }),
       ...(movementType === undefined ? {} : { movementType }),
-      ...(dateFrom === undefined ? {} : { fromUtc: dateFrom }),
-      ...(dateTo === undefined ? {} : { toUtc: dateTo }),
+      ...(dateFromIso === undefined ? {} : { fromUtc: dateFromIso }),
+      ...(dateToIso === undefined ? {} : { toUtc: dateToIso }),
     }),
-    [currentPage, dateFrom, dateTo, materialId, movementType, pageSize, warehouseId],
+    [currentPage, dateFromIso, dateToIso, materialId, movementType, pageSize, warehouseId],
   )
 
   const movementsQuery = useStockMovementsQuery(query)
@@ -110,18 +103,18 @@ function StockMovementReportTableImpl() {
         value === null || value === 'all'
           ? undefined
           : MOVEMENT_TYPE_OPTIONS.some((option) => option.value === value)
-            ? (value as StockMovementType)
+            ? (value as MovementType)
             : undefined
       resetPageAndSet(setMovementType, resolved)
     },
     [resetPageAndSet],
   )
   const handleDateFromChange = useCallback(
-    (value: string) => resetPageAndSet(setDateFromInput, value),
+    (date: Date | undefined) => resetPageAndSet(setDateFrom, date),
     [resetPageAndSet],
   )
   const handleDateToChange = useCallback(
-    (value: string) => resetPageAndSet(setDateToInput, value),
+    (date: Date | undefined) => resetPageAndSet(setDateTo, date),
     [resetPageAndSet],
   )
 
@@ -245,20 +238,18 @@ function StockMovementReportTableImpl() {
             </div>
             <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
               <span>من تاريخ</span>
-              <Input
-                type="datetime-local"
-                value={dateFromInput}
-                onChange={(event) => handleDateFromChange(event.currentTarget.value)}
-                aria-label="تصفية حسب تاريخ البداية"
+              <DatePicker
+                key="date-from"
+                ariaLabel="تصفية حسب تاريخ البداية"
+                onChange={handleDateFromChange}
               />
             </div>
             <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
               <span>إلى تاريخ</span>
-              <Input
-                type="datetime-local"
-                value={dateToInput}
-                onChange={(event) => handleDateToChange(event.currentTarget.value)}
-                aria-label="تصفية حسب تاريخ النهاية"
+              <DatePicker
+                key="date-to"
+                ariaLabel="تصفية حسب تاريخ النهاية"
+                onChange={handleDateToChange}
               />
             </div>
 
@@ -275,8 +266,8 @@ function StockMovementReportTableImpl() {
                 filters={
                   warehouseId !== undefined
                     ? {
-                        ...(dateFrom !== undefined ? { dateFrom } : {}),
-                        ...(dateTo !== undefined ? { dateTo } : {}),
+                        ...(dateFromIso !== undefined ? { dateFrom: dateFromIso } : {}),
+                        ...(dateToIso !== undefined ? { dateTo: dateToIso } : {}),
                         warehouseId,
                       }
                     : undefined
@@ -303,16 +294,8 @@ function StockMovementReportTableImpl() {
           emptyDescription="لم يتم العثور على حركات تطابق معايير التصفية الحالية."
           page={currentPage}
           pageSize={pageSize}
-          totalCount={
-            (page as unknown as { totalItems?: number } | undefined)?.totalItems ??
-            page?.meta?.totalItems
-          }
-          totalPages={Math.max(
-            (page as unknown as { totalPages?: number } | undefined)?.totalPages ??
-              page?.meta?.totalPages ??
-              1,
-            1,
-          )}
+          totalCount={page?.meta.totalItems}
+          totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
         />

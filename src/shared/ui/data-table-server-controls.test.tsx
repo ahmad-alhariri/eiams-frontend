@@ -57,6 +57,17 @@ describe('ServerPaginationControls', () => {
     expect(screen.getByText('صفحة ٢ من ٤')).toBeInTheDocument()
   })
 
+  // F-26: the page count is derived from a total the server may not have
+  // sent yet. `pageCount(undefined)` answers 1, so a pending page transition
+  // rendered "صفحة ٢ من ١" — a total LOWER than the page on screen.
+  it('renders no page total until the count is loaded', () => {
+    render(<ControlsHarness initialPage={2} totalCount={undefined} />)
+
+    // The loaded value only: the page number, and no total.
+    expect(screen.getByText('صفحة ٢')).toBeInTheDocument()
+    expect(screen.queryByText(/^صفحة .+ من /u)).not.toBeInTheDocument()
+  })
+
   it('disables previous on the first page and navigates to the next page', async () => {
     const user = userEvent.setup()
 

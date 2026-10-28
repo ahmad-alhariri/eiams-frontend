@@ -5,6 +5,7 @@ import { CounterpartSelect } from '@/modules/organization/components/counterpart
 import {
   ISSUE_RECIPIENT_TYPES,
   ISSUE_RECIPIENT_TYPE_LABELS_AR,
+  ISSUE_REASON_MAX_LENGTH,
   issueInfoSchema,
   type IssueInfoFormValues,
   type IssueRecipientType,
@@ -30,17 +31,16 @@ import { Textarea } from '@/shared/ui/textarea'
  * The `petal.issueTo.*` RHF group this section reads and writes, plus the
  * sibling `petal.issueToDisplayName` value it owns.
  *
- * `recipientDisplayName` is part of the contract `IssueTo` but the UI never
- * types it: it is captured at selection time (the chosen counterpart option's
- * display name) and kept beside the petal so the page can pass it to
- * `toIssueInfo(values.petal.issueTo, values.petal.issueToDisplayName)` when
- * mapping out. It lives outside {@link issueInfoSchema} because the schema
- * validates contract-shaped capture only; the mock document engine persists
- * `request.issueTo` verbatim, so a draft saved without this captured name
- * would render an empty recipient label after reload.
+ * `issueToDisplayName` is a FORM-only value: the chosen counterpart option's
+ * display name, captured at selection time so the responsibility preview can
+ * name the holder in Arabic. It is deliberately NOT part of the write — the
+ * live `IssueDraftDetails` carries `{ recipientType, recipientId, issueReason }`
+ * and nothing else, and the server resolves the recipient's display name
+ * itself on the read projection. It lives outside {@link issueInfoSchema}
+ * because the schema validates the wire-shaped capture only.
  *
  * Switching the recipient type clears the previously selected recipient — an
- * id captured for one `CounterpartType` must never survive under another.
+ * id captured for one `PartyType` must never survive under another.
  */
 export interface IssuePetalContainer {
   petal: {
@@ -190,7 +190,7 @@ export function IssueRecipientSection({ disabled = false }: IssueRecipientSectio
                 <Textarea
                   {...field}
                   rows={3}
-                  maxLength={500}
+                  maxLength={ISSUE_REASON_MAX_LENGTH}
                   disabled={disabled}
                   placeholder="اذكر سبب الصرف..."
                 />

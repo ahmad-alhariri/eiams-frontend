@@ -85,4 +85,29 @@ describe('AppHeader', () => {
 
     expect(screen.getAllByRole('button', { name: 'توسيع القائمة الجانبية' })).toHaveLength(2)
   })
+
+  /**
+   * design-tokens.md §8: "Interactive focus uses the Mountain Teal ring with a
+   * visible 2px treatment". The four persistent controls in the bar carried
+   * hover classes only, so a keyboard user saw nothing but the ~1px user-agent
+   * outline on the forest bar.
+   */
+  it('gives every control in the bar the documented 2px mountain-teal focus ring', () => {
+    // The collapse toggle's label follows the store, so the state is pinned
+    // here: this case is about the focus treatment, not about the label.
+    useUiStore.setState({ sidebarCollapsed: false })
+    renderHeader({ notificationsCount: 2 })
+
+    const controls = [
+      screen.getByRole('button', { name: 'فتح قائمة التنقل' }),
+      screen.getByRole('button', { name: 'طي القائمة الجانبية' }),
+      screen.getByRole('link', { name: 'الرئيسية' }),
+      screen.getByRole('button', { name: 'الإشعارات' }),
+    ]
+
+    for (const control of controls) {
+      expect(control).toHaveClass('focus-visible:ring-2')
+      expect(control).toHaveClass('focus-visible:ring-ring')
+    }
+  })
 })

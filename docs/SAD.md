@@ -6,10 +6,9 @@
 > reflects the current policy: the OpenAPI generation pipeline
 > (`Apidog OpenAPI 3.0 → openapi-typescript → OpenAPI-Qraft`) has been
 > retired in favor of handwritten per-module wire types produced by the
-> shared `ApiTransport` seam. The legacy generated artifact at
-> `src/shared/types/generated/eiams-v1.ts` is frozen migration scaffolding
-> and is deleted at `whhu.5` once the repository-wide import count reaches
-> zero. For the current contract model see
+> shared `ApiTransport` seam. The legacy generated artifact, its generator,
+> and the provisional snapshot it was generated from have all been deleted.
+> For the current contract model see
 > `docs/direct-backend-integration-plan.md` and
 > `docs/adr/0001-handwritten-contracts-for-direct-backend-integration.md`.
 
@@ -69,7 +68,7 @@ enforcer of permissions, transitions, stock safety, and transactions.
 | Forms | React Hook Form and Zod |
 | Tables | TanStack Table v9 |
 | HTTP | Axios behind the generated/shared API layer |
-| API contract | Handwritten per-module wire types (D-INT-02); backend's real OpenAPI export is human-only and not a frontend build dependency; the legacy generated artifact at `src/shared/types/generated/eiams-v1.ts` is frozen migration scaffolding per ADR-0001 and is deleted at `whhu.5` once the repository-wide import count reaches zero. |
+| API contract | Handwritten per-module wire types (D-INT-02); backend's real OpenAPI export is human-only and not a frontend build dependency; the legacy generated artifact, its generator, and its provisional snapshot have been deleted per ADR-0001. |
 | Tests | Vitest, Testing Library, MSW |
 
 The implementation uses Base UI and Tabler icons. References to Mantine,

@@ -2,7 +2,7 @@
  * Handwritten wire contracts for the Custody module (D-INT-02 / ADR-0001).
  *
  * The live rows are FLAT and camelCase. The frozen design snapshot
- * (`src/shared/types/generated/eiams-v1.ts`) described a nested `holder` object
+ * (the generated artifact, since deleted) described a nested `holder` object
  * and the field names `fromTs` / `toTs`; none of them exist on the wire, so
  * nothing here may be typed against the snapshot.
  *
@@ -135,8 +135,9 @@ export interface AssignAssetCustodyRequest {
 /**
  * Request body of `POST /custodies/{custodyId}/transfer`. Verified against
  * `Web.Api.Controllers.Custodies.TransferCustodyRequest` on 2026-10-22.
- * Distinct from the assign body — transfer changes the existing row's holder
- * instead of opening a new one tied to an issue document.
+ * Distinct from the assign body — transfer CLOSES the current custody row and
+ * opens a NEW one for the new holder, instead of assigning a holder to an
+ * asset that has none.
  *
  * `newHolderType` is the live `PartyType` vocabulary: `Employee`,
  * `OrganizationalUnit`, `Site`, `External`. The snapshot's `ExternalParty` is

@@ -67,7 +67,7 @@ A government-grade **Document-Driven** inventory and asset management system. Ev
 | File Upload  | react-dropzone                                                                 |
 | PDF          | react-pdf (viewer) + @react-pdf/renderer (report exports)                    |
 | Testing      | Vitest + Testing Library + MSW                                                 |
-| API Types    |(Will be exported from Apidog OpenAPI ) |
+| API Types    | Handwritten per-module wire contracts (D-INT-02 / ADR-0001), behind the shared `ApiTransport` |
 
 ---
 
@@ -152,7 +152,7 @@ src/
 ### Forms
 
 - **Every form** must use React Hook Form + Zod schema validation.
-- Schema should match the API contract (auto-generated types from openapi-typescript).
+- Schema should match the API contract (the module's own handwritten wire types).
 - Show validation errors inline, in Arabic.
 
 ### Tables (TanStack Table v9)
@@ -212,6 +212,13 @@ titles all derive from `ROUTE_PATHS` + `ROUTE_METADATA`; do not add route logic 
 - Testing Library for component tests.
 - MSW for API mocking.
 - Test: form validation, permission gating, document lifecycle flows, error states.
+
+### Bead Verification Claims
+
+- **Close a bead only with re-runnable evidence** — a verification claim must cite the commit SHA the evidence belongs to, the exact command, and that command's output.
+- **Uncommitted work must be labelled** — for an uncommitted working tree or a local stack, say so explicitly and give the `file:line` plus the command and its output; never phrase it as branch-carried or released.
+- **A local stack is not a release** — verification against a locally running stack is not verification against a released build or CI, and must not be described as one.
+- **Name the host you reached** — anything verified against a live API must state the host it was actually reached on: this project's API is reached on `127.0.0.1`, while `localhost` resolves to `::1` on this machine, so a probe sent to the wrong host times out and looks like a product defect.
 
 ---
 

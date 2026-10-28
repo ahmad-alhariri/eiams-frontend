@@ -75,6 +75,14 @@ describe('StatusBadge other entities', () => {
     expect(screen.getByText('مستبعد')).toHaveClass('bg-destructive')
   })
 
+  it('renders the aborted count status the live backend serves', () => {
+    // `GET /api/v1/inventory-counts` answers a row with `status:"Aborted"`, so
+    // the badge has to know the state instead of falling back to «غير معروف».
+    render(<StatusBadge entity="inventory-count" status="Aborted" />)
+
+    expect(screen.getByText('ملغي')).toHaveClass('bg-destructive')
+  })
+
   it('maps custody, inventory-count, record, and user statuses', () => {
     render(
       <>

@@ -236,6 +236,29 @@ describe('DocumentListPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('تفاصيل السند')
   })
 
+  /**
+   * The route → document-type mapping lives in `document-route-entries.ts`
+   * only; this page used to keep a second copy of it.
+   */
+  it.each([
+    ['/documents/transfer', 'Transfer'],
+    ['/documents/return', 'Return'],
+  ])('serves the %s list with its own document type', async (path, documentType) => {
+    const received = { documentType: null as string | null }
+
+    server.use(
+      http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
+        received.documentType = new URL(request.url).searchParams.get('documentType')
+        return okPageJson([])
+      }),
+      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([])),
+    )
+
+    render(<DocumentListPage />, { wrapper: createWrapper(path) })
+
+    await waitFor(() => expect(received.documentType).toBe(documentType))
+  })
+
   it('offers the create action to a user with document.create and navigates to the new-document route', async () => {
     const user = userEvent.setup()
 

@@ -95,7 +95,7 @@ describe('EmployeesListPage', () => {
     expect(screen.getByText('—')).toBeInTheDocument()
   })
 
-  it('sends selected site and status filters to the server', async () => {
+  it('sends the status filter and no site filter, because the endpoint binds no site parameter', async () => {
     const user = userEvent.setup()
     const site = createSite()
     const receivedFilters: Array<{ siteId: string | null; status: string | null }> = []
@@ -123,8 +123,12 @@ describe('EmployeesListPage', () => {
     await user.click(screen.getByRole('combobox', { name: 'تصفية حسب حالة الموظف' }))
     await user.click(await screen.findByRole('option', { name: 'غير نشط' }))
 
+    // `GET /employees` binds `orgUnitId` and NO site parameter
+    // (`GetEmployeesController.cs:23`), so the site key is not sent: the server
+    // discarded it anyway, and the scope the endpoint really reads is the
+    // organizational unit.
     await waitFor(() =>
-      expect(receivedFilters).toContainEqual({ siteId: site.id, status: 'Inactive' }),
+      expect(receivedFilters).toContainEqual({ siteId: null, status: 'Inactive' }),
     )
   })
 

@@ -5,6 +5,12 @@ import userEvent from '@testing-library/user-event'
 import { Calendar } from '@/shared/ui/calendar'
 
 describe('Calendar primitive', () => {
+  it('renders in RTL so the grid and captions lay out right-to-left', () => {
+    render(<Calendar defaultMonth={new Date(2026, 7, 1)} />)
+
+    expect(screen.getByRole('grid').closest('[data-slot="calendar"]')).toHaveAttribute('dir', 'rtl')
+  })
+
   it('renders the Arabic month header and weekday row starting on Saturday', () => {
     render(<Calendar defaultMonth={new Date(2026, 7, 1)} value={new Date(2026, 7, 15)} />)
 

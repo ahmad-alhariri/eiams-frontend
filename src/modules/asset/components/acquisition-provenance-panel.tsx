@@ -1,5 +1,6 @@
 import type { AssetDetails } from '@/modules/asset/types/asset.types'
 import { ContentCard } from '@/shared/layout/content-card'
+import { formatDate } from '@/shared/utils/format'
 
 export interface AcquisitionProvenancePanelProps {
   asset: AssetDetails
@@ -53,13 +54,15 @@ export function AcquisitionProvenancePanel({ asset }: AcquisitionProvenancePanel
           <div className="border-b border-border pb-4 sm:border-b-0">
             <dt className="text-sm font-medium text-muted-foreground">تاريخ الاقتناء</dt>
             <dd className="mt-1.5 text-base font-medium text-foreground" dir="ltr">
-              {asset.acquisitionDate}
+              {/* A DateOnly ("2024-03-01") goes through the shared date
+                  formatter, like every other date in the module. */}
+              {formatDate(asset.acquisitionDate)}
             </dd>
           </div>
           <div className="border-b border-border pb-4 last:border-b-0 sm:border-b-0">
             <dt className="text-sm font-medium text-muted-foreground">انتهاء الضمان</dt>
             <dd className="mt-1.5 text-base font-medium text-foreground" dir="ltr">
-              {asset.warrantyExpiry ?? '—'}
+              {asset.warrantyExpiry === null ? '—' : formatDate(asset.warrantyExpiry)}
             </dd>
           </div>
         </dl>

@@ -1,12 +1,17 @@
 import { IconCheck, type Icon } from '@tabler/icons-react'
 
+import type { AdjustmentStatus } from '@/modules/adjustment/types/adjustment.types'
 import { Badge, type BadgeProps } from '@/shared/ui/badge'
 
 type DocumentStatusValue = 'Draft' | 'Submitted' | 'Posted' | 'Reversed' | 'Cancelled' | 'Rejected'
-type AdjustmentStatusValue = 'Draft' | 'Posted' | 'Reversed'
 type AssetStatusValue = 'InStock' | 'Issued' | 'InCustody' | 'Disposed'
 type CustodyStatusValue = 'Active' | 'Closed'
-type InventoryCountStatusValue = 'Planned' | 'InProgress' | 'Completed' | 'Closed'
+/**
+ * The count lifecycle, INCLUDING `Aborted`: the LIVE backend serves it
+ * (`GET /api/v1/inventory-counts` answers a row with `status:"Aborted"`), and
+ * the count module's own `CountStatus` carries it too.
+ */
+type InventoryCountStatusValue = 'Planned' | 'InProgress' | 'Completed' | 'Closed' | 'Aborted'
 type RecordStatusValue = 'Active' | 'Inactive'
 type UserAccountStatusValue = 'Active' | 'Suspended'
 type WarehouseInitializationStatusValue =
@@ -24,7 +29,7 @@ type StatusEntity =
 
 type StatusValue =
   | DocumentStatusValue
-  | AdjustmentStatusValue
+  | AdjustmentStatus
   | AssetStatusValue
   | CustodyStatusValue
   | InventoryCountStatusValue
@@ -55,7 +60,7 @@ const STATUS_REGISTRY: Record<StatusEntity, Record<string, StatusMeta>> = {
     Draft: DRAFT_ENTRY,
     Posted: POSTED_ENTRY,
     Reversed: REVERSED_ENTRY,
-  } satisfies Record<AdjustmentStatusValue, StatusMeta>,
+  } satisfies Record<AdjustmentStatus, StatusMeta>,
   asset: {
     InStock: { label: 'في المخزن', variant: 'success' },
     Issued: { label: 'مصروف', variant: 'default' },
@@ -71,6 +76,7 @@ const STATUS_REGISTRY: Record<StatusEntity, Record<string, StatusMeta>> = {
     InProgress: { label: 'جارٍ', variant: 'success' },
     Completed: { label: 'مكتمل', variant: 'default', icon: IconCheck },
     Closed: { label: 'مغلق', variant: 'outline' },
+    Aborted: { label: 'ملغي', variant: 'destructive' },
   } satisfies Record<InventoryCountStatusValue, StatusMeta>,
   record: {
     Active: { label: 'نشط', variant: 'success' },

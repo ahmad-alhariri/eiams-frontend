@@ -108,25 +108,25 @@ describe('cross-module scenario data', () => {
 
   it('models returned and disposed assets through immutable event and custody relations', () => {
     const scenario = createCrossModuleScenario()
-    const returnedAssetId = scenario.assets.returned.assetId
+    const returnedAssetId = scenario.assets.returned.id
     const returnedEvents = scenario.ledgers.assetMovements
       .filter((movement) => movement.assetId === returnedAssetId)
-      .map((movement) => movement.eventType)
+      .map((movement) => movement.movementType)
 
     expect(returnedEvents).toEqual(['Received', 'Issued', 'Returned'])
-    expect(scenario.assets.returned.derivedStatus).toBe('InStock')
+    expect(scenario.assets.returned.currentStatus).toBe('InStock')
     expect(scenario.ledgers.custodies[0]).toMatchObject({
       assetId: returnedAssetId,
       issueDocumentId: scenario.documents.issue.documentId,
       returnDocumentId: scenario.documents.return.documentId,
       status: 'Closed',
     })
-    expect(scenario.assets.disposed.derivedStatus).toBe('Disposed')
-    expect(scenario.assets.pending.derivedStatus).toBe('Issued')
+    expect(scenario.assets.disposed.currentStatus).toBe('Disposed')
+    expect(scenario.assets.pending.currentStatus).toBe('Issued')
     expect(scenario.ledgers.custodies).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          assetId: scenario.assets.pending.assetId,
+          assetId: scenario.assets.pending.id,
           issueDocumentId: scenario.documents.issue.documentId,
           status: 'Active',
           custodyKind: 'Operational',
@@ -136,9 +136,9 @@ describe('cross-module scenario data', () => {
     expect(scenario.ledgers.assetMovements).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          assetId: scenario.assets.disposed.assetId,
+          assetId: scenario.assets.disposed.id,
           documentId: scenario.adjustments.disposal.id,
-          eventType: 'Disposed',
+          movementType: 'Disposed',
         }),
       ]),
     )
@@ -147,15 +147,16 @@ describe('cross-module scenario data', () => {
       status: 'Posted',
       lines: [
         expect.objectContaining({
-          assets: [expect.objectContaining({ id: scenario.assets.disposed.assetId })],
+          assets: [expect.objectContaining({ id: scenario.assets.disposed.id })],
         }),
       ],
     })
+    // The live movement row names the document it moved, but carries no line
+    // id — so the linkage that can still be checked is the document itself.
     expect(
-      scenario.ledgers.assetMovements.every((movement) => {
-        const document = documentsById(scenario).get(movement.documentId)
-        return document?.lines.some((line) => line.lineId === movement.documentLineId) ?? false
-      }),
+      scenario.ledgers.assetMovements.every((movement) =>
+        documentsById(scenario).has(movement.documentId),
+      ),
     ).toBe(true)
   })
 
@@ -189,16 +190,24 @@ describe('cross-module scenario data', () => {
         }),
       ]),
     )
-    const redactedEntry = scenario.ledgers.auditLogs
+    // The LIST projection carries headers only (`AuditLogListItemResponse` has
+    // no `entries` member), so a list row can never hold a redacted secret.
+    expect(scenario.ledgers.auditLogs.some((auditLog) => 'entries' in auditLog)).toBe(false)
+    // The field diff lives on the DETAIL, so that is where the redacted entry
+    // is read from.
+    const redactedEntry = scenario.ledgers.auditLogDetails
       .flatMap((auditLog) => auditLog.entries)
-      .find((entry) => entry.redacted)
+      .find((entry) => entry.isRedacted)
     expect(redactedEntry).toMatchObject({
       fieldName: 'signedOriginalChecksum',
-      redacted: true,
-      redactionReasonAr: expect.any(String),
+      isRedacted: true,
+      // The reason is the server's CODE, not an Arabic sentence.
+      redactionReason: expect.any(String),
     })
-    expect(redactedEntry).not.toHaveProperty('oldValue')
-    expect(redactedEntry).not.toHaveProperty('newValue')
+    // The withheld value never existed on the fixture, and the sanitizer must
+    // not reintroduce one.
+    expect(redactedEntry?.oldValue).toBeNull()
+    expect(redactedEntry?.newValue).toBeNull()
   })
 })
 

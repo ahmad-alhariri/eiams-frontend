@@ -359,4 +359,108 @@ describe('WarehouseCapabilitiesEditor — lvtk.3 acceptance', () => {
     ).toBeGreaterThan(0)
     expect(toastRoots()).toHaveLength(1)
   })
+
+  it('keeps a FAILED capabilities read distinguishable from an EMPTY one (secondary read)', async () => {
+    // STATEFUL mock: the matrix read fails once, then answers. A failed read
+    // gets its own Arabic surface + retry and the grant stays closed — it must
+    // never render as "no capability is granted yet".
+    const capability = createWarehouseCapability({
+      id: fixtureUuid(50),
+      warehouseId: WAREHOUSE_ID,
+      materialDomainId: IT_DOMAIN.id,
+      materialDomainName: IT_DOMAIN.name,
+      materialDomainCode: IT_DOMAIN.code,
+      operations: ['Transfer'],
+      status: 'Active',
+    })
+    let capabilityAttempts = 0
+    server.use(
+      http.get(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/capabilities`, () => {
+        capabilityAttempts += 1
+        return capabilityAttempts === 1
+          ? errJson(500)
+          : okPageJson([capability], { page: 1, pageSize: 100, totalCount: 1 })
+      }),
+    )
+    serveDomains(IT_DOMAIN)
+
+    const dialog = await openEditor()
+
+    expect(
+      await within(dialog).findByRole('heading', { name: 'تعذّر تحميل قدرات المستودع' }),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).queryByText('لا توجد قدرات ممنوحة بعد. استخدم النموذج أعلاه لمنح أول قدرة.'),
+    ).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'منح القدرة' })).toBeDisabled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'إعادة المحاولة' }))
+
+    await waitFor(() => expect(capabilityAttempts).toBe(2))
+    expect(await within(dialog).findByText(IT_DOMAIN.name)).toBeInTheDocument()
+    expect(
+      within(dialog).queryByRole('heading', { name: 'تعذّر تحميل قدرات المستودع' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps a FAILED domains read distinguishable from an EMPTY one and retries it', async () => {
+    // Same contract for the SECONDARY read: the domain catalogue failing once
+    // gets its own Arabic surface; after the retry the grant opens with the
+    // first still-ungranted domain preselected.
+    serveCapabilities()
+    let domainsAttempts = 0
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/domains`, () => {
+        domainsAttempts += 1
+        return domainsAttempts === 1 ? errJson(500) : okPageJson([IT_DOMAIN])
+      }),
+    )
+
+    const dialog = await openEditor()
+
+    expect(
+      await within(dialog).findByRole('heading', { name: 'تعذّر تحميل مجالات المواد' }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'منح القدرة' })).toBeDisabled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'إعادة المحاولة' }))
+
+    await waitFor(() => expect(domainsAttempts).toBe(2))
+    expect(
+      within(dialog).queryByRole('heading', { name: 'تعذّر تحميل مجالات المواد' }),
+    ).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'منح القدرة' })).toBeEnabled()
+  })
+
+  it('shows NO error surface for a SUCCESSFUL EMPTY read (empty is not failed)', async () => {
+    // The THIRD state, and the one a failed read must not be confused with:
+    // the server answered, and the answer is "nothing granted" / "no domain
+    // to grant". It renders the EMPTY copy and the productive grant form — no
+    // Arabic error surface, no retry button, no spinner. Without this case a
+    // failed read that renders as the empty state would pass the two failed
+    // cases only by accident.
+    serveCapabilities()
+    serveDomains()
+
+    const dialog = await openEditor()
+
+    // The capabilities surface reads as EMPTY (answered), not as FAILED.
+    expect(
+      await within(dialog).findByText(
+        'لا توجد قدرات ممنوحة بعد. استخدم النموذج أعلاه لمنح أول قدرة.',
+      ),
+    ).toBeInTheDocument()
+    // The domains surface reads as EMPTY (answered), not as FAILED.
+    expect(within(dialog).getByText('كل مجالات المواد المفعّلة ممنوحة بالفعل.')).toBeInTheDocument()
+    // Neither surface shows its failure copy, its retry, or its spinner.
+    expect(
+      within(dialog).queryByRole('heading', { name: 'تعذّر تحميل قدرات المستودع' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(dialog).queryByRole('heading', { name: 'تعذّر تحميل مجالات المواد' }),
+    ).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'إعادة المحاولة' })).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('جارٍ تحميل القدرات...')).not.toBeInTheDocument()
+    // And with no domain left to grant, the grant action is closed for the
+    // right reason (nothing to pick) rather than because a read failed.
+    expect(within(dialog).getByRole('button', { name: 'منح القدرة' })).toBeDisabled()
+  })
 })

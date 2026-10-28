@@ -1,13 +1,16 @@
+// The asset registry rows follow the LIVE wire contracts: flat rows with `id`
+// and `currentStatus`, a typed `holderType`/`holderId` pair on the custody
+// row, and no nested material/warehouse reference — the API sends none.
 import type {
   Asset,
-  AssetCustody,
+  AssetCustodyTimelineRow,
   AssetMovement,
-  AuditLog,
-  AuditLogEntry,
+} from '@/modules/asset/types/asset.types'
+import type {
   DocumentLifecycleEvent,
   NamedReference,
   WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/test/msw/document-engine.types'
 import type {
   InventoryCount,
   InventoryCountLine,
@@ -27,10 +30,19 @@ import type { Material } from '@/modules/catalog/types/catalog.api-types'
 // warehouse/material columns, `postedBy: Uuid`, `id` (not `movementId` /
 // `balanceId`). Mirrored in factories.ts.
 import type { InventoryBalance, StockMovement } from '@/modules/inventory/types/inventory.api-types'
+// The audit ledger follows the same rule: the LIVE wire is
+// `Application.AuditLogs.AuditLogListItemResponse` (headers only — no entries)
+// for the list and `AuditLogDetailsResponse` (the header plus the field diff)
+// for the detail. `id`, not `auditLogId`; `createdAtUtc`, not `occurredAt`.
+import type {
+  AuditLogDetail,
+  AuditLogEntry,
+  AuditLogHeader,
+} from '@/modules/audit/types/audit.api-types'
 import {
   createAsset,
   createAssetCustody,
-  createAuditLog,
+  createAuditLogDetail,
   createAuditLogEntry,
   createDocumentAttachment,
   createLifecycleEvent,
@@ -89,8 +101,9 @@ export type CrossModuleScenario = Readonly<{
     balances: readonly InventoryBalance[]
     stockMovements: readonly StockMovement[]
     assetMovements: readonly AssetMovement[]
-    custodies: readonly AssetCustody[]
-    auditLogs: readonly AuditLog[]
+    custodies: readonly AssetCustodyTimelineRow[]
+    auditLogs: readonly AuditLogHeader[]
+    auditLogDetails: readonly AuditLogDetail[]
     lifecycleEvents: Readonly<Record<string, readonly DocumentLifecycleEvent[]>>
     orderedLifecycleEvents: readonly DocumentLifecycleEvent[]
   }>
@@ -488,70 +501,70 @@ export function createCrossModuleScenario(): CrossModuleScenario {
   })
 
   const returned = createAsset({
-    assetId: fixtureUuid(930),
+    id: fixtureUuid(930),
     assetNumber: 'AST-2026-1001',
-    currentWarehouse: sourceRef,
-    derivedStatus: 'InStock',
-    material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
-    receiptLineId: receivingLineId,
+    currentStatus: 'InStock',
+    materialId: assetMaterial.id,
+    materialCode: assetMaterial.code,
+    materialNameAr: assetMaterial.nameAr,
     serialNumber: 'SN-LPT-1001',
+    warehouseId: source.id,
+    warehouseCode: source.code,
+    warehouseName: source.name,
   })
   const disposed = createAsset({
-    assetId: fixtureUuid(931),
+    id: fixtureUuid(931),
     assetNumber: 'AST-2026-1002',
-    currentWarehouse: undefined,
-    derivedStatus: 'Disposed',
-    material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
-    receiptLineId: receivingLineId,
+    currentStatus: 'Disposed',
+    materialId: assetMaterial.id,
+    materialCode: assetMaterial.code,
+    materialNameAr: assetMaterial.nameAr,
     serialNumber: 'SN-LPT-1002',
+    warehouseId: source.id,
+    warehouseCode: source.code,
+    warehouseName: source.name,
   })
   const available = createAsset({
-    assetId: fixtureUuid(932),
+    id: fixtureUuid(932),
     assetNumber: 'AST-2026-1003',
-    currentWarehouse: sourceRef,
-    derivedStatus: 'InStock',
-    material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
-    receiptLineId: receivingLineId,
+    currentStatus: 'InStock',
+    materialId: assetMaterial.id,
+    materialCode: assetMaterial.code,
+    materialNameAr: assetMaterial.nameAr,
     serialNumber: 'SN-LPT-1003',
+    warehouseId: source.id,
+    warehouseCode: source.code,
+    warehouseName: source.name,
   })
   const pending = createAsset({
-    assetId: fixtureUuid(934),
+    id: fixtureUuid(934),
     assetNumber: 'AST-2026-1004',
-    currentWarehouse: undefined,
-    derivedStatus: 'Issued',
-    material: reference(assetMaterial.id, assetMaterial.nameAr, assetMaterial.code),
-    receiptLineId: receivingLineId,
+    currentStatus: 'Issued',
+    materialId: assetMaterial.id,
+    materialCode: assetMaterial.code,
+    materialNameAr: assetMaterial.nameAr,
     serialNumber: 'SN-LPT-1004',
+    warehouseId: source.id,
+    warehouseCode: source.code,
+    warehouseName: source.name,
   })
   const returnedCustody = createAssetCustody({
-    assetId: returned.assetId,
-    assetNumber: returned.assetNumber,
+    assetId: returned.id,
     custodyId: fixtureUuid(933),
-    fromTs: '2026-08-21T10:00:00.000Z',
-    holder: {
-      displayName: 'مديرية المعلوماتية',
-      id: recipientId,
-      secondaryLabelAr: null,
-      status: 'Active',
-      type: 'OrganizationalUnit',
-    },
+    fromUtc: '2026-08-21T10:00:00.000Z',
+    holderType: 'OrganizationalUnit',
+    holderId: recipientId,
     issueDocumentId: issueId,
     returnDocumentId: returnId,
     status: 'Closed',
-    toTs: '2026-08-23T10:00:00.000Z',
+    toUtc: '2026-08-23T10:00:00.000Z',
   })
   const pendingCustody = createAssetCustody({
-    assetId: pending.assetId,
-    assetNumber: pending.assetNumber,
+    assetId: pending.id,
     custodyId: fixtureUuid(935),
-    fromTs: issue.postedAt ?? SCENARIO_TIMESTAMP,
-    holder: {
-      displayName: 'مديرية المعلوماتية',
-      id: recipientId,
-      secondaryLabelAr: null,
-      status: 'Active',
-      type: 'OrganizationalUnit',
-    },
+    fromUtc: issue.postedAt ?? SCENARIO_TIMESTAMP,
+    holderType: 'OrganizationalUnit',
+    holderId: recipientId,
     issueDocumentId: issueId,
     status: 'Active',
   })
@@ -644,7 +657,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
         reason: 'إعدام أصل تالف بموجب محضر اللجنة.',
         assets: [
           {
-            id: disposed.assetId,
+            id: disposed.id,
             assetNumber: disposed.assetNumber,
             serialNumber: disposed.serialNumber ?? null,
           },
@@ -826,160 +839,169 @@ export function createCrossModuleScenario(): CrossModuleScenario {
   ]
   const assetMovements: readonly AssetMovement[] = [
     {
-      assetId: returned.assetId,
+      id: fixtureUuid(960),
+      assetId: returned.id,
       documentId: receivingId,
-      documentLineId: receivingLineId,
-      documentReference: receiving.systemReferenceNumber,
-      eventType: 'Received',
-      movementId: fixtureUuid(960),
-      occurredAt: receiving.postedAt ?? SCENARIO_TIMESTAMP,
-      occurredBy: managerRef,
-      toWarehouse: sourceRef,
+      documentReferenceNumber: receiving.systemReferenceNumber,
+      documentType: 'Receiving',
+      movementType: 'Received',
+      movedAtUtc: receiving.postedAt ?? SCENARIO_TIMESTAMP,
     },
     {
-      assetId: returned.assetId,
-      custodyId: returnedCustody.custodyId,
+      id: fixtureUuid(961),
+      assetId: returned.id,
       documentId: issueId,
-      documentLineId: issueLineId,
-      documentReference: issue.systemReferenceNumber,
-      eventType: 'Issued',
-      fromWarehouse: sourceRef,
-      movementId: fixtureUuid(961),
-      occurredAt: issue.postedAt ?? SCENARIO_TIMESTAMP,
-      occurredBy: managerRef,
+      documentReferenceNumber: issue.systemReferenceNumber,
+      documentType: 'Issue',
+      movementType: 'Issued',
+      movedAtUtc: issue.postedAt ?? SCENARIO_TIMESTAMP,
     },
     {
-      assetId: returned.assetId,
-      custodyId: returnedCustody.custodyId,
+      id: fixtureUuid(962),
+      assetId: returned.id,
       documentId: returnId,
-      documentLineId: returnLineId,
-      documentReference: returnDocument.systemReferenceNumber,
-      eventType: 'Returned',
-      movementId: fixtureUuid(962),
-      occurredAt: returnDocument.postedAt ?? SCENARIO_TIMESTAMP,
-      occurredBy: managerRef,
-      toWarehouse: sourceRef,
+      documentReferenceNumber: returnDocument.systemReferenceNumber,
+      documentType: 'Return',
+      movementType: 'Returned',
+      movedAtUtc: returnDocument.postedAt ?? SCENARIO_TIMESTAMP,
     },
     {
-      assetId: disposed.assetId,
+      id: fixtureUuid(963),
+      assetId: disposed.id,
       documentId: receivingId,
-      documentLineId: receivingLineId,
-      documentReference: receiving.systemReferenceNumber,
-      eventType: 'Received',
-      movementId: fixtureUuid(963),
-      occurredAt: receiving.postedAt ?? SCENARIO_TIMESTAMP,
-      occurredBy: managerRef,
-      toWarehouse: sourceRef,
+      documentReferenceNumber: receiving.systemReferenceNumber,
+      documentType: 'Receiving',
+      movementType: 'Received',
+      movedAtUtc: receiving.postedAt ?? SCENARIO_TIMESTAMP,
     },
     {
-      assetId: disposed.assetId,
+      id: fixtureUuid(964),
+      assetId: disposed.id,
       documentId: disposalDocumentId,
-      documentLineId: disposalDocumentLineId,
-      documentReference: disposal.systemReferenceNumber,
-      eventType: 'Disposed',
-      fromWarehouse: sourceRef,
-      movementId: fixtureUuid(964),
-      occurredAt: disposal.postedAtUtc ?? SCENARIO_TIMESTAMP,
-      occurredBy: managerRef,
+      documentReferenceNumber: disposal.systemReferenceNumber,
+      documentType: 'Adjustment',
+      movementType: 'Disposed',
+      movedAtUtc: disposal.postedAtUtc ?? SCENARIO_TIMESTAMP,
     },
     {
-      assetId: available.assetId,
+      id: fixtureUuid(965),
+      assetId: available.id,
       documentId: receivingId,
-      documentLineId: receivingLineId,
-      documentReference: receiving.systemReferenceNumber,
-      eventType: 'Received',
-      movementId: fixtureUuid(965),
-      occurredAt: receiving.postedAt ?? SCENARIO_TIMESTAMP,
-      occurredBy: managerRef,
-      toWarehouse: sourceRef,
+      documentReferenceNumber: receiving.systemReferenceNumber,
+      documentType: 'Receiving',
+      movementType: 'Received',
+      movedAtUtc: receiving.postedAt ?? SCENARIO_TIMESTAMP,
     },
     {
-      assetId: pending.assetId,
+      id: fixtureUuid(966),
+      assetId: pending.id,
       documentId: receivingId,
-      documentLineId: receivingLineId,
-      documentReference: receiving.systemReferenceNumber,
-      eventType: 'Received',
-      movementId: fixtureUuid(966),
-      occurredAt: receiving.postedAt ?? SCENARIO_TIMESTAMP,
-      occurredBy: managerRef,
-      toWarehouse: sourceRef,
+      documentReferenceNumber: receiving.systemReferenceNumber,
+      documentType: 'Receiving',
+      movementType: 'Received',
+      movedAtUtc: receiving.postedAt ?? SCENARIO_TIMESTAMP,
     },
     {
-      assetId: pending.assetId,
-      custodyId: pendingCustody.custodyId,
+      id: fixtureUuid(967),
+      assetId: pending.id,
       documentId: issueId,
-      documentLineId: issueLineId,
-      documentReference: issue.systemReferenceNumber,
-      eventType: 'Issued',
-      fromWarehouse: sourceRef,
-      movementId: fixtureUuid(967),
-      occurredAt: issue.postedAt ?? SCENARIO_TIMESTAMP,
-      occurredBy: managerRef,
+      documentReferenceNumber: issue.systemReferenceNumber,
+      documentType: 'Issue',
+      movementType: 'Issued',
+      movedAtUtc: issue.postedAt ?? SCENARIO_TIMESTAMP,
     },
   ]
+  // A redacted entry carries NO value: the server nulls `oldValue`/`newValue`
+  // and names the reason with a CODE (`AuditSensitiveDataPolicy.GetReason`),
+  // not with an Arabic sentence — the display layer owns the sentence.
   const redactedAuditEntry: AuditLogEntry = {
-    entryId: fixtureUuid(976),
+    id: fixtureUuid(976),
     fieldName: 'signedOriginalChecksum',
-    redacted: true,
-    redactionReasonAr: 'قيمة تحقق حساسة لا تُعرض في سجل التدقيق.',
+    oldValue: null,
+    newValue: null,
+    isRedacted: true,
+    redactionReason: 'CONFIDENTIAL_CREDENTIAL',
+    fieldDisplayAr: null,
+    fieldDisplayEn: null,
   }
-  const auditLogs: readonly AuditLog[] = [
-    createAuditLog({
+  const auditLogDetails: readonly AuditLogDetail[] = [
+    createAuditLogDetail({
+      id: fixtureUuid(970),
       action: 'Post',
-      auditLogId: fixtureUuid(970),
-      entityDisplay: receiving.systemReferenceNumber,
       entityId: receiving.documentId,
       entityType: 'WarehouseDocument',
       entries: [
         createAuditLogEntry({
-          entryId: fixtureUuid(971),
+          id: fixtureUuid(971),
           fieldName: 'documentStatus',
           newValue: 'Posted',
           oldValue: 'Submitted',
         }),
       ],
-      occurredAt: receiving.postedAt ?? SCENARIO_TIMESTAMP,
-      occurredBy: managerRef,
-      summaryAr: 'تم ترحيل سند الاستلام مع حركاته المرتبطة.',
+      createdAtUtc: receiving.postedAt ?? SCENARIO_TIMESTAMP,
+      summary: 'تم ترحيل سند الاستلام مع حركاته المرتبطة.',
+      userId: managerRef.id,
     }),
-    createAuditLog({
+    createAuditLogDetail({
+      id: fixtureUuid(972),
       action: 'Post',
-      auditLogId: fixtureUuid(972),
-      entityDisplay: countVariance.systemReferenceNumber,
       entityId: countVariance.id,
       entityType: 'InventoryAdjustment',
       entries: [
         createAuditLogEntry({
-          entryId: fixtureUuid(973),
+          id: fixtureUuid(973),
           fieldName: 'status',
           newValue: 'Posted',
           oldValue: 'Draft',
         }),
       ],
-      occurredAt: countVariance.postedAtUtc ?? SCENARIO_TIMESTAMP,
-      occurredBy: managerRef,
-      summaryAr: 'تم ترحيل تسوية فرق الجرد.',
+      createdAtUtc: countVariance.postedAtUtc ?? SCENARIO_TIMESTAMP,
+      summary: 'تم ترحيل تسوية فرق الجرد.',
+      userId: managerRef.id,
     }),
-    createAuditLog({
+    createAuditLogDetail({
+      id: fixtureUuid(974),
       action: 'Post',
-      auditLogId: fixtureUuid(974),
-      entityDisplay: disposal.systemReferenceNumber,
       entityId: disposal.id,
       entityType: 'InventoryAdjustment',
       entries: [
         createAuditLogEntry({
-          entryId: fixtureUuid(975),
+          id: fixtureUuid(975),
           fieldName: 'status',
           newValue: 'Posted',
           oldValue: 'Draft',
         }),
         redactedAuditEntry,
       ],
-      occurredAt: disposal.postedAtUtc ?? SCENARIO_TIMESTAMP,
-      occurredBy: managerRef,
-      summaryAr: 'تم ترحيل سند إعدام الأصل.',
+      createdAtUtc: disposal.postedAtUtc ?? SCENARIO_TIMESTAMP,
+      summary: 'تم ترحيل سند إعدام الأصل.',
+      userId: managerRef.id,
     }),
   ]
+  /**
+   * The LIST projection of the same operations.
+   *
+   * `AuditLogListItemResponse` carries no field values and no entries, so the
+   * list row is the header alone: the detail-only members (the summary, the IP
+   * address, the redaction flags and the field diff) are simply absent.
+   */
+  const auditLogs: readonly AuditLogHeader[] = auditLogDetails.map((detail) => ({
+    action: detail.action,
+    actionDisplayAr: detail.actionDisplayAr,
+    actionDisplayEn: detail.actionDisplayEn,
+    aggregateId: detail.aggregateId,
+    aggregateType: detail.aggregateType,
+    commandName: detail.commandName,
+    createdAtUtc: detail.createdAtUtc,
+    entityId: detail.entityId,
+    entityType: detail.entityType,
+    entityTypeDisplayAr: detail.entityTypeDisplayAr,
+    entityTypeDisplayEn: detail.entityTypeDisplayEn,
+    id: detail.id,
+    operationId: detail.operationId,
+    requestId: detail.requestId,
+    userId: detail.userId,
+  }))
   const documents = {
     opening,
     receiving,
@@ -1004,6 +1026,7 @@ export function createCrossModuleScenario(): CrossModuleScenario {
     documents,
     ledgers: {
       assetMovements,
+      auditLogDetails,
       auditLogs,
       balances,
       custodies: [returnedCustody, pendingCustody],

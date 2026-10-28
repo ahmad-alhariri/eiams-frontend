@@ -10,14 +10,22 @@ import { describe, expect, it, vi } from 'vitest'
 import AdjustmentDraftFormPage from '@/modules/adjustment/pages/adjustment-draft-form-page'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
-import type { InventoryCount } from '@/shared/types/generated/eiams-v1'
+import type { InventoryCount } from '@/modules/inventory-count/types/inventory-count.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 const COUNT_ID = '223e4567-e89b-42d3-a456-426614174002'
 
-/** Serves the count-lines AND count-detail queries the page runs before seeding. */
-function useCountLinesHandler(status: InventoryCount['status'] = 'Completed') {
+/**
+ * Serves the count-lines AND count-detail queries the page runs before seeding.
+ *
+ * The count→adjustment launch requires a CLOSED count: the backend accepts an
+ * adjustment only from a closed session
+ * (`CreateAdjustmentFromCountCommandHandler`), so a `Completed` count 404s on
+ * `POST /api/v1/inventory-counts/{id}/adjustment`. The default fixture is
+ * therefore `Closed` — the only status that reaches the seeded draft form.
+ */
+function useCountLinesHandler(status: InventoryCount['status'] = 'Closed') {
   server.use(
     ...countNameHandlers({
       materials: {
@@ -126,7 +134,7 @@ function usePagedCountLinesHandler() {
         countType: 'Cycle',
         scopeType: 'EntireWarehouse',
         freezePolicy: 'SoftFreeze',
-        status: 'Completed',
+        status: 'Closed',
         rowVersion: 1,
         plannedAtUtc: '2026-08-24T08:00:00.000Z',
         startedAtUtc: '2026-08-24T09:00:00.000Z',
@@ -295,8 +303,8 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
     expect(await screen.findByText('جلسة الجرد المطلوبة')).toBeVisible()
   })
 
-  it.each(['Planned', 'InProgress'] as const)(
-    'blocks a direct count link for %s with Arabic recovery',
+  it.each(['Planned', 'InProgress', 'Completed'] as const)(
+    'blocks the count→adjustment launch for a %s count with Arabic recovery',
     async (status) => {
       useCountLinesHandler(status)
       renderForm(`/adjustments/new?countId=${COUNT_ID}&purpose=CountVariance`)
@@ -349,6 +357,9 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
       expect(
         await screen.findByText(unentered ? 'بيانات الجرد غير مكتملة' : 'لا توجد فروقات للتسوية'),
       ).toBeVisible()
+      // The CLOSED count passed the launch gate, so what stops the draft now is
+      // the variance data — not the count status.
+      expect(screen.queryByText('جلسة الجرد غير جاهزة للتسوية')).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'حفظ المسودة' })).not.toBeInTheDocument()
     },
   )
@@ -377,6 +388,8 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
 
     expect(await screen.findByText(/هذا السند مرتبط بجلسة الجرد/)).toBeInTheDocument()
     expect(screen.getByText(/الغرض مقفل وفق جلسة الجرد/)).toBeInTheDocument()
+    // A CLOSED count launches the draft form: the save action is live.
+    expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeEnabled()
   })
 
   it('preseeds the locked warehouse from the launch deep-link (QA defect D3)', async () => {
@@ -393,6 +406,8 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
     // The label resolves asynchronously: the scoped selector loads the option list
     // for the locked warehouse id, and only then does the combobox show the name.
     expect(await screen.findByDisplayValue('المستودع المركزي')).toBeInTheDocument()
+    // The CLOSED count launched the form: the draft is submittable.
+    expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeEnabled()
   })
 
   it('seeds locked variance rows from the count session lines (QA defect D4)', async () => {
@@ -408,6 +423,8 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
     expect(await screen.findByText('حاسوب مكتبي')).toBeInTheDocument()
     expect(screen.getByText('-2')).toBeInTheDocument()
     expect(screen.getAllByLabelText('سبب الفرق')).toHaveLength(1)
+    // The CLOSED count launched the form: the draft is submittable.
+    expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeEnabled()
   })
 
   it('seeds a nonzero variance beyond the first 200 count lines', async () => {
@@ -420,6 +437,8 @@ describe('AdjustmentDraftFormPage (e21-t04)', () => {
     expect(screen.getByDisplayValue('عجز مرصود في الصفحة الثانية')).toBeInTheDocument()
     expect(screen.getAllByLabelText('سبب الفرق')).toHaveLength(1)
     expect(requestedPages).toEqual([0, 1])
+    // The CLOSED count launched the form: the draft is submittable.
+    expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeEnabled()
   })
 
   it('never offers Disposal in the purpose dropdown (QA defect D1)', async () => {

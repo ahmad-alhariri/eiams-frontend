@@ -2,8 +2,8 @@
  * Live inventory-count wire types (IC-FE-1 frozen contract).
  *
  * Handwritten flat DTOs — the module speaks the LIVE shapes directly through
- * `shared/api/api-transport` and imports nothing from
- * `@/shared/types/generated/eiams-v1` (stale by design).
+ * `shared/api/api-transport` and imports nothing from the generated OpenAPI
+ * snapshot (stale by design).
  *
  * Naming:
  *  - IDs and version numbers are the wire's own keys (`id`, `rowVersion`,

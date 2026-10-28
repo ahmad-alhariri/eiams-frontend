@@ -6,8 +6,11 @@ import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
 import { TransferCustodyDialog } from './transfer-custody-dialog'
-import type { Custody } from '@/modules/custody/types/custody.types'
-import type { CounterpartResolution } from '@/modules/organization/types/counterpart-lookup.types'
+import type { Custody, CustodyKind } from '@/modules/custody/types/custody.types'
+import type {
+  CounterpartResolution,
+  CounterpartType,
+} from '@/modules/organization/types/counterpart-lookup.types'
 import { fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 import { createQueryClient } from '@/shared/services/query.client'
@@ -15,7 +18,6 @@ import { createQueryClient } from '@/shared/services/query.client'
 const API_BASE_URL = '/api/v1'
 const CUSTODY_ID = fixtureUuid(52)
 const ASSET_ID = fixtureUuid(235)
-const EMPLOYEE_ID = fixtureUuid(15)
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({
@@ -53,30 +55,79 @@ const custody: Custody = {
   rowVersion: 3,
 }
 
+/**
+ * The holder kinds the live counterpart lookup serves for a transfer.
+ *
+ * Every kind was proved live on 2026-10-22 with a real transfer against the
+ * MAIN warehouse: `GET /counterparts?operation=Transfer&type=<kind>` answers
+ * the counterpart, and `POST /custodies/{id}/transfer` accepts the holder with
+ * the kind the server pairs it with.
+ */
+const HOLDER_CASES = [
+  {
+    type: 'Employee' as CounterpartType,
+    labelAr: 'موظف',
+    id: fixtureUuid(15),
+    displayName: 'محمد السيد',
+    searchTerm: 'محمد',
+    kind: 'Personal' as CustodyKind,
+  },
+  {
+    type: 'OrganizationalUnit' as CounterpartType,
+    labelAr: 'وحدة تنظيمية',
+    id: fixtureUuid(21),
+    displayName: 'مديرية النقل والحراسة',
+    searchTerm: 'مديرية',
+    kind: 'Operational' as CustodyKind,
+  },
+  {
+    type: 'Site' as CounterpartType,
+    labelAr: 'موقع',
+    id: fixtureUuid(22),
+    displayName: 'مقر دمشق',
+    searchTerm: 'مقر',
+    kind: 'Operational' as CustodyKind,
+  },
+  {
+    type: 'External' as CounterpartType,
+    labelAr: 'جهة خارجية',
+    id: fixtureUuid(23),
+    displayName: 'شركة النور للتجارة',
+    searchTerm: 'شركة',
+    kind: 'Operational' as CustodyKind,
+  },
+]
+
 const EMPLOYEE: CounterpartResolution = {
   type: 'Employee',
-  id: EMPLOYEE_ID,
+  id: fixtureUuid(15),
   displayName: 'محمد السيد',
   secondaryLabelAr: null,
   status: 'Active',
 }
 
 /**
- * The typed search term has to be a substring of the served employee's name:
+ * The typed search term has to be a substring of the served counterpart's name:
  * the selector renders the label the server returned for that query, so a term
  * that matches nothing cannot produce a selectable option.
  */
 const EMPLOYEE_SEARCH_TERM = 'محمد'
 
-function useEmployeeHandler() {
+/** The transfer lookup: `operation=Transfer` with the picked holder kind. */
+function useTransferHandler(holderType: CounterpartType, counterpart: CounterpartResolution) {
   server.use(
     http.get(`${API_BASE_URL}/counterparts`, ({ request }) => {
       const url = new URL(request.url)
-      expect(url.searchParams.get('operation')).toBe('Issue')
-      expect(url.searchParams.get('type')).toBe('Employee')
-      return okPageJson([EMPLOYEE], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
+      expect(url.searchParams.get('operation')).toBe('Transfer')
+      expect(url.searchParams.get('type')).toBe(holderType)
+      return okPageJson([counterpart], { page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
     }),
   )
+}
+
+/** The employee counterpart served for the employee transfer flow. */
+function useEmployeeHandler() {
+  useTransferHandler('Employee', EMPLOYEE)
 }
 
 function renderDialog() {
@@ -90,15 +141,34 @@ function renderDialog() {
 
 async function openDialogAndSelectEmployee(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'مبادلة المسؤولية' }))
-  const employeeInput = screen.getByLabelText('الموظف المكلف')
+  const employeeInput = screen.getByLabelText('الحائز الجديد')
   await user.click(employeeInput)
   await user.type(employeeInput, EMPLOYEE_SEARCH_TERM)
   await user.click(await screen.findByRole('option', { name: new RegExp(EMPLOYEE_SEARCH_TERM) }))
 }
 
 describe('TransferCustodyDialog', () => {
-  it('posts the live transfer body to the per-custody path', async () => {
-    useEmployeeHandler()
+  it('offers every holder kind the live counterpart lookup serves for a transfer', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: 'مبادلة المسؤولية' }))
+    await user.click(screen.getByLabelText('نوع الحائز الجديد'))
+
+    for (const holderCase of HOLDER_CASES) {
+      expect(await screen.findByRole('option', { name: holderCase.labelAr })).toBeInTheDocument()
+    }
+  })
+
+  it.each(HOLDER_CASES)('posts the live transfer body for a $type holder', async (holderCase) => {
+    const counterpart: CounterpartResolution = {
+      type: holderCase.type,
+      id: holderCase.id,
+      displayName: holderCase.displayName,
+      secondaryLabelAr: null,
+      status: 'Active',
+    }
+    useTransferHandler(holderCase.type, counterpart)
     let postedBody: Record<string, unknown> | undefined
     let postedPath = ''
     server.use(
@@ -111,7 +181,15 @@ describe('TransferCustodyDialog', () => {
 
     const user = userEvent.setup()
     renderDialog()
-    await openDialogAndSelectEmployee(user)
+    await user.click(screen.getByRole('button', { name: 'مبادلة المسؤولية' }))
+    if (holderCase.type !== 'Employee') {
+      await user.click(screen.getByLabelText('نوع الحائز الجديد'))
+      await user.click(await screen.findByRole('option', { name: holderCase.labelAr }))
+    }
+    const holderInput = screen.getByLabelText('الحائز الجديد')
+    await user.click(holderInput)
+    await user.type(holderInput, holderCase.searchTerm)
+    await user.click(await screen.findByRole('option', { name: new RegExp(holderCase.searchTerm) }))
     await user.click(screen.getByRole('button', { name: 'تأكيد المبادلة' }))
 
     await waitFor(() => expect(postedBody).toBeDefined())
@@ -120,18 +198,51 @@ describe('TransferCustodyDialog', () => {
     // expectedRowVersion, note? } — and nothing else, so the body is asserted
     // EXACTLY: a snapshot-era field name cannot slip back in.
     //
-    // `newCustodyKind` is 'Personal' because the holder is an Employee: the
-    // domain pairs the two (`Domain/Custodies/Custody.cs`), and the server
-    // refuses an Employee holding an Operational custody with 400
+    // `newCustodyKind` follows the HOLDER: a Personal custody for an
+    // Employee, an Operational one for an OrganizationalUnit, a Site or an
+    // External party. The domain pairs the two (`Domain/Custodies/Custody.cs`),
+    // and the server refuses a mismatched pair with 400
     // COUNTERPARTS_OPERATIONAL_REQUIRES_NON_EMPLOYEE.
     expect(postedBody).toEqual({
       subjectType: 'Asset',
-      newHolderType: 'Employee',
-      newHolderId: EMPLOYEE_ID,
-      newCustodyKind: 'Personal',
+      newHolderType: holderCase.type,
+      newHolderId: holderCase.id,
+      newCustodyKind: holderCase.kind,
       expectedRowVersion: 3,
-      note: 'مبادلة مسؤولية إلى محمد السيد',
+      note: `مبادلة مسؤولية إلى ${holderCase.displayName}`,
     })
+  })
+
+  it('drops a holder captured under another kind', async () => {
+    // A holder id captured for one kind must never travel under another: the
+    // server resolves the pair it is given, so an Employee id sent as a Site
+    // holder is a mismatch the server answers 404 COUNTERPARTS_NOT_FOUND for.
+    useTransferHandler('Employee', EMPLOYEE)
+    let postedBody: Record<string, unknown> | undefined
+    server.use(
+      http.post(`${API_BASE_URL}/custodies/${CUSTODY_ID}/transfer`, async ({ request }) => {
+        postedBody = (await request.json()) as Record<string, unknown>
+        return apiJson({}, { status: 200 })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderDialog()
+    await user.click(screen.getByRole('button', { name: 'مبادلة المسؤولية' }))
+    const holderInput = screen.getByLabelText('الحائز الجديد')
+    await user.click(holderInput)
+    await user.type(holderInput, EMPLOYEE_SEARCH_TERM)
+    await user.click(await screen.findByRole('option', { name: new RegExp(EMPLOYEE_SEARCH_TERM) }))
+
+    // Switching the kind clears the employee selection: it means nothing for a
+    // Site holder, so nothing may be posted until a Site holder is picked.
+    await user.click(screen.getByLabelText('نوع الحائز الجديد'))
+    await user.click(await screen.findByRole('option', { name: 'موقع' }))
+    expect(screen.getByLabelText('الحائز الجديد')).toHaveValue('')
+
+    await user.click(screen.getByRole('button', { name: 'تأكيد المبادلة' }))
+    expect(await screen.findByText('يجب اختيار الحائز الجديد.')).toBeInTheDocument()
+    expect(postedBody).toBeUndefined()
   })
 
   it('presents a 404 as "not found", never as "unauthorized"', async () => {

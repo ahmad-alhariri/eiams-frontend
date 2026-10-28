@@ -27,8 +27,8 @@ import { ReferenceLimitNote } from '@/shared/feedback/reference-limit-note'
 import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
+import { OrganizationPageShell } from '@/modules/organization/components/organization-page-shell'
 import { ContentCard } from '@/shared/layout/content-card'
-import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { dataTableFeatures } from '@/shared/ui/data-table'
@@ -275,53 +275,51 @@ function EmployeesListPage() {
   const isStatusTargetActive = statusTarget?.status === 'Active'
 
   return (
-    <div dir="rtl" className="min-w-0">
-      <PageHeader
-        title="الموظفون"
-        subtitle="دليل الموظفين ضمن نطاق العمل الحالي، للعرض والبحث فقط."
-        toolbar={
-          <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2">
-            <div className="flex min-w-44 flex-col gap-2">
-              <span className="text-sm font-medium text-foreground">الموقع</span>
-              <Select value={siteId ?? 'all'} onValueChange={handleSiteChange}>
-                <SelectTrigger aria-label="تصفية حسب الموقع">
-                  <SelectValue>{siteId === undefined ? 'كل المواقع' : undefined}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل المواقع</SelectItem>
-                  {sitesQuery.data?.items.map((site) => (
-                    <SelectItem key={site.id} value={site.id}>
-                      {site.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex min-w-36 flex-col gap-2">
-              <span className="text-sm font-medium text-foreground">الحالة</span>
-              <Select value={status ?? 'all'} onValueChange={handleStatusChange}>
-                <SelectTrigger aria-label="تصفية حسب حالة الموظف">
-                  <SelectValue>
-                    {status === undefined ? 'كل الحالات' : status === 'Active' ? 'نشط' : 'غير نشط'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الحالات</SelectItem>
-                  <SelectItem value="Active">نشط</SelectItem>
-                  <SelectItem value="Inactive">غير نشط</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {canManage ? (
-              <Button type="button" className="self-end" onClick={openCreate}>
-                <IconPlus aria-hidden data-icon="inline-start" />
-                إضافة موظف
-              </Button>
-            ) : null}
+    <OrganizationPageShell
+      titleAr="الموظفون"
+      subtitle="دليل الموظفين ضمن نطاق العمل الحالي، للعرض والبحث فقط."
+      actions={
+        <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2">
+          <div className="flex min-w-44 flex-col gap-2">
+            <span className="text-sm font-medium text-foreground">الموقع</span>
+            <Select value={siteId ?? 'all'} onValueChange={handleSiteChange}>
+              <SelectTrigger aria-label="تصفية حسب الموقع">
+                <SelectValue>{siteId === undefined ? 'كل المواقع' : undefined}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل المواقع</SelectItem>
+                {sitesQuery.data?.items.map((site) => (
+                  <SelectItem key={site.id} value={site.id}>
+                    {site.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        }
-      />
-
+          <div className="flex min-w-36 flex-col gap-2">
+            <span className="text-sm font-medium text-foreground">الحالة</span>
+            <Select value={status ?? 'all'} onValueChange={handleStatusChange}>
+              <SelectTrigger aria-label="تصفية حسب حالة الموظف">
+                <SelectValue>
+                  {status === undefined ? 'كل الحالات' : status === 'Active' ? 'نشط' : 'غير نشط'}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل الحالات</SelectItem>
+                <SelectItem value="Active">نشط</SelectItem>
+                <SelectItem value="Inactive">غير نشط</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {canManage ? (
+            <Button type="button" className="self-end" onClick={openCreate}>
+              <IconPlus aria-hidden data-icon="inline-start" />
+              إضافة موظف
+            </Button>
+          ) : null}
+        </div>
+      }
+    >
       <ContentCard
         title="قائمة الموظفين"
         description="ابحث بالاسم أو الرقم الوظيفي، وصفِّ النتائج حسب الموقع أو الحالة، ثم تنقّل بين صفحات الخادم."
@@ -373,7 +371,7 @@ function EmployeesListPage() {
         busy={statusMutation.isPending}
         onConfirm={() => void confirmStatusChange()}
       />
-    </div>
+    </OrganizationPageShell>
   )
 }
 

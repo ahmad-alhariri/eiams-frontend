@@ -80,7 +80,7 @@ function unitsOfMeasureHandler() {
 let postedBody: Record<string, unknown> | undefined
 let paperReferenceBody: Record<string, unknown> | undefined
 
-function useHandlers() {
+function useHandlers(balanceQuantity = 100) {
   postedBody = undefined
   paperReferenceBody = undefined
   server.use(
@@ -111,7 +111,7 @@ function useHandlers() {
           {
             warehouseId: SOURCE_WAREHOUSE_ID,
             materialId: MATERIAL_ID,
-            quantity: 100,
+            quantity: balanceQuantity,
             unitOfMeasureId: fixtureUomId(),
           },
         ])
@@ -223,6 +223,31 @@ describe('TransferDocumentFormPage (e17-t04/t05/t06)', () => {
     expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeInTheDocument()
   }, 20000)
 
+  // eiams-frontend-61zf. The transfer reason textarea carried no `id`, so the
+  // shared `FormLabel` pointed its `for` at an element that did not exist and
+  // the browser logged «Incorrect use of <label for=FORM_ELEMENT>».
+  it('points every label at a control that exists', async () => {
+    useHandlers()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    renderPage()
+
+    await screen.findByText('سند تحويل جديد')
+
+    const orphanLabels = Array.from(document.querySelectorAll<HTMLLabelElement>('label[for]'))
+      .filter((label) => document.getElementById(label.htmlFor) === null)
+      .map((label) => label.textContent)
+    expect(orphanLabels).toEqual([])
+
+    // The reason field is named by the label that points at it.
+    const reason = screen.getByLabelText('سبب التحويل')
+    const reasonLabel = Array.from(document.querySelectorAll<HTMLLabelElement>('label')).find(
+      (label) => label.textContent === 'سبب التحويل',
+    )
+    expect(reasonLabel?.htmlFor).toBe(reason.id)
+    expect(reason.id).not.toBe('')
+    expect(consoleError).not.toHaveBeenCalled()
+  }, 20000)
+
   it('blocks submission when a line quantity exceeds the source balance', async () => {
     useHandlers()
     const user = userEvent.setup()
@@ -239,6 +264,35 @@ describe('TransferDocumentFormPage (e17-t04/t05/t06)', () => {
     expect(await screen.findByText(/تتجاوز الرصيد المتاح في المستودع المصدر/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeDisabled()
     expect(postedBody).toBeUndefined()
+  }, 30000)
+
+  // eiams-frontend-7eqp. The form-level over-balance alert and the shared
+  // per-line hint sit on ONE screen and state the SAME balance, so they must
+  // render the SAME glyphs. Arabic-Indic digits are the app-wide policy
+  // (`formatNumber`); the alert used to interpolate the raw number, so the
+  // user could not tell the two renderings apart.
+  it('renders the over-balance alert and the per-line hint in the same Arabic-Indic digits', async () => {
+    useHandlers(3)
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('سند تحويل جديد')
+    await fillHeader(user)
+    await fillLine(user)
+    const quantity = screen.getByLabelText('الكمية')
+    await user.clear(quantity)
+    await user.type(quantity, '5')
+
+    const alert = await screen.findByText(
+      /^الكمية المطلوبة في البند 1 تتجاوز الرصيد المتاح في المستودع المصدر/,
+    )
+    // The balance (3) reads ٣ in the alert, and never as the Latin "3".
+    expect(alert).toHaveTextContent('(٣)')
+    expect(alert).not.toHaveTextContent('3')
+
+    const perLineHint = await screen.findByText(/^الكمية المطلوبة تتجاوز الرصيد المتاح/)
+    expect(perLineHint).toHaveTextContent('(٣)')
+    expect(perLineHint).not.toHaveTextContent('3')
   }, 30000)
 
   it('posts a contract-shaped Transfer draft and navigates to the detail route', async () => {
@@ -262,7 +316,10 @@ describe('TransferDocumentFormPage (e17-t04/t05/t06)', () => {
     expect(postedBody?.['documentType']).toBe('Transfer')
     const transferInfo = postedBody?.['transferInfo'] as Record<string, unknown>
     expect(transferInfo['destinationWarehouseId']).toBe(DESTINATION_WAREHOUSE_ID)
-    expect(transferInfo['destinationWarehouseName']).toBe('مستودع الفرع الشمالي')
+    expect(transferInfo['transferReason']).toBe('تغطية احتياج الفرع الشمالي')
+    // The live petal is an id and a reason: the server never accepted a
+    // destination display name on the write.
+    expect(transferInfo['destinationWarehouseName']).toBeUndefined()
     // The paper reference is not part of the draft command: it is written on its
     // own route, guarded on the version the user was shown.
     expect(paperReferenceBody).toEqual({

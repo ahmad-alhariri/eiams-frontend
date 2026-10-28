@@ -1,44 +1,72 @@
-import type { AuditLog, AuditLogEntry } from '@/shared/types/generated/eiams-v1'
-
+import type { AuditLogEntry, AuditLogHeader } from '@/modules/audit/types/audit.api-types'
 import type { AuditEntityFilter } from '@/modules/audit/types/audit.types'
 
 export const REDACTED_AUDIT_VALUE_AR = 'قيمة محجوبة'
 
 /**
- * Arabic label per audited action.
+ * The Arabic sentence shown when the server gives no reason code.
  *
- * Keyed on the wire action string. An action absent here is not an error:
- * `getAuditActionDisplay` reports `isKnown: false` and falls back to the raw
- * string, so a newly added backend action degrades honestly instead of
- * rendering a blank cell.
- *
- * `SetActiveScope` was removed here with the rest of the withdrawn scope
- * switching (D-SRS-01, RESOLUTION-015, `eiams-frontend-z34j`). It was a label
- * for an operation the backend has never emitted — `Domain/AuditLogs/AuditActions.cs`
- * is a closed vocabulary with no such member and a grep of the backend returns
- * zero hits — so it advertised a capability the system does not have.
+ * D-AUD-02 requires a fixed Arabic sentence rather than an empty gap.
  */
-const AUDIT_ACTION_LABELS_AR: Readonly<Record<string, string>> = {
-  Assign: 'تكليف',
+export const DEFAULT_REDACTION_REASON_AR = 'القيمة محجوبة وفق سياسة التدقيق.'
+
+/**
+ * Arabic explanation per server redaction code.
+ *
+ * The wire carries a CODE (`AuditSensitiveDataPolicy.GetReason`), not a
+ * sentence: `CONFIDENTIAL_CREDENTIAL` for a credential-shaped field and
+ * `SENSITIVE_SYSTEM_VALUE` for a system value. The sentence is ours to write.
+ */
+const AUDIT_REDACTION_REASONS_AR: Readonly<Record<string, string>> = {
+  CONFIDENTIAL_CREDENTIAL: 'القيمة محجوبة لارتباطها ببيانات اعتماد سرية.',
+  SENSITIVE_SYSTEM_VALUE: 'القيمة محجوبة لارتباطها ببيانات نظام حساسة.',
+}
+
+/**
+ * Arabic label per audited action, used only when the server sent no label.
+ *
+ * The server owns the label (`AuditRedactionService.GetActionDisplayAr`) and
+ * the module prefers it; this table is the fallback for a response that
+ * carries none. A code absent from here is not an error: `getAuditActionDisplay`
+ * reports `isKnown: false` and falls back to the raw string, so a newly added
+ * backend action degrades honestly instead of rendering a blank cell.
+ *
+ * The keys are EXACTLY the backend's closed vocabulary of emitted actions —
+ * `Domain/AuditLogs/AuditActions.cs` declares 24 constants and no others — and
+ * no name the server never sends. The Arabic follows the server's own label
+ * table (`Infrastructure/AuditLogs/AuditRedactionService.cs`) wherever it has
+ * one for the same action.
+ *
+ * The names this table used to carry and the server never emits (`Login`,
+ * `Revise`, `Transfer`, `Return`, `Dispose`, `DeleteAttachment`, `Upload`)
+ * were document-lifecycle actions or operations the backend has no member for,
+ * so they advertised a capability the audit trail does not have.
+ */
+export const AUDIT_ACTION_LABELS_AR: Readonly<Record<string, string>> = {
+  Activate: 'تفعيل',
+  Add: 'إضافة',
+  Assign: 'تسليم عهدة',
+  Authenticate: 'تسجيل دخول',
   Cancel: 'إلغاء',
   Close: 'إغلاق',
   Complete: 'إتمام',
   Create: 'إنشاء',
+  Deactivate: 'تعطيل',
   Delete: 'حذف',
-  DeleteAttachment: 'حذف المرفق',
-  Dispose: 'إتلاف',
-  Login: 'تسجيل الدخول',
-  Logout: 'تسجيل الخروج',
+  Grant: 'منح',
+  Logout: 'تسجيل خروج',
+  Move: 'نقل',
   Post: 'ترحيل',
+  RecordActual: 'تسجيل الكمية الفعلية',
   Reject: 'رفض',
-  Return: 'إرجاع',
+  Remove: 'إزالة',
+  ReturnToDraft: 'إعادة للمسودة',
   Reverse: 'عكس',
-  Revise: 'إعادة إلى المسودة',
+  Revoke: 'سحب',
   Start: 'بدء',
-  Submit: 'إرسال',
-  Transfer: 'نقل',
-  Update: 'تحديث',
-  Upload: 'رفع مرفق',
+  Submit: 'إرسال للتدقيق',
+  TokenRefresh: 'تجديد الجلسة',
+  Update: 'تعديل',
 }
 
 export interface AuditCodeDisplay {
@@ -56,42 +84,71 @@ export interface AuditEntryDisplay {
 }
 
 /**
- * Produces a display-safe label for an audit action. Unratified codes remain
- * raw so the caller can render them in a code-styled element rather than
- * guessing an Arabic translation.
+ * Produces a display-safe label for an audit action.
+ *
+ * The server's own Arabic label wins when it carries one; an unratified code
+ * is reported as `isKnown: false` and rendered raw, so the caller can show it
+ * in a code-styled element instead of guessing an Arabic translation.
  */
-export function getAuditActionDisplay(action: string): AuditCodeDisplay {
-  const labelAr = AUDIT_ACTION_LABELS_AR[action]
-  return labelAr === undefined ? { isKnown: false, text: action } : { isKnown: true, text: labelAr }
+export function getAuditActionDisplay(
+  action: string,
+  serverLabelAr?: string | null,
+): AuditCodeDisplay {
+  const label = serverLabelAr || AUDIT_ACTION_LABELS_AR[action]
+  if (label === undefined || label === action) {
+    return { isKnown: false, text: action }
+  }
+  return { isKnown: true, text: label }
 }
 
 /**
- * The current generated contract has no `fieldLabelAr`; therefore all field
- * names remain raw contract codes until the approved OpenAPI increment lands.
+ * Produces a display-safe label for an audited field.
+ *
+ * The live contract carries `fieldDisplayAr` — the server's Arabic label for
+ * the field. The server echoes the raw field name when the field is outside
+ * its vocabulary, and that echo is how an unratified field stays raw.
  */
-export function getAuditFieldDisplay(fieldName: string): AuditCodeDisplay {
-  return { isKnown: false, text: fieldName }
+export function getAuditFieldDisplay(
+  fieldName: string,
+  serverLabelAr?: string | null,
+): AuditCodeDisplay {
+  const label = serverLabelAr || null
+  if (label === null || label === fieldName) {
+    return { isKnown: false, text: fieldName }
+  }
+  return { isKnown: true, text: label }
 }
 
 /**
  * Applies the approved server redaction projection at the display boundary.
- * It intentionally does not inspect old/new values when `redacted` is true.
+ *
+ * It intentionally does not inspect old/new values when `isRedacted` is true —
+ * the service has already nulled them, and a redacted entry never carries a
+ * value to show.
  */
 export function toAuditEntryDisplay(entry: AuditLogEntry): AuditEntryDisplay {
-  const hidden = entry.redacted
+  const hidden = entry.isRedacted
   return {
-    entryId: entry.entryId,
-    field: getAuditFieldDisplay(entry.fieldName),
+    entryId: entry.id,
+    field: getAuditFieldDisplay(entry.fieldName, entry.fieldDisplayAr),
     newValue: hidden ? REDACTED_AUDIT_VALUE_AR : (entry.newValue ?? null),
     oldValue: hidden ? REDACTED_AUDIT_VALUE_AR : (entry.oldValue ?? null),
     redacted: hidden,
-    redactionReasonAr: entry.redactionReasonAr ?? null,
+    redactionReasonAr: hidden ? getRedactionReasonAr(entry.redactionReason) : null,
   }
+}
+
+/** The Arabic sentence for a server redaction code, or the fixed fallback. */
+function getRedactionReasonAr(reason: string | null): string {
+  if (reason === null) {
+    return DEFAULT_REDACTION_REASON_AR
+  }
+  return AUDIT_REDACTION_REASONS_AR[reason] ?? DEFAULT_REDACTION_REASON_AR
 }
 
 /** Builds the only supported correlation filter for an entity's audit history. */
 export function toAuditEntityFilter(
-  auditLog: Pick<AuditLog, 'entityId' | 'entityType'>,
+  auditLog: Pick<AuditLogHeader, 'entityId' | 'entityType'>,
 ): AuditEntityFilter {
   return { entityId: auditLog.entityId, entityType: auditLog.entityType }
 }

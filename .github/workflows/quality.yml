@@ -60,22 +60,3 @@ jobs:
 
       - name: Run quality gate
         run: pnpm run quality
-
-      # `pnpm run quality` does not cover the contract scripts, so the design
-      # snapshot could drift (edited JSON, stale generated types) with a fully
-      # green quality gate. Both are offline: they read committed files only.
-      #
-      # NON-BLOCKING, and deliberately so: the committed design snapshot is
-      # behind the live backend (it predates the `OpeningRegistered` asset-movement
-      # type), while `src/shared/types/generated/eiams-v1.ts` is AHEAD of it.
-      # Regenerating from the stale snapshot would DELETE `OpeningRegistered` and
-      # break `src/modules/asset/asset-movement-labels.ts` with TS2353. This step
-      # reports that staleness; it must not fail a pull request for a condition
-      # the fix (re-ratifying the snapshot from the live API) has not landed yet.
-      # See contracts/openapi/README.md.
-      - name: Verify generated API types match the contract snapshot (non-blocking)
-        continue-on-error: true
-        run: pnpm run api:types:check
-
-      - name: Validate contract snapshot and provenance
-        run: pnpm run contract:validate

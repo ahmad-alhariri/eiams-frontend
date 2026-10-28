@@ -31,12 +31,16 @@ const columnHelper = createColumnHelper<typeof dataTableFeatures, AssetCustodyTi
 export default function AssetCustodyHistoryPage() {
   const { assetId } = useParams<{ assetId: string }>()
   const timelineQuery = useAssetCustodyTimelineQuery(assetId)
-  const timeline = timelineQuery.data ?? []
 
+  // The empty fallback lives inside the memo: `timelineQuery.data ?? []` outside it
+  // would mint a new array on every render and make this memo's dependency change
+  // every render.
   const sorted = useMemo(
     () =>
-      [...timeline].sort((a, b) => (a.fromUtc < b.fromUtc ? 1 : a.fromUtc > b.fromUtc ? -1 : 0)),
-    [timeline],
+      [...(timelineQuery.data ?? [])].sort((a, b) =>
+        a.fromUtc < b.fromUtc ? 1 : a.fromUtc > b.fromUtc ? -1 : 0,
+      ),
+    [timelineQuery.data],
   )
 
   const columns = useMemo(
