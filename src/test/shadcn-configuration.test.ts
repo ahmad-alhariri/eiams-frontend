@@ -57,11 +57,9 @@ describe('shadcn Base UI generation configuration', () => {
     expect(packageManifest.dependencies).toMatchObject({
       '@base-ui/react': expect.any(String),
       '@tabler/icons-react': expect.any(String),
-      '@tailwindcss/vite': expect.any(String),
       'class-variance-authority': expect.any(String),
       clsx: expect.any(String),
       'tailwind-merge': expect.any(String),
-      tailwindcss: expect.any(String),
       'tw-animate-css': expect.any(String),
     })
     // The shadcn CLI is build-time tooling, not a runtime dependency: keeping it
