@@ -24,7 +24,10 @@ const TYPE_PRESENTATION: Record<ToastType | 'loading', { icon: Icon; color: stri
   error: { icon: IconCircleX, color: 'text-error' },
   warning: { icon: IconAlertTriangle, color: 'text-warning' },
   info: { icon: IconInfoCircle, color: 'text-accent' },
-  loading: { icon: IconLoader2, color: 'animate-spin text-muted-foreground' },
+  loading: {
+    icon: IconLoader2,
+    color: 'animate-spin text-muted-foreground motion-reduce:animate-none',
+  },
 }
 
 function ToasterViewport() {
