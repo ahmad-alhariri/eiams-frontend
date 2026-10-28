@@ -81,6 +81,5 @@ export interface LoginRequest {
 export interface AuthTokenResponse {
   readonly accessToken: string
   readonly expiresInSeconds: number
-  readonly tokenType: 'Bearer'
   readonly session: SessionResponse
 }

@@ -382,7 +382,6 @@ export function createAuthTokenResponse(
       accessToken: 'fixture-access-token',
       expiresInSeconds: 900,
       session: createSession(),
-      tokenType: 'Bearer',
     },
     overrides,
   )

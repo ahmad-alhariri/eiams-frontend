@@ -1,6 +1,6 @@
-﻿import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
-import type { DocumentAttachmentResponse, Uuid } from '@/shared/documents/types/document-wire.types'
+import type { AttachmentMutationResponse, Uuid } from '@/shared/documents/types/document-wire.types'
 
 const ATTACHMENTS_PATH = '/warehouse-documents/{documentId}/attachments'
 const ATTACHMENT_PATH = '/warehouse-documents/{documentId}/attachments/{attachmentId}'
@@ -32,7 +32,7 @@ export interface DocumentAttachmentService {
   uploadAttachment: (
     documentId: Uuid,
     request: Readonly<UploadDocumentAttachmentRequest>,
-  ) => Promise<DocumentAttachmentResponse>
+  ) => Promise<AttachmentMutationResponse>
   /** Deletes a draft attachment guarded by the document version QUERY parameter. */
   deleteAttachment: (
     documentId: Uuid,
@@ -83,7 +83,7 @@ export function createDocumentAttachmentService(
 ): DocumentAttachmentService {
   return {
     async uploadAttachment(documentId, request) {
-      return transport.request<DocumentAttachmentResponse, FormData>({
+      return transport.request<AttachmentMutationResponse, FormData>({
         path: pathWithSegments(ATTACHMENTS_PATH, documentId),
         method: 'POST',
         // No Content-Type: the browser must add the multipart boundary, which is

@@ -1,8 +1,12 @@
-﻿import axios from 'axios'
+import axios from 'axios'
 import { HttpResponse, http } from 'msw'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createDocumentAttachmentService } from '@/shared/documents/document-attachment-service'
+import type {
+  AttachmentMutationResponse,
+  DocumentAttachmentResponse,
+} from '@/shared/documents/types/document-wire.types'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { readRequestForm } from '@/test/msw/multipart-parser'
 import { fixtureUuid } from '@/test/msw/factories'
@@ -19,6 +23,22 @@ const ATTACHMENT_ID = fixtureUuid(61)
 // wire envelope, which is what the transport reads.
 const createHarness = registerTestTransportHarness(API_BASE_URL)
 
+/**
+ * The live upload response NESTS the attachment under the attachment field; the flat
+ * element type is only what the document attachment LIST carries. Serving the flat
+ * shape here would let that fiction return.
+ */
+function mutationResponse(attachment: DocumentAttachmentResponse): AttachmentMutationResponse {
+  return {
+    attachmentId: attachment.id,
+    removed: false,
+    documentRowVersion: 4,
+    malwareScanPolicy: 'Disabled',
+    malwareScanClean: false,
+    attachment,
+  }
+}
+
 beforeAll(() => {
   // jsdom's XHR serializer preserves File names; undici's fetch adapter drops
   // them to "blob" and asserts on non-undici Files (see multipart-parser.ts).
@@ -34,6 +54,7 @@ describe('document attachment transport', () => {
   it('uploads multipart file, attachmentType and expectedRowVersion fields to the document URL', async () => {
     const { service } = setupService()
     const attachment = wireAttachment({ attachmentId: ATTACHMENT_ID })
+    const response = mutationResponse(attachment)
     const capturedUrl = vi.fn<() => URL>()
     const capturedForm = vi.fn<() => FormData>()
 
@@ -43,7 +64,7 @@ describe('document attachment transport', () => {
         async ({ request }) => {
           capturedUrl.mockReturnValue(new URL(request.url))
           capturedForm.mockReturnValue(await readRequestForm(request))
-          return apiJson(attachment, { status: 201 })
+          return apiJson(response, { status: 201 })
         },
       ),
     )
@@ -57,7 +78,7 @@ describe('document attachment transport', () => {
         expectedRowVersion: 3,
         file,
       }),
-    ).resolves.toEqual(attachment)
+    ).resolves.toEqual(response)
 
     expect(capturedUrl().pathname).toBe(
       `${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/attachments`,
@@ -78,6 +99,7 @@ describe('document attachment transport', () => {
     const { service } = setupService()
     const documentId = 'doc id / ١'
     const attachment = wireAttachment({ attachmentId: fixtureUuid(60) })
+    const response = mutationResponse(attachment)
 
     server.use(
       http.post(
@@ -86,7 +108,7 @@ describe('document attachment transport', () => {
           expect(new URL(request.url).pathname).toBe(
             `${API_BASE_URL}/warehouse-documents/${encodeURIComponent(documentId)}/attachments`,
           )
-          return apiJson(attachment, { status: 201 })
+          return apiJson(response, { status: 201 })
         },
       ),
     )
@@ -97,7 +119,7 @@ describe('document attachment transport', () => {
         expectedRowVersion: 1,
         file: new File(['x'], 'note.txt'),
       }),
-    ).resolves.toEqual(attachment)
+    ).resolves.toEqual(response)
   })
 
   it('deletes an attachment with the expectedRowVersion query parameter and resolves on 204', async () => {

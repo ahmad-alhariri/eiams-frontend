@@ -14,7 +14,6 @@ import { server } from '@/test/msw/server'
 const loginResponse: AuthTokenResponse = {
   accessToken: 'in-memory-login-token',
   expiresInSeconds: 300,
-  tokenType: 'Bearer',
   session: {
     user: createSessionUser({ firstName: 'أمين المستودع' }),
     role: createSessionRole(),

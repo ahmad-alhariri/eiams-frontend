@@ -146,6 +146,21 @@ export interface DocumentAttachmentResponse {
   readonly uploadedAtUtc: string
 }
 
+/**
+ * The live upload/delete response: the attachment is NESTED under ttachment.
+ *
+ * The document's attachment LIST is flat instead (the backend has two distinct
+ * shapes), so the flat element type above is NOT this response.
+ */
+export interface AttachmentMutationResponse {
+  readonly attachmentId: Uuid
+  readonly removed: boolean
+  readonly documentRowVersion: number
+  readonly malwareScanPolicy: string
+  readonly malwareScanClean: boolean
+  readonly attachment: DocumentAttachmentResponse
+}
+
 export interface ReceivingInfoResponse {
   readonly supplierRef: string
   readonly supplierInvoiceRef: string | null

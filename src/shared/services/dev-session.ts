@@ -42,7 +42,6 @@ export function createDevSession(): AuthTokenResponse {
   return {
     accessToken: 'dev-access-token',
     expiresInSeconds: 3600,
-    tokenType: 'Bearer',
     session: {
       user: {
         id: DEV_USER_ID,

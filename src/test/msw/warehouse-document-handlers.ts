@@ -198,10 +198,15 @@ export function toWireLine(line: DocumentLine): DocumentLineResponse {
 /**
  * One attachment record in the wire spelling.
  *
- * The live `DocumentAttachmentResponse` is a flat `{ id, attachmentType,
- * originalFilename, mimeType, fileSize, uploadedAtUtc }`. The snapshot's record
- * carried the document it belonged to, a checksum, the uploader and an optional
- * download URL; none of that crosses HTTP, so none of it is projected.
+ * The live LIST element `DocumentAttachmentResponse` is a flat `{ id,
+ * attachmentType, originalFilename, mimeType, fileSize, uploadedAtUtc }`. The
+ * snapshot's record carried the document it belonged to, a checksum, the uploader
+ * and an optional download URL; none of that crosses HTTP, so none of it is
+ * projected.
+ *
+ * The UPLOAD and DELETE response is a DIFFERENT wire shape: the attachment is
+ * nested under the attachment field (`AttachmentMutationResponse`). Never project
+ * this flat list shape for that one.
  */
 export function toWireAttachment(attachment: DocumentAttachment): DocumentAttachmentResponse {
   return {

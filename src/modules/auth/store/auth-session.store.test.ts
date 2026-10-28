@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createAuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import type {
@@ -35,7 +35,6 @@ const tokenResponse: AuthTokenResponse = {
   accessToken: 'memory-only-token',
   expiresInSeconds: 300,
   session: sessionFixture,
-  tokenType: 'Bearer',
 }
 
 function createSessionAdapterStub() {

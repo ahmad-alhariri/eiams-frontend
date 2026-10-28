@@ -39,7 +39,6 @@ const tokenResponse: AuthTokenResponse = {
   accessToken: 'in-memory-token',
   expiresInSeconds: 300,
   session: sessionFixture,
-  tokenType: 'Bearer',
 }
 
 const bundles: ApiClientBundle[] = []

@@ -28,7 +28,6 @@ const sessionFixture: SessionResponse = {
 const tokenResponse: AuthTokenResponse = {
   accessToken: 'in-memory-refresh-token',
   expiresInSeconds: 300,
-  tokenType: 'Bearer',
   session: sessionFixture,
 }
 

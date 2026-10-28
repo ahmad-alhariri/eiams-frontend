@@ -135,7 +135,8 @@ describe('contract-derived MSW factories', () => {
     })
     const response = createAuthTokenResponse({ expiresInSeconds: 60, session })
 
-    expect(response).toMatchObject({ tokenType: 'Bearer', expiresInSeconds: 60 })
+    expect(response).toMatchObject({ expiresInSeconds: 60 })
+    expect(response).not.toHaveProperty('tokenType')
     expect(response.session.activeScope).toEqual(scope)
     expect(response.session.permissionCodes).toEqual(['audit.view'])
   })
