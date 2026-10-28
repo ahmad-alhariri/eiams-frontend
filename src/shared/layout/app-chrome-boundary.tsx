@@ -23,17 +23,17 @@ function AppChromeBoundary({ label, children }: AppChromeBoundaryProps) {
       onError={(error) => {
         console.error(`[chrome] Failed to render the ${label} region.`, error)
       }}
-      fallback={(error, resetErrorBoundary) => (
+      // The raw error text is deliberately NOT rendered: an arbitrary thrown
+      // error's message is implementation detail (and may be English), so it
+      // stays in the console for developers while the user sees Arabic only.
+      fallback={(_error, resetErrorBoundary) => (
         <section
           data-slot="chrome-error-fallback"
           role="alert"
           aria-label={label}
           className="flex min-h-12 items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
         >
-          <span className="min-w-0 truncate">
-            تعذر عرض {label}.
-            {error.message ? <span className="text-destructive/70"> {error.message}</span> : null}
-          </span>
+          <span className="min-w-0 truncate">تعذر عرض {label}.</span>
           <Button type="button" variant="outline" size="sm" onClick={resetErrorBoundary}>
             إعادة المحاولة
           </Button>

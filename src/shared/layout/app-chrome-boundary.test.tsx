@@ -42,7 +42,7 @@ describe('AppChromeBoundary', () => {
 
     const alert = screen.getByRole('alert', { name: 'القائمة الجانبية' })
     expect(alert).toHaveTextContent('تعذر عرض القائمة الجانبية')
-    expect(alert).toHaveTextContent('header exploded')
+    expect(alert).not.toHaveTextContent('header exploded')
     expect(consoleError).toHaveBeenCalledWith(
       '[chrome] Failed to render the القائمة الجانبية region.',
       expect.any(Error),
