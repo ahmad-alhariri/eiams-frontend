@@ -174,7 +174,11 @@ import {
 // `@/test/**`, so the no-offenders assertion below stays green.
 // +1 since 406: `config/bundle-budget.ts` (the committed bundle budget) is a new
 // application file. It reads no test support, so the no-offenders assertion below stays green.
-const SCANNED_FILE_COUNT = 407
+// +2 since 407: `shared/layout/route-focus-announcer.tsx` (the route focus
+// announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
+// new application files. They read no test support, so the no-offenders
+// assertion below stays green.
+const SCANNED_FILE_COUNT = 409
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

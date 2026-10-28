@@ -42,7 +42,11 @@ import {
  * this number means the file set moved and every finding below must be
  * re-examined, so it fails loudly instead of drifting.
  */
-const EXPECTED_SCANNED_FILES = 407
+// +2 since 407: `shared/layout/route-focus-announcer.tsx` (the route focus
+// announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
+// new application files. They read no test support, so the no-offenders
+// assertion below stays green.
+const EXPECTED_SCANNED_FILES = 409
 
 describe('a failed secondary read stays distinguishable (source scan)', () => {
   it('scans the expected production file set, so a narrowed glob cannot pass silently', () => {

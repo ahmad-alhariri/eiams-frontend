@@ -7,6 +7,8 @@ import { AppHeader } from '@/shared/layout/header/app-header'
 import { Breadcrumbs } from '@/shared/layout/header/breadcrumb'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
 import { UiSandboxMarker } from '@/shared/layout/ui-sandbox-marker'
+import { RouteFocusAnnouncer } from '@/shared/layout/route-focus-announcer'
+import { APP_MAIN_ID } from '@/shared/layout/route-keys'
 import type { HasPermission } from '@/shared/layout/sidebar/sidebar-nav-model'
 
 /**
@@ -32,6 +34,13 @@ type AppLayoutProps = {
 function AppLayout({ hasPermission, userMenu }: AppLayoutProps) {
   return (
     <div className="flex min-h-svh flex-col bg-ivory text-foreground" dir="rtl">
+      <RouteFocusAnnouncer />
+      <a
+        href="#app-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        تخطَّ إلى المحتوى
+      </a>
       <UiSandboxMarker>
         <AppChromeBoundary label="الشريط العلوي">
           <AppHeader breadcrumb={<Breadcrumbs />} userMenu={userMenu} />
@@ -41,6 +50,8 @@ function AppLayout({ hasPermission, userMenu }: AppLayoutProps) {
             <Sidebar hasPermission={hasPermission} />
           </AppChromeBoundary>
           <main
+            id={APP_MAIN_ID}
+            tabIndex={-1}
             data-slot="app-main"
             className="min-w-0 flex-1 px-4 py-8 md:px-6 lg:px-8"
             aria-label="محتوى الصفحة"

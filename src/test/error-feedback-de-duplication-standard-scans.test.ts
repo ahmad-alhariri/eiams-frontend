@@ -42,7 +42,10 @@ describe('error-feedback-de-duplication-standard-scans', () => {
     )
 
   // Pin count so a broken/narrowed glob cannot silently pass.
-  const EXPECTED_SCANNED_FILES = 369
+  // +2 since 369: `shared/layout/route-focus-announcer.tsx` and
+  // `shared/layout/route-keys.ts` are new application files. Neither raises a
+  // toast, so the no-offenders assertions below stay green.
+  const EXPECTED_SCANNED_FILES = 371
   assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
 
   // Fence 1 — only api-error.ts may build the toast.error({ title, ...(detailAr === null ? {} : { description }) }) shape

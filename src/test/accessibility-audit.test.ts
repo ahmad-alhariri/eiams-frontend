@@ -29,7 +29,11 @@ import {
 const SCANNED = applicationSourceFiles()
 
 /** The pinned production file count. A narrowed glob must fail loudly. */
-const EXPECTED_SCANNED_FILES = 407
+// +2 since 407: `shared/layout/route-focus-announcer.tsx` (the route focus
+// announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
+// new application files. They read no test support, so the no-offenders
+// assertion below stays green.
+const EXPECTED_SCANNED_FILES = 409
 
 /** An INFINITE (looping) animation. The one-shot enter/exit transitions use
  * a different mechanism (motion-reduce:data-open:animate-none), so they are
