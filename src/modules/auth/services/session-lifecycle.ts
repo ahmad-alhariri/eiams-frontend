@@ -1,5 +1,6 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 
+import { SCOPED_PREFIX, UNSCOPED_PREFIX } from '@/shared/services/query-keys'
 import type { AuthService } from '@/modules/auth/services/auth.service'
 import type { AuthSessionStore } from '@/modules/auth/store/auth-session.store'
 import type { SessionAdapter } from '@/shared/services/session-adapter'
@@ -10,7 +11,7 @@ export const authSessionQueryKey = ['auth', 'session'] as const
 
 function isProtectedQuery(queryKey: QueryKey): boolean {
   const namespace = queryKey[0]
-  return namespace === 'auth' || namespace === 'scoped'
+  return namespace === 'auth' || namespace === SCOPED_PREFIX || namespace === UNSCOPED_PREFIX
 }
 
 /**

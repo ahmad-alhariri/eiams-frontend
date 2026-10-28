@@ -1,3 +1,4 @@
+import { reportApiError } from '@/shared/services/api-error'
 import { IconCheck, IconEdit, IconPlus, IconUserOff } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
@@ -24,7 +25,6 @@ import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
-import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { dataTableFeatures } from '@/shared/ui/data-table'
@@ -129,11 +129,7 @@ function MaterialFamiliesPage() {
         }
         setDialogFamily(undefined)
       } catch (error: unknown) {
-        const apiError = normalizeApiError(error)
-        toast.error({
-          title: apiError.titleAr,
-          ...(apiError.detailAr === null ? {} : { description: apiError.detailAr }),
-        })
+        reportApiError(error)
         throw error
       }
     },

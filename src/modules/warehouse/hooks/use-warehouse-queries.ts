@@ -55,7 +55,7 @@ export function useWarehousesQuery(query: ListWarehousesQuery = EMPTY_QUERY) {
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(WAREHOUSE_RESOURCE, 'warehouses', query)
+        ? queryKeys.unscoped(WAREHOUSE_RESOURCE, 'warehouses', query)
         : warehouseQueryKeys.warehouses(scope, query),
     queryFn: ({ signal }) => warehouseService.listWarehouses(query, { signal }),
     enabled: scope !== undefined,
@@ -68,7 +68,7 @@ export function useWarehouseQuery(warehouseId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || warehouseId === undefined
-        ? queryKeys.public(WAREHOUSE_RESOURCE, 'warehouses', warehouseId)
+        ? queryKeys.unscoped(WAREHOUSE_RESOURCE, 'warehouses', warehouseId)
         : warehouseQueryKeys.warehouse(scope, warehouseId),
     queryFn: ({ signal }) => warehouseService.getWarehouse(warehouseId ?? '', { signal }),
     enabled: scope !== undefined && warehouseId !== undefined,
@@ -81,7 +81,7 @@ export function useWarehouseCapabilitiesQuery(warehouseId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || warehouseId === undefined
-        ? queryKeys.public(WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'capabilities')
+        ? queryKeys.unscoped(WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'capabilities')
         : warehouseQueryKeys.capabilities(scope, warehouseId),
     queryFn: ({ signal }) =>
       warehouseService.listWarehouseCapabilities(warehouseId ?? '', { signal }),
@@ -99,7 +99,7 @@ export function useWarehouseInitializationStateQuery(warehouseId: string | undef
   return useQuery({
     queryKey:
       scope === undefined || warehouseId === undefined
-        ? queryKeys.public(WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'initialization')
+        ? queryKeys.unscoped(WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'initialization')
         : [
             ...queryKeys.scoped(
               scope,
@@ -123,7 +123,7 @@ export function useWarehouseMaterialSettingsQuery(
   return useQuery({
     queryKey:
       scope === undefined || warehouseId === undefined
-        ? queryKeys.public(
+        ? queryKeys.unscoped(
             WAREHOUSE_RESOURCE,
             'warehouses',
             warehouseId,

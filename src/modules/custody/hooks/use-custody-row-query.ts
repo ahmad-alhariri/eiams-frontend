@@ -33,7 +33,7 @@ export function useCustodyRowQuery(custodyId: string | undefined) {
   return useQuery({
     queryKey:
       custodyId === undefined || scope.activeScopeCacheKey === undefined
-        ? queryKeys.public(CUSTODY_RESOURCE, 'row')
+        ? queryKeys.unscoped(CUSTODY_RESOURCE, 'row', custodyId)
         : custodyQueryKeys.row(scope.activeScopeCacheKey, custodyId),
     queryFn: async () => {
       // The wire values are built by the shared pagination helper inside the

@@ -2,6 +2,13 @@ import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
+import { ASSET_RESOURCE } from '@/modules/asset/hooks/use-asset-queries'
+import { AUDIT_RESOURCE } from '@/modules/audit/hooks/use-audit-queries'
+import { CUSTODY_RESOURCE } from '@/modules/custody/hooks/use-custody-queries'
+import { RETURN_RESOURCE } from '@/modules/custody/hooks/use-return-eligible-items'
+import { INVENTORY_RESOURCE } from '@/modules/inventory/hooks/use-inventory-queries'
+import { COUNT_RESOURCE } from '@/modules/inventory-count/hooks/use-count-queries'
+import { REPORTS_RESOURCE } from '@/modules/reports/hooks/use-reports-queries'
 import type {
   AdjustmentDraftRequest,
   AdjustmentUpdateRequest,
@@ -10,23 +17,16 @@ import type {
   ListDisposalEligibleAssetsQuery,
 } from '@/modules/adjustment/types/adjustment.types'
 import { adjustmentService } from '@/modules/adjustment/services/adjustment.service'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { documentService } from '@/shared/documents/document-transport'
+import type { PaperReferenceInput } from '@/shared/documents/use-document-draft-mutations'
+import { DOCUMENT_RESOURCE } from '@/shared/documents/use-document-queries'
+import { reportApiError } from '@/shared/services/api-error'
 import { toast } from '@/shared/ui/toast-manager'
 import { createIdempotencyKey, type IdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 
 const ADJUSTMENT_RESOURCE = 'adjustments'
-
-/**
- * Resource-name literals owned by the sibling modules whose caches an
- * adjustment mutation touches (`use-inventory-queries`, `use-asset-queries`,
- * `use-custody-queries`). They are not exported there, so they are mirrored
- * here — keep them in sync if a sibling renames its resource.
- */
-const INVENTORY_RESOURCE = 'inventory'
-const ASSET_RESOURCE = 'asset'
-const CUSTODY_RESOURCE = 'custody'
 
 export const adjustmentQueryKeys = {
   adjustments: (scope: ScopeCacheKey, query: ListAdjustmentsQuery) =>
@@ -46,22 +46,45 @@ export interface ReverseAdjustmentInput {
 }
 
 /**
- * Shared invalidation for every adjustment mutation. Posting or reversing an
- * adjustment moves stock and (for disposal) closes custody — so the inventory
- * balance/movement ledgers, asset registry/status, and custody caches are
- * invalidated alongside the adjustment list/detail keys. Every scoped cache
- * lives under `[scoped, ...scopeParts, <resource>, ...]`.
+ * The ONE invalidation policy for the adjustment domain, shared by the reads
+ * hook and `usePostAdjustmentAction`/`useReverseAdjustmentAction`. A posted or
+ * reversed adjustment moves stock and (for disposal) closes custody, so every
+ * read model derived from those ledgers is invalidated alongside the
+ * adjustment list/detail keys. An adjustment IS a warehouse document: its own
+ * document detail, policy and attachment reads change when it is posted, so the
+ * document resource is invalidated too. Every scoped cache lives under
+ * `[scoped, ...scopeParts, <resource>, ...]`.
  */
-function useAdjustmentInvalidation() {
+export function useAdjustmentInvalidation() {
   const queryClient = useQueryClient()
   const scope = useActiveScopeContext()
   return () => {
     if (scope.activeScopeCacheKey === undefined) return
+    // One entry per resource a posted/reversed adjustment demonstrably changes:
+    // - adjustments: list/detail status and lifecycle fields.
+    // - inventory: balances and the stock-movement ledger it writes.
+    // - asset: registry/status projections (disposal disposes assets).
+    // - custody: disposal closes Active custody rows.
+    // - document: its own detail, policy and attachment reads change on post.
+    // - inventory-counts: the count's settlement projection is `Settled` iff
+    //   its linked adjustment is Posted, and the count page renders from it.
+    // - return: eligible-items lists filter `Custodies.Status == Active`,
+    //   which a disposal post closes.
+    // - reports: every report projection (count-adjustment, inventory,
+    //   assets, documents, dashboard) derives from the same ledgers.
+    // - audit: posting/reversing appends audit entries.
+    // Deliberately excluded: catalog, organization, admin, warehouse,
+    // receiving, issue and transfer — an adjustment post cannot change them.
     const resources = [
       ADJUSTMENT_RESOURCE,
       INVENTORY_RESOURCE,
       ASSET_RESOURCE,
       CUSTODY_RESOURCE,
+      DOCUMENT_RESOURCE,
+      COUNT_RESOURCE,
+      RETURN_RESOURCE,
+      REPORTS_RESOURCE,
+      AUDIT_RESOURCE,
     ] as const
     for (const resource of resources) {
       // Built by the shared factory rather than by hand. A hand-derived prefix
@@ -136,32 +159,89 @@ export function useCreateAdjustmentMutation() {
       toast.success({ title: 'تم حفظ مسودة سند التسوية' })
     },
     onError: (error) => {
-      const apiError = normalizeApiError(error)
-      toast.error({ title: apiError.titleAr, description: apiError.detailAr ?? undefined })
+      reportApiError(error)
     },
   })
 }
 
 /**
+ * The two writes of a disposal save: the LIVE disposal body, and the paper
+ * reference the shared document engine owns.
+ *
+ * The paper reference is NOT part of the disposal body — the live endpoint
+ * binds no such field — so it is written through the shared
+ * `PUT /warehouse-documents/{id}/paper-reference` route, exactly like every
+ * other document form.
+ */
+export interface CreateDisposalInput {
+  readonly request: DisposalDraftRequest
+  readonly paperReference: PaperReferenceInput
+}
+
+/**
+ * The disposal DRAFT exists, but its paper reference was not stored: the
+ * disposal is real, its audit trail is not.
+ *
+ * The form cannot simply be retried — the server refuses a second draft for an
+ * asset that already has a pending one — and no page of the adjustment module
+ * edits a draft's paper reference, so the copy states the fact and points at
+ * the only remaining way out. The page therefore says exactly that instead of
+ * a generic failure that hides a draft the user cannot see.
+ */
+export class DisposalPaperReferenceError extends Error {
+  constructor(cause: unknown) {
+    super('أُنشئت مسودة الإعدام لكن تعذّر حفظ رقم المستند الورقي؛ تواصل مع الدعم الفني لإتمامه.', {
+      cause,
+    })
+    this.name = 'DisposalPaperReferenceError'
+  }
+}
+
+/**
  * Creates the disposal DRAFT through the LIVE disposal endpoint
- * (`POST /adjustments/disposals`).
+ * (`POST /adjustments/disposals`) and writes its paper reference through the
+ * shared document engine's own route.
  *
  * A disposal is NOT a generic adjustment draft: it has its own endpoint, its
  * own body (`{ warehouseId, assetIds, reason }`) and its own server-derived
  * effect. Posting one still needs the shared document engine's SignedOriginal
  * gate, so this mutation only creates the draft.
+ *
+ * Two writes, not one, because the backend has two routes. The paper
+ * reference is written right after the draft, guarded on the document's
+ * CURRENT `rowVersion`: the disposal create answers only `{ id }`, so the
+ * version the write must carry comes from a server read, never from the
+ * browser. A failure in that write REJECTS this mutation, so the page reports
+ * one Arabic error and never claims a disposal whose paper reference was
+ * never stored.
  */
 export function useCreateDisposalMutation() {
   const invalidate = useAdjustmentInvalidation()
   return useMutation({
-    mutationFn: (request: DisposalDraftRequest) => adjustmentService.createDisposalDraft(request),
+    mutationFn: async ({ request, paperReference }: CreateDisposalInput) => {
+      const created = await adjustmentService.createDisposalDraft(request)
+      try {
+        const document = await documentService.getDocument(created.id)
+        await documentService.updatePaperReference(created.id, {
+          expectedRowVersion: document.rowVersion,
+          paperDocumentNumber: paperReference.paperDocumentNumber,
+          paperDocumentYear: paperReference.paperDocumentYear,
+        })
+      } catch (error) {
+        throw new DisposalPaperReferenceError(error)
+      }
+      return created.id
+    },
     onSuccess: () => {
       invalidate()
       toast.success({ title: 'تم حفظ مسودة سند الإعدام' })
     },
     onError: (error) => {
-      const apiError = normalizeApiError(error)
-      toast.error({ title: apiError.titleAr, description: apiError.detailAr ?? undefined })
+      if (error instanceof DisposalPaperReferenceError) {
+        reportApiError(error)
+        return
+      }
+      reportApiError(error)
     },
   })
 }

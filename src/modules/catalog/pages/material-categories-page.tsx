@@ -1,3 +1,4 @@
+import { reportApiError } from '@/shared/services/api-error'
 import { IconFolders, IconPlus } from '@tabler/icons-react'
 import { useCallback, useMemo, useState } from 'react'
 
@@ -29,7 +30,6 @@ import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { useDebounce } from '@/shared/hooks/use-debounce'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
-import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { Input } from '@/shared/ui/input'
@@ -50,7 +50,10 @@ import type { MaterialCategory, RecordStatus } from '@/modules/catalog/types/cat
  * a child on page 2 has no visible ancestor.
  */
 const CATEGORY_TREE_PAGE = { page: 1, pageSize: MAX_WIRE_PAGE_SIZE } as const
-const DOMAIN_REFERENCE_PAGE = { page: 1, pageSize: MAX_WIRE_PAGE_SIZE } as const
+const DOMAIN_REFERENCE_PAGE = {
+  page: 1,
+  pageSize: MAX_WIRE_PAGE_SIZE,
+} as const
 
 /** Contract-backed hierarchy with guarded create/edit/status actions for catalog managers. */
 function MaterialCategoriesPage() {
@@ -105,17 +108,16 @@ function MaterialCategoriesPage() {
           })
           const moveRequest = toMoveMaterialCategoryRequest(values, category)
           if (moveRequest !== null) {
-            await moveMutation.mutateAsync({ categoryId: category.id, request: moveRequest })
+            await moveMutation.mutateAsync({
+              categoryId: category.id,
+              request: moveRequest,
+            })
           }
           toast.success({ title: 'تم حفظ تعديلات تصنيف المادة.' })
         }
         setDialogCategory(undefined)
       } catch (error: unknown) {
-        const apiError = normalizeApiError(error)
-        toast.error({
-          title: apiError.titleAr,
-          ...(apiError.detailAr === null ? {} : { description: apiError.detailAr }),
-        })
+        reportApiError(error)
         throw error
       }
     },
@@ -128,7 +130,10 @@ function MaterialCategoriesPage() {
     const nextStatus: RecordStatus = statusTarget.status === 'Active' ? 'Inactive' : 'Active'
 
     try {
-      await statusMutation.mutateAsync({ categoryId: statusTarget.id, status: nextStatus })
+      await statusMutation.mutateAsync({
+        categoryId: statusTarget.id,
+        status: nextStatus,
+      })
     } catch {
       return
     }
@@ -151,7 +156,7 @@ function MaterialCategoriesPage() {
         subtitle="استعرض التسلسل الهرمي للتصنيفات ضمن مجال كل مادة في نطاق العمل الحالي."
         toolbar={
           canManage ? (
-            <Button type="button" onClick={openCreate}>
+            <Button type="button" onClick={openCreate} disabled={domainsQuery.isError}>
               <IconPlus aria-hidden data-icon="inline-start" />
               إضافة تصنيف
             </Button>
@@ -197,6 +202,18 @@ function MaterialCategoriesPage() {
           />
         ) : null}
 
+        {domainsQuery.isError ? (
+          <ErrorState
+            title="تعذّر تحميل مجالات المواد"
+            description="تعذّر جلب المجالات. حاول مرة أخرى."
+            action={
+              <Button type="button" onClick={() => void domainsQuery.refetch()}>
+                إعادة المحاولة
+              </Button>
+            }
+          />
+        ) : null}
+
         {!categoriesQuery.isLoading && !categoriesQuery.isError && categories.length === 0 ? (
           <EmptyState
             icon={<IconFolders className="size-12" />}
@@ -208,7 +225,9 @@ function MaterialCategoriesPage() {
             }
             action={
               canManage && search === '' ? (
-                <Button onClick={openCreate}>إضافة تصنيف</Button>
+                <Button onClick={openCreate} disabled={domainsQuery.isError}>
+                  إضافة تصنيف
+                </Button>
               ) : undefined
             }
           />

@@ -33,7 +33,7 @@ export function useCustodiesQuery(query: ListCustodiesQuery) {
   return useQuery({
     queryKey:
       scope.activeScopeCacheKey === undefined
-        ? queryKeys.public(CUSTODY_RESOURCE, 'custodies', query)
+        ? queryKeys.unscoped(CUSTODY_RESOURCE, 'custodies', query)
         : custodyQueryKeys.custodies(scope.activeScopeCacheKey, query),
     queryFn: () => custodyService.listCustodies(query),
     enabled: scope.activeScopeCacheKey !== undefined,
@@ -56,7 +56,7 @@ export function usePendingCustodiesQuery(warehouseId: string, page: number, page
   return useQuery({
     queryKey:
       scope.activeScopeCacheKey === undefined
-        ? queryKeys.public(CUSTODY_RESOURCE, 'custodies', 'pending', query)
+        ? queryKeys.unscoped(CUSTODY_RESOURCE, 'custodies', 'pending', query)
         : custodyQueryKeys.pending(scope.activeScopeCacheKey, query),
     queryFn: () => custodyService.listPendingCustodies(query),
     enabled: scope.activeScopeCacheKey !== undefined,

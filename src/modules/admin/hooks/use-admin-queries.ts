@@ -33,7 +33,7 @@ export function usePermissionsQuery() {
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(ADMIN_RESOURCE, 'permissions')
+        ? queryKeys.unscoped(ADMIN_RESOURCE, 'permissions')
         : adminQueryKeys.permissions(scope),
     queryFn: adminService.listPermissions,
     enabled: scope !== undefined,
@@ -45,7 +45,9 @@ export function useRolesQuery(enabled = true) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
     queryKey:
-      scope === undefined ? queryKeys.public(ADMIN_RESOURCE, 'roles') : adminQueryKeys.roles(scope),
+      scope === undefined
+        ? queryKeys.unscoped(ADMIN_RESOURCE, 'roles')
+        : adminQueryKeys.roles(scope),
     queryFn: adminService.listRoles,
     enabled: scope !== undefined && enabled,
     staleTime: MASTER_DATA_STALE_TIME,
@@ -57,7 +59,7 @@ export function useRoleQuery(roleId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || roleId === undefined
-        ? queryKeys.public(ADMIN_RESOURCE, 'roles', roleId)
+        ? queryKeys.unscoped(ADMIN_RESOURCE, 'roles', roleId)
         : adminQueryKeys.role(scope, roleId),
     queryFn: () => adminService.getRole(roleId ?? ''),
     enabled: scope !== undefined && roleId !== undefined,
@@ -70,7 +72,7 @@ export function useUsersQuery(query: ListUsersQuery = EMPTY_QUERY) {
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(ADMIN_RESOURCE, 'users', query)
+        ? queryKeys.unscoped(ADMIN_RESOURCE, 'users', query)
         : adminQueryKeys.users(scope, query),
     queryFn: () => adminService.listUsers(query),
     enabled: scope !== undefined,
@@ -83,7 +85,7 @@ export function useUserQuery(userId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || userId === undefined
-        ? queryKeys.public(ADMIN_RESOURCE, 'users', userId)
+        ? queryKeys.unscoped(ADMIN_RESOURCE, 'users', userId)
         : adminQueryKeys.user(scope, userId),
     queryFn: () => adminService.getUser(userId ?? ''),
     enabled: scope !== undefined && userId !== undefined,
@@ -103,7 +105,7 @@ export function useUserRoleScopeQuery(userId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || userId === undefined
-        ? queryKeys.public(ADMIN_RESOURCE, 'users', userId, 'role-scope')
+        ? queryKeys.unscoped(ADMIN_RESOURCE, 'users', userId, 'role-scope')
         : adminQueryKeys.userRoleScope(scope, userId),
     queryFn: () => adminService.getUserRoleScope(userId ?? ''),
     enabled: scope !== undefined && userId !== undefined,

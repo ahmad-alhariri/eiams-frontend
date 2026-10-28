@@ -186,7 +186,7 @@ export function useAssignmentScopeLabel(
   return useQuery({
     queryKey:
       scope === undefined || scopeId === null
-        ? queryKeys.public('admin', 'assignment-scope-label', scopeType, scopeId)
+        ? queryKeys.unscoped('admin', 'assignment-scope-label', scopeType, scopeId)
         : scopeType === 'Site'
           ? organizationQueryKeys.site(scope, scopeId)
           : warehouseQueryKeys.warehouse(scope, scopeId),

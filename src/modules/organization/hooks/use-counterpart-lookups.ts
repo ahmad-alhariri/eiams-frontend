@@ -54,7 +54,7 @@ export function useCounterpartSearchQuery(query: SearchCounterpartsQuery | undef
   return useQuery({
     queryKey:
       scope === undefined || query === undefined
-        ? queryKeys.public(COUNTERPART_RESOURCE, 'search', query)
+        ? queryKeys.unscoped(COUNTERPART_RESOURCE, 'search', query)
         : counterpartLookupQueryKeys.search(scope, query),
     queryFn: () =>
       counterpartLookupService.searchCounterparts(query ?? { operation: 'Receiving', search: '' }),
@@ -69,7 +69,7 @@ export function useHistoricalCounterpartQuery(reference: CounterpartReference | 
   return useQuery({
     queryKey:
       scope === undefined || reference === undefined
-        ? queryKeys.public(COUNTERPART_RESOURCE, 'resolve', reference)
+        ? queryKeys.unscoped(COUNTERPART_RESOURCE, 'resolve', reference)
         : counterpartLookupQueryKeys.resolve(scope, reference),
     queryFn: () =>
       counterpartLookupService.resolveCounterpart(reference ?? { type: 'Employee', id: '' }),

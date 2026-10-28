@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
-
-import { useMaterialDomainsQuery } from '@/modules/catalog/hooks/use-catalog-queries'
+import { useConfirm } from '@/shared/hooks/use-confirm'
 import {
   useAddWarehouseCapabilityOperationMutation,
   useGrantWarehouseCapabilityMutation,
@@ -14,8 +13,8 @@ import {
   type CapabilityOperation,
   type WarehouseCapability,
 } from '@/modules/warehouse/types/warehouse.types'
-import { useConfirm } from '@/shared/hooks/use-confirm'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { reportApiError } from '@/shared/services/api-error'
+import { useMaterialDomainsQuery } from '@/modules/catalog/hooks/use-catalog-queries'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -26,8 +25,8 @@ import {
   DialogTitle,
 } from '@/shared/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import { toast } from '@/shared/ui/toast-manager'
 import { ContentCard } from '@/shared/layout/content-card'
+import { ErrorState } from '@/shared/feedback/error-state'
 
 /**
  * REBUILT 2026-10-12 (lvtk.3 / lvtk.4 owner ruling: per-capability writes,
@@ -92,11 +91,6 @@ const EMPTY_CAPABILITIES: readonly WarehouseCapability[] = []
  * normalized Arabic, so a rejected grant/already-revoked surfaces the approved
  * copy rather than the generic per-status fallback.
  */
-function formatErrorMessage(error: unknown, fallback: string): string {
-  const apiError = normalizeApiError(error)
-  return apiError.detailAr ?? apiError.titleAr ?? fallback
-}
-
 export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabilitiesEditorProps) {
   const [open, setOpen] = useState(false)
   const { confirm, element: confirmElement } = useConfirm()
@@ -160,10 +154,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
     } catch (error: unknown) {
       // No editor-side success toast: `useGrantWarehouseCapabilityMutation`
       // already emits exactly one. Only the failure path toasts here.
-      toast.error({
-        title: 'تعذّر منح القدرة',
-        description: formatErrorMessage(error, 'تعذّر منح القدرة لهذا المستودع. راجع المحاولة.'),
-      })
+      reportApiError(error)
     }
   }
 
@@ -177,10 +168,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
         materialDomainId: capability.materialDomainId,
       })
     } catch (error: unknown) {
-      toast.error({
-        title: 'تعذّر تنشيط القدرة',
-        description: formatErrorMessage(error, 'تعذّر تنشيط القدرة. راجع المحاولة.'),
-      })
+      reportApiError(error)
     }
   }
 
@@ -195,10 +183,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
     try {
       await revokeMutation.mutateAsync({ warehouseId, capabilityId: capability.id })
     } catch (error: unknown) {
-      toast.error({
-        title: 'تعذّر إبطال القدرة',
-        description: formatErrorMessage(error, 'تعذّر إبطال القدرة. راجع المحاولة.'),
-      })
+      reportApiError(error)
     }
   }
 
@@ -217,10 +202,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
           operation,
         })
       } catch (error: unknown) {
-        toast.error({
-          title: 'تعذّر إزالة العملية',
-          description: formatErrorMessage(error, 'تعذّر إزالة العملية. راجع المحاولة.'),
-        })
+        reportApiError(error)
       } finally {
         setPendingRemoves((prev) => {
           if (!prev.has(key)) return prev
@@ -238,10 +220,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
           operation,
         })
       } catch (error: unknown) {
-        toast.error({
-          title: 'تعذّر إضافة العملية',
-          description: formatErrorMessage(error, 'تعذّر إضافة العملية. راجع المحاولة.'),
-        })
+        reportApiError(error)
       } finally {
         setPendingAdds((prev) => {
           if (!prev.has(key)) return prev
@@ -267,6 +246,28 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
         }}
       >
         <DialogContent size="lg" dir="rtl">
+          {capabilitiesQuery.isError && (
+            <ErrorState
+              title="تعذّر تحميل قدرات المستودع"
+              description="تعذّر جلب القدرات. حاول مرة أخرى."
+              action={
+                <Button type="button" onClick={() => void capabilitiesQuery.refetch()}>
+                  إعادة المحاولة
+                </Button>
+              }
+            />
+          )}
+          {domainsQuery.isError && (
+            <ErrorState
+              title="تعذّر تحميل مجالات المواد"
+              description="تعذّر جلب المجالات. حاول مرة أخرى."
+              action={
+                <Button type="button" onClick={() => void domainsQuery.refetch()}>
+                  إعادة المحاولة
+                </Button>
+              }
+            />
+          )}
           <DialogHeader>
             <DialogTitle>إدارة قدرات المستودع</DialogTitle>
             <DialogDescription>
@@ -314,7 +315,12 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
               <Button
                 type="button"
                 onClick={() => void grant(resolvedSelectedDomainId)}
-                disabled={resolvedSelectedDomainId === '' || grantMutation.isPending}
+                disabled={
+                  resolvedSelectedDomainId === '' ||
+                  grantMutation.isPending ||
+                  domainsQuery.isError ||
+                  capabilitiesQuery.isError
+                }
                 loading={grantMutation.isPending}
               >
                 منح القدرة
@@ -326,15 +332,15 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
             title="القدرات الحالية"
             description="كل صف مجال ممنوح وعملياته. أضف أو أزل عمليات كل صف على حدة."
           >
-            {capabilitiesQuery.isPending ? (
+            {capabilitiesQuery.isPending && !capabilitiesQuery.isError ? (
               <p className="py-4 text-center text-sm text-muted-foreground" role="status">
                 جارٍ تحميل القدرات...
               </p>
-            ) : capabilities.length === 0 ? (
+            ) : !capabilitiesQuery.isError && capabilities.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground" role="status">
                 لا توجد قدرات ممنوحة بعد. استخدم النموذج أعلاه لمنح أول قدرة.
               </p>
-            ) : (
+            ) : !capabilitiesQuery.isError ? (
               <ul className="grid gap-3">
                 {capabilities.map((capability) => (
                   <CapabilityRow
@@ -342,6 +348,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
                     capability={capability}
                     isRevoking={revokeMutation.isPending}
                     isReactivating={grantMutation.isPending}
+                    isCapabilitiesError={capabilitiesQuery.isError}
                     onRevoke={() => void revoke(capability)}
                     onReactivate={() => void reactivate(capability)}
                     onToggleOperation={(operation, committedGranted) =>
@@ -352,7 +359,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
                   />
                 ))}
               </ul>
-            )}
+            ) : null}
           </ContentCard>
 
           <DialogFooter>
@@ -371,6 +378,7 @@ interface CapabilityRowProps {
   capability: WarehouseCapability
   isRevoking: boolean
   isReactivating: boolean
+  isCapabilitiesError?: boolean
   onRevoke: () => void
   onReactivate: () => void
   onToggleOperation: (operation: CapabilityOperation, committedGranted: boolean) => void
@@ -382,6 +390,7 @@ function CapabilityRow({
   capability,
   isRevoking,
   isReactivating,
+  isCapabilitiesError,
   onRevoke,
   onReactivate,
   onToggleOperation,
@@ -413,7 +422,7 @@ function CapabilityRow({
             variant="ghost"
             size="sm"
             onClick={onRevoke}
-            disabled={isRevoking}
+            disabled={isRevoking || !!isCapabilitiesError}
             loading={isRevoking}
             aria-label={`إبطال قدرة ${capability.materialDomainName}`}
           >
@@ -425,7 +434,7 @@ function CapabilityRow({
             variant="outline"
             size="sm"
             onClick={onReactivate}
-            disabled={isReactivating}
+            disabled={isReactivating || !!isCapabilitiesError}
             loading={isReactivating}
             aria-label={`تنشيط قدرة ${capability.materialDomainName}`}
           >
@@ -451,7 +460,7 @@ function CapabilityRow({
               <button
                 type="button"
                 onClick={() => onToggleOperation(operation, committedGranted.has(operation))}
-                disabled={busy}
+                disabled={busy || !!isCapabilitiesError}
                 aria-pressed={effectiveGranted}
                 className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground"
                 data-operation={operation}

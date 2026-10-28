@@ -1,3 +1,4 @@
+import { reportApiError } from '@/shared/services/api-error'
 import { IconCheck, IconEdit, IconPlus, IconUserOff } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
@@ -18,10 +19,9 @@ import {
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { isConcurrencyConflict } from '@/shared/services/mutation-safety'
-import { normalizeApiError } from '@/shared/services/api-error'
 import { StatusBadge } from '@/shared/feedback/status-badge'
+import { OrganizationPageShell } from '@/modules/organization/components/organization-page-shell'
 import { ContentCard } from '@/shared/layout/content-card'
-import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { ConflictRecoveryDialog } from '@/shared/ui/conflict-recovery-dialog'
@@ -49,15 +49,6 @@ const CONFLICT_COPY = {
   recoveringLabelAr: 'جارٍ التحميل...',
   stayLabelAr: 'البقاء على المعروض',
 } as const
-
-/** One Arabic error toast for a non-conflict failure, as `useSubmitFeedback` does. */
-function reportApiError(error: unknown): void {
-  const apiError = normalizeApiError(error)
-  toast.error({
-    title: apiError.titleAr,
-    ...(apiError.detailAr === null ? {} : { description: apiError.detailAr }),
-  })
-}
 
 function ExternalPartiesPage() {
   const { has } = usePermission()
@@ -278,19 +269,18 @@ function ExternalPartiesPage() {
   const isStatusTargetActive = statusTarget?.status === 'Active'
 
   return (
-    <div dir="rtl" className="min-w-0">
-      <PageHeader
-        title="الجهات الخارجية"
-        subtitle="سجل موحّد للجهات المستلمة والحافظة للعهد؛ التعطيل يمنع اختيار الجهة لاحقاً ولا يزيل أي مرجع تاريخي."
-        toolbar={
-          canManage ? (
-            <Button type="button" onClick={openCreate}>
-              <IconPlus aria-hidden data-icon="inline-start" />
-              إضافة جهة خارجية
-            </Button>
-          ) : undefined
-        }
-      />
+    <OrganizationPageShell
+      titleAr="الجهات الخارجية"
+      subtitle="سجل موحّد للجهات المستلمة والحافظة للعهد؛ التعطيل يمنع اختيار الجهة لاحقاً ولا يزيل أي مرجع تاريخي."
+      actions={
+        canManage ? (
+          <Button type="button" onClick={openCreate}>
+            <IconPlus aria-hidden data-icon="inline-start" />
+            إضافة جهة خارجية
+          </Button>
+        ) : undefined
+      }
+    >
       <ContentCard
         title="قائمة الجهات الخارجية"
         description="ابحث بالاسم أو الرمز، وتنقّل بين صفحات الخادم."
@@ -358,7 +348,7 @@ function ExternalPartiesPage() {
           titleAr={CONFLICT_COPY.titleAr}
         />
       ) : null}
-    </div>
+    </OrganizationPageShell>
   )
 }
 

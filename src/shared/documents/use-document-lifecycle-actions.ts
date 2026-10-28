@@ -9,13 +9,15 @@ import type {
   PostDocumentResponse,
   Uuid,
 } from '@/shared/documents/types/document-wire.types'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { reportApiError } from '@/shared/services/api-error'
 import {
   isConcurrencyConflict,
   withIdempotencyKey,
   type IdempotencyKey,
 } from '@/shared/services/mutation-safety'
 import { toast } from '@/shared/ui/toast-manager'
+
+export const DOCUMENT_CONFLICT_GUIDANCE_AR = 'المستند عدّله مستخدم آخر. أعد تحميل البيانات'
 
 /** The six transition actions the detail page can execute (Edit/attachment actions flow elsewhere). */
 export type LifecycleActionKind = 'Submit' | 'Post' | 'Reject' | 'Revise' | 'Cancel' | 'Reverse'
@@ -76,14 +78,6 @@ const SUCCESS_TOAST_TITLES_AR: Readonly<Record<LifecycleActionKind, string>> = {
   Cancel: 'تم إلغاء السند',
   Reverse: 'تم عكس السند',
 }
-
-/**
- * Guidance surfaced when the server rejects an action with a CONCURRENT-EDIT 409
- * (D-LIFE-01) — and only then, because it names another user as the writer and a
- * state or idempotency 409 names no writer at all. A business 409 keeps the
- * governed copy for its own code instead.
- */
-const CONFLICT_GUIDANCE_AR = 'المستند عدّله مستخدم آخر. أعد تحميل البيانات'
 
 /**
  * Joins the post-time advisories the server returned into one Arabic sentence.
@@ -203,13 +197,7 @@ function useDocumentLifecycleAction(kind: LifecycleActionKind, documentId: strin
       void invalidateDetail(documentId)
     },
     onError: (error) => {
-      const apiError = normalizeApiError(error)
-      const description =
-        apiError.detailAr ?? (isConcurrencyConflict(error) ? CONFLICT_GUIDANCE_AR : undefined)
-      toast.error({
-        title: apiError.titleAr,
-        ...(description === undefined ? {} : { description }),
-      })
+      reportApiError(error, { conflictGuidanceAr: DOCUMENT_CONFLICT_GUIDANCE_AR })
     },
   })
 }

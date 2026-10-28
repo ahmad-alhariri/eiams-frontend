@@ -1,8 +1,10 @@
+import { reportApiError } from '@/shared/services/api-error'
 import { IconCheck, IconEdit, IconPlus, IconUserOff } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { usePermission } from '@/modules/auth/hooks/use-permission'
+import { unitTypeLabelAr } from '@/modules/catalog/constants/catalog-labels'
 import { UnitOfMeasureFormDialog } from '@/modules/catalog/components/unit-of-measure-form-dialog'
 import {
   useCreateUnitOfMeasureMutation,
@@ -11,6 +13,7 @@ import {
 } from '@/modules/catalog/hooks/use-catalog-mutations'
 import { useUnitsOfMeasureQuery } from '@/modules/catalog/hooks/use-catalog-queries'
 import {
+  setUnitOfMeasureUniquenessScope,
   toCreateUnitOfMeasureRequest,
   toUpdateUnitOfMeasureRequest,
   type UnitOfMeasureFormValues,
@@ -19,7 +22,6 @@ import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
-import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { dataTableFeatures } from '@/shared/ui/data-table'
@@ -62,6 +64,18 @@ function UnitsOfMeasurePage() {
     if (!open) setDialogUnit(undefined)
   }, [])
 
+  // The units the open form must not collide with: the unit being edited never
+  // collides with itself. The form's resolver reads this scope, so the
+  // duplicate (name, unitType) is refused inline instead of reaching the
+  // server as a second unit with the same label.
+  const knownUnits = useMemo(() => unitsQuery.data?.items ?? [], [unitsQuery.data])
+  useEffect(() => {
+    setUnitOfMeasureUniquenessScope({
+      units: knownUnits,
+      editingUnitId: dialogUnit?.id ?? null,
+    })
+  }, [dialogUnit, knownUnits])
+
   const submitForm = useCallback(
     async (values: UnitOfMeasureFormValues) => {
       const unit = dialogUnit ?? null
@@ -82,11 +96,7 @@ function UnitsOfMeasurePage() {
         }
         setDialogUnit(undefined)
       } catch (error: unknown) {
-        const apiError = normalizeApiError(error)
-        toast.error({
-          title: apiError.titleAr,
-          ...(apiError.detailAr === null ? {} : { description: apiError.detailAr }),
-        })
+        reportApiError(error)
         throw error
       }
     },
@@ -131,6 +141,9 @@ function UnitsOfMeasurePage() {
         unitColumnHelper.accessor('unitType', {
           id: 'unitType',
           header: 'نوع الوحدة',
+          // The wire sends a free-form type; the Arabic map owns the ones the
+          // catalog uses and an unmapped value is shown as it arrived.
+          cell: ({ getValue }) => <span>{unitTypeLabelAr(getValue())}</span>,
         }),
         unitColumnHelper.accessor('status', {
           id: 'status',

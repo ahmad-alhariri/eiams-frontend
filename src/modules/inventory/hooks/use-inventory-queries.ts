@@ -9,7 +9,7 @@ import type {
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 
-const INVENTORY_RESOURCE = 'inventory'
+export const INVENTORY_RESOURCE = 'inventory'
 const EMPTY_QUERY = {} as const
 
 export const inventoryQueryKeys = {
@@ -32,7 +32,7 @@ export function useInventoryBalancesQuery(query: ListInventoryBalancesQuery = EM
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(INVENTORY_RESOURCE, 'balances', query)
+        ? queryKeys.unscoped(INVENTORY_RESOURCE, 'balances', query)
         : inventoryQueryKeys.balances(scope, query),
     queryFn: () => inventoryService.listBalances(query),
     enabled: scope !== undefined,
@@ -45,7 +45,7 @@ export function useInventoryBalanceQuery(balanceId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || balanceId === undefined
-        ? queryKeys.public(INVENTORY_RESOURCE, 'balances', balanceId)
+        ? queryKeys.unscoped(INVENTORY_RESOURCE, 'balances', balanceId)
         : inventoryQueryKeys.balance(scope, balanceId),
     queryFn: () => inventoryService.getBalance(balanceId ?? ''),
     enabled: scope !== undefined && balanceId !== undefined,
@@ -58,7 +58,7 @@ export function useStockMovementsQuery(query: ListStockMovementsQuery = EMPTY_QU
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(INVENTORY_RESOURCE, 'movements', query)
+        ? queryKeys.unscoped(INVENTORY_RESOURCE, 'movements', query)
         : inventoryQueryKeys.movements(scope, query),
     queryFn: () => inventoryService.listMovements(query),
     enabled: scope !== undefined,
@@ -71,7 +71,7 @@ export function useStockMovementQuery(movementId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || movementId === undefined
-        ? queryKeys.public(INVENTORY_RESOURCE, 'movements', movementId)
+        ? queryKeys.unscoped(INVENTORY_RESOURCE, 'movements', movementId)
         : inventoryQueryKeys.movement(scope, movementId),
     queryFn: () => inventoryService.getMovement(movementId ?? ''),
     enabled: scope !== undefined && movementId !== undefined,

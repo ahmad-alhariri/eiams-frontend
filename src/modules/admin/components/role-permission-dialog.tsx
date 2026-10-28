@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
+import { reportApiError } from '@/shared/services/api-error'
 
 import { RolePermissionMatrixField } from '@/modules/admin/components/role-permission-matrix-field'
 import { useReplaceRolePermissionsMutation } from '@/modules/admin/hooks/use-admin-mutations'
@@ -8,7 +9,6 @@ import { usePermissionsQuery } from '@/modules/admin/hooks/use-admin-queries'
 import {
   applyRolePermissionsServerError,
   classifyRolePermissionWriteError,
-  ROLE_STALE_VERSION_MESSAGE_AR,
   rolePermissionsSchema,
   toPermissionMatrixRows,
   toReplaceRolePermissionsRequest,
@@ -78,10 +78,7 @@ export function RolePermissionDialog({ role, open, onOpenChange }: RolePermissio
       const outcome = classifyRolePermissionWriteError(error)
 
       if (outcome.kind === 'stale-version') {
-        toast.error({
-          title: 'عدّل مستخدم آخر هذا الدور أثناء عملك.',
-          description: ROLE_STALE_VERSION_MESSAGE_AR,
-        })
+        reportApiError(error)
         // Reload the catalogue so the matrix shows the version now on the server. The dialog
         // is left open with the stale selection rather than silently resubmitting it.
         await permissionsQuery.refetch()
@@ -90,7 +87,7 @@ export function RolePermissionDialog({ role, open, onOpenChange }: RolePermissio
       }
 
       if (outcome.kind === 'scope-mismatch') {
-        toast.error({ title: outcome.titleAr, description: outcome.detailAr ?? undefined })
+        reportApiError(error)
         return
       }
 

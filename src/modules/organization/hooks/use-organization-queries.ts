@@ -54,7 +54,7 @@ export function useOrganizationsQuery(
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(ORGANIZATION_RESOURCE, 'organizations', query)
+        ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'organizations', query)
         : organizationQueryKeys.organizations(scope, query),
     queryFn: () => organizationService.listOrganizations(query),
     enabled: scope !== undefined && (options.enabled ?? true),
@@ -67,7 +67,7 @@ export function useOrganizationQuery(organizationId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || organizationId === undefined
-        ? queryKeys.public(ORGANIZATION_RESOURCE, 'organizations', organizationId)
+        ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'organizations', organizationId)
         : organizationQueryKeys.organization(scope, organizationId),
     queryFn: () => organizationService.getOrganization(organizationId ?? ''),
     enabled: scope !== undefined && organizationId !== undefined,
@@ -83,7 +83,7 @@ export function useSitesQuery(
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(ORGANIZATION_RESOURCE, 'sites', query)
+        ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'sites', query)
         : organizationQueryKeys.sites(scope, query),
     queryFn: () => organizationService.listSites(query),
     enabled: scope !== undefined && (options.enabled ?? true),
@@ -96,7 +96,7 @@ export function useSiteQuery(siteId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || siteId === undefined
-        ? queryKeys.public(ORGANIZATION_RESOURCE, 'sites', siteId)
+        ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'sites', siteId)
         : organizationQueryKeys.site(scope, siteId),
     queryFn: () => organizationService.getSite(siteId ?? ''),
     enabled: scope !== undefined && siteId !== undefined,
@@ -112,7 +112,7 @@ export function useOrganizationalUnitsQuery(
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(ORGANIZATION_RESOURCE, 'organizational-units', query)
+        ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'organizational-units', query)
         : organizationQueryKeys.organizationalUnits(scope, query),
     queryFn: () => organizationService.listOrganizationalUnits(query),
     enabled: scope !== undefined && (options.enabled ?? true),
@@ -125,7 +125,7 @@ export function useOrganizationalUnitQuery(orgUnitId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || orgUnitId === undefined
-        ? queryKeys.public(ORGANIZATION_RESOURCE, 'organizational-units', orgUnitId)
+        ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'organizational-units', orgUnitId)
         : organizationQueryKeys.organizationalUnit(scope, orgUnitId),
     queryFn: () => organizationService.getOrganizationalUnit(orgUnitId ?? ''),
     enabled: scope !== undefined && orgUnitId !== undefined,
@@ -138,7 +138,7 @@ export function useEmployeesQuery(query: ListEmployeesQuery = EMPTY_QUERY) {
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(ORGANIZATION_RESOURCE, 'employees', query)
+        ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'employees', query)
         : organizationQueryKeys.employees(scope, query),
     queryFn: () => organizationService.listEmployees(query),
     enabled: scope !== undefined,
@@ -151,7 +151,7 @@ export function useEmployeeQuery(employeeId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || employeeId === undefined
-        ? queryKeys.public(ORGANIZATION_RESOURCE, 'employees', employeeId)
+        ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'employees', employeeId)
         : organizationQueryKeys.employee(scope, employeeId),
     queryFn: () => organizationService.getEmployee(employeeId ?? ''),
     enabled: scope !== undefined && employeeId !== undefined,
@@ -159,15 +159,22 @@ export function useEmployeeQuery(employeeId: string | undefined) {
   })
 }
 
-export function useExternalPartiesQuery(query: ListExternalPartiesQuery = EMPTY_QUERY) {
+export function externalPartiesFetchFn(query: ListExternalPartiesQuery) {
+  return organizationService.listExternalParties(query)
+}
+
+export function useExternalPartiesQuery(
+  query: ListExternalPartiesQuery = EMPTY_QUERY,
+  options: OrganizationQueryOptions = {},
+) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(ORGANIZATION_RESOURCE, 'external-parties', query)
+        ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'external-parties', query)
         : organizationQueryKeys.externalParties(scope, query),
     queryFn: () => organizationService.listExternalParties(query),
-    enabled: scope !== undefined,
+    enabled: scope !== undefined && (options.enabled ?? true),
     staleTime: MASTER_DATA_STALE_TIME,
   })
 }
@@ -177,7 +184,7 @@ export function useExternalPartyQuery(externalPartyId: string | undefined) {
   return useQuery({
     queryKey:
       scope === undefined || externalPartyId === undefined
-        ? queryKeys.public(ORGANIZATION_RESOURCE, 'external-parties', externalPartyId)
+        ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'external-parties', externalPartyId)
         : organizationQueryKeys.externalParty(scope, externalPartyId),
     queryFn: () => organizationService.getExternalParty(externalPartyId ?? ''),
     enabled: scope !== undefined && externalPartyId !== undefined,

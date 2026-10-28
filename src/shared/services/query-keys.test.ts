@@ -40,6 +40,24 @@ describe('query-key conventions', () => {
     expect(client.getQueryData(queryKeys.public('catalog'))).toEqual(['material'])
   })
 
+  it('unscoped namespace key formats correctly and stays separate from public', () => {
+    expect(queryKeys.unscoped('catalog', 'materials')).toEqual(['unscoped', 'catalog', 'materials'])
+    expect(queryKeys.unscoped('catalog')).toEqual(['unscoped', 'catalog'])
+  })
+
+  it('removeScopedQueries / clearScopedQueries evict only scoped, not unscoped or public', async () => {
+    const client = createQueryClient()
+    client.setQueryData(queryKeys.unscoped('catalog'), ['unscoped data'])
+    client.setQueryData(queryKeys.public('catalog'), ['public data'])
+    client.setQueryData(queryKeys.scoped({ kind: 'site', id: 's1' }, 'catalog'), ['scoped'])
+    removeScopedQueries(client)
+    expect(client.getQueryData(queryKeys.unscoped('catalog'))).toEqual(['unscoped data'])
+    expect(client.getQueryData(queryKeys.public('catalog'))).toEqual(['public data'])
+    expect(
+      client.getQueryData(queryKeys.scoped({ kind: 'site', id: 's1' }, 'catalog')),
+    ).toBeUndefined()
+  })
+
   it('cancels and removes every scoped query while retaining public data', async () => {
     const client = createQueryClient()
     client.setQueryData(queryKeys.scoped({ kind: 'site', id: 'site-1' }, 'documents'), ['draft'])

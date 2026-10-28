@@ -1,10 +1,30 @@
 import axios from 'axios'
 
+import { toast } from '@/shared/ui/toast-manager'
+import { isConflictError } from '@/shared/services/mutation-safety'
 import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
 import { normalizeWireErrorCode, readApiError } from '@/shared/api/envelope'
-import type { FieldError } from '@/shared/types/generated/eiams-v1'
 
 export type ApiErrorKind = 'problem' | 'network' | 'unexpected'
+
+/**
+ * One field-level failure, in the shape the form layer maps onto an input.
+ *
+ * `field` is the form field the failure belongs to, `code` the wire error code
+ * it was raised under, and `messageAr` the APPROVED Arabic for that code — never
+ * the wire's English text, which is not user-facing copy.
+ *
+ * This is the frontend's OWN field-error shape, not a wire type: the API sends
+ * `Record<fieldPath, string[]>` inside `error.details` (or a FluentValidation
+ * `{ errors: [{ name, message }] }` list), and `normalizeApiError` is what turns
+ * either of those into this. It used to be imported from the deleted generated
+ * artifact; it lives here because this module is what produces it.
+ */
+export interface FieldError {
+  readonly field: string
+  readonly code: string
+  readonly messageAr: string
+}
 
 export interface ApiError {
   readonly kind: ApiErrorKind
@@ -121,7 +141,7 @@ function fieldErrors(value: unknown, operationCode: string): readonly FieldError
 
   return value.flatMap((item) => {
     const fieldError = toFieldError(item, operationCode)
-    return fieldError === null ? [] : [fieldError]
+    return fieldError === null || isPseudoField(fieldError.field) ? [] : [fieldError]
   })
 }
 
@@ -223,6 +243,15 @@ function toFormFieldName(path: string): string {
 }
 
 /**
+ * ASP.NET's model-level pseudo-field. It is not a form field, so attaching it
+ * would point the user at an input that does not exist. A path like
+ * `body.code` still reduces to `code`, which IS a real field.
+ */
+function isPseudoField(field: string): boolean {
+  return field === 'body'
+}
+
+/**
  * Extracts per-field validation errors from `error.details`.
  *
  * Two real backend shapes reach this field and both must be tolerated:
@@ -279,7 +308,11 @@ function detailsToFieldErrors(details: unknown, operationCode: string): readonly
     // function exists to fix. So the field is identified by its wire path and the
     // APPROVED Arabic for the operation's error code is shown. The specific English
     // string stays available in the support log, correlated by `request_id`.
-    mapped.push({ field: toFormFieldName(path), code: wireCode, messageAr })
+    const field = toFormFieldName(path)
+    if (isPseudoField(field)) {
+      continue
+    }
+    mapped.push({ field, code: wireCode, messageAr })
   }
   return mapped
 }
@@ -317,4 +350,32 @@ export function normalizeApiError(error: unknown): ApiError {
   }
 
   return problemFromWire(response.data, response.status)
+}
+
+export const CONFLICT_GUIDANCE_AR = 'تغيّرت البيانات على الخادم. أعد تحميل البيانات ثم حاول مجدداً.'
+
+export interface ReportApiErrorOptions {
+  /** Arabic guidance for a 409 that carries no detail of its own. */
+  readonly conflictGuidanceAr?: string
+}
+
+/**
+ * Shared error-toast reporter.
+ *
+ * Intentional behaviour delta vs. the old document-lifecycle site: a 409 with
+ * no `detailAr` now renders the shared conflict guidance at EVERY site class,
+ * matching the adjustment site's existing behaviour. Previously the document
+ * site applied guidance only to VERSION_MISMATCH 409s.
+ */
+export function reportApiError(error: unknown, options: ReportApiErrorOptions = {}): void {
+  const apiError = normalizeApiError(error)
+  let description = apiError.detailAr
+  if (description === null && isConflictError(error)) {
+    const guidance = options.conflictGuidanceAr ?? CONFLICT_GUIDANCE_AR
+    description = guidance
+  }
+  toast.error({
+    title: apiError.titleAr,
+    ...(description === null ? {} : { description }),
+  })
 }

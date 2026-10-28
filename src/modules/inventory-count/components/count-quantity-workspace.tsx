@@ -1,3 +1,4 @@
+import { reportApiError } from '@/shared/services/api-error'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useEffect, useMemo } from 'react'
@@ -32,7 +33,6 @@ import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { Form } from '@/shared/forms/form'
 import { useConfirm } from '@/shared/hooks/use-confirm'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
-import { normalizeApiError } from '@/shared/services/api-error'
 import { isConflictError } from '@/shared/services/mutation-safety'
 import { Button } from '@/shared/ui/button'
 import { ConflictRecoveryDialog } from '@/shared/ui/conflict-recovery-dialog'
@@ -295,11 +295,7 @@ export function CountQuantityWorkspace({
         if (isConflictError(error)) {
           recovery.reportConflict()
         } else {
-          const apiError = normalizeApiError(error)
-          toast.error({
-            title: apiError.titleAr,
-            ...(apiError.detailAr === null ? {} : { description: apiError.detailAr }),
-          })
+          reportApiError(error)
         }
         // Nothing is refetched on failure: a reload would reset the form and
         // destroy the entries being saved.
