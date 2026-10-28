@@ -158,7 +158,9 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // `modules/audit/types/audit.types.ts` (-1). None of them introduces any of
     // the three banned shapes, so every "no offenders" assertion below stays
     // green.
-    assertScannedFiles(PRODUCTION_FILES, 406)
+    // +1 since 406: `config/bundle-budget.ts` (the committed bundle budget) is a new
+    // application file. It introduces none of the three banned shapes.
+    assertScannedFiles(PRODUCTION_FILES, 407)
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

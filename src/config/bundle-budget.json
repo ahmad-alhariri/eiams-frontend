@@ -1,0 +1,8 @@
+{
+  "measuredAt": "2026-10-28",
+  "note": "REGRESSION CEILINGS derived from a production build on 2026-10-28, not performance targets. Raise them deliberately, never silently.",
+  "maxJsChunkCount": 168,
+  "maxJsTotalBytes": 1609146,
+  "maxLargestChunkBytes": 342842,
+  "routePageCount": 59
+}

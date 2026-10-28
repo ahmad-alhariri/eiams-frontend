@@ -42,7 +42,7 @@ import {
  * this number means the file set moved and every finding below must be
  * re-examined, so it fails loudly instead of drifting.
  */
-const EXPECTED_SCANNED_FILES = 406
+const EXPECTED_SCANNED_FILES = 407
 
 describe('a failed secondary read stays distinguishable (source scan)', () => {
   it('scans the expected production file set, so a narrowed glob cannot pass silently', () => {

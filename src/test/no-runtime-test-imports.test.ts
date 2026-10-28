@@ -172,7 +172,9 @@ import {
 // that had their own `modules/audit/types/audit-range.ts` now ride in
 // `modules/audit/types/audit.types.ts` (-1). None of them reaches into
 // `@/test/**`, so the no-offenders assertion below stays green.
-const SCANNED_FILE_COUNT = 406
+// +1 since 406: `config/bundle-budget.ts` (the committed bundle budget) is a new
+// application file. It reads no test support, so the no-offenders assertion below stays green.
+const SCANNED_FILE_COUNT = 407
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

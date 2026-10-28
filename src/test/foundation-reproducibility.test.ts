@@ -56,7 +56,7 @@ describe('foundation reproducibility', () => {
     }
 
     expect(packageManifest.scripts?.['quality']).toBe(
-      'pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run test && pnpm run build',
+      'pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run test && pnpm run build && pnpm run budget:bundle',
     )
   })
 
