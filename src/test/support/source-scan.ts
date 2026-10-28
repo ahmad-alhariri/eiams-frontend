@@ -28,7 +28,10 @@ export function sourceFilesIn(dir: string): string[] {
 /** Application source only — assertions are about production code, not fixtures. */
 export function applicationSourceFiles(): string[] {
   return sourceFilesIn(join(process.cwd(), 'src')).filter(
-    (file) => !/\.test\.tsx?$/u.test(file) && !file.includes(`${sep}test${sep}`),
+    (file) =>
+      !/\.test\.tsx?$/u.test(file) &&
+      !file.includes(`${sep}test${sep}`) &&
+      !file.includes(`${sep}contract-smoke${sep}`),
   )
 }
 

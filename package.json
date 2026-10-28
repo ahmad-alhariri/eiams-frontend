@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -b --noEmit",
+    "test:contract": "vitest run --config vitest.contract.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier . --write",

@@ -1,0 +1,119 @@
+name: Contract Smoke
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contract-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Contract Smoke (live backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The backend is checked out exactly the way .github/workflows/quality.yml
+      # does it, so the image below is built from the canonical source tree
+      # rather than from a published image that may not exist.
+      - name: Checkout canonical backend as data
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: ahmad-alhariri/eiams-backend
+          ref: main
+          path: .ci/eiams-backend
+          token: ${{ secrets.EIAMS_CROSS_REPO_READ_TOKEN }}
+          persist-credentials: false
+
+      - name: Move the backend checkout beside the frontend
+        run: mv "$GITHUB_WORKSPACE/.ci/eiams-backend" "$GITHUB_WORKSPACE/../eiams-backend"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.20.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # A user-defined network gives the backend a stable DNS name for the
+      # database. host.docker.internal does not resolve on a Linux runner.
+      - name: Start a postgres container for the backend
+        run: |
+          docker network create eiams-contract-net
+          docker run -d --name eiams-contract-pg --network eiams-contract-net --network-alias postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=eiams \
+            postgres:17
+          for i in $(seq 1 60); do
+            if docker exec eiams-contract-pg pg_isready -U postgres -d eiams > /dev/null 2>&1; then
+              echo "postgres ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "postgres did not become ready"
+          docker logs eiams-contract-pg
+          exit 1
+
+      - name: Build the backend image from the backend source tree
+        run: |
+          docker build \
+            -f "$GITHUB_WORKSPACE/../eiams-backend/src/Web.Api/Dockerfile" \
+            -t eiams-web-api:contract-smoke \
+            "$GITHUB_WORKSPACE/../eiams-backend"
+
+      - name: Start the backend on the same network
+        run: |
+          docker run -d --name eiams-contract-api --network eiams-contract-net --network-alias api \
+            -p 5000:8080 \
+            -e ASPNETCORE_ENVIRONMENT=Development \
+            -e ASPNETCORE_HTTP_PORTS=8080 \
+            -e "ConnectionStrings__Database=Host=postgres;Port=5432;Database=eiams;Username=postgres;Password=postgres" \
+            # Throwaway dev-only credentials for an ephemeral CI container that holds no real data.
+            -e "Jwt__Secret=this-is-a-development-secret-key-for-ci-only-32b" \
+            -e "AttachmentStorage__Local__RootPath=/tmp/attachment-storage" \
+            eiams-web-api:contract-smoke
+          for i in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:5000/api/v1/health/ready > /dev/null 2>&1; then
+              echo "backend ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "backend did not become ready"
+          docker logs eiams-contract-api
+          exit 1
+
+      # The seed is a data-only dump of the reference dataset the suite reads:
+      # the users and their role scopes, the warehouse, the catalogue, the
+      # balances, the assets and the documents. Roles and permissions are NOT
+      # seeded - the application seeds those through its own migrations.
+      - name: Load the contract seed
+        run: |
+          docker cp src/contract-smoke/contract-seed.sql eiams-contract-pg:/tmp/contract-seed.sql
+          docker exec eiams-contract-pg psql -U postgres -d eiams -v ON_ERROR_STOP=1 -q -f /tmp/contract-seed.sql
+          docker exec eiams-contract-pg psql -U postgres -d eiams -t -c "select 'users='||(select count(*) from users)||' scopes='||(select count(*) from user_role_scopes)||' warehouses='||(select count(*) from warehouses)||' balances='||(select count(*) from inventory_balances)"
+
+      - name: Run contract smoke
+        run: pnpm run test:contract
+        env:
+          EIAMS_DEV_PROXY_TARGET: http://127.0.0.1:5000
