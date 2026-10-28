@@ -103,7 +103,7 @@ function createWrapper(initialEntry: string, client: QueryClient = createQueryCl
           <Routes>
             <Route path="/assets/:assetId" element={children} />
             <Route path="/custody/:custodyId" element={children} />
-            <Route path="/custody/active" element={children} />
+            <Route path="/custody/register" element={children} />
             <Route path="*" element={children} />
           </Routes>
         </QueryClientProvider>
@@ -116,7 +116,7 @@ describe('Active custody list + detail', () => {
   it('lists custody rows with the live holder, kind and status', async () => {
     useCustodyHandlers()
     render(<ActiveCustodyListPage />, {
-      wrapper: createWrapper('/custody/active'),
+      wrapper: createWrapper('/custody/register'),
     })
 
     expect(await screen.findByRole('link', { name: /AST-2023-C099/ })).toBeInTheDocument()
@@ -136,7 +136,7 @@ describe('Active custody list + detail', () => {
       }),
     )
     render(<ActiveCustodyListPage />, {
-      wrapper: createWrapper('/custody/active'),
+      wrapper: createWrapper('/custody/register'),
     })
 
     await screen.findByRole('link', { name: /AST-2023-C099/ })
@@ -161,7 +161,7 @@ describe('Active custody list + detail', () => {
     )
     const user = userEvent.setup()
     render(<ActiveCustodyListPage />, {
-      wrapper: createWrapper('/custody/active'),
+      wrapper: createWrapper('/custody/register'),
     })
 
     await screen.findByRole('link', { name: /AST-2023-C099/ })
@@ -204,7 +204,7 @@ describe('Active custody list + detail', () => {
     )
 
     render(<ActiveCustodyListPage />, {
-      wrapper: createWrapper('/custody/active'),
+      wrapper: createWrapper('/custody/register'),
     })
 
     // Asset -> asset number.
@@ -223,7 +223,7 @@ describe('Active custody list + detail', () => {
   it('states that the rows are custody and links the stock balances screen', async () => {
     useCustodyHandlers()
     render(<ActiveCustodyListPage />, {
-      wrapper: createWrapper('/custody/active'),
+      wrapper: createWrapper('/custody/register'),
     })
 
     expect(await screen.findByText(/رصيد مخزون/)).toBeInTheDocument()
@@ -249,7 +249,7 @@ describe('Active custody list + detail', () => {
     )
     const user = userEvent.setup()
     render(<ActiveCustodyListPage />, {
-      wrapper: createWrapper('/custody/active'),
+      wrapper: createWrapper('/custody/register'),
     })
 
     await screen.findByRole('link', { name: /AST-2023-C099/ })

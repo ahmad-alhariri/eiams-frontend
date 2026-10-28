@@ -1,4 +1,4 @@
-﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { okJson, okPageJson } from '@/test/msw/envelope'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
@@ -221,7 +221,7 @@ describe('custody row cache key (e24-t10 review)', () => {
  * hook resolves the row by scanning the ONE-based pages of the Asset-scoped
  * list. It used to look at page 1 only: a row past the first hundred entries
  * resolved to `null` and the detail page reported a load failure for a row
- * that exists and is reachable from /custody/active.
+ * that exists and is reachable from /custody/register.
  */
 describe('custody row resolution across the Asset-scoped pages', () => {
   it('resolves a row that sits on page 2 of a two-page list', async () => {

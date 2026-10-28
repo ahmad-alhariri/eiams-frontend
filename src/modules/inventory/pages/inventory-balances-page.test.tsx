@@ -112,7 +112,7 @@ describe('InventoryBalancesPage', () => {
     expect(screen.getByText(/وليست العهد/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'سجل العهد' })).toHaveAttribute(
       'href',
-      '/custody/active',
+      '/custody/register',
     )
   })
 

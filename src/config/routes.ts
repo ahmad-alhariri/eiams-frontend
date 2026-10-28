@@ -72,7 +72,7 @@ export const ROUTE_PATHS = {
   assetDetail: '/assets/:assetId',
   assetCustodyHistory: '/assets/:assetId/custody',
   custodyPending: '/custody/pending',
-  custodyActive: '/custody/active',
+  custodyActive: '/custody/register',
   custodyDetail: '/custody/:custodyId',
   /** Audit & reports. */
   audit: '/audit',
