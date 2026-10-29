@@ -82,13 +82,15 @@ jobs:
             "$GITHUB_WORKSPACE/../eiams-backend"
 
       - name: Start the backend on the same network
+          # The backend needs a JWT secret and an attachment root: the appsettings files ship
+          # both empty, so the container refuses to start without them.
+          # Throwaway dev-only credentials for an ephemeral CI container that holds no real data.
         run: |
           docker run -d --name eiams-contract-api --network eiams-contract-net --network-alias api \
             -p 5000:8080 \
             -e ASPNETCORE_ENVIRONMENT=Development \
             -e ASPNETCORE_HTTP_PORTS=8080 \
             -e "ConnectionStrings__Database=Host=postgres;Port=5432;Database=eiams;Username=postgres;Password=postgres" \
-            # Throwaway dev-only credentials for an ephemeral CI container that holds no real data.
             -e "Jwt__Secret=this-is-a-development-secret-key-for-ci-only-32b" \
             -e "AttachmentStorage__Local__RootPath=/tmp/attachment-storage" \
             eiams-web-api:contract-smoke
