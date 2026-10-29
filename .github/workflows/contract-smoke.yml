@@ -24,13 +24,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # The backend is checked out exactly the way .github/workflows/quality.yml
-      # does it, so the image below is built from the canonical source tree
-      # rather than from a published image that may not exist.
+      # tareq-11/EIAMS implements the v1 wire contract this frontend consumes;
+      # the repo used before it is a 2026-09-14 snapshot with empty JWT
+      # settings and a session projection that predates D-SRS-01.
       - name: Checkout canonical backend as data
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          repository: ahmad-alhariri/eiams-backend
+          repository: tareq-11/EIAMS
           ref: main
           path: .ci/eiams-backend
           token: ${{ secrets.EIAMS_CROSS_REPO_READ_TOKEN }}
