@@ -20,23 +20,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    # Without the cross-repo token the live-backend gate cannot run, so the
+    # backend steps below skip rather than fail: a pull request must never go red
+    # for a reason the frontend did not cause. GitHub rejects `secrets` in a
+    # job-level `if`, so the token travels through `env` and the steps gate on it.
+    env:
+      EIAMS_BACKEND_REPO_TOKEN: ${{ secrets.EIAMS_BACKEND_REPO_TOKEN }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Warn that the live-backend gate is skipped
+        if: ${{ env.EIAMS_BACKEND_REPO_TOKEN == '' }}
+        run: echo "::warning::EIAMS_BACKEND_REPO_TOKEN is not configured; the live-backend contract gate is skipped."
+
       # tareq-11/EIAMS implements the v1 wire contract this frontend consumes;
       # the repo used before it is a 2026-09-14 snapshot with empty JWT
-      # settings and a session projection that predates D-SRS-01.
+      # settings and a session projection that predates D-SRS-01. The token is
+      # this repository's own EIAMS_BACKEND_REPO_TOKEN, the same one
+      # contract-drift.yml uses for this repository.
       - name: Checkout canonical backend as data
+        if: ${{ env.EIAMS_BACKEND_REPO_TOKEN != '' }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: tareq-11/EIAMS
           ref: main
           path: .ci/eiams-backend
-          token: ${{ secrets.EIAMS_CROSS_REPO_READ_TOKEN }}
+          token: ${{ secrets.EIAMS_BACKEND_REPO_TOKEN }}
           persist-credentials: false
 
       - name: Move the backend checkout beside the frontend
+        if: ${{ env.EIAMS_BACKEND_REPO_TOKEN != '' }}
         run: mv "$GITHUB_WORKSPACE/.ci/eiams-backend" "$GITHUB_WORKSPACE/../eiams-backend"
 
       - name: Setup pnpm
@@ -56,6 +71,7 @@ jobs:
       # A user-defined network gives the backend a stable DNS name for the
       # database. host.docker.internal does not resolve on a Linux runner.
       - name: Start a postgres container for the backend
+        if: ${{ env.EIAMS_BACKEND_REPO_TOKEN != '' }}
         run: |
           docker network create eiams-contract-net
           docker run -d --name eiams-contract-pg --network eiams-contract-net --network-alias postgres \
@@ -75,6 +91,7 @@ jobs:
           exit 1
 
       - name: Build the backend image from the backend source tree
+        if: ${{ env.EIAMS_BACKEND_REPO_TOKEN != '' }}
         run: |
           docker build \
             -f "$GITHUB_WORKSPACE/../eiams-backend/src/Web.Api/Dockerfile" \
@@ -86,6 +103,7 @@ jobs:
           # The backend needs a JWT secret and an attachment root: the appsettings files ship
           # both empty, so the container refuses to start without them.
           # Throwaway dev-only credentials for an ephemeral CI container that holds no real data.
+        if: ${{ env.EIAMS_BACKEND_REPO_TOKEN != '' }}
         run: |
           docker run -d --name eiams-contract-api --network eiams-contract-net --network-alias api \
             -p 5000:8080 \
@@ -111,12 +129,14 @@ jobs:
       # balances, the assets and the documents. Roles and permissions are NOT
       # seeded - the application seeds those through its own migrations.
       - name: Load the contract seed
+        if: ${{ env.EIAMS_BACKEND_REPO_TOKEN != '' }}
         run: |
           docker cp src/contract-smoke/contract-seed.sql eiams-contract-pg:/tmp/contract-seed.sql
           docker exec eiams-contract-pg psql -U postgres -d eiams -v ON_ERROR_STOP=1 -q -f /tmp/contract-seed.sql
           docker exec eiams-contract-pg psql -U postgres -d eiams -t -c "select 'users='||(select count(*) from users)||' scopes='||(select count(*) from user_role_scopes)||' warehouses='||(select count(*) from warehouses)||' balances='||(select count(*) from inventory_balances)"
 
       - name: Run contract smoke
+        if: ${{ env.EIAMS_BACKEND_REPO_TOKEN != '' }}
         run: pnpm run test:contract
         env:
           EIAMS_DEV_PROXY_TARGET: http://127.0.0.1:5000
