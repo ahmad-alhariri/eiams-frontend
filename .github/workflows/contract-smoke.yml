@@ -81,7 +81,8 @@ jobs:
             -t eiams-web-api:contract-smoke \
             "$GITHUB_WORKSPACE/../eiams-backend"
 
-      - name: Start the backend on the same network
+      - name:
+          Start the backend on the same network
           # The backend needs a JWT secret and an attachment root: the appsettings files ship
           # both empty, so the container refuses to start without them.
           # Throwaway dev-only credentials for an ephemeral CI container that holds no real data.
