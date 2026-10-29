@@ -6,8 +6,13 @@ import type { PropsWithChildren } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createInventoryBalance, createMaterial, createWarehouse } from '@/test/msw/factories'
-import { okPageJson } from '@/test/msw/envelope'
+import {
+  createAuthTokenResponse,
+  createInventoryBalance,
+  createMaterial,
+  createWarehouse,
+} from '@/test/msw/factories'
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -92,6 +97,22 @@ describe('InventoryBalancesPage', () => {
     expect(screen.getByRole('columnheader', { name: 'المستودع' })).toHaveAttribute(
       'aria-sort',
       'ascending',
+    )
+  })
+
+  it('labels its section as stock and links the open-custody view', async () => {
+    server.use(
+      http.get(`${API_BASE_URL}/inventory/balances`, () => okPageJson([createInventoryBalance()])),
+    )
+
+    render(<InventoryBalancesPage />, { wrapper: createWrapper() })
+
+    expect(await screen.findByText('قائمة أرصدة المخزون')).toBeInTheDocument()
+    expect(screen.getByText('المخزون')).toBeInTheDocument()
+    expect(screen.getByText(/وليست العهد/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'سجل العهد' })).toHaveAttribute(
+      'href',
+      '/custody/register',
     )
   })
 
@@ -183,6 +204,23 @@ describe('InventoryBalancesPage', () => {
         }),
       ),
     )
+  })
+
+  it('renders the shared session-expired copy for a 401 instead of a connection message', async () => {
+    server.use(
+      http.post(`${API_BASE_URL}/auth/refresh`, () => okJson(createAuthTokenResponse())),
+      http.get(`${API_BASE_URL}/inventory/balances`, () =>
+        errJson(401, { code: 'AUTHENTICATION_REQUIRED', message: 'Unauthorized.' }),
+      ),
+    )
+
+    render(<InventoryBalancesPage />, { wrapper: createWrapper({ retry: false }) })
+
+    expect(
+      await screen.findByRole('heading', { name: 'تعذّر تحميل أرصدة المخزون' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('انتهت الجلسة. يرجى تسجيل الدخول مجدداً.')).toBeInTheDocument()
+    expect(screen.queryByText(/تحقق من الاتصال/)).not.toBeInTheDocument()
   })
 
   it('renders accessible Arabic error, empty, and retry states', async () => {

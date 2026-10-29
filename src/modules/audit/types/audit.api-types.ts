@@ -1,78 +1,45 @@
 /**
- * Audit module API types — handwritten contracts for direct backend integration.
+ * Handwritten wire contracts for the Audit module (D-INT-02 / ADR-0001).
  *
- * These types match the backend's actual JSON serialization (field names, shapes,
- * nullability). They replace the generated imports from `@/shared/types/generated/eiams-v1`.
+ * The live audit endpoints answer with FLAT camelCase rows whose property
+ * names are the ones the backend's own DTO records carry. The frozen design
+ * snapshot (the generated artifact, since deleted) described a DIFFERENT shape —
+ * `auditLogId`, `occurredAt`, `occurredBy`, `entityDisplay`, `summaryAr`,
+ * `traceId`, and `entries[].entryId / redacted / redactionReasonAr` — and NONE
+ * of those names exist on the wire, so nothing here may be typed against the
+ * snapshot.
  *
- * Verified against:
- * - Backend C# DTOs in `EIAMS\src\Application\AuditLogs\AuditLogResponses.cs`
- * - Backend query record in `EIAMS\src\Application\AuditLogs\GetAuditLogs\GetAuditLogsQuery.cs`
- * - Generated OpenAPI types (`components.schemas.AuditLog`, `AuditLogEntry`, `AuditLogPage`)
- * - `docs/direct-backend-integration-plan.md` §4.2 (snake_case → camelCase normalization)
- * - `docs/audit-detail-contract-decision.md` D-AUD-02 (redaction policy, action vocabulary)
+ * Verified against the live API (probe on 2026-10-26) and the backend source:
+ * - `Application.AuditLogs.AuditLogListItemResponse` -> `AuditLogHeader`
+ *   (`GET /audit-logs`; the list projection carries NO field values at all)
+ * - `Application.AuditLogs.AuditLogEntryResponse`    -> `AuditLogEntry`
+ * - `Application.AuditLogs.AuditLogDetailsResponse`  -> `AuditLogDetail`
+ * - `Web.Api.Controllers.AuditLogs.GetAuditLogsController.GetAuditLogsRequest`
+ *   -> the query parameters (see `audit.types.ts`)
+ *
+ * The property names are pinned against the committed consumer baseline by
+ * `src/modules/audit/audit-wire-contract.test.ts`.
  */
-
-// ---------------------------------------------------------------------------
-// Shared primitives
-// ---------------------------------------------------------------------------
-
-/** Matches backend Guid / OpenAPI Uuid: a lowercased hyphenated UUID string. */
-export type Uuid = string
-
-/** Matches backend NamedReference: { id: Uuid, displayName: string } */
-export interface NamedReference {
-  readonly id: Uuid
-  readonly displayName: string
-}
-
-// ---------------------------------------------------------------------------
-// Query types
-// ---------------------------------------------------------------------------
 
 /**
- * Wire query parameters for `GET /audit-logs`.
+ * `GET /audit-logs` row (`AuditLogListItemResponse`).
  *
- * Snake_case → camelCase per plan.md §4.2 / pagination.ts:
- *   page_index → pageIndex   (1-based, per plan §5.2)
- *   page_size  → pageSize
- *   date_from   → dateFrom   (ISO 8601 / date-time)
- *   date_to     → dateTo     (ISO 8601 / date-time)
+ * Headers only: the server's list projection carries no field values and no
+ * entries, so a list row can never hold a redacted secret.
  *
- * Derived from backend `GetAuditLogsQuery`:
- *   UserId?, EntityType?, EntityId?, Action?, FieldName?,
- *   FromUtc?, ToUtc?, Search?, Page, PageSize
+ * `actionDisplayAr` / `entityTypeDisplayAr` are the server's own Arabic
+ * labels; they fall back to the raw code when the action or entity type is
+ * outside the server's vocabulary.
  */
-export interface ListAuditLogsQuery {
-  readonly pageIndex?: number
-  readonly pageSize?: number
-  readonly entityType?: string
-  readonly entityId?: Uuid
-  readonly action?: string
-  readonly fieldName?: string
-  readonly dateFrom?: string
-  readonly dateTo?: string
-  readonly search?: string
-}
-
-// ---------------------------------------------------------------------------
-// Response types — list projection
-// ---------------------------------------------------------------------------
-
-/**
- * Matches backend `AuditLogListItemResponse` (list header projection).
- *
- * Returned inside `AuditLogPage.items` for `GET /audit-logs`.
- * Header-only: no `entries` array.
- */
-export interface AuditLog {
-  readonly auditLogId: Uuid
-  readonly operationId: Uuid
+export interface AuditLogHeader {
+  readonly id: string
+  readonly operationId: string
   readonly requestId: string | null
-  readonly userId: Uuid | null
+  readonly userId: string | null
   readonly entityType: string
-  readonly entityId: Uuid
+  readonly entityId: string
   readonly aggregateType: string | null
-  readonly aggregateId: Uuid | null
+  readonly aggregateId: string | null
   readonly action: string
   readonly commandName: string | null
   readonly createdAtUtc: string
@@ -82,47 +49,45 @@ export interface AuditLog {
   readonly entityTypeDisplayEn: string | null
 }
 
-// ---------------------------------------------------------------------------
-// Response types — field-diff entry
-// ---------------------------------------------------------------------------
-
 /**
- * Matches backend `AuditLogEntryResponse`.
+ * `GET /audit-logs/{auditLogId}` field diff (`AuditLogEntryResponse`).
  *
- * Per D-AUD-02:
- * - `oldValue`/`newValue` are absent (null) when `redacted` is true.
- * - `redactionReasonAr` is the server-provided Arabic explanation.
- * - `fieldDisplayAr`/`fieldDisplayEn` carry server-provided Arabic labels.
+ * The server redacts at this boundary (`Infrastructure.AuditLogs
+ * .AuditRedactionService.RedactEntry`): a sensitive field arrives with
+ * `oldValue`/`newValue` already nulled and `isRedacted` set. `redactionReason`
+ * is the server's REASON CODE — `CONFIDENTIAL_CREDENTIAL` or
+ * `SENSITIVE_SYSTEM_VALUE` (`AuditSensitiveDataPolicy.GetReason`) — not a
+ * sentence; the Arabic explanation is the display layer's job.
  */
 export interface AuditLogEntry {
-  readonly entryId: Uuid
+  readonly id: string
   readonly fieldName: string
   readonly oldValue: string | null
   readonly newValue: string | null
-  readonly redacted: boolean
-  readonly redactionReasonAr: string | null
+  readonly isRedacted: boolean
+  readonly redactionReason: string | null
   readonly fieldDisplayAr: string | null
   readonly fieldDisplayEn: string | null
 }
 
-// ---------------------------------------------------------------------------
-// Response types — detail projection
-// ---------------------------------------------------------------------------
-
 /**
- * Matches backend `AuditLogDetailsResponse` (`GET /audit-logs/{auditLogId}`).
+ * `GET /audit-logs/{auditLogId}` (`AuditLogDetailsResponse`).
  *
- * Header + ordered field-diff entries for one audit operation.
+ * The header plus the ordered field diff of one audit operation.
+ *
+ * `summary` is null whenever `isSummaryRedacted` is true: the server withholds
+ * a summary whose JSON carries a credential-shaped property
+ * (`AuditSensitiveDataPolicy.ContainsSensitiveJsonProperty`).
  */
 export interface AuditLogDetail {
-  readonly auditLogId: Uuid
-  readonly operationId: Uuid
+  readonly id: string
+  readonly operationId: string
   readonly requestId: string | null
-  readonly userId: Uuid | null
+  readonly userId: string | null
   readonly entityType: string
-  readonly entityId: Uuid
+  readonly entityId: string
   readonly aggregateType: string | null
-  readonly aggregateId: Uuid | null
+  readonly aggregateId: string | null
   readonly action: string
   readonly commandName: string | null
   readonly summary: string | null
@@ -130,37 +95,9 @@ export interface AuditLogDetail {
   readonly summaryRedactionReason: string | null
   readonly ipAddress: string | null
   readonly createdAtUtc: string
-  readonly entries: ReadonlyArray<AuditLogEntry>
+  readonly entries: readonly AuditLogEntry[]
   readonly actionDisplayAr: string | null
   readonly actionDisplayEn: string | null
   readonly entityTypeDisplayAr: string | null
   readonly entityTypeDisplayEn: string | null
-}
-
-// ---------------------------------------------------------------------------
-// Paginated envelope
-// ---------------------------------------------------------------------------
-
-/**
- * Matches backend paginated response shape + OpenAPI `AuditLogPage`.
- *
- * `items` carries the list projection (`AuditLog` header-only records).
- * `meta` follows the backend `PageMeta` contract (pageIndex-based, 0-based index).
- */
-export interface AuditLogPage {
-  readonly items: ReadonlyArray<AuditLog>
-  readonly meta: PageMeta
-}
-
-/**
- * Matches backend `PageMeta` (OpenAPI `components.schemas.PageMeta`).
- *
- * pageIndex is 0-based per OpenAPI spec (`minimum: 0`); matches other
- * handwritten module types (`organization.api-types.ts`, `catalog.api-types.ts`).
- */
-export interface PageMeta {
-  readonly pageIndex: number
-  readonly pageSize: number
-  readonly totalItems: number
-  readonly totalPages: number
 }

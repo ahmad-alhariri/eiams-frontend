@@ -13,7 +13,7 @@ import {
   toWirePolicy,
   toWireSummary,
 } from '@/test/msw/warehouse-document-handlers'
-import type { DocumentLifecycleEvent as GeneratedLifecycleEvent } from '@/shared/types/generated/eiams-v1'
+import type { DocumentLifecycleEvent as HarnessLifecycleEvent } from '@/test/msw/document-engine.types'
 import type {
   DocumentAttachmentResponse,
   DocumentLifecycleEvent,
@@ -98,7 +98,7 @@ export function wireDocumentSummary(
 
 /** One history entry (`DocumentLifecycleEvent`) in the wire spelling. */
 export function wireLifecycleEvent(
-  overrides: FixtureOverrides<GeneratedLifecycleEvent> = {},
+  overrides: FixtureOverrides<HarnessLifecycleEvent> = {},
 ): DocumentLifecycleEvent {
   return toWireLifecycleEvent(createLifecycleEvent(overrides))
 }
@@ -109,7 +109,7 @@ export function wireLifecycleEvent(
  * reports for a document that is not being concurrently written.
  */
 export function wireDocumentHistory(
-  events: readonly GeneratedLifecycleEvent[],
+  events: readonly HarnessLifecycleEvent[],
   options: {
     documentId?: string
     currentStatus?: DocumentStatus

@@ -2,6 +2,9 @@
 
 **Decision ID:** D-INT-01  
 **Status:** Superseded in part by D-INT-02 on 2026-09-02  
+**Date:** _(owner input required — not recorded in the source document)_  
+**Owner:** ahmad-alhariri  
+**Scope:** Direct, production-aligned integration between the frontend and the .NET backend: the backend's real OpenAPI export is the only API source of truth, the frontend's wire contracts are handwritten per module and transcribed from it, and the OpenAPI-to-TypeScript generation strategy is retired.  
 **Beads:** `eiams-frontend-whhu` (epic), `eiams-frontend-whhu.1` (this decision)  
 **Amends:** D-AUTH-01 v1.0.1 → v1.1.0  
 **Aligns with:** D-SRS-01, D-MAT-01, and D-UOM-01  
@@ -17,9 +20,12 @@
 
 D-INT-01 adopts direct, production-aligned integration between the frontend and
 the .NET backend. The backend's real OpenAPI export is the only API source of
-truth; `openapi-typescript` regenerates frontend types from that export. The
-former hand-written provisional snapshot is historical input only and cannot be
-used as a parallel source or hidden behind handwritten frontend adapters.
+truth; the frontend's types are handwritten per-module wire contracts
+transcribed from it. The `openapi-typescript` generation strategy this decision
+mandated has since been retired: the generator, its generated artifact, and the
+provisional snapshot it read are deleted. A second, hand-written provisional
+snapshot can never be used as a parallel source or hidden behind handwritten
+frontend adapters.
 
 This decision reconciles route grouping, authentication/session transport,
 response envelopes, CORS, versioning, generation workflow, and the D-SRS-01

@@ -31,12 +31,13 @@ import {
 } from '@/shared/documents/use-document-draft-mutations'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
+import { formatNumber } from '@/shared/utils/format'
 
 /**
  * The form mirrors the RHF groups the shared sections register: the spine
  * lives under `header.*`, the TransferInfo petal under `petal.transferInfo`
- * (with its selection-time name sibling `petal.destinationWarehouseName`,
- * e17-t03), and the quantity lines under `lines.*`.
+ * (the live petal carries the destination warehouse as an ID, so there is no
+ * selection-time name sibling), and the quantity lines under `lines.*`.
  *
  * Transfer material rules (e17-t04 / PRD §12.4): only consumable/durable
  * materials transfer in v1 — asset-kind lines are blocked with an Arabic
@@ -67,7 +68,6 @@ const DEFAULT_VALUES: DeepPartial<TransferDocumentFormValues> = {
       destinationWarehouseId: '',
       transferReason: '',
     },
-    destinationWarehouseName: '',
   },
   lines: [createEmptyQuantityLine()],
 }
@@ -121,7 +121,9 @@ export default function TransferDocumentFormPage() {
       if (balance === undefined) continue // unknown/loading → never blocks
       const available = balance === null ? 0 : balance
       if ((quantities[index] ?? 0) > available) {
-        return `الكمية المطلوبة في البند ${index + 1} تتجاوز الرصيد المتاح في المستودع المصدر (${available}).`
+        // Same numeral policy as the per-line hint (`balanceHintAr` → formatNumber):
+        // alert and hint sit on one screen, so the balance must read identically.
+        return `الكمية المطلوبة في البند ${index + 1} تتجاوز الرصيد المتاح في المستودع المصدر (${formatNumber(available)}).`
       }
     }
     return null

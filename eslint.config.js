@@ -12,7 +12,6 @@ export default defineConfig([
     'coverage',
     '.beads',
     'contracts/openapi/*.json',
-    'src/shared/types/generated',
     'vite-dev.err.log',
     'vite-dev.out.log',
   ]),

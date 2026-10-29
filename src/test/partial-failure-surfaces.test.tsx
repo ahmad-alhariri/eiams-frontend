@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseDocument } from '@/test/msw/document-engine.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   createDocumentAttachment,

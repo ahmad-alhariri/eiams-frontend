@@ -319,7 +319,7 @@ defects rather than zero:
 - `src/test/msw/factories.ts` had to invent a role to satisfy the generated
   type, so the suite asserted a projection the API never sends and masked the
   crash above.
-- `src/shared/types/generated/eiams-v1.ts` declared the field REQUIRED, with no
+- The deleted generated artifact declared the field REQUIRED, with no
   `?`, which is how a stale generated type became the reason the UI assumed a
   field existed.
 

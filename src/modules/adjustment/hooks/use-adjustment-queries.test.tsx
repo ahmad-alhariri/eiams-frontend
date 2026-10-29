@@ -13,11 +13,16 @@ import {
   useReverseAdjustmentMutation,
 } from './use-adjustment-queries'
 import { createQueryClient } from '@/shared/services/query.client'
+import { queryKeys } from '@/shared/services/query-keys'
+import { AUDIT_RESOURCE } from '@/modules/audit/hooks/use-audit-queries'
+import { RETURN_RESOURCE } from '@/modules/custody/hooks/use-return-eligible-items'
+import { COUNT_RESOURCE } from '@/modules/inventory-count/hooks/use-count-queries'
+import { REPORTS_RESOURCE } from '@/modules/reports/hooks/use-reports-queries'
 import type {
   AdjustmentDetail,
   AdjustmentPurpose,
+  AdjustmentStatus,
 } from '@/modules/adjustment/types/adjustment.types'
-import type { AdjustmentStatus } from '@/shared/types/generated/eiams-v1'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -79,7 +84,7 @@ afterEach(() => {
 
 describe('adjustment query keys (e21-t01)', () => {
   const scope = { kind: 'warehouse' as const, id: '823e4567-e89b-42d3-a456-426614174008' }
-  const listQuery = { pageIndex: 0, pageSize: 20 }
+  const listQuery = { page: 1, pageSize: 20 }
 
   it('builds scope-isolated keys that retain every server filter', () => {
     expect(adjustmentQueryKeys.adjustments(scope, listQuery)).toEqual([
@@ -117,7 +122,7 @@ describe('useAdjustmentsListQuery (e21-t02 seam)', () => {
     const { result } = renderHook(
       () =>
         useAdjustmentsListQuery({
-          pageIndex: 0,
+          page: 1,
           pageSize: 20,
           purpose: 'Disposal',
           status: 'Posted',
@@ -133,7 +138,7 @@ describe('useAdjustmentsListQuery (e21-t02 seam)', () => {
   it('stays idle without an active scope', () => {
     activeScope.key = undefined
     const { Wrapper } = createWrapper()
-    const { result } = renderHook(() => useAdjustmentsListQuery({ pageIndex: 0, pageSize: 20 }), {
+    const { result } = renderHook(() => useAdjustmentsListQuery({ page: 1, pageSize: 20 }), {
       wrapper: Wrapper,
     })
 
@@ -166,6 +171,7 @@ describe('useAdjustmentDetailQuery (e21-t07 seam)', () => {
 
 describe('adjustment mutations (e21-t06 seams)', () => {
   const ADJUSTMENT_ID = '423e4567-e89b-42d3-a456-426614174004'
+  const COUNT_ID = '00000000-0000-4000-8000-000000000003'
 
   it('posts with an Idempotency-Key header and invalidates the scoped caches', async () => {
     let seenIdempotencyKey: string | null = null
@@ -180,7 +186,26 @@ describe('adjustment mutations (e21-t06 seams)', () => {
     )
 
     const { client, Wrapper } = createWrapper()
-    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+    const scope = { kind: 'enterprise' as const }
+    // Seed every resource a post can change, plus one it cannot. Asserting the
+    // cache STATE (not the invalidateQueries calls) is the only way this test
+    // fails when a target stops matching a real key. The count key exercises
+    // the settlement projection, which flips to Settled when the linked
+    // adjustment is posted.
+    const changed = [
+      queryKeys.scoped(scope, 'adjustments'),
+      queryKeys.scoped(scope, 'inventory'),
+      queryKeys.scoped(scope, 'asset'),
+      queryKeys.scoped(scope, 'custody'),
+      queryKeys.scoped(scope, 'document'),
+      queryKeys.scoped(scope, COUNT_RESOURCE, 'count', COUNT_ID),
+      queryKeys.scoped(scope, RETURN_RESOURCE),
+      queryKeys.scoped(scope, REPORTS_RESOURCE),
+      queryKeys.scoped(scope, AUDIT_RESOURCE),
+    ]
+    const untouched = queryKeys.scoped(scope, 'receiving')
+    for (const key of [...changed, untouched]) client.setQueryData(key, [])
+
     const { result } = renderHook(() => usePostAdjustmentMutation(ADJUSTMENT_ID), {
       wrapper: Wrapper,
     })
@@ -190,22 +215,16 @@ describe('adjustment mutations (e21-t06 seams)', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(postCalls).toBe(1)
     expect(typeof seenIdempotencyKey).toBe('string')
-    expect(invalidateSpy).toHaveBeenCalled()
-
-    const invalidatedResources = new Set(
-      invalidateSpy.mock.calls.flatMap((call) => {
-        const key = call[0]?.queryKey
-        return Array.isArray(key) && key[0] === 'scoped' ? [key[3]] : []
-      }),
-    )
-    // Posting/reversing moves stock, asset states, and custody — every
-    // touched ledger cache must be invalidated, not only the adjustment keys.
-    expect([...invalidatedResources].sort()).toEqual([
-      'adjustments',
-      'asset',
-      'custody',
-      'inventory',
-    ])
+    // Posting/reversing moves stock, asset states, custody, the warehouse
+    // document, the count settlement, return eligibility, report projections
+    // and audit entries — every touched cache must be invalidated, not only
+    // the adjustment keys. Order-independent by construction.
+    for (const key of changed) {
+      expect(client.getQueryState(key)?.isInvalidated, `not invalidated: ${key.join('/')}`).toBe(
+        true,
+      )
+    }
+    expect(client.getQueryState(untouched)?.isInvalidated).not.toBe(true)
   })
 
   it('sends reason and rowVersion in the reverse body', async () => {

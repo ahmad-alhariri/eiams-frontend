@@ -47,6 +47,34 @@ function postedIssue(documentId: string, warehouseId: string, sequence: number) 
 const MATCHED_ISSUE = postedIssue(ISSUE_DOC_ID, WAREHOUSE_ID, 1)
 const WRONG_WAREHOUSE_ISSUE = postedIssue(WRONG_ISSUE_DOC_ID, WRONG_WAREHOUSE_ID, 2)
 
+/**
+ * The list route the way the backend binds it: `systemReferenceNumber` and
+ * `paperDocumentNumber` are two INDEPENDENT `Contains` filters, ANDed. The
+ * handler therefore answers only what the bound filters match — a picker that
+ * searches the field the label does NOT lead with returns nothing, which is
+ * the defect this suite guards. Returns the bound query of every request.
+ */
+function useWarehouseDocumentList() {
+  const boundQueries: URLSearchParams[] = []
+  server.use(
+    http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
+      const url = new URL(request.url)
+      boundQueries.push(url.searchParams)
+      const systemQuery = url.searchParams.get('systemReferenceNumber')
+      const paperQuery = url.searchParams.get('paperDocumentNumber')
+      const all = [MATCHED_ISSUE, WRONG_WAREHOUSE_ISSUE]
+      return okPageJson(
+        all.filter(
+          (row) =>
+            (systemQuery === null || (row.systemReferenceNumber ?? '').includes(systemQuery)) &&
+            (paperQuery === null || (row.paperDocumentNumber ?? '').includes(paperQuery)),
+        ),
+      )
+    }),
+  )
+  return boundQueries
+}
+
 function renderSelector(props: {
   value: string | null
   onValueChange: (value: string | null, option: ReturnOriginalIssueOption | undefined) => void
@@ -70,21 +98,28 @@ describe('ReturnOriginalIssueSelector (FIX-R3)', () => {
     )
   })
 
+  it('searches by the identifier the label leads with, so a copied reference finds the row', async () => {
+    const boundQueries = useWarehouseDocumentList()
+    const user = userEvent.setup()
+    renderSelector({ value: null, onValueChange: vi.fn() })
+
+    // The identifier the option label shows FIRST is the one a user copies.
+    const leadIdentifier = MATCHED_ISSUE.systemReferenceNumber
+    expect(originalIssueOptionLabel(MATCHED_ISSUE).startsWith(leadIdentifier)).toBe(true)
+
+    await user.type(screen.getByRole('combobox'), leadIdentifier)
+
+    const option = await screen.findByRole('option')
+    // The visible label carries the identifier the search matched.
+    expect(option.textContent).toContain(leadIdentifier)
+    // ... and the request bound the parameter that matches it (and only it).
+    const bound = boundQueries[boundQueries.length - 1]
+    expect(bound?.get('systemReferenceNumber')).toBe(leadIdentifier)
+    expect(bound?.get('paperDocumentNumber')).toBeNull()
+  })
+
   it('loads options from POSTED Issue documents server-side', async () => {
-    server.use(
-      http.get(`${API_BASE_URL}/warehouse-documents`, ({ request }) => {
-        const url = new URL(request.url)
-        expect(url.searchParams.get('documentType')).toBe('Issue')
-        expect(url.searchParams.get('documentStatus')).toBe('Posted')
-        const paperQuery = url.searchParams.get('paperDocumentNumber')
-        const all = [MATCHED_ISSUE, WRONG_WAREHOUSE_ISSUE]
-        return okPageJson(
-          paperQuery === null || paperQuery === ''
-            ? all
-            : all.filter((row) => row.paperDocumentNumber?.includes(paperQuery)),
-        )
-      }),
-    )
+    const boundQueries = useWarehouseDocumentList()
     const onValueChange = vi.fn(
       (value: string | null, option: ReturnOriginalIssueOption | undefined) => {
         void value
@@ -94,12 +129,15 @@ describe('ReturnOriginalIssueSelector (FIX-R3)', () => {
     const user = userEvent.setup()
     renderSelector({ value: null, onValueChange })
 
-    const input = screen.getByRole('combobox')
-    await user.type(input, 'ISSUE-2026-0001')
+    await user.type(screen.getByRole('combobox'), MATCHED_ISSUE.systemReferenceNumber)
     const option = await screen.findByRole('option')
     // The label IS the human-readable reference — the uuid is the hidden value.
     expect(option.textContent).not.toContain(ISSUE_DOC_ID)
     expect(option.textContent).toContain('EIAMS-ISS-2026-0001')
+
+    const bound = boundQueries[boundQueries.length - 1]
+    expect(bound?.get('documentType')).toBe('Issue')
+    expect(bound?.get('documentStatus')).toBe('Posted')
 
     await user.click(option)
     expect(onValueChange).toHaveBeenCalledWith(ISSUE_DOC_ID, expect.anything())

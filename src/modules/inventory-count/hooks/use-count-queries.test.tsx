@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiJson, okPageJson } from '@/test/msw/envelope'
-import { render, renderHook, screen, waitFor } from '@testing-library/react'
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
@@ -106,6 +106,27 @@ describe('useUpdateCountLinesMutation invalidation', () => {
     expect(client.getQueryState(pagedLines)?.isInvalidated).toBe(true)
   }, 20000)
 
+  it('invalidates every count read under the factory-built resource prefix', async () => {
+    // The target is `queryKeys.scoped(scope, 'inventory-counts')`, so it must
+    // reach the detail and freeze-status branches too — not only the lines
+    // branch the previous test seeds.
+    server.use(http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () => apiJson({})))
+    const client = createClient()
+    const detail = countQueryKeys.count(SCOPE, COUNT_ID)
+    const freeze = countQueryKeys.freezeStatus(SCOPE, '823e4567-e89b-42d3-a456-426614174008')
+    client.setQueryData(detail, null)
+    client.setQueryData(freeze, null)
+
+    const user = userEvent.setup()
+    render(withClient(client, <SaveProbe />))
+    await user.click(screen.getByRole('button', { name: 'حفظ' }))
+
+    await waitFor(() => {
+      expect(client.getQueryState(detail)?.isInvalidated).toBe(true)
+    })
+    expect(client.getQueryState(freeze)?.isInvalidated).toBe(true)
+  }, 20000)
+
   it('over-invalidates sibling sessions in the same scope (known, pre-existing)', async () => {
     // Documented trade-off rather than desired behaviour: every count mutation
     // shares `useCountInvalidation`, which sweeps the whole
@@ -126,6 +147,85 @@ describe('useUpdateCountLinesMutation invalidation', () => {
     await waitFor(() => {
       expect(client.getQueryState(otherCount)?.isInvalidated).toBe(true)
     })
+  }, 20000)
+})
+
+describe('useUpdateCountLinesMutation idempotency key (RESOLUTION-025)', () => {
+  const BATCH = {
+    actuals: [{ lineId: 'L1', actualQuantity: 5 }],
+    expectedRowVersion: 4,
+  }
+  const OTHER_BATCH = {
+    actuals: [{ lineId: 'L2', actualQuantity: 7 }],
+    expectedRowVersion: 4,
+  }
+
+  /**
+   * Answers the semantic actuals route and records the key each attempt
+   * carried. `failures` decides how many attempts fail before the route
+   * answers 200.
+   */
+  function useActualsHandler(keys: (string | null)[], failures: number) {
+    server.use(
+      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, ({ request }) => {
+        keys.push(request.headers.get('Idempotency-Key'))
+        if (keys.length <= failures) {
+          return apiJson({ error: { code: 'x', message: 'boom' } }, { status: 500 })
+        }
+        return apiJson({})
+      }),
+    )
+  }
+
+  async function save(
+    result: { current: { mutateAsync: (request: typeof BATCH) => Promise<unknown> } },
+    request: typeof BATCH,
+  ) {
+    await act(async () => {
+      await result.current.mutateAsync(request).catch(() => undefined)
+    })
+  }
+
+  it('reuses the key when the SAME batch is sent again after a failure', async () => {
+    // The client cannot know whether a failed attempt landed, so the operator's
+    // next save of the same batch is an EQUIVALENT retry and must carry the
+    // SAME key: the server then answers with the original result instead of
+    // applying the batch a second time.
+    const keys: (string | null)[] = []
+    useActualsHandler(keys, 1)
+    const client = createClient()
+    const { result } = renderHook(() => useUpdateCountLinesMutation(COUNT_ID), {
+      wrapper: ({ children }) => withClient(client, children),
+    })
+
+    await save(result, BATCH)
+    await save(result, BATCH)
+
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).toBeTruthy()
+    expect(keys[1]).toBe(keys[0])
+  }, 20000)
+
+  it('issues a NEW key for a different batch, and a new key after a success', async () => {
+    // The server pairs a key with the request it was issued for, so a
+    // different batch must not reuse the previous key. A SUCCESSFUL batch ends
+    // that execution: the next save is a new user-approved action.
+    const keys: (string | null)[] = []
+    useActualsHandler(keys, 0)
+    const client = createClient()
+    const { result } = renderHook(() => useUpdateCountLinesMutation(COUNT_ID), {
+      wrapper: ({ children }) => withClient(client, children),
+    })
+
+    await save(result, BATCH)
+    await save(result, OTHER_BATCH)
+    await save(result, BATCH)
+
+    expect(keys).toHaveLength(3)
+    expect(keys[1]).not.toBe(keys[0])
+    // The third attempt repeats the first batch, but the first one SUCCEEDED,
+    // so it is a new execution and gets a new key.
+    expect(keys[2]).not.toBe(keys[0])
   }, 20000)
 })
 

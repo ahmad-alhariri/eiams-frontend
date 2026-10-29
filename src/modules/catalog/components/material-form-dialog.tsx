@@ -7,6 +7,10 @@ import {
   TRACKING_TYPE_OPTIONS,
 } from '@/modules/catalog/constants/catalog-labels'
 import {
+  assetNumberPolicy,
+  policyDescription,
+} from '@/modules/catalog/constants/material-kind-policy'
+import {
   getMaterialTrackingPolicy,
   materialFormSchema,
   type MaterialFormValues,
@@ -377,6 +381,12 @@ export function MaterialFormDialog({
                           ))}
                         </SelectContent>
                       </Select>
+                      <p className="text-sm text-muted-foreground">
+                        {policyDescription(field.value)}
+                        {field.value === 'Asset'
+                          ? ` رقم الأصل: ${assetNumberPolicy(field.value)}`
+                          : null}
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}

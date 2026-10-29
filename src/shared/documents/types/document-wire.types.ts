@@ -3,7 +3,7 @@
  *
  * ## Why these exist
  *
- * The generated snapshot (`@/shared/types/generated/eiams-v1`) describes a
+ * The generated snapshot (the deleted generated artifact) describes a
  * provisional design-first contract that the live API never shipped. Every
  * document write path differs from it:
  *
@@ -144,6 +144,21 @@ export interface DocumentAttachmentResponse {
   readonly mimeType: string
   readonly fileSize: number
   readonly uploadedAtUtc: string
+}
+
+/**
+ * The live upload/delete response: the attachment is NESTED under ttachment.
+ *
+ * The document's attachment LIST is flat instead (the backend has two distinct
+ * shapes), so the flat element type above is NOT this response.
+ */
+export interface AttachmentMutationResponse {
+  readonly attachmentId: Uuid
+  readonly removed: boolean
+  readonly documentRowVersion: number
+  readonly malwareScanPolicy: string
+  readonly malwareScanClean: boolean
+  readonly attachment: DocumentAttachmentResponse
 }
 
 export interface ReceivingInfoResponse {

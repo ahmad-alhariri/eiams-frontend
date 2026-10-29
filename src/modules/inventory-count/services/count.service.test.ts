@@ -181,7 +181,7 @@ describe('createCountService (IC-FE-1 live wire)', () => {
     })
   })
 
-  it('batches line actuals through PUT /actuals with the live wire shape', async () => {
+  it('batches line actuals through the SEMANTIC PUT /actuals with the live wire shape', async () => {
     // RESOLUTION-025: PUT /inventory-counts/{countId}/actuals carries ONLY
     // `{ actuals: [{ lineId, actualQuantity }], expectedRowVersion }` — the
     // aggregate count row version, no per-line rowVersion.
@@ -192,7 +192,7 @@ describe('createCountService (IC-FE-1 live wire)', () => {
       actuals: [{ lineId: LINE_ID, actualQuantity: 5 }],
       expectedRowVersion: 4,
     }
-    await service.updateLines(COUNT_ID, request)
+    await service.updateLines(COUNT_ID, request, 'idem-actuals-1')
 
     expect(sentConfig()).toMatchObject({
       url: `/inventory-counts/${COUNT_ID}/actuals`,
@@ -202,6 +202,62 @@ describe('createCountService (IC-FE-1 live wire)', () => {
         expectedRowVersion: 4,
       },
     })
+  })
+
+  it('keeps the actuals write on the semantic route, never on a writable /lines', async () => {
+    // REVERT-PROOF. The generic `/lines` route is a READ in the live contract
+    // (GET only) and was replaced by the semantic `/actuals` command. If the
+    // service were pointed back at `/lines`, this assertion fails.
+    mockedRequest.mockReturnValue(envelope({}) as never)
+    const service = createCountService(testTransport)
+
+    await service.updateLines(
+      COUNT_ID,
+      { actuals: [{ lineId: LINE_ID, actualQuantity: 5 }], expectedRowVersion: 4 },
+      'idem-actuals-2',
+    )
+
+    expect(sentConfig().url).toBe(`/inventory-counts/${COUNT_ID}/actuals`)
+    expect(sentConfig().url).not.toContain('/lines')
+  })
+
+  it('sends a CLOSED body: no per-line version, no reason, no unknown key', async () => {
+    // The backend's strict count body filter answers 400 for any unknown
+    // top-level key, and its command validator rejects an actual that carries a
+    // per-line version. The body is therefore exactly two keys, and each
+    // actual exactly two.
+    mockedRequest.mockReturnValue(envelope({}) as never)
+    const service = createCountService(testTransport)
+
+    await service.updateLines(
+      COUNT_ID,
+      { actuals: [{ lineId: LINE_ID, actualQuantity: 5 }], expectedRowVersion: 4 },
+      'idem-actuals-3',
+    )
+
+    const body = sentConfig().data as {
+      actuals: readonly Record<string, unknown>[]
+      expectedRowVersion: number
+    }
+    expect(Object.keys(body).sort()).toEqual(['actuals', 'expectedRowVersion'])
+    expect(Object.keys(body.actuals[0] ?? {}).sort()).toEqual(['actualQuantity', 'lineId'])
+    expect(body.actuals[0]).not.toHaveProperty('rowVersion')
+    expect(body.actuals[0]).not.toHaveProperty('reason')
+  })
+
+  it('carries an Idempotency-Key so an equivalent retry is replayable server-side', async () => {
+    // RESOLUTION-025: the actuals endpoint accepts an idempotency key and
+    // returns the original result for an equivalent retry.
+    mockedRequest.mockReturnValue(envelope({}) as never)
+    const service = createCountService(testTransport)
+
+    await service.updateLines(
+      COUNT_ID,
+      { actuals: [{ lineId: LINE_ID, actualQuantity: 5 }], expectedRowVersion: 4 },
+      'idem-actuals-4',
+    )
+
+    expect(sentConfig().headers?.['Idempotency-Key']).toBe('idem-actuals-4')
   })
 
   it('saves one line actual and one variance reason (PUT per-line routes)', async () => {

@@ -72,7 +72,7 @@ describe('createAdjustmentService (e21-t01)', () => {
     const service = createAdjustmentService(testTransport)
 
     await service.listAdjustments({
-      pageIndex: 2,
+      page: 3,
       pageSize: 10,
       purpose: 'CountVariance',
       status: 'Posted',
@@ -83,7 +83,7 @@ describe('createAdjustmentService (e21-t01)', () => {
       url: '/adjustments',
       method: 'GET',
       params: {
-        // Zero-based `pageIndex: 2` travels one-based as `page: 3`.
+        // The page is ONE-based on both sides, so it crosses unchanged.
         page: 3,
         pageSize: 10,
         purpose: 'CountVariance',
@@ -97,13 +97,22 @@ describe('createAdjustmentService (e21-t01)', () => {
     mockedRequest.mockReturnValue(pagedEnvelope([]))
     const service = createAdjustmentService(testTransport)
 
-    await service.listAdjustments({ pageIndex: 0, pageSize: 20 })
+    await service.listAdjustments({ page: 1, pageSize: 20 })
 
     const params = sentConfig().params ?? {}
     // Key-set assertion (not just toEqual, which ignores undefined-valued
     // props): catches a regression to unconditional filter spreading.
     expect(Object.keys(params).sort()).toEqual(['page', 'pageSize'])
     expect(params).toEqual({ page: 1, pageSize: 20 })
+  })
+
+  it('clamps a page of 0 to 1 so an invalid page=0 never reaches the wire', async () => {
+    mockedRequest.mockReturnValue(pagedEnvelope([]))
+    const service = createAdjustmentService(testTransport)
+
+    await service.listAdjustments({ page: 0, pageSize: 20 })
+
+    expect(sentConfig().params).toEqual({ page: 1, pageSize: 20 })
   })
 
   it('fetches one adjustment by id', async () => {
@@ -194,7 +203,7 @@ describe('createAdjustmentService (e21-t01)', () => {
     const service = createAdjustmentService(testTransport)
 
     await service.listDisposalEligibleAssets({
-      pageIndex: 0,
+      page: 1,
       pageSize: 25,
       search: 'AST-',
       warehouseId: 'wh-9',

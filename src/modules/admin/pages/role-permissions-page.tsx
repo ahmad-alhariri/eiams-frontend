@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { IconArrowRight, IconDeviceFloppy } from '@tabler/icons-react'
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
+import { reportApiError } from '@/shared/services/api-error'
 import { useNavigate, useParams } from 'react-router'
 
 import { ROUTE_PATHS } from '@/config/routes'
@@ -12,7 +13,6 @@ import { usePermissionsQuery, useRoleQuery } from '@/modules/admin/hooks/use-adm
 import {
   applyRolePermissionsServerError,
   classifyRolePermissionWriteError,
-  ROLE_STALE_VERSION_MESSAGE_AR,
   rolePermissionsSchema,
   toPermissionMatrixRows,
   toReplaceRolePermissionsRequest,
@@ -89,16 +89,13 @@ function RolePermissionsPage() {
       if (outcome.kind === 'stale-version') {
         // Someone changed this role after the form loaded. Reload instead of replaying:
         // the selected codes were chosen against a version that no longer exists.
-        toast.error({
-          title: 'عدّل مستخدم آخر هذا الدور أثناء عملك.',
-          description: ROLE_STALE_VERSION_MESSAGE_AR,
-        })
+        reportApiError(error)
         await roleQuery.refetch()
         return
       }
 
       if (outcome.kind === 'scope-mismatch') {
-        toast.error({ title: outcome.titleAr, description: outcome.detailAr ?? undefined })
+        reportApiError(error)
         return
       }
 

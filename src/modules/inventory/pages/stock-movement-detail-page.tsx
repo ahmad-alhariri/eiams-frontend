@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router'
 import { ROUTE_PATHS } from '@/config/routes'
 import { stockMovementTypeLabelAr } from '@/modules/inventory/components/stock-movement-labels'
 import { useStockMovementQuery } from '@/modules/inventory/hooks/use-inventory-queries'
+import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { ContentCard } from '@/shared/layout/content-card'
@@ -35,6 +36,7 @@ function StockMovementDetailPage() {
   if (movementId === undefined || movementId === '') {
     return (
       <div dir="rtl" className="min-w-0">
+        <PageHeader title="تفاصيل حركة المخزون" />
         <ErrorState
           title="تعذّر تحديد الحركة"
           description="رابط الحركة غير مكتمل. ارجع إلى سجل الحركات ثم اختر سجلاً صالحاً."
@@ -63,12 +65,20 @@ function StockMovementDetailPage() {
     const apiError = normalizeApiError(movementQuery.error)
     const isNotFound = apiError.status === 404
     const title = isNotFound ? 'الحركة غير متاحة' : 'تعذّر تحميل تفاصيل الحركة'
+    // Prefer the shared code table's copy; `detailAr` is null for many codes
+    // (including a 401), so its `titleAr` is what keeps the message specific.
+    // The connection sentence remains only for a code the table does not cover.
+    const sharedCopy = arabicCopyForCode(apiError.code)
     const description = isNotFound
       ? 'لا تتوفر هذه الحركة ضمن نطاق العمل الحالي، أو لم تعد موجودة.'
-      : (apiError.detailAr ?? 'تعذّر جلب بيانات الحركة. تحقق من الاتصال ثم أعد المحاولة.')
+      : (sharedCopy?.detailAr ??
+        sharedCopy?.titleAr ??
+        apiError.detailAr ??
+        'تعذّر جلب بيانات الحركة. تحقق من الاتصال ثم أعد المحاولة.')
 
     return (
       <div dir="rtl" className="min-w-0">
+        <PageHeader title="تفاصيل حركة المخزون" />
         <ErrorState
           title={title}
           description={description}

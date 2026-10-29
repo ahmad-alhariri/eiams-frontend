@@ -1,4 +1,4 @@
-import type { CustodyStatus } from '@/modules/custody/types/custody.types'
+import type { CustodyStatus, CustodySubjectType } from '@/modules/custody/types/custody.types'
 
 /**
  * Arabic labels for the custody `status` string, which is SUBJECT-DEPENDENT:
@@ -15,3 +15,16 @@ export const CUSTODY_STATUS_LABELS_AR = {
   FullyReturned: 'مرتجعة بالكامل',
   Unknown: 'غير معروفة',
 } as const satisfies Record<CustodyStatus, string>
+
+/**
+ * Arabic labels for the custody SUBJECT vocabulary. A custody row is a
+ * responsibility over one of: a registered asset (`Asset`, identified by its
+ * asset number), a serial-tracked durable (`TrackedUnit`, identified by its
+ * serial number) or a quantity-tracked durable (`MaterialQuantity`, identified
+ * by its material and the quantity still held). None of them is a stock figure.
+ */
+export const CUSTODY_SUBJECT_TYPE_LABELS_AR = {
+  Asset: 'أصل ثابت',
+  TrackedUnit: 'معمرة بالتسلسل',
+  MaterialQuantity: 'معمرة بكمية',
+} as const satisfies Record<CustodySubjectType, string>

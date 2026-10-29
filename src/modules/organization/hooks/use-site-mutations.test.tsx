@@ -1,4 +1,4 @@
-﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
@@ -74,7 +74,7 @@ describe('site mutation cache invalidation', () => {
     await act(async () => {
       await result.current.create.mutateAsync({
         organizationId: site.organizationId,
-        name: 'Ù…ÙˆÙ‚Ø¹ Ø¬Ø¯ÙŠØ¯',
+        name: 'موقع جديد',
         code: 'SITE-NEW',
         location: null,
         governorateCode: null,
@@ -88,7 +88,7 @@ describe('site mutation cache invalidation', () => {
     expect(createBodies).toEqual([
       {
         organizationId: site.organizationId,
-        name: 'Ù…ÙˆÙ‚Ø¹ Ø¬Ø¯ÙŠØ¯',
+        name: 'موقع جديد',
         code: 'SITE-NEW',
         location: null,
         governorateCode: null,
@@ -138,7 +138,7 @@ describe('site mutation cache invalidation', () => {
     await act(async () => {
       await result.current.update.mutateAsync({
         siteId: site.id,
-        request: { name: 'Ø§Ù„Ù…ÙˆÙ‚Ø¹ Ø§Ù„Ù…Ø­Ø¯Ù‘Ø«', location: null, governorateCode: null },
+        request: { name: 'الموقع المحدّث', location: null, governorateCode: null },
       })
     })
 
@@ -158,7 +158,7 @@ describe('site mutation cache invalidation', () => {
     // `PUT /sites/{id}` binds name / location / governorateCode only: no `status`
     // (that is the separate command) and no version token.
     expect(updateBodies).toEqual([
-      { name: 'Ø§Ù„Ù…ÙˆÙ‚Ø¹ Ø§Ù„Ù…Ø­Ø¯Ù‘Ø«', location: null, governorateCode: null },
+      { name: 'الموقع المحدّث', location: null, governorateCode: null },
     ])
     // `[JsonRequired] int Status`: the ORDINAL, never the status name the read
     // served, and NOTHING else. Site is not versioned, so there is no

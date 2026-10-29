@@ -229,6 +229,64 @@ describe('LifecycleActionBar', () => {
     expect(alertRow).not.toHaveTextContent('The signed copy of the document is required')
   })
 
+  /**
+   * The signed-original reason has ONE owner per screen: the attachment gate
+   * row, which sits next to the badge that states the requirement. Alerting it
+   * here as well printed the same Arabic sentence twice on one document screen
+   * (grsv), so the bar omits every signed-original blocker the canonical
+   * vocabulary names (eiams-frontend-n31q).
+   */
+  it("omits the backend's own signed-copy code from the alert list", () => {
+    renderBar({
+      policy: makePolicy([availability({ action: 'Submit', confirmationRequired: true })], {
+        blockers: [
+          {
+            action: 'Post',
+            code: 'WarehouseDocuments.SignedCopyRequired',
+            message: 'لا توجد نسخة ورقية موقّعة صالحة.',
+          },
+        ],
+      }),
+    })
+
+    // The reason is stated once, by the attachment gate row — never twice.
+    expect(screen.queryByText('لا توجد نسخة ورقية موقّعة صالحة.')).toBeNull()
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('omits a namespaced signed-original blocker from the alert list', () => {
+    renderBar({
+      policy: makePolicy([availability({ action: 'Submit', confirmationRequired: true })], {
+        blockers: [
+          {
+            action: 'Post',
+            code: 'document.signed_original_missing',
+            message: 'يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.',
+          },
+        ],
+      }),
+    })
+
+    expect(screen.queryByText('يلزم رفع النسخة الأصلية الموقعة قبل الترحيل.')).toBeNull()
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('keeps alerting a blocker that is not the signed-original requirement', () => {
+    renderBar({
+      policy: makePolicy([availability({ action: 'Submit', confirmationRequired: true })], {
+        blockers: [
+          {
+            action: 'Post',
+            code: 'WAREHOUSE_DOCUMENTS_LINES_REQUIRED',
+            message: 'The document needs at least one line.',
+          },
+        ],
+      }),
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('يجب إضافة بند واحد على الأقل قبل التقديم.')
+  })
+
   it('renders an advisory as a muted info row when its code resolves to Arabic', () => {
     renderBar({
       policy: makePolicy([availability({ action: 'Submit', confirmationRequired: true })], {

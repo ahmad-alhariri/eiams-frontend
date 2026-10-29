@@ -1,15 +1,13 @@
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
-import {
-  ASSET_DERIVED_STATUSES,
-  ASSET_DERIVED_STATUS_LABELS_AR,
-} from '@/modules/asset/asset-status-labels'
+import { AssetStatusBadge } from '@/modules/asset/components/asset-status-badge'
+import { ASSET_STATUSES, ASSET_STATUS_LABELS_AR } from '@/modules/asset/asset-status-labels'
+import type { AssetCurrentStatus } from '@/modules/asset/types/asset.types'
 import { useAssetReportQuery } from '@/modules/reports/hooks/use-reports-queries'
-import type { ListAssetReportQuery } from '@/modules/reports/types/reports.types'
+import type { AssetsReportRow, ListAssetReportQuery } from '@/modules/reports/types/reports.types'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
-import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { dataTableFeatures } from '@/shared/ui/data-table'
@@ -18,43 +16,42 @@ import { AsyncSelect } from '@/shared/ui/async-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { ExportButton } from '@/shared/ui/export-button'
 import { PrintButton } from '@/shared/ui/print-button'
+import { formatNumber } from '@/shared/utils/format'
 import { pageRows } from '@/shared/utils/table-data'
-import type { Asset, AssetDerivedStatus } from '@/shared/types/generated/eiams-v1'
 
-const assetColumnHelper = createColumnHelper<typeof dataTableFeatures, Asset>()
-
-const STATUS_FILTER_OPTIONS: ReadonlyArray<{ value: AssetDerivedStatus; label: string }> =
-  ASSET_DERIVED_STATUSES.map((value) => ({ value, label: ASSET_DERIVED_STATUS_LABELS_AR[value] }))
+const assetColumnHelper = createColumnHelper<typeof dataTableFeatures, AssetsReportRow>()
 
 /**
- * Asset & custody report (e23-t07). Server-paged asset projection; the
- * derived status badge and current custody (if any) come from the contract
- * response and are rendered as-is. The report never joins the custody ledger
- * in the browser — custody remains a separate read surface
- * (D-RPT-01 §"V1 contract matrix", asset & custody row).
+ * Asset report (`GET /reports/assets`).
  *
- * Status codes that fall outside the contract enum (D-AST-02 set) are
- * rendered as the raw code rather than as an invented Arabic label, in
- * line with D-RPT-01 §"Rejected alternatives".
+ * The live endpoint answers with a per-warehouse SUMMARY: one row per
+ * (warehouse, current status) pair carrying the server's asset COUNT
+ * (`Application/Reports/Assets/AssetsReportRow.cs:3-8`,
+ * `Application/Reports/Assets/GetAssetsReportQueryHandler.cs:37-44`). There is
+ * no asset identity, no material and no custodian on the wire, so the table
+ * renders what the server sends and nothing more.
+ *
+ * The controller binds `warehouseId`, `status` and the one-based pagination
+ * (`Web.Api/Controllers/Reports/GetAssetsReportController.cs:26-30`) — and NO
+ * `search`, so this report offers no search box: a filter the server ignores
+ * would be a lie in the UI.
  */
 function AssetReportTableImpl() {
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<AssetDerivedStatus | undefined>()
+  const [status, setStatus] = useState<AssetCurrentStatus | undefined>()
   const [warehouseId, setWarehouseId] = useState<string | undefined>()
 
   const warehouseSelector = useScopedWarehouseSelector()
 
   const queryInput = useMemo<ListAssetReportQuery>(
     () => ({
-      pageIndex: currentPage - 1,
+      page: currentPage,
       pageSize,
-      ...(search.trim() === '' ? {} : { search: search.trim() }),
       ...(status === undefined ? {} : { status }),
       ...(warehouseId === undefined ? {} : { warehouseId }),
     }),
-    [currentPage, pageSize, search, status, warehouseId],
+    [currentPage, pageSize, status, warehouseId],
   )
 
   const reportQuery = useAssetReportQuery(queryInput)
@@ -68,17 +65,17 @@ function AssetReportTableImpl() {
     [setPage],
   )
 
-  const handleSearchChange = useCallback(
-    (nextSearch: string) => resetPageAndSet(setSearch, nextSearch),
-    [resetPageAndSet],
-  )
   const handleStatusChange = useCallback(
     (value: string | null) => {
-      const resolved = value === 'all' || value === null ? undefined : (value as AssetDerivedStatus)
+      const resolved =
+        value === 'all' || value === null
+          ? undefined
+          : ASSET_STATUSES.find((candidate) => candidate === value)
       resetPageAndSet(setStatus, resolved)
     },
     [resetPageAndSet],
   )
+
   const handleWarehouseChange = useCallback(
     (value: string | null) => resetPageAndSet(setWarehouseId, value ?? undefined),
     [resetPageAndSet],
@@ -87,47 +84,34 @@ function AssetReportTableImpl() {
   const columns = useMemo(
     () =>
       assetColumnHelper.columns([
-        assetColumnHelper.accessor('assetNumber', {
-          id: 'AssetNumber',
-          header: 'رقم الأصل',
+        assetColumnHelper.accessor((row) => row.warehouseName, {
+          id: 'Warehouse',
+          header: 'المستودع',
           enableSorting: false,
-          cell: ({ getValue }) => (
-            <span dir="ltr" className="font-mono text-sm font-semibold text-foreground">
-              {getValue()}
-            </span>
+          cell: ({ row }) => (
+            <div className="flex flex-col">
+              <span className="font-medium text-foreground">{row.original.warehouseName}</span>
+              <span dir="ltr" className="font-mono text-xs text-muted-foreground">
+                {row.original.warehouseCode}
+              </span>
+            </div>
           ),
         }),
-        assetColumnHelper.accessor((asset) => asset.material.displayName, {
-          id: 'Material',
-          header: 'المادة',
+        assetColumnHelper.accessor('currentStatus', {
+          id: 'CurrentStatus',
+          header: 'الحالة',
           enableSorting: false,
+          cell: ({ getValue }) => <AssetStatusBadge status={getValue()} />,
         }),
-        assetColumnHelper.accessor((asset) => asset.currentWarehouse?.displayName ?? '—', {
-          id: 'CurrentWarehouse',
-          header: 'المستودع الحالي',
+        assetColumnHelper.accessor('assetCount', {
+          id: 'AssetCount',
+          header: 'عدد الأصول',
           enableSorting: false,
-        }),
-        assetColumnHelper.accessor('derivedStatus', {
-          id: 'DerivedStatus',
-          header: 'الحالة المشتقة',
-          enableSorting: false,
-          cell: ({ getValue }) => <StatusBadge entity="asset" status={getValue()} />,
-        }),
-        assetColumnHelper.accessor((asset) => asset.currentCustody?.holder.displayName ?? '—', {
-          id: 'CurrentCustodian',
-          header: 'المكلف الحالي',
-          enableSorting: false,
-        }),
-        assetColumnHelper.accessor('acquisitionDate', {
-          id: 'AcquisitionDate',
-          header: 'تاريخ الاقتناء',
-          enableSorting: false,
-          cell: ({ getValue }) =>
-            getValue() === null || getValue() === undefined ? (
-              '—'
-            ) : (
-              <span dir="ltr">{getValue()}</span>
-            ),
+          cell: ({ getValue }) => (
+            <span dir="ltr" className="font-semibold text-foreground">
+              {formatNumber(getValue())}
+            </span>
+          ),
         }),
       ]),
     [],
@@ -137,7 +121,7 @@ function AssetReportTableImpl() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="تقرير الأصول والتكليف"
-        subtitle="قراءة فقط، تعتمد على الخادم. لا يتم جمع التكليف مع الأصل في المتصفح."
+        subtitle="ملخص عدد الأصول لكل مستودع وحالة، يحسبه الخادم. لا يعرض التقرير تفاصيل الأصول."
         toolbar={
           <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
@@ -152,18 +136,18 @@ function AssetReportTableImpl() {
               />
             </div>
             <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
-              <span>الحالة المشتقة</span>
+              <span>الحالة</span>
               <Select value={status ?? 'all'} onValueChange={handleStatusChange}>
                 <SelectTrigger aria-label="تصفية حسب الحالة">
                   <SelectValue>
-                    {status === undefined ? 'كل الحالات' : ASSET_DERIVED_STATUS_LABELS_AR[status]}
+                    {status === undefined ? 'كل الحالات' : ASSET_STATUS_LABELS_AR[status]}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">كل الحالات</SelectItem>
-                  {STATUS_FILTER_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
+                  {ASSET_STATUSES.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {ASSET_STATUS_LABELS_AR[option]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -188,8 +172,8 @@ function AssetReportTableImpl() {
         }
       />
       <ContentCard
-        title="قائمة الأصول"
-        description="كل أصل ضمن النطاق الحالي مع حالته المشتقة والتكليف الحالي."
+        title="ملخص الأصول"
+        description="لكل مستودع وحالة: عدد الأصول الذي يحسبه الخادم."
       >
         <DataTableServer
           columns={columns}
@@ -198,18 +182,15 @@ function AssetReportTableImpl() {
           isError={reportQuery.isError}
           onRetry={() => void reportQuery.refetch()}
           errorTitle="تعذّر تحميل تقرير الأصول"
-          errorMessage="تعذّر جلب قائمة الأصول. حاول مرة أخرى."
+          errorMessage="تعذّر جلب ملخص الأصول. حاول مرة أخرى."
           emptyTitle="لا توجد أصول"
           emptyDescription="لم يتم العثور على أصول تطابق معايير التصفية الحالية."
           page={currentPage}
           pageSize={pageSize}
-          totalCount={page?.meta.totalItems}
-          totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
+          totalCount={page?.totalItems}
+          totalPages={Math.max(page?.totalPages ?? 1, 1)}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
-          searchQuery={search}
-          onSearchChange={handleSearchChange}
-          searchPlaceholder="ابحث في تقرير الأصول..."
         />
       </ContentCard>
     </div>

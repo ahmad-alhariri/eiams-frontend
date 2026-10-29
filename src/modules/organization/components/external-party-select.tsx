@@ -2,8 +2,10 @@ import { useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
-import { organizationQueryKeys } from '@/modules/organization/hooks/use-organization-queries'
-import { organizationService } from '@/modules/organization/services/organization.service'
+import {
+  externalPartiesFetchFn,
+  organizationQueryKeys,
+} from '@/modules/organization/hooks/use-organization-queries'
 import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
 import type { ExternalParty } from '@/modules/organization/types/organization.api-types'
@@ -43,7 +45,6 @@ export function ExternalPartySelect({
 }: ExternalPartySelectProps) {
   const queryClient = useQueryClient()
   const scope = useActiveScopeContext().activeScopeCacheKey
-
   const loadOptions = useCallback(
     async (search: string): Promise<AsyncSelectOption<ExternalParty>[]> => {
       if (scope === undefined) {
@@ -53,7 +54,7 @@ export function ExternalPartySelect({
       const query = { ...LOOKUP_PAGE, ...(search === '' ? {} : { search }) }
       const page = await queryClient.fetchQuery({
         queryKey: organizationQueryKeys.externalParties(scope, query),
-        queryFn: () => organizationService.listExternalParties(query),
+        queryFn: () => externalPartiesFetchFn(query),
         staleTime: MASTER_DATA_STALE_TIME,
       })
 

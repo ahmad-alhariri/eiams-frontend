@@ -1,0 +1,8 @@
+{
+  "measuredAt": "2026-10-29",
+  "note": "REGRESSION CEILINGS derived from a production build, not performance targets. Raise them deliberately, never silently. Re-derived on 2026-10-29 after the live-API work was merged: the chunk count is unchanged, the total and the largest chunk grew by the merged production code, not by a regression.",
+  "maxJsChunkCount": 168,
+  "maxJsTotalBytes": 1610964,
+  "maxLargestChunkBytes": 343958,
+  "routePageCount": 59
+}

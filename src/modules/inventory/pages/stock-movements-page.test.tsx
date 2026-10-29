@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
 import type { StockMovement } from '@/modules/inventory/types/inventory.api-types'
-import { okPageJson } from '@/test/msw/envelope'
+import { arMonthName, formatArabicDate } from '@/shared/ui/calendar-utils'
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
+import { createAuthTokenResponse } from '@/test/msw/factories'
 import { wireStockMovement } from '@/test/msw/inventory-wire-fixtures'
 import { server } from '@/test/msw/server'
 
@@ -117,12 +119,13 @@ describe('StockMovementsPage', () => {
       }),
     )
 
-    fireEvent.change(screen.getByLabelText('من تاريخ الترحيل'), {
-      target: { value: '2026-08-01T08:30' },
-    })
+    const today = new Date()
+    const postedOn = new Date(today.getFullYear(), today.getMonth(), 15)
+    await user.click(screen.getByRole('button', { name: 'من تاريخ الترحيل' }))
+    await user.click(screen.getByRole('button', { name: formatArabicDate(postedOn) }))
     await waitFor(() => {
       expect(requests.at(-1)?.['page']).toBe('1')
-      expect(requests.at(-1)?.['fromUtc']).toMatch(/^2026-08-01T.*Z$/)
+      expect(requests.at(-1)?.['fromUtc']).toBe(postedOn.toISOString())
     })
 
     expect(screen.queryByRole('button', { name: 'مرجع المستند' })).not.toBeInTheDocument()
@@ -146,6 +149,45 @@ describe('StockMovementsPage', () => {
 
     await waitFor(() => expect(requests.at(-1)?.['movementType']).toBe('TransferOut'))
     expect(screen.queryByRole('option', { name: /إرجاع/ })).not.toBeInTheDocument()
+  })
+
+  it('renders Arabic RTL date pickers instead of native mm/dd/yyyy inputs', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.get(`${API_BASE_URL}/inventory/movements`, () => okPageJson([createMovement()])),
+    )
+
+    render(<StockMovementsPage />, { wrapper: createWrapper() })
+    await screen.findByText('المستودع المركزي')
+
+    expect(document.querySelector('input[type="datetime-local"]')).toBeNull()
+    expect(document.querySelector('input[type="date"]')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'من تاريخ الترحيل' }))
+
+    const calendar = screen.getByRole('grid').closest('[data-slot="calendar"]')
+    expect(calendar).toHaveAttribute('dir', 'rtl')
+    const today = new Date()
+    expect(screen.getByText(`${arMonthName(today)} ${today.getFullYear()}`)).toBeInTheDocument()
+    expect(screen.getByText('سبت')).toBeInTheDocument()
+    expect(screen.queryByText(/mm\/dd\/yyyy/)).not.toBeInTheDocument()
+  })
+
+  it('renders the shared session-expired copy for a 401 instead of a connection message', async () => {
+    server.use(
+      http.post(`${API_BASE_URL}/auth/refresh`, () => okJson(createAuthTokenResponse())),
+      http.get(`${API_BASE_URL}/inventory/movements`, () =>
+        errJson(401, { code: 'AUTHENTICATION_REQUIRED', message: 'Unauthorized.' }),
+      ),
+    )
+
+    render(<StockMovementsPage />, { wrapper: createWrapper({ retry: false }) })
+
+    expect(
+      await screen.findByRole('heading', { name: 'تعذّر تحميل حركات المخزون' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('انتهت الجلسة. يرجى تسجيل الدخول مجدداً.')).toBeInTheDocument()
+    expect(screen.queryByText(/تحقق من الاتصال/)).not.toBeInTheDocument()
   })
 
   it('renders accessible Arabic error and empty states and allows a retry', async () => {

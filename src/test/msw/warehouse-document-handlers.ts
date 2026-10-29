@@ -25,21 +25,23 @@ import { apiJson, okJson, okPageJson, toWireErrorResponse } from '@/test/msw/env
 // ever returned.
 import type { Site } from '@/modules/organization/types/organization.api-types'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.api-types'
+// The harness's IN-MEMORY document model lives in the test tree, not in the
+// deleted generated artifact: the transition engine, the idempotency memo and
+// every fixture read these nested members, and every RESPONSE is projected
+// into the handwritten wire contract below.
 import type {
-  DocumentActionType,
   DocumentActionResult,
   DocumentAttachment,
   DocumentLifecycleEvent,
   DocumentLine,
-  DocumentStatus,
-  DocumentType,
   LifecycleActorSnapshot,
   LifecycleConflictProblemDetails,
   LifecycleDocumentReference,
   NamedReference,
   ProblemDetails,
   WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/test/msw/document-engine.types'
+import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
 
 import type { Material } from '@/modules/catalog/types/catalog.api-types'
 import type {
@@ -51,6 +53,8 @@ import type {
   DocumentPolicy as WireDocumentPolicy,
   DocumentLifecycleHistory,
   DocumentLifecycleEvent as WireDocumentLifecycleEvent,
+  DocumentStatus,
+  DocumentType,
   PostDocumentResponse,
   WarehouseDocumentDetails,
   WarehouseDocumentSummary,
@@ -194,10 +198,15 @@ export function toWireLine(line: DocumentLine): DocumentLineResponse {
 /**
  * One attachment record in the wire spelling.
  *
- * The live `DocumentAttachmentResponse` is a flat `{ id, attachmentType,
- * originalFilename, mimeType, fileSize, uploadedAtUtc }`. The snapshot's record
- * carried the document it belonged to, a checksum, the uploader and an optional
- * download URL; none of that crosses HTTP, so none of it is projected.
+ * The live LIST element `DocumentAttachmentResponse` is a flat `{ id,
+ * attachmentType, originalFilename, mimeType, fileSize, uploadedAtUtc }`. The
+ * snapshot's record carried the document it belonged to, a checksum, the uploader
+ * and an optional download URL; none of that crosses HTTP, so none of it is
+ * projected.
+ *
+ * The UPLOAD and DELETE response is a DIFFERENT wire shape: the attachment is
+ * nested under the attachment field (`AttachmentMutationResponse`). Never project
+ * this flat list shape for that one.
  */
 export function toWireAttachment(attachment: DocumentAttachment): DocumentAttachmentResponse {
   return {

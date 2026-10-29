@@ -3,7 +3,7 @@
  * (D-INT-02 / ADR-0001, docs/adr/0001-handwritten-contracts-for-direct-backend-integration.md).
  *
  * These are GENERIC TRANSPORT SEAMS — not feature DTOs, not UI/display models,
- * and NOT derived from `@/shared/types/generated/eiams-v1` (frozen migration
+ * and NOT derived from the deleted generated artifact (frozen migration
  * scaffolding, deleted at `whhu.5` once import count reaches zero; see
  * `docs/direct-backend-integration-plan.md` §6 retirement sequence).
  *
@@ -14,7 +14,7 @@
  *  - No `any`; generics (`Readonly` arrays) only; optional = omittable (`exactOptionalPropertyTypes`);
  *    nullable = JSON `null` preserved; dates remain ISO strings; decimals (`DECIMAL(18,6)`) kept
  *    as `PositiveDecimal18_6` (string transport, numeric display handled by feature adapter).
- *  - No import of the frozen generated file (`BASELINE_IMPORTS=249` guard enforced by
+ *  - No import of the deleted generated file (the guard is
  *    `src/test/no-new-generated-imports.test.ts`); no `fetch` used; no second `AxiosInstance`;
  *    no duplication of existing service interfaces (`document-transport.ts` kept intact).
  *  - No module-specific endpoint strings in this file (`ASSETS_PATH`, `/receiving/suppliers`, etc.)
@@ -126,9 +126,9 @@ export interface ResourceIdResponse {
  * The lifecycle state shared by every master-data aggregate the backend can
  * suspend (Organization, Site, OrganizationalUnit, Employee, ExternalParty).
  *
- * Declared here rather than imported from `@/shared/types/generated/eiams-v1`
- * because that artifact is frozen migration scaffolding scheduled for deletion
- * at `whhu.5`. A `shared/` import is exactly what keeps the generated count above
+ * Declared here rather than imported from the deleted generated artifact
+ * because that artifact was frozen migration scaffolding: a `shared/` import is
+ * exactly what keeps the generated count above
  * zero once every feature module has been migrated off it, so it has to end too.
  *
  * This is the READ side, and it is deliberately a string union even though the

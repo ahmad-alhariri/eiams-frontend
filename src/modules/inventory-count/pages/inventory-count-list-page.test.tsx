@@ -20,6 +20,7 @@ import {
 } from '@/modules/inventory-count/types/inventory-count.types'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
+import { formatDateTime } from '@/shared/utils/format'
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -96,6 +97,16 @@ describe('InventoryCountListPage (e20-t02)', () => {
     ).toBeInTheDocument()
     const detailLink = screen.getByRole('link', { name: /\u0641\u062A\u062D/ })
     expect(detailLink.getAttribute('href')).toBe(`/counts/${COUNT_ID}`)
+  })
+
+  it('renders the planned timestamp through the shared formatter, never the raw wire value', async () => {
+    useCountHandlers()
+    renderPage(['count.view'])
+
+    await screen.findByRole('heading', { level: 1 })
+    // The raw ISO value never reaches the user (defect 2).
+    expect(await screen.findByText(formatDateTime('2026-08-18T08:00:00.000Z'))).toBeInTheDocument()
+    expect(screen.queryByText('2026-08-18T08:00:00.000Z')).toBeNull()
   })
 
   it('offers the create CTA to a user with count.plan', async () => {

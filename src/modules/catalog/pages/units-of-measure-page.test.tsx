@@ -6,6 +6,7 @@ import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import UnitsOfMeasurePage from '@/modules/catalog/pages/units-of-measure-page'
+import { DUPLICATE_UNIT_NAME_AR } from '@/modules/catalog/schemas/unit-of-measure.schemas'
 import { createQueryClient } from '@/shared/services/query.client'
 import { okJson, okPageJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
@@ -147,6 +148,65 @@ describe('UnitsOfMeasurePage', () => {
         unitType: 'Quantity',
       }),
     )
+  })
+
+  /**
+   * The unit type is a free-form string on the wire; the Arabic map owns the
+   * ones the catalog uses, and an unmapped value is shown as the server sent it
+   * rather than guessed at.
+   */
+  it('shows the unit type in Arabic and keeps an unmapped type as it arrived', async () => {
+    permissions.canManage = false
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/units-of-measure`, () =>
+        okPageJson([
+          makeUnit({ id: fixtureUuid(31), name: 'قطعة', symbol: 'pcs', unitType: 'Counting' }),
+          makeUnit({ id: fixtureUuid(32), name: 'صندوق', symbol: 'BOX', unitType: 'Packaging' }),
+        ]),
+      ),
+    )
+
+    render(<UnitsOfMeasurePage />, { wrapper: PageWrapper })
+
+    await waitFor(() => expect(screen.getByText('pcs')).toBeInTheDocument())
+    expect(screen.getByText('العدّ')).toBeInTheDocument()
+    // Never invented: a type the map has never heard of stays as it arrived.
+    expect(screen.getByText('Packaging')).toBeInTheDocument()
+  })
+
+  /**
+   * Two units sharing a (name, unitType) pair are indistinguishable in every
+   * picker, so the form refuses the duplicate and shows the Arabic reason
+   * inline instead of sending it.
+   */
+  it('refuses a duplicate unit name in the same unit type and shows it inline', async () => {
+    permissions.canManage = true
+    const user = userEvent.setup()
+    const existing = makeUnit({
+      id: fixtureUuid(31),
+      name: 'Piece',
+      symbol: 'pcs',
+      unitType: 'Counting',
+    })
+    let requested = false
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/units-of-measure`, () => okPageJson([existing])),
+      http.post(`${API_BASE_URL}/catalog/units-of-measure`, () => {
+        requested = true
+        return okJson(existing)
+      }),
+    )
+
+    render(<UnitsOfMeasurePage />, { wrapper: PageWrapper })
+
+    await user.click(await screen.findByRole('button', { name: 'إضافة وحدة قياس' }))
+    await user.type(screen.getByLabelText('اسم الوحدة'), 'Piece')
+    await user.type(screen.getByLabelText('رمز الوحدة'), 'pcs')
+    await user.type(screen.getByLabelText('نوع الوحدة'), 'Counting')
+    await user.click(screen.getByRole('button', { name: 'إضافة الوحدة' }))
+
+    expect(await screen.findByText(DUPLICATE_UNIT_NAME_AR)).toBeInTheDocument()
+    expect(requested).toBe(false)
   })
 
   it('deactivates through the integer status command', async () => {

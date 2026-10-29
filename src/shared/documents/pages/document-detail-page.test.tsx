@@ -229,6 +229,9 @@ describe('DocumentDetailPage', () => {
     const heading = await screen.findByRole('heading', { level: 1, name: /EIAMS-DOC-2024-0001/ })
     expect(heading).toHaveTextContent('تفاصيل سند الاستلام')
     expect(screen.getAllByText('بانتظار الترحيل').length).toBeGreaterThan(0)
+    // D1: a non-draft has no paper-reference editor, so the section must not
+    // claim the reference is editable.
+    expect(screen.queryByText(/قابلة للتحرير/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'إرسال للترحيل' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'ترحيل' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'رفض' })).toBeEnabled()
@@ -813,6 +816,10 @@ describe('DocumentDetailPage', () => {
     })
 
     await screen.findByRole('heading', { level: 1, name: /EIAMS-DOC-2024-0001/ })
+
+    // The draft's paper-reference editor is rendered, so the copy may say the
+    // reference is editable.
+    expect(screen.getByText(/قابلة للتحرير/)).toBeInTheDocument()
 
     // Signed-original + supporting dropzones are present (not read-only).
     expect(screen.getAllByText('اسحب وأفلت الملف هنا أو انقر للاختيار')).toHaveLength(2)

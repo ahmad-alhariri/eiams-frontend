@@ -16,6 +16,7 @@ import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
+import { OrganizationPageShell } from '@/modules/organization/components/organization-page-shell'
 import { PageHeader } from '@/shared/layout/page-header'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { Button } from '@/shared/ui/button'
@@ -112,26 +113,24 @@ function SiteDetailPage() {
   }
 
   return (
-    <div dir="rtl" className="min-w-0">
-      <PageHeader
-        title={site.name}
-        subtitle={`رمز الموقع: ${site.code}`}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {canManage ? (
-              <Button type="button" onClick={() => setIsEditDialogOpen(true)}>
-                <IconEdit aria-hidden data-icon="inline-start" />
-                تعديل الموقع
-              </Button>
-            ) : null}
-            <Button type="button" variant="outline" onClick={returnToSites}>
-              <IconArrowRight aria-hidden data-icon="inline-start" />
-              العودة إلى المواقع
+    <OrganizationPageShell
+      titleAr={site.name}
+      subtitle={`رمز الموقع: ${site.code}`}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {canManage ? (
+            <Button type="button" onClick={() => setIsEditDialogOpen(true)}>
+              <IconEdit aria-hidden data-icon="inline-start" />
+              تعديل الموقع
             </Button>
-          </div>
-        }
-      />
-
+          ) : null}
+          <Button type="button" variant="outline" onClick={returnToSites}>
+            <IconArrowRight aria-hidden data-icon="inline-start" />
+            العودة إلى المواقع
+          </Button>
+        </div>
+      }
+    >
       <ContentCard title="بيانات الموقع" description="بيانات مرجعية للقراءة ضمن نطاق العمل الحالي.">
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
           <DetailField label="اسم الموقع">{site.name}</DetailField>
@@ -142,16 +141,12 @@ function SiteDetailPage() {
           <DetailField label="الحالة">
             <StatusBadge entity="record" status={site.status} />
           </DetailField>
-          <div className="border-b border-border pb-4 sm:col-span-2 sm:border-b-0">
-            <dt className="text-sm font-medium text-muted-foreground">العنوان</dt>
-            <dd className="mt-1.5 text-base font-medium text-foreground">{site.location ?? '—'}</dd>
-          </div>
-          <div className="sm:col-span-2">
-            <dt className="text-sm font-medium text-muted-foreground">معرّف الجهة المالكة</dt>
-            <dd className="mt-1.5 font-mono text-sm text-foreground" dir="ltr">
-              {site.organizationId ?? '—'}
-            </dd>
-          </div>
+          <DetailField label="OٕU,O1U+U^OٕO+" className="sm:col-span-2">
+            {site.location ?? '—'}
+          </DetailField>
+          <DetailField label="U.O1OٕU`U? OٕU,OٕUٕOc OٕU,U.OٕU,UٕOc" className="sm:col-span-2" ltr>
+            {site.organizationId ?? '—'}
+          </DetailField>
         </dl>
       </ContentCard>
 
@@ -162,7 +157,7 @@ function SiteDetailPage() {
         onOpenChange={closeEditDialog}
         onSubmit={submitForm}
       />
-    </div>
+    </OrganizationPageShell>
   )
 }
 

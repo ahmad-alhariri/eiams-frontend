@@ -9,8 +9,11 @@ import { describe, expect, it, vi } from 'vitest'
 import AdjustmentsListPage from './adjustments-list-page'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { server } from '@/test/msw/server'
-import type { AdjustmentListItem } from '@/modules/adjustment/types/adjustment.types'
-import type { AdjustmentPurpose, AdjustmentStatus } from '@/shared/types/generated/eiams-v1'
+import type {
+  AdjustmentListItem,
+  AdjustmentPurpose,
+  AdjustmentStatus,
+} from '@/modules/adjustment/types/adjustment.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 

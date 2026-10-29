@@ -1,46 +1,48 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
 /**
- * Architecture guard for the D-INT-02 pivot.
+ * Architecture guard for the D-INT-02 pivot (ADR-0001).
  *
- * ADR-0001 replaces OpenAPI-generated TypeScript with handwritten per-module
- * wire types. The legacy generated artifact at
- * `src/shared/types/generated/eiams-v1.ts` is frozen migration scaffolding;
- * it is being deleted at `whhu.5` once every module reaches zero imports.
+ * ADR-0001 replaced OpenAPI-generated TypeScript with handwritten per-module
+ * wire contracts behind the shared `ApiTransport`. Every module has since
+ * migrated, so the generated artifact has been DELETED — together with the
+ * generator that produced it, the provisional OpenAPI snapshot it was
+ * generated from, and the `api:types:*` / `contract:validate` commands that
+ * ran it.
  *
- * Until that close, no source file may add a NEW import from that artifact.
- * This guard walks every `.ts` / `.tsx` file under `src/`, skips itself and
- * the generated artifact directory, and counts regex matches; if the count
- * grows above the committed baseline, the test fails with the offender
- * list.
+ * This guard is the other half of that deletion. It fails if:
+ *   1. the generated artifact comes back;
+ *   2. any source file imports the path it lived at;
+ *   3. the generator, its config, the snapshot validator, or the provisional
+ *      snapshot come back.
  *
- * To legitimately re-introduce a generated import, the contributor must:
- *   1. open a P1 contract-decision bead (per
- *      `direct-backend-integration-plan.md` §6 step 4);
- *   2. justify the regression against ADR-0001;
- *   3. bump `BASELINE_IMPORTS` here with a pointer to the bead.
- *
- * MSW handlers (`src/test/msw/`) and tests (`src/test/`) are subject to the same
- * rule, as was the dev mock layer `src/mocks/` before `eiams-frontend-m4jm`
- * deleted it. The only "tolerance" is the frozen baseline itself.
+ * To legitimately reintroduce generated types, open a P1 contract-decision
+ * bead (per `direct-backend-integration-plan.md` §6 step 4), justify the
+ * regression against ADR-0001, and re-open the artifact deliberately. Do not
+ * widen a handwritten contract instead — that is the defect this guard exists
+ * to keep from coming back.
  */
 
-const SRC_ROOT = join(process.cwd(), 'src')
-const TEST_FILE_PATH = join(SRC_ROOT, 'test', 'no-new-generated-imports.test.ts')
-const GENERATED_MODULE = '@/shared/types/generated/eiams-v1'
-
+const REPO_ROOT = process.cwd()
+const SRC_ROOT = join(REPO_ROOT, 'src')
+const GENERATED_DIRECTORY = join(SRC_ROOT, 'shared', 'types', 'generated')
 /**
- * Measured on commit 3e298ab (2026-09-02, D-SRS-01 singular-session close)
- * after the file's stray self-import was removed. The test excludes itself
- * from the count so the baseline is the count of imports across the rest
- * of `src/`. Allowed to decrease as modules migrate to handwritten
- * contracts (D-INT-02); update only when a P1 contract-decision bead
- * justifies a new generated-type import.
+ * The deleted module path, assembled from parts so this guard's own source
+ * does not contain the literal it forbids: a repository-wide search for that
+ * path must find nothing, including in this file.
  */
-const BASELINE_IMPORTS = 249
+const GENERATED_MODULE = `@/shared/types/${'generated'}`
+
+/** The generator, its config, its snapshot validator and its input snapshot. */
+const DELETED_ARTIFACTS = [
+  join(REPO_ROOT, 'scripts', 'generate-api-types.mjs'),
+  join(REPO_ROOT, 'scripts', 'openapi-generation.config.mjs'),
+  join(REPO_ROOT, 'scripts', 'validate-contract.mjs'),
+  join(REPO_ROOT, 'contracts', 'openapi', 'eiams-v1.openapi.json'),
+]
 
 const SCAN_EXTENSIONS = /\.[jt]sx?$/u
 const SKIP_DIRECTORIES = new Set(['node_modules', 'dist', '.git'])
@@ -61,44 +63,32 @@ function walk(directory: string, accumulator: string[]): void {
   }
 }
 
-function countGeneratedImports(): { count: number; offenders: string[] } {
+/** Every file under `src/` that still imports the deleted module path. */
+function findGeneratedImports(): string[] {
   const files: string[] = []
   walk(SRC_ROOT, files)
-  const offenders: string[] = []
-  let count = 0
   const escapedModule = GENERATED_MODULE.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
   const pattern = new RegExp(`from\\s+(['"])${escapedModule}\\1`, 'gu')
+  const offenders: string[] = []
   for (const file of files) {
-    if (file === TEST_FILE_PATH) {
-      continue
-    }
     const source = readFileSync(file, 'utf8')
-    const matches = source.match(pattern)
-    if (matches === null) {
-      continue
+    if (source.match(pattern) !== null) {
+      offenders.push(relative(SRC_ROOT, file).replaceAll('\\', '/'))
     }
-    const relativePath = relative(SRC_ROOT, file).replaceAll('\\', '/')
-    count += matches.length
-    offenders.push(`${relativePath}: ${matches.length}`)
   }
-  return { count, offenders }
+  return offenders
 }
 
-describe('forbid-new-generated-imports (D-INT-02 / ADR-0001)', () => {
-  it('does not gain new @/shared/types/generated/eiams-v1 imports anywhere under src/', () => {
-    const { count, offenders } = countGeneratedImports()
-    if (count > BASELINE_IMPORTS) {
-      const drift = count - BASELINE_IMPORTS
-      throw new Error(
-        `D-INT-02 regression: ${drift} new generated-type import(s) detected.\n` +
-          `Baseline (commit 3e298ab, 2026-09-02): ${BASELINE_IMPORTS}\n` +
-          `Current: ${count}\n` +
-          `Offenders (path: match count):\n  ${offenders.join('\n  ')}\n\n` +
-          `ADR-0001 forbids new generated-type imports. Per the contract-decision ` +
-          `policy in direct-backend-integration-plan.md §6 step 4, this regression ` +
-          `requires a P1 contract-decision bead before it can be accepted.`,
-      )
-    }
-    expect(count).toBeLessThanOrEqual(BASELINE_IMPORTS)
+describe('forbid-generated-contract-imports (D-INT-02 / ADR-0001)', () => {
+  it('keeps the generated artifact deleted', () => {
+    expect(existsSync(GENERATED_DIRECTORY)).toBe(false)
+  })
+
+  it('has no import of the deleted generated module anywhere under src/', () => {
+    expect(findGeneratedImports()).toEqual([])
+  })
+
+  it('keeps the OpenAPI generator and the provisional snapshot deleted', () => {
+    expect(DELETED_ARTIFACTS.filter((path) => existsSync(path))).toEqual([])
   })
 })

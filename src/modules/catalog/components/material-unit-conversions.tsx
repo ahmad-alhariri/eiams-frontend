@@ -1,3 +1,4 @@
+import { reportApiError } from '@/shared/services/api-error'
 import { IconEdit, IconPlus, IconTrash } from '@tabler/icons-react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
@@ -22,7 +23,6 @@ import type { Material, MaterialUnitConversion } from '@/modules/catalog/types/c
 import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { ReferenceLimitNote } from '@/shared/feedback/reference-limit-note'
 import { ContentCard } from '@/shared/layout/content-card'
-import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { dataTableFeatures, DataTable } from '@/shared/ui/data-table'
@@ -118,11 +118,7 @@ export function MaterialUnitConversions({ material }: { material: Material }) {
         }
         setDialogConversion(undefined)
       } catch (error: unknown) {
-        const apiError = normalizeApiError(error)
-        toast.error({
-          title: apiError.titleAr,
-          ...(apiError.detailAr === null ? {} : { description: apiError.detailAr }),
-        })
+        reportApiError(error)
         throw error
       }
     },

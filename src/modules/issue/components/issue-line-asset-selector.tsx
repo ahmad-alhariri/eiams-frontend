@@ -3,6 +3,8 @@ import { useFormContext, useWatch } from 'react-hook-form'
 import { useIssueLineAssetOptions } from '@/modules/issue/hooks/use-issue-line-asset-options'
 import { assetChipLabel } from '@/modules/issue/utils/asset-selector-labels'
 import type { DocumentLinesContainer } from '@/shared/documents/schemas/document-lines.schemas'
+import { ErrorState } from '@/shared/feedback/error-state'
+import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/utils/class-names'
 
 export interface IssueLineAssetSelectorProps {
@@ -31,7 +33,10 @@ export function IssueLineAssetSelector({
   const isAssetKind = line.materialKind === 'Asset'
   const selected = line.assetIds ?? []
 
-  const { assets, isLoading } = useIssueLineAssetOptions(warehouseId, materialId || undefined)
+  const { assets, isLoading, isError, retry } = useIssueLineAssetOptions(
+    warehouseId,
+    materialId || undefined,
+  )
 
   if (!isAssetKind || materialId === '') {
     return null
@@ -53,7 +58,26 @@ export function IssueLineAssetSelector({
       <span className="text-sm font-medium text-foreground">
         الأصول المحددة للبند: {selected.length} من {quantity} (يجب أن يساوي المحدد الكمية)
       </span>
-      {isLoading ? (
+      {isError ? (
+        // The assets read is a SECONDARY read: the line itself is already
+        // chosen, and the assets only supply the rows the user picks from. It
+        // used to be collapsed into an empty list, so a FAILED read rendered
+        // exactly like "this material has no asset in this warehouse" — a
+        // false statement about stock the server never answered, with no
+        // Arabic reason and no retry. A failed read must stay DISTINGUISHABLE
+        // from an empty one, so the failure gets its OWN surface and no chip
+        // is offered: picking from a list that never arrived would be a guess.
+        <ErrorState
+          className="min-h-32"
+          title="تعذّر تحميل الأصول المتاحة"
+          description="تعذّر جلب الأصول المتاحة لهذه المادة في المستودع، فلا يمكن اختيار الأصول. حاول مرة أخرى."
+          action={
+            <Button type="button" variant="outline" size="sm" onClick={retry}>
+              إعادة المحاولة
+            </Button>
+          }
+        />
+      ) : isLoading ? (
         <p className="text-sm text-muted-foreground" aria-live="polite">
           جارٍ تحميل الأصول المتاحة...
         </p>
@@ -88,7 +112,7 @@ export function IssueLineAssetSelector({
           })}
         </div>
       )}
-      {!isLoading && assets.length > 0 && countMismatch ? (
+      {!isLoading && !isError && assets.length > 0 && countMismatch ? (
         <p role="alert" className="text-sm text-destructive">
           المحدد {selected.length} من {quantity} — يجب أن يساوي عدد الأصول المحددة الكمية.
         </p>

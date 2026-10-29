@@ -153,6 +153,46 @@ describe('UsersListPage', () => {
     expect(screen.queryByText('مدير النظام')).not.toBeInTheDocument()
   })
 
+  it('keeps a failed role-catalogue read distinguishable from an empty one, and retries it', async () => {
+    // The role catalogue is a SECONDARY read: the directory comes from the
+    // users read, and the roles only fill the create dialog's role picker. A
+    // failed read used to render as "no roles are configured" — an empty,
+    // disabled picker with no Arabic reason and no retry.
+    const row = createUserDirectoryRow({ roleId: ROLE_ID, roleName: 'SYSTEM_ADMIN' })
+    const role = createRoleProjection({ id: ROLE_ID, name: 'SYSTEM_ADMIN', nameAr: 'مدير النظام' })
+    let roleAttempts = 0
+
+    server.use(
+      http.get(`${API_BASE_URL}/admin/users`, () => okPageJson([row])),
+      http.get(`${API_BASE_URL}/admin/roles`, () => {
+        roleAttempts += 1
+        return roleAttempts === 1 ? new HttpResponse(null, { status: 500 }) : okPageJson([role])
+      }),
+    )
+
+    render(<UsersListPage />, {
+      wrapper: createWrapper({
+        retry: false,
+        permissions: ['admin.user.manage', 'admin.role.view'],
+      }),
+    })
+
+    expect(await screen.findByRole('heading', { name: 'تعذّر تحميل الأدوار' })).toBeInTheDocument()
+    // The action that would consume the empty list stays closed until the
+    // catalogue is readable again.
+    expect(screen.getByRole('button', { name: 'مستخدم جديد' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
+
+    await waitFor(() => expect(roleAttempts).toBe(2))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'تعذّر تحميل الأدوار' }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('button', { name: 'مستخدم جديد' })).toBeEnabled()
+  })
+
   it('shows an em dash for a user with no assignment, not an empty cell', async () => {
     // An account can exist before its assignment does. The backend sends roleId,
     // roleName and scopeType as three nulls together.

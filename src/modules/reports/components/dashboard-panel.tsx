@@ -3,30 +3,31 @@ import { useMemo } from 'react'
 import { Skeleton } from '@/shared/ui/skeleton'
 import { useDashboardReportQuery } from '@/modules/reports/hooks/use-reports-queries'
 import { KpiGrid } from '@/modules/reports/components/kpi-grid'
-import { DashboardCharts } from '@/modules/reports/components/dashboard-charts'
+import { toDashboardKpis } from '@/modules/reports/dashboard-kpis.model'
 
 /**
- * Dashboard panel — KPI cards + trend/distribution charts (e23-t02/t03).
- * Renders the singleton `GET /reports/dashboard` response.
+ * Dashboard panel — the KPI surface of `GET /reports/dashboard` (e23-t02/t03).
  *
  * Data flow:
- *  `useDashboardReportQuery` → `DashboardReport { kpis, movementTrend, assetStatusDistribution }`
+ *  `useDashboardReportQuery` → `DashboardReport` (flat counters)
+ *    → `toDashboardKpis` (labels + units only)
  *    → `KpiGrid` (KPI cards)
- *    → `DashboardCharts` (line + pie)
  *
- * Loading/error/empty states are handled at the panel level so KPI cards
- * and charts share the same loading skeleton and never render in partial states.
+ * The live response is a SINGLETON of flat counters
+ * (`Application/Reports/Dashboard/DashboardReportResponse.cs:3-11`): it carries
+ * NO kpi list and NO series, so there is nothing to chart. The frozen snapshot
+ * described a dashboard of KPI codes with trend and distribution series — that
+ * shape is not on the wire, and inventing the series in the browser would be
+ * the client computing aggregates the server owns (D-RPT-02).
  *
- * Per D-RPT-02: server owns aggregation, date-boundary, series bucket width,
- * and null/zero treatment. The client renders verbatim labels without interpretation.
+ * Loading/error/empty states are handled at the panel level so the KPI cards
+ * never render in a partial state.
  */
 export function DashboardPanel() {
   const { data, isLoading, isError, error } = useDashboardReportQuery({})
 
-  const generatedAt = data?.generatedAt
-  const kpis = (data?.kpis ?? []).slice()
-  const movementTrend = (data?.movementTrend ?? []).slice()
-  const assetStatusDistribution = (data?.assetStatusDistribution ?? []).slice()
+  const generatedAt = data?.generatedAtUtc
+  const kpis = useMemo(() => (data === undefined ? [] : toDashboardKpis(data)), [data])
 
   const formattedGeneratedAt = useMemo(() => {
     if (!generatedAt) return null
@@ -42,7 +43,7 @@ export function DashboardPanel() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* KPI cards — primary dashboard surface */}
+      {/* KPI cards — the dashboard's only surface on the live contract */}
       {isLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -60,19 +61,6 @@ export function DashboardPanel() {
       ) : (
         <KpiGrid kpis={kpis} />
       )}
-
-      {/* Charts — secondary dashboard surface (only render when data is available) */}
-      {isLoading ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Skeleton className="h-72 rounded-xl" />
-          <Skeleton className="h-72 rounded-xl" />
-        </div>
-      ) : !isError && data ? (
-        <DashboardCharts
-          movementTrend={movementTrend}
-          assetStatusDistribution={assetStatusDistribution}
-        />
-      ) : null}
 
       {/* Data provenance — server timestamp */}
       {generatedAt && (

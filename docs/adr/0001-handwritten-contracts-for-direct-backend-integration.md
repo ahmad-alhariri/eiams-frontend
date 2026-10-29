@@ -1,6 +1,8 @@
 ---
 status: accepted
 date: 2026-09-02
+owner: ahmad-alhariri
+scope: Integrate the React frontend directly with the authoritative .NET backend running on localhost during development, with a small handwritten transport contract and handwritten request, response, and view-model types within each domain module, and no TypeScript generation from OpenAPI.
 supersedes: D-INT-01 generated-TypeScript strategy
 ---
 

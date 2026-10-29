@@ -411,10 +411,14 @@ describe('inventory-count wire contract (IC-FE-1)', () => {
 
     it('batches actuals (PUT /{countId}/actuals) with the aggregate expectedRowVersion', async () => {
       const { service, captures } = buildService()
-      await service.updateLines(COUNT_ID, {
-        actuals: [{ lineId: LINE_ID, actualQuantity: 23 }],
-        expectedRowVersion: 3,
-      })
+      await service.updateLines(
+        COUNT_ID,
+        {
+          actuals: [{ lineId: LINE_ID, actualQuantity: 23 }],
+          expectedRowVersion: 3,
+        },
+        'idem-actuals',
+      )
       expect(captures[0]!).toMatchObject({
         path: `/inventory-counts/${COUNT_ID}/actuals`,
         method: 'PUT',
@@ -422,6 +426,7 @@ describe('inventory-count wire contract (IC-FE-1)', () => {
           actuals: [{ lineId: LINE_ID, actualQuantity: 23 }],
           expectedRowVersion: 3,
         },
+        headers: { 'Idempotency-Key': 'idem-actuals' },
       })
     })
 

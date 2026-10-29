@@ -2,7 +2,10 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
 import { useOperationalDocumentsReportQuery } from '@/modules/reports/hooks/use-reports-queries'
-import type { ListOperationalDocumentsReportQuery } from '@/modules/reports/types/reports.types'
+import type {
+  DocumentsReportRow,
+  ListOperationalDocumentsReportQuery,
+} from '@/modules/reports/types/reports.types'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { StatusBadge } from '@/shared/feedback/status-badge'
@@ -10,17 +13,17 @@ import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
+import { DatePicker } from '@/shared/ui/date-picker'
 import { AsyncSelect } from '@/shared/ui/async-select'
-import { Input } from '@/shared/ui/input'
 import { ExportButton } from '@/shared/ui/export-button'
 import { PrintButton } from '@/shared/ui/print-button'
 import { pageRows } from '@/shared/utils/table-data'
-import { formatDateTime } from '@/shared/utils/format'
-import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import { formatDateTime, formatNumber } from '@/shared/utils/format'
+import type { DocumentType } from '@/shared/documents/types/document-wire.types'
 
-const documentColumnHelper = createColumnHelper<typeof dataTableFeatures, WarehouseDocument>()
+const documentColumnHelper = createColumnHelper<typeof dataTableFeatures, DocumentsReportRow>()
 
-const DOCUMENT_TYPE_LABELS_AR: Readonly<Record<WarehouseDocument['documentType'], string>> = {
+const DOCUMENT_TYPE_LABELS_AR: Readonly<Record<DocumentType, string>> = {
   Receiving: 'سند استلام',
   Issue: 'سند إصدار',
   Transfer: 'سند تحويل',
@@ -29,41 +32,44 @@ const DOCUMENT_TYPE_LABELS_AR: Readonly<Record<WarehouseDocument['documentType']
   Return: 'سند إرجاع',
 }
 
-function toIsoDateTime(value: string): string | undefined {
-  if (value === '') return undefined
-  const date = new Date(value)
-  return Number.isNaN(date.valueOf()) ? undefined : date.toISOString()
-}
-
 /**
- * Operational documents report (e23-t09). Server-paged document spine
- * projection; status and provenance come directly from the contract and
- * retain their D-LIFE-01 meanings. The contract allows only `dateFrom`,
- * `dateTo`, `warehouseId`, `pageIndex`, and `pageSize` — no `documentType`
- * or status filter is permitted without a contract update
- * (D-RPT-01 §"V1 contract matrix", operational documents report row).
+ * Operational documents report (e23-t09). `GET /reports/documents` answers with
+ * a per-warehouse SUMMARY: one row per (warehouse, document type, document
+ * status) triple carrying the server's document COUNT and the newest
+ * timestamps of that group (`Application/Reports/Documents/DocumentsReportRow.cs:3-11`).
+ *
+ * There is NO document identity on the wire — no reference number, no paper
+ * number, no attachments — so the table renders the grouped counters the
+ * server sends and nothing more. The frozen snapshot's document spine
+ * (`WarehouseDocument`) is not what this endpoint returns.
+ *
+ * The controller binds `warehouseId`, `documentType`, `status`, `fromUtc`,
+ * `toUtc` and the one-based pagination
+ * (`Web.Api/Controllers/Reports/GetDocumentsReportController.cs:26-33`); this
+ * screen exposes the warehouse and the date window only.
  */
 function OperationalDocumentsReportTableImpl() {
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [warehouseId, setWarehouseId] = useState<string | undefined>()
-  const [dateFromInput, setDateFromInput] = useState('')
-  const [dateToInput, setDateToInput] = useState('')
-
-  const dateFrom = toIsoDateTime(dateFromInput)
-  const dateTo = toIsoDateTime(dateToInput)
+  const [dateFrom, setDateFrom] = useState<Date | undefined>()
+  const [dateTo, setDateTo] = useState<Date | undefined>()
+  const dateFromIso = dateFrom ? dateFrom.toISOString() : undefined
+  const dateToIso = dateTo ? dateTo.toISOString() : undefined
 
   const warehouseSelector = useScopedWarehouseSelector()
 
   const queryInput = useMemo<ListOperationalDocumentsReportQuery>(
     () => ({
-      pageIndex: currentPage - 1,
+      // The live controller binds a ONE-based `page`
+      // (`PaginationQueryParameters.Page`); `pageIndex` was never bound.
+      page: currentPage,
       pageSize,
       ...(warehouseId === undefined ? {} : { warehouseId }),
-      ...(dateFrom === undefined ? {} : { dateFrom }),
-      ...(dateTo === undefined ? {} : { dateTo }),
+      ...(dateFromIso === undefined ? {} : { fromUtc: dateFromIso }),
+      ...(dateToIso === undefined ? {} : { toUtc: dateToIso }),
     }),
-    [currentPage, dateFrom, dateTo, pageSize, warehouseId],
+    [currentPage, dateFromIso, dateToIso, pageSize, warehouseId],
   )
 
   const reportQuery = useOperationalDocumentsReportQuery(queryInput)
@@ -82,25 +88,28 @@ function OperationalDocumentsReportTableImpl() {
     [resetPageAndSet],
   )
   const handleDateFromChange = useCallback(
-    (value: string) => resetPageAndSet(setDateFromInput, value),
+    (date: Date | undefined) => resetPageAndSet(setDateFrom, date),
     [resetPageAndSet],
   )
   const handleDateToChange = useCallback(
-    (value: string) => resetPageAndSet(setDateToInput, value),
+    (date: Date | undefined) => resetPageAndSet(setDateTo, date),
     [resetPageAndSet],
   )
 
   const columns = useMemo(
     () =>
       documentColumnHelper.columns([
-        documentColumnHelper.accessor('systemReferenceNumber', {
-          id: 'SystemReferenceNumber',
-          header: 'الرقم المرجعي',
+        documentColumnHelper.accessor((row) => row.warehouseName, {
+          id: 'Warehouse',
+          header: 'المستودع',
           enableSorting: false,
-          cell: ({ getValue }) => (
-            <span dir="ltr" className="font-mono text-sm font-semibold text-foreground">
-              {getValue()}
-            </span>
+          cell: ({ row }) => (
+            <div className="flex flex-col">
+              <span className="font-medium text-foreground">{row.original.warehouseName}</span>
+              <span dir="ltr" className="font-mono text-xs text-muted-foreground">
+                {row.original.warehouseCode}
+              </span>
+            </div>
           ),
         }),
         documentColumnHelper.accessor('documentType', {
@@ -115,26 +124,29 @@ function OperationalDocumentsReportTableImpl() {
           enableSorting: false,
           cell: ({ getValue }) => <StatusBadge entity="document" status={getValue()} />,
         }),
-        documentColumnHelper.accessor((doc) => doc.warehouse.displayName, {
-          id: 'Warehouse',
-          header: 'المستودع',
+        documentColumnHelper.accessor('documentCount', {
+          id: 'DocumentCount',
+          header: 'عدد المستندات',
           enableSorting: false,
+          cell: ({ getValue }) => <span dir="ltr">{formatNumber(getValue())}</span>,
         }),
-        documentColumnHelper.accessor('paperDocumentNumber', {
-          id: 'PaperDocumentNumber',
-          header: 'رقم الورقي',
+        documentColumnHelper.accessor('latestCreatedAtUtc', {
+          id: 'LatestCreatedAtUtc',
+          header: 'آخر إنشاء',
           enableSorting: false,
-          cell: ({ getValue, row }) => (
-            <span dir="ltr" className="font-mono text-sm text-muted-foreground">
-              {row.original.paperDocumentYear}/{getValue()}
-            </span>
-          ),
+          cell: ({ getValue }) => {
+            const value = getValue()
+            return value === null ? <span>—</span> : <span dir="ltr">{formatDateTime(value)}</span>
+          },
         }),
-        documentColumnHelper.accessor('createdAt', {
-          id: 'CreatedAt',
-          header: 'تاريخ الإنشاء',
+        documentColumnHelper.accessor('latestPostedAtUtc', {
+          id: 'LatestPostedAtUtc',
+          header: 'آخر ترحيل',
           enableSorting: false,
-          cell: ({ getValue }) => formatDateTime(getValue()),
+          cell: ({ getValue }) => {
+            const value = getValue()
+            return value === null ? <span>—</span> : <span dir="ltr">{formatDateTime(value)}</span>
+          },
         }),
       ]),
     [],
@@ -160,20 +172,18 @@ function OperationalDocumentsReportTableImpl() {
             </div>
             <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
               <span>من تاريخ</span>
-              <Input
-                type="datetime-local"
-                value={dateFromInput}
-                onChange={(event) => handleDateFromChange(event.currentTarget.value)}
-                aria-label="تصفية حسب تاريخ البداية"
+              <DatePicker
+                key="date-from"
+                ariaLabel="تصفية حسب تاريخ البداية"
+                onChange={handleDateFromChange}
               />
             </div>
             <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
               <span>إلى تاريخ</span>
-              <Input
-                type="datetime-local"
-                value={dateToInput}
-                onChange={(event) => handleDateToChange(event.currentTarget.value)}
-                aria-label="تصفية حسب تاريخ النهاية"
+              <DatePicker
+                key="date-to"
+                ariaLabel="تصفية حسب تاريخ النهاية"
+                onChange={handleDateToChange}
               />
             </div>
 
@@ -190,8 +200,8 @@ function OperationalDocumentsReportTableImpl() {
                 filters={
                   warehouseId !== undefined
                     ? {
-                        ...(dateFrom !== undefined ? { dateFrom } : {}),
-                        ...(dateTo !== undefined ? { dateTo } : {}),
+                        ...(dateFromIso !== undefined ? { dateFrom: dateFromIso } : {}),
+                        ...(dateToIso !== undefined ? { dateTo: dateToIso } : {}),
                         warehouseId,
                       }
                     : undefined
@@ -203,8 +213,8 @@ function OperationalDocumentsReportTableImpl() {
         }
       />
       <ContentCard
-        title="قائمة المستندات"
-        description="كل سند ضمن النطاق الحالي بنوعه وحالته ومرجعه الورقي."
+        title="ملخص المستندات"
+        description="لكل مستودع ونوع وحالة: عدد المستندات وآخر تاريخي إنشاء وترحيل، كما يحسبها الخادم."
       >
         <DataTableServer
           columns={columns}
@@ -218,8 +228,8 @@ function OperationalDocumentsReportTableImpl() {
           emptyDescription="لم يتم العثور على مستندات تطابق معايير التصفية الحالية."
           page={currentPage}
           pageSize={pageSize}
-          totalCount={page?.meta.totalItems}
-          totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
+          totalCount={page?.totalItems}
+          totalPages={Math.max(page?.totalPages ?? 1, 1)}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
         />

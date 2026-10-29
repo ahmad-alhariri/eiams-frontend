@@ -11,15 +11,12 @@ import type {
   ListStockMovementsQuery,
   PageMeta,
 } from '@/modules/inventory/types/inventory.api-types'
+import { pathWithId } from '@/shared/services/api-path'
 
 const INVENTORY_BALANCES_PATH = '/inventory/balances'
 const INVENTORY_BALANCE_PATH = '/inventory/balances/{balanceId}'
 const STOCK_MOVEMENTS_PATH = '/inventory/movements'
 const STOCK_MOVEMENT_PATH = '/inventory/movements/{movementId}'
-
-function pathWithId(path: string, parameter: string, id: string): string {
-  return path.replace(parameter, encodeURIComponent(id))
-}
 
 /**
  * Sends a list query through the ONE shared pagination clamp.

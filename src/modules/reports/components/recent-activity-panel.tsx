@@ -14,9 +14,9 @@ import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { pageRows } from '@/shared/utils/table-data'
 import { formatDateTime, formatNumber, formatUuid } from '@/shared/utils/format'
-import type { AuditLog } from '@/shared/types/generated/eiams-v1'
+import type { AuditLogHeader } from '@/modules/audit/types/audit.api-types'
 
-const auditColumnHelper = createColumnHelper<typeof dataTableFeatures, AuditLog>()
+const auditColumnHelper = createColumnHelper<typeof dataTableFeatures, AuditLogHeader>()
 const balanceColumnHelper = createColumnHelper<typeof dataTableFeatures, InventoryBalance>()
 
 /**
@@ -63,7 +63,10 @@ function RecentAuditSection() {
 
   const queryInput = useMemo(
     () => ({
-      pageIndex: currentPage - 1,
+      // The wire page is ONE-based (`PaginationQueryParameters.Page`), and the
+      // audit list binds `page` — `pageIndex` is not a parameter the server
+      // reads, so it silently kept every list on its first page.
+      page: currentPage,
       pageSize,
     }),
     [currentPage, pageSize],
@@ -75,9 +78,9 @@ function RecentAuditSection() {
   const columns = useMemo(
     () =>
       auditColumnHelper.columns([
-        auditColumnHelper.accessor('occurredAt', {
-          id: 'OccurredAt',
-          header: 'وقت الحدث',
+        auditColumnHelper.accessor('createdAtUtc', {
+          id: 'CreatedAtUtc',
+          header: 'تاريخ الإنشاء',
           cell: ({ getValue }) => formatDateTime(getValue()),
         }),
         auditColumnHelper.accessor('action', {
@@ -92,23 +95,28 @@ function RecentAuditSection() {
             )
           },
         }),
-        auditColumnHelper.accessor((row) => row.entityDisplay ?? row.entityId, {
-          id: 'Entity',
+        auditColumnHelper.accessor('entityId', {
+          id: 'EntityId',
           header: 'السجل المتأثر',
           cell: ({ getValue, row }) => (
             <Link
-              to={`${ROUTE_PATHS.audit}?auditLogId=${encodeURIComponent(row.original.auditLogId)}`}
-              aria-label={`عرض تفاصيل سجل التدقيق ${formatUuid(row.original.auditLogId)}`}
+              to={`${ROUTE_PATHS.audit}?auditLogId=${encodeURIComponent(row.original.id)}`}
+              aria-label={`عرض تفاصيل سجل التدقيق ${formatUuid(row.original.id)}`}
               className="font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
-              {getValue()}
+              <span dir="ltr">{formatUuid(getValue())}</span>
             </Link>
           ),
         }),
-        auditColumnHelper.accessor('occurredBy', {
-          id: 'OccurredBy',
+        auditColumnHelper.accessor('userId', {
+          id: 'UserId',
           header: 'بواسطة',
-          cell: ({ getValue }) => <span>{getValue().displayName}</span>,
+          // The live detail carries the actor's IDENTIFIER only — there is no
+          // user directory on the backend, so no display name exists to show.
+          cell: ({ getValue }) => {
+            const userId = getValue()
+            return userId === null ? <span>—</span> : <span dir="ltr">{formatUuid(userId)}</span>
+          },
         }),
       ]),
     [],
@@ -131,8 +139,8 @@ function RecentAuditSection() {
         emptyDescription="لم يتم تسجيل أي عمليات تدقيق في النطاق الحالي."
         page={currentPage}
         pageSize={pageSize}
-        totalCount={page?.meta.totalItems}
-        totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
+        totalCount={page?.totalItems}
+        totalPages={Math.max(page?.totalPages ?? 1, 1)}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
       />

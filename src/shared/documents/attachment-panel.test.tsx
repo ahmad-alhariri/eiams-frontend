@@ -275,11 +275,11 @@ describe('AttachmentPanel — signed-original gate status row', () => {
     expect(screen.queryByTestId('attachment-gate-satisfied')).not.toBeInTheDocument()
   })
 
-  it('states the requirement and echoes no reason for a bare signed-original blocker code', () => {
-    // The row matches blockers by CODE and resolves the Arabic through the
-    // governed `error-copy-ar.ts` table; `SIGNED_ORIGINAL_MISSING` is not in it,
-    // so the requirement badge renders alone. The server's English `message` is
-    // never rendered either — Arabic-first, code-owned copy.
+  it('states the requirement and the canonical reason for a bare signed-original blocker code', () => {
+    // The gate row OWNS the signed-original reason (eiams-frontend-n31q): it
+    // sits next to the badge that states the requirement, so it is where a user
+    // looks for the reason. The sentence comes from the shared policy-gate copy
+    // — never from the server's English `message`.
     renderPanel({
       policy: {
         signedOriginalSatisfied: false,
@@ -287,10 +287,58 @@ describe('AttachmentPanel — signed-original gate status row', () => {
       },
     })
 
-    expect(screen.getByTestId('attachment-gate-missing')).toHaveTextContent(
-      'النسخة الأصلية الموقعة مطلوبة للترحيل',
-    )
+    const gate = screen.getByTestId('attachment-gate-missing')
+    expect(gate).toHaveTextContent('النسخة الأصلية الموقعة مطلوبة للترحيل')
+    expect(gate).toHaveTextContent('النسخة الموقعة من المستند مطلوبة قبل الترحيل.')
     expect(screen.queryByText('The signed copy is required.')).toBeNull()
+  })
+
+  /**
+   * The signed-original statement has one owner per screen: this row, which
+   * sits next to the badge that states the requirement. The action bars omit
+   * the same blocker as a duplicate, so the identical Arabic sentence is never
+   * printed twice on one document screen.
+   */
+  it("states the server's own Arabic reason when the blocker carries one", () => {
+    const reasonAr = 'لا توجد نسخة ورقية موقّعة صالحة.'
+    renderPanel({
+      policy: {
+        signedOriginalSatisfied: false,
+        blockers: [{ code: 'document.signed_original_missing', message: reasonAr }],
+      },
+    })
+
+    const gate = screen.getByTestId('attachment-gate-missing')
+    expect(gate).toHaveTextContent('النسخة الأصلية الموقعة مطلوبة للترحيل')
+    expect(gate).toHaveTextContent(reasonAr)
+  })
+
+  it('states the reason for the backend’s own dotted signed-copy code', () => {
+    // The canonical vocabulary accepts the backend's spelling too, so the row
+    // answers for it instead of leaving the reason to a second surface.
+    renderPanel({
+      policy: {
+        signedOriginalSatisfied: false,
+        blockers: [{ code: 'WarehouseDocuments.SignedCopyRequired' }],
+      },
+    })
+
+    expect(screen.getByTestId('attachment-gate-missing')).toHaveTextContent(
+      'يجب إرفاق النسخة الموقعة قبل الترحيل.',
+    )
+  })
+
+  it('states no reason when the policy carries no signed-original blocker', () => {
+    renderPanel({
+      policy: {
+        signedOriginalSatisfied: false,
+        blockers: [{ code: 'WAREHOUSE_DOCUMENTS_LINES_REQUIRED' }],
+      },
+    })
+
+    const gate = screen.getByTestId('attachment-gate-missing')
+    expect(gate).toHaveTextContent('النسخة الأصلية الموقعة مطلوبة للترحيل')
+    expect(gate.querySelector('[data-slot="attachment-gate-reason"]')).toBeNull()
   })
 
   it('falls back to attachment presence when no policy is provided', () => {
@@ -427,7 +475,6 @@ describe('AttachmentPanel — server-owned attachment limits (F-14)', () => {
     expect(within(summary).getByText('application/pdf')).toBeInTheDocument()
     expect(within(summary).getByText(formatFileSize(metadata.size))).toBeInTheDocument()
     expect(within(summary).getByText(formatDateTime(metadata.uploadedAtUtc))).toBeInTheDocument()
-    expect(within(summary).getByText('user-42')).toBeInTheDocument()
     expect(within(summary).getByText('sha256:abc123def456')).toBeInTheDocument()
 
     // Never the bytes: the summary is identity + size + checksum, never a
@@ -436,6 +483,38 @@ describe('AttachmentPanel — server-owned attachment limits (F-14)', () => {
     expect(summary.textContent).not.toContain('base64')
     expect(summary.querySelector('a')).toBeNull()
     expect(summary.querySelector('img')).toBeNull()
+  })
+
+  /**
+   * The wire carries the uploader's USER ID only — no display name, and the
+   * frontend has no user directory to resolve one — so the row must not print
+   * that id as if it were a name.
+   */
+  it('names the uploader in Arabic and keeps the raw id as secondary text', () => {
+    const metadata = {
+      attachmentId: 'att-satisfier-1',
+      filename: 'signed-original.pdf',
+      mimeType: 'application/pdf',
+      size: 123456,
+      uploadedAtUtc: '2026-08-10T09:30:00.000Z',
+      uploadedBy: 'fa74c546-6796-40b9-8110-a81c17d9f934',
+      checksum: 'sha256:abc123def456',
+    }
+    renderPanel({
+      policy: policyWithLimits({
+        signedOriginalSatisfied: true,
+        satisfyingSignedOriginal: metadata,
+      }),
+    })
+
+    const summary = screen.getByTestId('signed-original-satisfier')
+    expect(within(summary).getByText('رفعه')).toBeInTheDocument()
+    expect(within(summary).getByText('مستخدم معروف')).toBeInTheDocument()
+    // The id is never the visible label, only the secondary text behind it.
+    expect(within(summary).queryByText(metadata.uploadedBy)).toBeNull()
+    expect(summary.textContent).not.toContain(metadata.uploadedBy)
+    const uploaderValue = within(summary).getByText('مستخدم معروف')
+    expect(uploaderValue).toHaveAttribute('title', metadata.uploadedBy)
   })
 
   it('renders no satisfier summary when the policy carries none', () => {

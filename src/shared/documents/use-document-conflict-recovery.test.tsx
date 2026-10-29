@@ -7,8 +7,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
-import type { DocumentLifecycleHistory, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
-import { createLifecycleEvent, createWarehouseDocument, fixtureUuid } from '@/test/msw/factories'
+import type { DocumentLifecycleHistory } from '@/shared/documents/types/document-wire.types'
+import type { WarehouseDocument } from '@/test/msw/document-engine.types'
+import { wireLifecycleEvent } from '@/test/msw/document-wire-fixtures'
+import { createWarehouseDocument, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
@@ -107,7 +109,10 @@ describe('useDocumentConflictRecovery', () => {
     // The server moved on while the user worked: a newer version exists.
     store.documents[0] = createWarehouseDocument({ documentId: DOCUMENT_ID, rowVersion: 2 })
     store.historyEvents = [
-      createLifecycleEvent({
+      // The history read is served on the LIVE wire contract, so the event is
+      // projected into it (`action`, `actorDisplayName`, `occurredAtUtc`) rather
+      // than being handed to the client in the harness's own spelling.
+      wireLifecycleEvent({
         documentId: DOCUMENT_ID,
         documentRowVersion: 2,
         eventId: fixtureUuid(161),

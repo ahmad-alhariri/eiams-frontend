@@ -43,7 +43,11 @@ export interface CountService {
   planCount: (request: PlanCountRequest, idempotencyKey: string) => Promise<ResourceId>
   startCount: (countId: string, expectedRowVersion: number) => Promise<void>
   listLines: (countId: string, query: ListCountLinesQuery) => Promise<CountPage<InventoryCountLine>>
-  updateLines: (countId: string, request: UpdateCountLinesRequest) => Promise<void>
+  updateLines: (
+    countId: string,
+    request: UpdateCountLinesRequest,
+    idempotencyKey: string,
+  ) => Promise<void>
   updateLineActual: (
     countId: string,
     lineId: string,
@@ -78,7 +82,10 @@ function linePath(template: string, countId: string, lineId: string): string {
  * `total_items` → camelCase); the count list and the lines read are both paged
  * this way and no module-local pagination fabrication exists (F5). Lifecycle
  * mutations answer with no body, so they go through `requestEmpty` and the
- * hooks invalidate + refetch after success.
+ * hooks invalidate + refetch after success. The count actuals batch is such a
+ * mutation too: `PUT /{countId}/actuals` answers `ApiResponse<EmptyResponse>`
+ * on the live API, so the affected lines and the new count version are read
+ * back rather than merged from a response the server does not send.
  */
 export function createCountService(transport: ApiTransport): CountService {
   return {
@@ -123,13 +130,30 @@ export function createCountService(transport: ApiTransport): CountService {
       })
     },
 
-    async updateLines(countId, request) {
-      // `PUT /{countId}/actuals` answers with an empty body; the hook
-      // invalidates and refetches the count + lines on success.
+    async updateLines(countId, request, idempotencyKey) {
+      // RESOLUTION-025: the SEMANTIC actuals command, `PUT
+      // /inventory-counts/{countId}/actuals` — it replaced the generic
+      // writable `/lines` route, which the backend never had a PUT for.
+      //
+      // The body is CLOSED: `{ actuals: [{ lineId, actualQuantity }],
+      // expectedRowVersion }` and nothing else. The backend's strict count body
+      // filter answers 400 for any unknown top-level key, so a per-line
+      // `rowVersion` or a `reason` would be rejected outright.
+      //
+      // The `Idempotency-Key` makes an EQUIVALENT retry (the same batch sent
+      // again after an uncertain outcome) replayable server-side, as
+      // RESOLUTION-025 requires. The live API accepts the header but does not
+      // yet replay on it — that is backend work, tracked with the resolution.
+      //
+      // The answer is `ApiResponse<EmptyResponse>`: the live route returns no
+      // authoritative result envelope (no count header, no new row version, no
+      // affected line projections), so the hook invalidates and refetches the
+      // count + lines instead of merging a response that does not exist.
       await transport.requestEmpty<UpdateCountLinesRequest>({
         path: pathWithId(COUNT_ACTUALS_PATH, '{countId}', countId),
         method: 'PUT',
         body: request,
+        headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
       })
     },
 

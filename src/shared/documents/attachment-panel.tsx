@@ -12,10 +12,11 @@ import { useId } from 'react'
 import {
   attachmentSignedDescriptionAr,
   attachmentSupportingDescriptionAr,
-  policyBlockerMessageAr,
   SIGNED_GATE_MOOT_STATUSES,
+  signedOriginalBlockerReasonAr,
   type AttachmentLimits,
 } from '@/shared/documents/document-policy-gates'
+import { isSignedOriginalBlocker } from '@/shared/documents/policy-blocker-codes'
 import type { AttachmentType } from '@/shared/documents/document-attachment-service'
 import type {
   DocumentAttachmentResponse,
@@ -34,15 +35,19 @@ import { formatDate, formatDateTime, formatFileSize } from '@/shared/utils/forma
  * Policy slice consumed by the panel; the server evaluation is authoritative
  * (D-ATT-01).
  *
- * `blockers` is typed by the one field the panel actually reads. The signed-original
- * row resolves its Arabic sentence from the blocker CODE through the governed
- * copy table, never from a message field, so the panel has no reason to depend on
- * the projection's message name — and a sibling module whose own read still
- * spells that member `messageAr` stays compatible without either side faking it.
+ * `blockers` is typed by the fields the panel actually reads: the signed-original
+ * row resolves the Arabic sentence from the blocker CODE (and the server's own
+ * Arabic sentence when it carries one) through the shared policy-gate copy, so
+ * the panel never invents a reason of its own.
  */
 export type AttachmentPanelPolicy = {
   signedOriginalSatisfied: boolean
-  blockers?: readonly { readonly code: string }[]
+  /**
+   * The server's policy blockers. The signed-original reason is stated by the
+   * gate row (see {@link GateStatusRow}); the lifecycle/adjustment action bars
+   * omit the same blocker as a duplicate.
+   */
+  blockers?: readonly { readonly code: string; readonly message?: string | null }[]
   /** Server's max upload size in bytes (F-14); absent on older cached policies. */
   maxSizeBytes?: number | null
   /** Server-allowed MIME types (F-14); absent on older cached policies. */
@@ -101,6 +106,15 @@ export type AttachmentPanelProps = {
 
 const DEFAULT_UPLOAD_ERROR = 'تعذر رفع الملف — حاول مرة أخرى'
 
+/**
+ * What the uploader row says when the wire carries only the uploader's id.
+ *
+ * The attachment projection serves `UploadedBy` (a user id) and no display
+ * name, so the panel cannot name the uploader — it can only say that a
+ * registered user uploaded the file.
+ */
+const UPLOADER_LABEL_AR = 'مستخدم معروف'
+
 function GateStatusRow({
   policy,
   hasSignedOriginal,
@@ -111,19 +125,19 @@ function GateStatusRow({
   documentStatus: DocumentStatus | undefined
 }) {
   const satisfied = policy ? policy.signedOriginalSatisfied : hasSignedOriginal
-  // e24-t07: deliberately NOT widened to the canonical vocabulary. Widening it
-  // to also match the `document.`-prefixed spelling (what the contract producers
-  // emit) makes this row render the server's Arabic reason, and the lifecycle
-  // action bar renders the same blocker on the same screen — the identical
-  // sentence then appears twice. The bar owns that message today; this row owns
-  // the requirement badge. Recorded as a finding in
-  // docs/policy-failure-matrix-verification.md rather than "fixed", because the
-  // fix is a presentation-ownership decision, not a matcher bug.
-  const signedBlocker = policy?.blockers?.find((blocker) =>
-    blocker.code.startsWith('signed_original'),
-  )
-  const signedBlockerMessageAr =
-    signedBlocker === undefined ? null : policyBlockerMessageAr({ code: signedBlocker.code })
+  // The signed-original statement has ONE owner per screen, and this row is it:
+  // it states the REQUIREMENT (the gate badge) AND the reason, because it sits
+  // next to the badge and is where a user looks for the reason. The lifecycle
+  // and adjustment action bars therefore omit the same blocker as a duplicate.
+  //
+  // The matcher is the canonical one (`policy-blocker-codes.ts`), so every
+  // accepted spelling resolves — the bare code, the `document.`-prefixed
+  // vocabulary the contract producers emit, and the backend's own dotted
+  // signed-copy code. The reason itself comes from the shared policy-gate copy,
+  // never from a sentence invented here.
+  const signedBlocker = policy?.blockers?.find(isSignedOriginalBlocker)
+  const signedBlockerReasonAr =
+    signedBlocker === undefined ? null : signedOriginalBlockerReasonAr(signedBlocker)
 
   if (documentStatus !== undefined && SIGNED_GATE_MOOT_STATUSES.has(documentStatus)) {
     return (
@@ -163,8 +177,10 @@ function GateStatusRow({
       <IconAlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
       <div className="flex flex-col gap-0.5">
         <p className="text-sm font-medium text-foreground">النسخة الأصلية الموقعة مطلوبة للترحيل</p>
-        {signedBlockerMessageAr === null ? null : (
-          <p className="text-xs text-muted-foreground">{signedBlockerMessageAr}</p>
+        {signedBlockerReasonAr === null ? null : (
+          <p data-slot="attachment-gate-reason" className="text-xs text-muted-foreground">
+            {signedBlockerReasonAr}
+          </p>
         )}
       </div>
     </div>
@@ -200,13 +216,23 @@ function SignedOriginalSatisfierSummary({
 }: {
   metadata: SignedOriginalAttachmentMetadata
 }) {
-  const fields: ReadonlyArray<{ label: string; value: string; ltr?: boolean }> = [
+  const fields: ReadonlyArray<{
+    label: string
+    value: string
+    ltr?: boolean
+    /** Secondary detail the label does not state (the raw id behind it). */
+    title?: string
+  }> = [
     { label: 'معرّف المرفق', value: metadata.attachmentId, ltr: true },
     { label: 'اسم الملف', value: metadata.filename },
     { label: 'نوع الملف', value: metadata.mimeType, ltr: true },
     { label: 'الحجم', value: formatFileSize(metadata.size) },
     { label: 'تاريخ الرفع', value: formatDateTime(metadata.uploadedAtUtc) },
-    { label: 'رفعه', value: metadata.uploadedBy, ltr: true },
+    // The wire carries the uploader's USER ID only — no display name, and the
+    // frontend has no user directory to resolve one — so the row states an
+    // honest Arabic label and keeps the id as the secondary text. A bare UUID
+    // printed as a name would read as a person's name and identify nobody.
+    { label: 'رفعه', value: UPLOADER_LABEL_AR, title: metadata.uploadedBy },
     { label: 'بصمة التحقق', value: metadata.checksum, ltr: true },
   ]
   return (
@@ -221,6 +247,7 @@ function SignedOriginalSatisfierSummary({
           <dd
             className="truncate text-sm text-foreground"
             {...(field.ltr === true ? { dir: 'ltr' as const } : {})}
+            {...(field.title === undefined ? {} : { title: field.title })}
           >
             {field.value}
           </dd>

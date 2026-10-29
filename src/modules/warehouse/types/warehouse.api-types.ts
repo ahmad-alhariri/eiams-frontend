@@ -77,10 +77,10 @@ export function operationOrdinal(name: CapabilityOperation): number {
 }
 
 export function operationFromOrdinal(ordinal: number): CapabilityOperation {
-  // The backend rejects ordinals outside [0, 5] at the controller, so a
-  // type cast is safe; we still guard at runtime because the read is
-  // a string enum and a server-side addition (seven operations tomorrow)
-  // would silently project as `unknown` without this branch.
+  // The backend rejects ordinals outside [0, 6] at the controller (`Opening`
+  // = 6 is live), so a type cast is safe; we still guard at runtime because
+  // the read is a string enum and a server-side addition (an eighth operation
+  // tomorrow) would silently project as `unknown` without this branch.
   const value = CAPABILITY_OPERATION_VALUES[ordinal]
   if (value !== undefined) return value
   throw new RangeError(`Unknown CapabilityOperation ordinal: ${ordinal}`)

@@ -6,6 +6,8 @@ import {
   ADJUSTMENT_PURPOSE_LABELS_AR,
   ADJUSTMENT_STATUS_LABELS_AR,
   type AdjustmentListItem,
+  type AdjustmentPurpose,
+  type AdjustmentStatus,
   type ListAdjustmentsQuery,
 } from '@/modules/adjustment/types/adjustment.types'
 import { useAdjustmentsListQuery } from '@/modules/adjustment/hooks/use-adjustment-queries'
@@ -20,7 +22,6 @@ import { AsyncSelect } from '@/shared/ui/async-select'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { AdjustmentPurpose, AdjustmentStatus } from '@/shared/types/generated/eiams-v1'
 import { formatDateTime } from '@/shared/utils/format'
 
 /**
@@ -53,7 +54,11 @@ export default function AdjustmentsListPage() {
 
   const filters = useMemo<ListAdjustmentsQuery>(
     () => ({
-      pageIndex: pagination.page - 1,
+      // One-based controls, one-based wire: the page crosses unchanged. The
+      // `pageIndex: pagination.page - 1` that used to sit here fed a zero-based
+      // helper that added one back — the same number twice, and a `page=0` on
+      // the wire whenever the arithmetic went wrong.
+      page: pagination.page,
       pageSize: pagination.pageSize,
       ...(purpose === undefined ? {} : { purpose }),
       ...(status === undefined ? {} : { status }),

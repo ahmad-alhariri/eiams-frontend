@@ -126,11 +126,13 @@ const twoLines: TestLine[] = [
 ]
 
 let savedBody: SavedBody | undefined
+let savedUrl: string | undefined
 let savedReasonBody: SavedReasonBody | undefined
 let savedReasonUrl: string | undefined
 
 beforeEach(() => {
   savedBody = undefined
+  savedUrl = undefined
   savedReasonBody = undefined
   savedReasonUrl = undefined
   toastError.mockClear()
@@ -169,6 +171,7 @@ function usePagedLinesHandlers(seed: readonly TestLine[]) {
     }),
     http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, async ({ request }) => {
       savedBody = (await request.json()) as SavedBody
+      savedUrl = request.url
       for (const saved of savedBody.actuals as {
         lineId: string
         actualQuantity: number
@@ -512,6 +515,111 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
     expect(await screen.findByText('مادة 1')).toBeInTheDocument()
   }, 40000)
 })
+describe('CountQuantityWorkspace semantic actuals write (RESOLUTION-025)', () => {
+  it('writes the operator quantities to /actuals with the closed semantic body', async () => {
+    // REVERT-PROOF. The count actuals write is the SEMANTIC
+    // `PUT /inventory-counts/{countId}/actuals` command; the generic writable
+    // `/lines` route is a READ in the live contract and was replaced by it.
+    // Pointing the service back at `/lines` fails this case on the URL, and
+    // the body assertions fail on any key the closed command body does not
+    // carry (the backend's strict count body filter answers 400 for one).
+    usePagedLinesHandlers([
+      { ...bulkLine(1), material: { id: 'm1', displayName: 'حاسوب مكتبي' }, snapshotQuantity: 25 },
+      { ...bulkLine(2), material: { id: 'm2', displayName: 'طابعة ليزر' }, snapshotQuantity: 2 },
+    ])
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('حاسوب مكتبي')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '23')
+    await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
+
+    await waitFor(
+      () => {
+        expect(savedBody).toBeDefined()
+      },
+      { timeout: 8000 },
+    )
+
+    expect(savedUrl).toContain(`/inventory-counts/${COUNT_ID}/actuals`)
+    expect(savedUrl).not.toContain('/lines')
+    // Exactly two top-level keys: the aggregate count version and the batch.
+    const body = savedBody as SavedBody
+    expect(Object.keys(body).sort()).toEqual(['actuals', 'expectedRowVersion'])
+    // And exactly two per actual: the line identity and the quantity. No
+    // per-line version, no reason, no snapshot.
+    const first = savedBody?.actuals?.[0] as Record<string, unknown>
+    expect(Object.keys(first).sort()).toEqual(['actualQuantity', 'lineId'])
+  }, 40000)
+
+  it('sends an actual that exceeds the snapshot quantity, because an excess is a variance', async () => {
+    // The server computes the difference and the variance state; an actual
+    // ABOVE the snapshot is a legitimate overage to report, not an error the
+    // client may refuse to send. The live API accepts it (proved against the
+    // running container) and answers with the server-computed difference.
+    usePagedLinesHandlers([
+      { ...bulkLine(1), material: { id: 'm1', displayName: 'حاسوب مكتبي' }, snapshotQuantity: 25 },
+    ])
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('حاسوب مكتبي')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '999')
+    await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
+
+    await waitFor(
+      () => {
+        expect(savedBody).toBeDefined()
+      },
+      { timeout: 8000 },
+    )
+    const first = savedBody?.actuals?.[0] as { actualQuantity: number }
+    expect(first.actualQuantity).toBe(999)
+    expect(toastError).not.toHaveBeenCalled()
+  }, 40000)
+
+  it('surfaces the refusal of a line that is not in the count and keeps the entry', async () => {
+    // The server answers `INVENTORY_COUNT_LINES_NOT_FOUND` (404) for a line
+    // outside the count. The client reports it in Arabic, applies NO local
+    // transition, does not re-send the batch on its own, and leaves the
+    // operator's entry on screen.
+    const attempts: number[] = []
+    usePagedLinesHandlers([
+      { ...bulkLine(1), material: { id: 'm1', displayName: 'حاسوب مكتبي' }, snapshotQuantity: 25 },
+    ])
+    server.use(
+      http.put(`${API_BASE_URL}/inventory-counts/${COUNT_ID}/actuals`, () => {
+        attempts.push(Date.now())
+        return errJson(404, {
+          code: 'INVENTORY_COUNT_LINES_NOT_FOUND',
+          message: 'Inventory count line was not found.',
+        })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('حاسوب مكتبي')
+    await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '23')
+    await user.click(screen.getByRole('button', { name: 'حفظ (١)' }))
+
+    await waitFor(
+      () => {
+        expect(toastError).toHaveBeenCalled()
+      },
+      { timeout: 8000 },
+    )
+    expect(toastError).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'لم يتم العثور على البيانات المطلوبة.' }),
+    )
+    // No local transition and no silent retry.
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(attempts).toHaveLength(1)
+    // The entry survives the refusal.
+    expect(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي')).toHaveValue(23)
+  }, 40000)
+})
+
 describe('CountQuantityWorkspace conflict recovery (eiams-frontend-3wv1)', () => {
   const threeLines: TestLine[] = [
     { ...bulkLine(1), material: { id: 'm1', displayName: 'حاسوب مكتبي' }, snapshotQuantity: 25 },

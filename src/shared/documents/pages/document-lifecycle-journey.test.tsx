@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { environment } from '@/config/env'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import type { LifecycleActionKind } from '@/shared/documents/use-document-lifecycle-actions'
-import type { DocumentLifecycleEvent, WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { DocumentLifecycleEvent, WarehouseDocument } from '@/test/msw/document-engine.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { Toaster } from '@/shared/ui/toaster'
 import {

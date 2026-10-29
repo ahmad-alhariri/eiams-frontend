@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createReportsService } from '@/modules/reports/services/reports.service'
 import type {
+  DashboardReport,
   InventoryReportRow,
   ListAssetReportQuery,
   ListCountAdjustmentReportQuery,
@@ -48,7 +49,7 @@ describe('reportsService', () => {
       )
 
       const query: ListInventoryReportQuery = {
-        pageIndex: 0,
+        page: 1,
         pageSize: 10,
         search: 'حاسوب',
         warehouseId: 'wh-1',
@@ -56,7 +57,13 @@ describe('reportsService', () => {
       const page = await service.getInventoryReport(query)
 
       expect(page.items).toEqual([summary])
-      expect(page.meta).toEqual({ pageIndex: 0, pageSize: 10, totalItems: 1, totalPages: 1 })
+      // `ApiPage` is FLAT: the transport normalizes the wire `pagination`
+      // block into `page`/`pageSize`/`totalItems`/`totalPages` siblings of
+      // `items` — there is no `meta` envelope on the normalized page.
+      expect(page.page).toBe(1)
+      expect(page.pageSize).toBe(10)
+      expect(page.totalItems).toBe(1)
+      expect(page.totalPages).toBe(1)
       expect(captured.at(-1)).toMatchObject({
         page: '1',
         pageSize: '10',
@@ -75,7 +82,7 @@ describe('reportsService', () => {
         }),
       )
 
-      const page = await service.getInventoryReport({ pageIndex: 0, pageSize: 10 })
+      const page = await service.getInventoryReport({ page: 1, pageSize: 10 })
 
       expect(page.items).toEqual([])
       expect(captured.at(-1)).not.toHaveProperty('search')
@@ -95,7 +102,7 @@ describe('reportsService', () => {
       )
 
       const query: ListAssetReportQuery = {
-        pageIndex: 0,
+        page: 1,
         pageSize: 10,
         status: 'InStock',
         warehouseId: 'wh-1',
@@ -124,11 +131,11 @@ describe('reportsService', () => {
       )
 
       const query: ListCountAdjustmentReportQuery = {
-        pageIndex: 0,
+        page: 1,
         pageSize: 10,
         warehouseId: 'wh-1',
-        dateFrom: '2026-09-01T00:00:00.000Z',
-        dateTo: '2026-09-30T00:00:00.000Z',
+        fromUtc: '2026-09-01T00:00:00.000Z',
+        toUtc: '2026-09-30T00:00:00.000Z',
       }
       await service.getCountAdjustmentReport(query)
 
@@ -154,11 +161,11 @@ describe('reportsService', () => {
       )
 
       const query: ListOperationalDocumentsReportQuery = {
-        pageIndex: 0,
+        page: 1,
         pageSize: 10,
         warehouseId: 'wh-1',
-        dateFrom: '2026-09-01T00:00:00.000Z',
-        dateTo: '2026-09-30T00:00:00.000Z',
+        fromUtc: '2026-09-01T00:00:00.000Z',
+        toUtc: '2026-09-30T00:00:00.000Z',
       }
       await service.getOperationalDocumentsReport(query)
 
@@ -175,10 +182,19 @@ describe('reportsService', () => {
   })
 
   describe('getDashboardReport', () => {
-    it('returns the server singleton payload unwrapped, forwarding all four filters', async () => {
+    it('returns the server singleton payload unwrapped, forwarding only the bound filter', async () => {
       const service = setupService()
       const captured: Record<string, string>[] = []
-      const dashboard = { kpis: [], trends: [], distributions: [] }
+      const dashboard: DashboardReport = {
+        warehouseCount: 6,
+        stockedMaterialCount: 7,
+        totalOnHandQuantity: 531,
+        assetCount: 15,
+        activeCustodyCount: 6,
+        openDocumentCount: 54,
+        activeInventoryCountCount: 4,
+        generatedAtUtc: '2026-10-27T04:14:19.3288988Z',
+      }
       server.use(
         http.get(`${API_BASE_URL}/reports/dashboard`, ({ request }) => {
           captured.push(Object.fromEntries(new URL(request.url).searchParams))
@@ -186,20 +202,17 @@ describe('reportsService', () => {
         }),
       )
 
-      const page = await service.getDashboardReport({
-        siteId: 'site-1',
-        warehouseId: 'wh-1',
-        dateFrom: '2026-09-01T00:00:00.000Z',
-        dateTo: '2026-09-30T00:00:00.000Z',
-      })
+      const page = await service.getDashboardReport({ warehouseId: 'wh-1' })
 
       expect(page).toEqual(dashboard)
-      expect(captured.at(-1)).toMatchObject({
-        siteId: 'site-1',
-        warehouseId: 'wh-1',
-        dateFrom: '2026-09-01T00:00:00.000Z',
-        dateTo: '2026-09-30T00:00:00.000Z',
-      })
+      // The dashboard controller binds `warehouseId` and nothing else
+      // (`GetDashboardReportController.cs:23`) — the snapshot-era `siteId`,
+      // `dateFrom` and `dateTo` were never bound and must not be sent.
+      expect(captured.at(-1)).toMatchObject({ warehouseId: 'wh-1' })
+      expect(captured.at(-1)).not.toHaveProperty('siteId')
+      expect(captured.at(-1)).not.toHaveProperty('dateFrom')
+      expect(captured.at(-1)).not.toHaveProperty('dateTo')
+      expect(captured.at(-1)).not.toHaveProperty('page')
     })
   })
 })

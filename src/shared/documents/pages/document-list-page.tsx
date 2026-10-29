@@ -5,8 +5,8 @@ import { Link, useLocation } from 'react-router'
 
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import {
+  DOCUMENT_LIST_ROUTE_ENTRIES,
   type DocumentRouteEntry,
-  RECEIVING_DOCUMENT_LIST_ENTRY,
 } from '@/shared/documents/document-route-entries'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import type { DocumentListFilters } from '@/shared/documents/use-document-queries'
@@ -45,38 +45,6 @@ const DOCUMENT_STATUS_LABELS_AR: Readonly<Record<DocumentStatus, string>> = {
   Reversed: 'معكوس',
   Cancelled: 'ملغي',
   Rejected: 'مرفوض',
-}
-
-const DOCUMENT_LIST_ROUTE_ENTRIES: Readonly<Record<string, DocumentRouteEntry>> = {
-  [ROUTE_PATHS.documentReceiving]: RECEIVING_DOCUMENT_LIST_ENTRY,
-  [ROUTE_PATHS.documentIssue]: {
-    routeKey: 'documentIssue',
-    detailRouteKey: 'documentIssueDetail',
-    createRouteKey: 'documentIssueNew',
-    createLabelAr: 'سند إصدار جديد',
-    documentType: 'Issue',
-  },
-  [ROUTE_PATHS.documentTransfer]: {
-    routeKey: 'documentTransfer',
-    detailRouteKey: 'documentTransferDetail',
-    createRouteKey: 'documentTransferNew',
-    createLabelAr: 'سند تحويل جديد',
-    documentType: 'Transfer',
-  },
-  [ROUTE_PATHS.documentOpening]: {
-    routeKey: 'documentOpening',
-    detailRouteKey: 'documentOpeningDetail',
-    createRouteKey: 'documentOpeningNew',
-    createLabelAr: 'سند رصيد افتتاحي جديد',
-    documentType: 'Opening',
-  },
-  [ROUTE_PATHS.documentReturn]: {
-    routeKey: 'documentReturn',
-    detailRouteKey: 'documentReturnDetail',
-    createRouteKey: 'documentReturnNew',
-    createLabelAr: 'سند إرجاع جديد',
-    documentType: 'Return',
-  },
 }
 
 const documentColumnHelper = createColumnHelper<

@@ -27,6 +27,7 @@ import {
   DialogTrigger,
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 
 export interface TransferCustodyDialogProps {
   /** The LIVE custody row being transferred (`GET /custodies`). */
@@ -34,12 +35,31 @@ export interface TransferCustodyDialogProps {
 }
 
 /**
- * The holder type this dialog can produce.
+ * The holder kinds this dialog may target.
  *
- * The counterpart picker is employee-only (`operation: 'Issue'`, `type:
- * 'Employee'`), so the transfer target is always an Employee.
+ * The live counterpart lookup serves all of them for a transfer:
+ * `GET /counterparts?operation=Transfer&type=<kind>` answers every `PartyType`
+ * value, because the backend validator restricts `type` only for `Receiving`
+ * (→ External) and `Issue` (→ internal parties). Each kind was proved live by
+ * a real transfer on 2026-10-22.
  */
-const NEW_HOLDER_TYPE: CounterpartType = 'Employee'
+const HOLDER_TYPES: readonly CounterpartType[] = [
+  'Employee',
+  'OrganizationalUnit',
+  'Site',
+  'External',
+]
+
+/** Arabic labels of the holder kinds (the issue recipient wording). */
+const HOLDER_TYPE_LABELS_AR: Readonly<Record<CounterpartType, string>> = {
+  Employee: 'موظف',
+  OrganizationalUnit: 'وحدة تنظيمية',
+  Site: 'موقع',
+  External: 'جهة خارجية',
+}
+
+/** The id of the holder-type select, bound by its `<label>`. */
+const HOLDER_TYPE_FIELD_ID = 'transfer-custody-holder-type'
 
 /**
  * The custody kind that goes with a holder type.
@@ -63,6 +83,7 @@ function custodyKindForHolder(holderType: CounterpartType): CustodyKind {
  */
 export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
   const [open, setOpen] = useState(false)
+  const [holderType, setHolderType] = useState<CounterpartType>('Employee')
   const transferMutation = useTransferCustodyMutation()
 
   const methods = useForm<TransferCustodyFormValues>({
@@ -84,9 +105,9 @@ export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
     //   { subjectType, newHolderType, newHolderId, newCustodyKind, expectedRowVersion, note? }
     const request: TransferCustodyRequest = {
       subjectType: custody.subjectType,
-      newHolderType: NEW_HOLDER_TYPE,
+      newHolderType: holderType,
       newHolderId: values.holderId,
-      newCustodyKind: custodyKindForHolder(NEW_HOLDER_TYPE),
+      newCustodyKind: custodyKindForHolder(holderType),
       expectedRowVersion: custody.rowVersion,
       note:
         values.reason !== undefined && values.reason !== ''
@@ -100,7 +121,14 @@ export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
   })
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // A reopened dialog starts from the default holder kind.
+        if (next) setHolderType('Employee')
+        setOpen(next)
+      }}
+    >
       <DialogTrigger render={<Button type="button">مبادلة المسؤولية</Button>} />
       <DialogContent dir="rtl">
         <DialogHeader>
@@ -110,7 +138,8 @@ export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
             <span dir="ltr" className="font-mono">
               {custody.assetNumber}
             </span>
-            . الحائز الجديد موظف، لذلك تُفتح العهدة الجديدة كعهدة شخصية.
+            . نوع الحائز يحدد نوع العهدة: الموظف عهدة شخصية، والوحدة التنظيمية أو الموقع أو الجهة
+            الخارجية عهدة تشغيلية.
           </DialogDescription>
         </DialogHeader>
         <FormProvider {...methods}>
@@ -122,9 +151,45 @@ export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
             }}
             className="grid gap-3 py-2"
           >
+            <div className="grid gap-2">
+              <label htmlFor={HOLDER_TYPE_FIELD_ID} className="text-sm font-medium text-foreground">
+                نوع الحائز الجديد
+              </label>
+              <Select
+                value={holderType}
+                onValueChange={(nextType) => {
+                  if (nextType === null || nextType === holderType) return
+                  setHolderType(nextType)
+                  // A holder captured for one kind is meaningless for the next.
+                  methods.setValue('holderId', '')
+                  methods.setValue('holderDisplayName', '')
+                }}
+                disabled={transferMutation.isPending}
+              >
+                <SelectTrigger id={HOLDER_TYPE_FIELD_ID}>
+                  <SelectValue placeholder="اختر نوع الحائز...">
+                    {HOLDER_TYPE_LABELS_AR[holderType]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {HOLDER_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {HOLDER_TYPE_LABELS_AR[type]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* The picker is remounted per holder kind: the shared selector
+                keeps the options it loaded last, and a Site list offered for an
+                Employee would hand the server a holder of the wrong kind. */}
             <CounterpartSelectField
+              key={holderType}
               control={methods.control}
               disabled={transferMutation.isPending}
+              operation="Transfer"
+              type={holderType}
+              label="الحائز الجديد"
             />
             <div className="grid gap-2">
               <label htmlFor="transfer-reason" className="text-sm font-medium text-foreground">

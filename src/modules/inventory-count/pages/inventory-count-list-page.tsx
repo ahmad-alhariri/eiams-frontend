@@ -19,6 +19,7 @@ import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { dataTableFeatures } from '@/shared/ui/data-table'
+import { formatDateTime } from '@/shared/utils/format'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 
@@ -93,7 +94,10 @@ export default function InventoryCountListPage() {
         columnHelper.accessor('plannedAtUtc', {
           id: 'plannedAtUtc',
           header: 'أُخططت في',
-          cell: ({ getValue }) => (getValue() === null ? '—' : <span dir="ltr">{getValue()}</span>),
+          cell: ({ getValue }) => {
+            const value = getValue() as string | null
+            return value === null ? '—' : <span dir="ltr">{formatDateTime(value)}</span>
+          },
         }),
         columnHelper.display({
           id: 'open',

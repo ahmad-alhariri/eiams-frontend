@@ -22,6 +22,7 @@ type ComponentsConfig = {
 type PackageManifest = {
   scripts?: Record<string, string>
   dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
 }
 
 const componentsConfig = JSON.parse(componentsJsonRaw) as ComponentsConfig
@@ -56,14 +57,15 @@ describe('shadcn Base UI generation configuration', () => {
     expect(packageManifest.dependencies).toMatchObject({
       '@base-ui/react': expect.any(String),
       '@tabler/icons-react': expect.any(String),
-      '@tailwindcss/vite': expect.any(String),
       'class-variance-authority': expect.any(String),
       clsx: expect.any(String),
-      shadcn: expect.any(String),
       'tailwind-merge': expect.any(String),
-      tailwindcss: expect.any(String),
       'tw-animate-css': expect.any(String),
     })
+    // The shadcn CLI is build-time tooling, not a runtime dependency: keeping it
+    // out of dependencies keeps its own tree (express, proxy-addr) out of every
+    // production install.
+    expect(packageManifest.devDependencies).toMatchObject({})
 
     expect(classNamesRaw).toContain('twMerge(clsx(inputs))')
   })

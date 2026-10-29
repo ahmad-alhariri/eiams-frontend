@@ -21,6 +21,22 @@ export interface DatePickerProps {
   disabled?: boolean
   /** Placeholder shown when no date is selected. Defaults to "اختر التاريخ". */
   placeholder?: string
+  /**
+   * Trigger id. The shared `FormControl` supplies its `FormItem` id here so
+   * the `FormLabel`'s `htmlFor` resolves to the real trigger button.
+   */
+  id?: string
+  /** Set by `FormControl` so an invalid field is announced as invalid. */
+  'aria-invalid'?: boolean
+  /** Set by `FormControl`: the description/message ids describing this field. */
+  'aria-describedby'?: string
+  /** Set by `FormControl` when the field is declared required. */
+  'aria-required'?: boolean
+  /**
+   * Accessible name for the trigger. Use it when several pickers share a form
+   * so each one is distinguishable; the selected date is still appended.
+   */
+  ariaLabel?: string
   className?: string
 }
 
@@ -32,6 +48,11 @@ function DatePicker({
   max,
   disabled = false,
   placeholder = 'اختر التاريخ',
+  id,
+  'aria-invalid': ariaInvalid,
+  'aria-describedby': ariaDescribedBy,
+  'aria-required': ariaRequired,
+  ariaLabel,
   className,
 }: DatePickerProps) {
   const [open, setOpen] = useState(false)
@@ -49,12 +70,21 @@ function DatePicker({
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <div className={cn('relative', className)}>
+      <div dir="rtl" className={cn('relative', className)}>
         <PopoverTrigger
-          id={triggerId}
+          id={id ?? triggerId}
           data-slot="date-picker-trigger"
           disabled={disabled}
-          aria-label={selected ? `التاريخ المحدد: ${formatArabicDate(selected)}` : placeholder}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedBy}
+          aria-required={ariaRequired}
+          aria-label={
+            selected
+              ? ariaLabel === undefined
+                ? `التاريخ المحدد: ${formatArabicDate(selected)}`
+                : `${ariaLabel}: ${formatArabicDate(selected)}`
+              : (ariaLabel ?? placeholder)
+          }
           className="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-input bg-popover px-3 py-2 text-start text-base text-foreground whitespace-nowrap transition-[color,box-shadow,background-color] outline-none select-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-50 aria-expanded:border-ring"
         >
           <span className={cn('truncate', !selected && 'text-muted-foreground')}>

@@ -100,27 +100,32 @@ canonical `document.signed_original_missing`.
 
 ## Recorded, not changed
 
-### The attachment gate row deliberately does not echo the server reason
+### The attachment gate row owns the server reason
 
-`attachment-panel.tsx` matches the gate row's blocker with
-`startsWith('signed_original')`, which matches the **bare** spelling only — so
-for the `document.`-prefixed spelling the contract producers actually emit, the
-row shows only its requirement badge and the action bar above it shows the
-reason.
+`attachment-panel.tsx` matches the gate row's blocker with the canonical
+`isSignedOriginalBlocker` predicate (`src/shared/documents/policy-blocker-codes.ts`),
+so every accepted spelling resolves — the bare code, the `document.`-prefixed
+spelling the contract producers actually emit, and the backend's own dotted
+signed-copy code. The row states the requirement badge **and** renders the
+server's Arabic reason once; the lifecycle and the adjustment action bars omit
+that blocker as a duplicate, so the identical sentence never appears twice on
+one screen.
 
-This looks like a bug and was initially fixed as one. It is not. Widening the
-match makes the row render the server's Arabic reason, and the lifecycle action
-bar renders the same blocker on the same screen — so the identical sentence
-appears twice on every document detail page. The failure surfaced as 6 broken
-assertions across 5 test files, all of which encode the bar as the owner of that
-message.
+This looked like a bug and was initially fixed as one. The row used to match
+the gate row's blocker with `startsWith('signed_original')`, which matches the
+**bare** spelling only, and the row therefore showed only its requirement badge
+while the action bar above it showed the reason. Widening that match made the
+row render the server's Arabic reason, and the lifecycle action bar renders the
+same blocker on the same screen — so the identical sentence appeared twice on
+every document detail page. The failure surfaced as 6 broken assertions across 5
+test files, all of which encode the bar as the owner of that message.
 
 Resolving it properly is a **presentation-ownership decision** (which of the two
-surfaces should state the reason), not a matcher correction, so it is recorded
-here instead. Current behaviour is pinned in
-`policy-failure-surfaces.test.tsx` under *"the attachment gate row owns the
-requirement, not the reason"*. Recommended follow-up: pick one owner and delete
-the other rendering.
+surfaces should state the reason), not a matcher correction. The gate row is now
+the single owner and both action bars omit the blocker. Current behaviour is
+pinned in `policy-failure-surfaces.test.tsx` under *"the attachment gate row
+owns the signed-original reason"*, which proves the reason renders exactly
+once.
 
 ## Coverage added
 
@@ -135,20 +140,64 @@ Suite totals: **242 files / 1665 tests**, up from 240 / 1584.
 Previously `signed_original_immutable` had **no** UI test of any kind — it
 existed only as a `ProblemDetails` code — and no test enumerated the vocabulary.
 
-## Pre-existing flakiness observed, not introduced
+## Pre-existing flakiness observed, not introduced — root cause now known
 
-`src/modules/admin/pages/user-detail-page.test.tsx` and
-`src/modules/adjustment/pages/asset-disposal-form-page.test.tsx` fail
-intermittently under full-suite parallel load, with a **different test each
-run**. Both rely on 13–16 `findBy`/`waitFor` assertions at the default 1000 ms
-timeout with no fake timers; under CPU contention they exceed it. Neither imports
-anything this slice touched, and both pass in isolation. This was already
-observable at 240 files before this slice added any test file.
+`src/modules/admin/pages/user-detail-page.test.tsx`,
+`src/modules/adjustment/pages/asset-disposal-form-page.test.tsx` and
+`src/app/app-router.test.tsx` failed intermittently under full-suite parallel
+load, with a **different test each run**. All three drive a real integration
+chain — the shared 300 ms search debounce (`useDebounce`), the MSW-intercepted
+round trip, and the React / Base-UI re-render that publishes the result — and
+under load (300+ files, 15 workers on 16 logical CPUs) every step of that chain
+is served late. None of them imports anything this slice touched, and all three
+pass in isolation. This was already observable at 240 files before this slice
+added any test file.
 
-Confirmed by timeout, not inference: the whole suite is green under
-`pnpm vitest run --testTimeout=25000` (**242 files / 1665 tests**), so the
-failures are the assertions' default timeout, not a behaviour change. Worth
-raising those timeouts or reducing pool pressure; out of scope here.
+**Three distinct mechanisms, all reproduced (not inferred).** Measured under
+30-way CPU contention, which is what a full parallel run looks like from the
+inside a worker:
+
+1. **The per-assertion budget** — RTL's default 1000 ms `findBy*` / `waitFor`:
+   `Unable to find role="option" and name "المستودع المركزي في دمشق"`, the
+   debounced search not having published its option yet.
+2. **The per-test budget** — Vitest's own `testTimeout` (20 s,
+   `vite.config.ts`): `Test timed out in 20000ms` on the 200-character reason
+   test, whose body is 201 keystrokes. This is the DOMINANT mechanism, and the
+   evidence already recorded in this section proves it: the whole suite is
+   green under `pnpm vitest run --testTimeout=25000` (242 files / 1665 tests),
+   and a Vitest timeout cannot cure an RTL assertion timeout — so the
+   assertions' default timeout could not have been what `--testTimeout` fixed.
+   An earlier revision of this section claimed the opposite ("failed with
+   'Unable to find an element ...' rather than 'Test timed out'"); both
+   messages occur, and the second one is the dominant one.
+3. **Not a budget at all — an `aria-hidden` race.** Base UI's combobox popup is
+   a modal focus manager, so while it is open, or while its teardown is still
+   pending, the rest of the document is `aria-hidden`, and RTL's role queries
+   ignore `aria-hidden` subtrees. A synchronous `getByRole` landing in that
+   window fails with `Unable to find an accessible element with the role
+   "combobox" and name "الأصل المستبعد"` — about an element that IS in the DOM.
+
+The third suite failed for a fourth reason: the dev gallery is a LAZY route, and
+the on-demand transform of its module graph (twenty demo components) was being
+charged to the gallery assertion's own 5000 ms budget, so the assertion failed
+while React was still showing the Suspense fallback (`جارٍ تحميل الصفحة...`).
+
+**Fixed** in `eiams-frontend-6lqw`:
+
+- each affected suite carries its OWN scoped budgets — the RTL async-assertion
+  budget is raised for that suite only (and restored afterwards) and the suite
+  carries its own test timeout;
+- the queries that can land in the `aria-hidden` window now WAIT for the
+  element (`findByRole`) instead of demanding it synchronously, and the one
+  assertion on a REMOUNTED control asserts the settled state — no assertion
+  was weakened, only made to wait for it;
+- the gallery's lazy chunk is imported by the test file, so the transform is
+  paid in that file's import phase (where no assertion budget applies) and the
+  assertion measures the gallery's RENDER.
+
+No global timeout override was added, no pool pressure was changed, and no
+assertion was weakened. Under the same 30-way contention: 4 failures without
+the scoped budgets, 1 with them, 0 with all of the above.
 
 ## Manual verification
 

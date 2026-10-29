@@ -116,9 +116,9 @@ Where it appears:
 - Almost every source file under `src/`
 - `tsconfig.json`
 - `tsconfig.app.json`
-- `src/shared/types/generated/eiams-v1.ts`
+- the wire contracts under `src/modules/*/types/` and `src/shared/documents/types/`
 
-The important beginner idea: TypeScript describes the shape of data. For example, `LoginRequest`, `AuthTokenResponse`, and `SessionResponse` come from the generated OpenAPI types, so the frontend and backend can agree on request and response shapes.
+The important beginner idea: TypeScript describes the shape of data. For example, `LoginRequest`, `AuthTokenResponse`, and `SessionResponse` are handwritten wire contracts, transcribed from the backend's own DTOs, so the frontend and backend can agree on request and response shapes.
 
 Alternatives are plain JavaScript or Flow. TypeScript is preferred because this is a government-grade business application where incorrect data shapes can become expensive bugs.
 
@@ -360,27 +360,29 @@ Examples:
 - `shared/layout`: app layout, header, sidebar, breadcrumbs.
 - `shared/feedback`: loading, empty, error states.
 - `shared/hooks`: generic hooks such as debounce, confirm, query params, pagination.
-- `shared/types/generated`: OpenAPI-generated TypeScript types.
+- `shared/api`: the shared transport seams (`ApiTransport`, the envelope types).
 
 The rule of thumb: if code belongs to one feature, put it in `modules/<feature>`. If many features need it, put it in `shared`.
 
 ### `contracts`
 
-This folder stores the OpenAPI contract used to generate frontend API types.
+This folder records the API contract and the gate that keeps the frontend
+honest against the live API. There is NO generator here any more: the
+frontend's API types are handwritten per-module wire contracts.
 
 Important files:
 
-- `contracts/openapi/eiams-v1.openapi.json`
-- `contracts/openapi/eiams-v1.provenance.json`
-- `contracts/openapi/README.md`
+- `contracts/openapi/eiams-v1.consumer-baseline.json` — the ratchet: the response fingerprint of every endpoint the frontend consumes, captured from the live API.
+- `contracts/openapi/README.md` — what the gate does and how to re-capture it.
 
-The generated output goes to:
+To check the frontend against a running backend:
 
 ```text
-src/shared/types/generated/eiams-v1.ts
+pnpm run contract:drift
 ```
 
-Do not edit generated API types by hand.
+A mismatch is a contract change: fix it by hand in the owning module's wire
+contract, against a versioned backend change.
 
 ### `docs`
 
@@ -1660,13 +1662,13 @@ Invalid data does not reach the API accidentally, and users get inline feedback.
 
 ### Generated API types
 
-Meaning: backend OpenAPI contract generates TypeScript definitions.
+Meaning: the backend's OpenAPI contract is the reference the frontend's handwritten wire contracts are transcribed from, and a gate compares the two.
 
 Where it appears:
 
-- `contracts/openapi/eiams-v1.openapi.json`
-- `scripts/generate-api-types.mjs`
-- `src/shared/types/generated/eiams-v1.ts`
+- `contracts/openapi/eiams-v1.consumer-baseline.json`
+- `contracts/openapi/README.md`
+- the wire contracts under `src/modules/*/types/`
 
 Problem it prevents:
 

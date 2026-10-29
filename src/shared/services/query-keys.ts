@@ -3,7 +3,8 @@ import type { QueryClient, QueryKey } from '@tanstack/react-query'
 export type ScopeCacheKey =
   { kind: 'enterprise' } | { kind: 'site'; id: string } | { kind: 'warehouse'; id: string }
 
-const SCOPED_PREFIX = 'scoped'
+export const SCOPED_PREFIX = 'scoped'
+export const UNSCOPED_PREFIX = 'unscoped'
 const PUBLIC_PREFIX = 'public'
 
 function scopeParts(scope: ScopeCacheKey) {
@@ -13,6 +14,8 @@ function scopeParts(scope: ScopeCacheKey) {
 export const queryKeys = {
   public: (resource: string, ...parts: readonly unknown[]) =>
     [PUBLIC_PREFIX, resource, ...parts] as const,
+  unscoped: (resource: string, ...parts: readonly unknown[]) =>
+    [UNSCOPED_PREFIX, resource, ...parts] as const,
   scoped: (scope: ScopeCacheKey, resource: string, ...parts: readonly unknown[]) =>
     [SCOPED_PREFIX, ...scopeParts(scope), resource, ...parts] as const,
 }

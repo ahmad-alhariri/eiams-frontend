@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { assetQueryKeys } from '@/modules/asset/hooks/use-asset-queries'
@@ -33,11 +33,12 @@ export function useCustodiesQuery(query: ListCustodiesQuery) {
   return useQuery({
     queryKey:
       scope.activeScopeCacheKey === undefined
-        ? queryKeys.public(CUSTODY_RESOURCE, 'custodies', query)
+        ? queryKeys.unscoped(CUSTODY_RESOURCE, 'custodies', query)
         : custodyQueryKeys.custodies(scope.activeScopeCacheKey, query),
     queryFn: () => custodyService.listCustodies(query),
     enabled: scope.activeScopeCacheKey !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -56,11 +57,12 @@ export function usePendingCustodiesQuery(warehouseId: string, page: number, page
   return useQuery({
     queryKey:
       scope.activeScopeCacheKey === undefined
-        ? queryKeys.public(CUSTODY_RESOURCE, 'custodies', 'pending', query)
+        ? queryKeys.unscoped(CUSTODY_RESOURCE, 'custodies', 'pending', query)
         : custodyQueryKeys.pending(scope.activeScopeCacheKey, query),
     queryFn: () => custodyService.listPendingCustodies(query),
     enabled: scope.activeScopeCacheKey !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
+    placeholderData: keepPreviousData,
   })
 }
 

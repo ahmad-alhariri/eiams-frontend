@@ -17,6 +17,7 @@ import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
+import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { formatDate, formatDateTime } from '@/shared/utils/format'
 
@@ -34,6 +35,18 @@ export default function AssetDetailPage() {
   const assetQuery = useAssetQuery(assetId)
   const asset = assetQuery.data
   const statusQuery = useAssetCurrentStatusQuery(assetId)
+
+  // A missing asset and a failed read are DIFFERENT facts. The shared copy
+  // table owns the Arabic for the server's not-found code
+  // (`ASSETS_NOT_FOUND`), so a 404 speaks the mapped sentence instead of the
+  // page's generic "تعذّر تحميل الأصل", which stays for a genuine failure.
+  const assetError = assetQuery.isError ? normalizeApiError(assetQuery.error) : null
+  const assetErrorTitle =
+    assetError !== null && assetError.status === 404 ? assetError.titleAr : 'تعذّر تحميل الأصل'
+  const assetErrorDescription =
+    assetError !== null && assetError.status === 404
+      ? (assetError.detailAr ?? 'لا يوجد أصل بهذا المعرّف ضمن نطاق العمل الحالي.')
+      : 'تعذّر جلب بيانات هذا الأصل. حاول مرة أخرى.'
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -53,8 +66,8 @@ export default function AssetDetailPage() {
         <LoadingSpinner className="min-h-48" label="جارٍ تحميل بيانات الأصل..." />
       ) : assetQuery.isError ? (
         <ErrorState
-          title="تعذّر تحميل الأصل"
-          description="تعذّر جلب بيانات هذا الأصل. حاول مرة أخرى."
+          title={assetErrorTitle}
+          description={assetErrorDescription}
           action={
             <Button
               type="button"

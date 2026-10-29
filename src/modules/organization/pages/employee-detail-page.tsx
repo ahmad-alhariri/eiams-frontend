@@ -21,6 +21,7 @@ import { StatusBadge } from '@/shared/feedback/status-badge'
 import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
+import { OrganizationPageShell } from '@/modules/organization/components/organization-page-shell'
 import { PageHeader } from '@/shared/layout/page-header'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { Button } from '@/shared/ui/button'
@@ -128,25 +129,24 @@ function EmployeeDetailPage() {
     )
 
   return (
-    <div dir="rtl" className="min-w-0">
-      <PageHeader
-        title={employee.fullName}
-        subtitle={`الرقم الوظيفي: ${employee.employeeNumber}`}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {canManage ? (
-              <Button type="button" onClick={() => setIsEditDialogOpen(true)}>
-                <IconEdit aria-hidden data-icon="inline-start" />
-                تعديل الموظف
-              </Button>
-            ) : null}
-            <Button type="button" variant="outline" onClick={returnToEmployees}>
-              <IconArrowRight aria-hidden data-icon="inline-start" />
-              العودة إلى الموظفين
+    <OrganizationPageShell
+      titleAr={employee.fullName}
+      subtitle={`الرقم الوظيفي: ${employee.employeeNumber}`}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {canManage ? (
+            <Button type="button" onClick={() => setIsEditDialogOpen(true)}>
+              <IconEdit aria-hidden data-icon="inline-start" />
+              تعديل الموظف
             </Button>
-          </div>
-        }
-      />
+          ) : null}
+          <Button type="button" variant="outline" onClick={returnToEmployees}>
+            <IconArrowRight aria-hidden data-icon="inline-start" />
+            العودة إلى الموظفين
+          </Button>
+        </div>
+      }
+    >
       <ContentCard title="بيانات الموظف" description="بيانات مرجعية للقراءة ضمن نطاق العمل الحالي.">
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
           <DetailField label="اسم الموظف">{employee.fullName}</DetailField>
@@ -174,7 +174,7 @@ function EmployeeDetailPage() {
         }}
         onSubmit={submitForm}
       />
-    </div>
+    </OrganizationPageShell>
   )
 }
 

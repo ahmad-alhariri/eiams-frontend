@@ -1,6 +1,8 @@
-import type { CounterpartType, CustodyKind } from '@/shared/types/generated/eiams-v1'
-
-import { ISSUE_RECIPIENT_TYPE_LABELS_AR } from '@/modules/issue/schemas/issue-info.schema'
+import type { CustodyKind } from '@/modules/custody/types/custody.types'
+import {
+  ISSUE_RECIPIENT_TYPE_LABELS_AR,
+  type IssueRecipientType,
+} from '@/modules/issue/schemas/issue-info.schema'
 
 /**
  * Issue responsibility preview (e16-t06).
@@ -12,6 +14,12 @@ import { ISSUE_RECIPIENT_TYPE_LABELS_AR } from '@/modules/issue/schemas/issue-in
  *
  * The mapping below is presentation guidance only: custody creation is
  * server-owned on posting and this model never persists anything.
+ *
+ * The two vocabularies are the LIVE backend ones, not the frozen snapshot's:
+ * `IssueRecipientType` is the issue form's `PartyType` quartet
+ * (`Domain/Common/PartyType.cs`) and `CustodyKind` is the custody module's
+ * handwritten `Domain.Common.CustodyKind`
+ * (`src/modules/custody/types/custody.types.ts`).
  */
 
 export interface IssueResponsibilityPreview {
@@ -21,7 +29,7 @@ export interface IssueResponsibilityPreview {
   messageAr: string | null
 }
 
-const CUSTODY_KIND_BY_RECIPIENT_TYPE: Readonly<Record<CounterpartType, CustodyKind>> = {
+const CUSTODY_KIND_BY_RECIPIENT_TYPE: Readonly<Record<IssueRecipientType, CustodyKind>> = {
   Employee: 'Personal',
   OrganizationalUnit: 'Operational',
   Site: 'Operational',
@@ -41,11 +49,11 @@ export function issueResponsibilityPreview(
   if (recipientType === '' || !(recipientType in CUSTODY_KIND_BY_RECIPIENT_TYPE)) {
     return { custodyKind: null, messageAr: null }
   }
-  const custodyKind = CUSTODY_KIND_BY_RECIPIENT_TYPE[recipientType as CounterpartType]
+  const custodyKind = CUSTODY_KIND_BY_RECIPIENT_TYPE[recipientType as IssueRecipientType]
   const holderLabel =
     recipientDisplayName.trim() !== ''
       ? recipientDisplayName.trim()
-      : ISSUE_RECIPIENT_TYPE_LABELS_AR[recipientType as CounterpartType]
+      : ISSUE_RECIPIENT_TYPE_LABELS_AR[recipientType as IssueRecipientType]
   return {
     custodyKind,
     messageAr: `${RESPONSIBILITY_MESSAGE_AR[custodyKind]} (الجهة: ${holderLabel})`,

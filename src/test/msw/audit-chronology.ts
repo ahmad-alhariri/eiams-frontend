@@ -5,25 +5,29 @@
  * ----------------------------------------------
  * The audit explorer used to return headers in whatever order the fixture list
  * happened to be built. For an append-only ledger read newest-first that is not
- * cosmetic: `occurredAt` is a client-supplied timestamp with millisecond
- * precision, so several actions inside one transaction legitimately share it, and
- * an ordering without a tie-break leaves those rows in an arbitrary — and
- * page-to-page unstable — sequence. Two pages of the same query could then show
- * the same row twice and drop another, which is the specific defect this
- * comparator fixed.
+ * cosmetic: `createdAtUtc` is a millisecond-precision timestamp, so several
+ * actions inside one transaction legitimately share it, and an ordering without
+ * a tie-break leaves those rows in an arbitrary — and page-to-page unstable —
+ * sequence. Two pages of the same query could then show the same row twice and
+ * drop another, which is the specific defect this comparator fixed.
  *
  * The fix is a TOTAL order over two immutable fields, which is exactly what
- * server-side pagination needs: sort by `occurredAt` descending, then by
- * `auditLogId` descending. Both keys are written once and never updated, so the
- * order of the whole ledger is stable for the lifetime of the deployment.
+ * server-side pagination needs: sort by `createdAtUtc` descending, then by `id`
+ * descending. Both keys are written once and never updated, so the order of the
+ * whole ledger is stable for the lifetime of the deployment.
  *
  * WHY THE ID DESCENDS TOO
  * -----------------------
  * Descending on both keys matches "newest first" under either tie-break
  * direction, so either choice produces the same visible chronology; descending
  * keeps one consistent rule ("later key wins") instead of a comparator whose two
- * halves disagree. `localeCompare` is retained from the original fix: `occurredAt`
- * is an ISO-8601 UTC string, so lexicographic order is chronological order.
+ * halves disagree. `localeCompare` is retained from the original fix:
+ * `createdAtUtc` is an ISO-8601 UTC string, so lexicographic order is
+ * chronological order.
+ *
+ * The two keys are named after the LIVE wire (`AuditLogHeader.id` /
+ * `AuditLogHeader.createdAtUtc`), never after the frozen snapshot's
+ * `auditLogId` / `occurredAt`, which the backend never sends.
  *
  * Ported from `src/mocks/handlers.ts` by bead `eiams-frontend-79na` (EPIC G7)
  * so that deleting the dev mock in `eiams-frontend-m4jm` cannot silently
@@ -32,8 +36,8 @@
 
 /** The two immutable fields the audit ledger may be ordered by. */
 export interface AuditChronologyKey {
-  readonly auditLogId: string
-  readonly occurredAt: string
+  readonly id: string
+  readonly createdAtUtc: string
 }
 
 /**
@@ -41,10 +45,10 @@ export interface AuditChronologyKey {
  * `Array.prototype.sort` comparator.
  */
 export function compareAuditLogChronology(a: AuditChronologyKey, b: AuditChronologyKey): number {
-  if (a.occurredAt === b.occurredAt) {
-    return b.auditLogId.localeCompare(a.auditLogId)
+  if (a.createdAtUtc === b.createdAtUtc) {
+    return b.id.localeCompare(a.id)
   }
-  return b.occurredAt.localeCompare(a.occurredAt)
+  return b.createdAtUtc.localeCompare(a.createdAtUtc)
 }
 
 /**

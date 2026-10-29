@@ -5,6 +5,7 @@ import {
   policyAdvisoryMessageAr,
   policyBlockerMessageAr,
 } from '@/shared/documents/document-policy-gates'
+import { isSignedOriginalBlocker } from '@/shared/documents/policy-blocker-codes'
 import {
   toDocumentActionType,
   type DocumentActionType,
@@ -183,11 +184,18 @@ function LifecycleActionBar({
     })
   }
 
+  // The signed-original requirement is stated once per screen, by the attachment
+  // gate row — it sits next to the badge that states the requirement and is
+  // where a user looks for the reason. Alerting the same blocker here printed
+  // the identical Arabic sentence twice on one document screen (grsv), so the
+  // bar omits every signed-original blocker the canonical vocabulary names.
+  const alertedBlockers = policy.blockers.filter((blocker) => !isSignedOriginalBlocker(blocker))
+
   return (
     <div className={cn('flex flex-col gap-2', className)}>
-      {policy.blockers.length > 0 ? (
+      {alertedBlockers.length > 0 ? (
         <div role="alert" className="flex flex-col gap-1.5 rounded-md bg-destructive/5 px-3 py-2">
-          {policy.blockers.map((blocker) => {
+          {alertedBlockers.map((blocker) => {
             const messageAr = policyBlockerMessageAr(blocker)
             return messageAr === null ? null : (
               <p

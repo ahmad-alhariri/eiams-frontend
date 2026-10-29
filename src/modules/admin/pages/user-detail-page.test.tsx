@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { configure, getConfig, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { HttpResponse, http } from 'msw'
 
 import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
@@ -98,7 +98,51 @@ afterEach(() => {
   permissions.canViewRoles = true
 })
 
-describe('UserDetailPage', () => {
+/**
+ * WHY THIS SUITE CARRIES ITS OWN BUDGETS
+ * --------------------------------------
+ *
+ * This suite drives a real integration chain — the shared 300 ms search
+ * debounce (`useDebounce`), the MSW-intercepted round trip, and the React /
+ * Base-UI re-render that publishes the result — and under the full parallel run
+ * (300+ files, 15 workers on 16 logical CPUs) every step of that chain is
+ * served late. TWO DIFFERENT budgets are exhausted, and which one trips first
+ * differs from run to run on an unchanged tree:
+ *
+ *  - RTL's per-assertion budget (DEFAULT 1000 ms). Measured under 30-way CPU
+ *    contention: "Unable to find role=\"option\" and name \"المستودع المركزي في
+ *    دمشق\"" — the debounced search had not published its option yet.
+ *  - the per-TEST budget. Measured under the same load: "Test timed out in
+ *    20000ms" (on the disposal suite's 200-character reason test, whose body is
+ *    201 keystrokes). Vitest's own `testTimeout` (20 s, `vite.config.ts`) IS
+ *    this budget, and the bead's own evidence — the whole suite is green under
+ *    `--testTimeout=25000` — proves it is the dominant one, because a Vitest
+ *    timeout cannot cure an RTL assertion timeout.
+ *
+ * A third mechanism is not a budget at all: Base UI's combobox popup is a
+ * modal focus manager, so while it is open — or while its teardown is still
+ * pending — the rest of the document is `aria-hidden`, and RTL's role queries
+ * ignore aria-hidden subtrees. A synchronous `getByRole` landing in that window
+ * fails with "Unable to find an accessible element with the role ..." about an
+ * element that IS in the DOM. The queries below therefore WAIT for the element
+ * (`findByRole`) instead of demanding it synchronously.
+ *
+ * The budgets are scoped to THIS SUITE: the RTL async-assertion budget is
+ * raised for these tests only (and restored afterwards), and the suite carries
+ * its own test timeout. No global override is added and no assertion is
+ * relaxed — a wrong element still fails, it just fails after the real round
+ * trip has had time to land.
+ */
+const ASYNC_ASSERTION_TIMEOUT = 8_000
+
+/** The suite's own test timeout, so a slow round trip is not a test timeout. */
+const SUITE_TIMEOUT = 30_000
+
+describe('UserDetailPage', { timeout: SUITE_TIMEOUT }, () => {
+  const defaultAsyncUtilTimeout = getConfig().asyncUtilTimeout
+  beforeAll(() => configure({ asyncUtilTimeout: ASYNC_ASSERTION_TIMEOUT }))
+  afterAll(() => configure({ asyncUtilTimeout: defaultAsyncUtilTimeout }))
+
   it('replaces the single assignment with the role scope and version it was read at', async () => {
     const user = userEvent.setup()
     const receivedBodies: unknown[] = []
@@ -138,10 +182,10 @@ describe('UserDetailPage', () => {
 
     // AsyncSelect's Base UI input carries the combobox role, not textbox.
     await user.click(await screen.findByRole('combobox', { name: 'موقع' }))
-    await user.type(screen.getByRole('combobox', { name: 'موقع' }), 'حلب')
+    await user.type(await screen.findByRole('combobox', { name: 'موقع' }), 'حلب')
     await user.click(await screen.findByRole('option', { name: /موقع حلب/ }))
 
-    await user.click(screen.getByRole('button', { name: 'حفظ التعيين' }))
+    await user.click(await screen.findByRole('button', { name: 'حفظ التعيين' }))
 
     await waitFor(() =>
       expect(receivedBodies).toEqual([
@@ -249,7 +293,7 @@ describe('UserDetailPage', () => {
 
     await user.click(await screen.findByRole('combobox', { name: /الدور/ }))
     await user.click(await screen.findByRole('option', { name: ROLE_A.nameAr }))
-    await user.click(screen.getByRole('button', { name: 'حفظ التعيين' }))
+    await user.click(await screen.findByRole('button', { name: 'حفظ التعيين' }))
 
     await waitFor(() =>
       expect(receivedBodies).toEqual([

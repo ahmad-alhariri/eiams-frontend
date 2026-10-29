@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { DocumentActionType } from '@/shared/types/generated/eiams-v1'
+import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 import {

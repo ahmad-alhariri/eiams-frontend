@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import {
@@ -23,7 +23,7 @@ import { createIdempotencyKey, type IdempotencyKey } from '@/shared/services/mut
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 
-const COUNT_RESOURCE = 'inventory-counts'
+export const COUNT_RESOURCE = 'inventory-counts'
 // The server caps a page at PaginationDefaults.MaximumPageSize (100); asking for
 // more answers 400 and the variance review never loads.
 const ALL_COUNT_LINES_PAGE_SIZE = 100
@@ -81,14 +81,12 @@ function useCountInvalidation() {
   const scope = useActiveScopeContext()
   return () => {
     if (scope.activeScopeCacheKey === undefined) return
-    // Every count query is scoped under [scoped, ...scopeParts, inventory-counts, ...].
-    const prefix = [
-      'scoped',
-      scope.activeScopeCacheKey.kind,
-      'id' in scope.activeScopeCacheKey ? scope.activeScopeCacheKey.id : null,
-      COUNT_RESOURCE,
-    ] as const
-    void queryClient.invalidateQueries({ queryKey: [...prefix] })
+    // Built by the shared factory rather than by hand. A hand-derived prefix
+    // can silently diverge from `queryKeys.scoped`'s shape and then match
+    // nothing at all, which is the failure filed as eiams-frontend-jkel.
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.scoped(scope.activeScopeCacheKey, COUNT_RESOURCE),
+    })
   }
 }
 
@@ -100,6 +98,7 @@ function useCountInvalidation() {
 export function useInventoryCountsQuery(query: ListCountsQuery) {
   const scope = useActiveScopeContext()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope.activeScopeCacheKey === undefined
         ? ['inventory-counts', 'unscoped', query]
@@ -131,6 +130,7 @@ export function useCountLinesQuery(
 ) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined || countId == null
         ? ['inventory-counts', 'lines', 'unscoped', countId, query]
@@ -150,6 +150,7 @@ export function useCountLinesQuery(
 export function useAllCountLinesQuery(countId: string | undefined | null) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined || countId == null
         ? ['inventory-counts', 'lines', 'all', 'unscoped', countId]
@@ -223,6 +224,12 @@ export function useStartCountMutation(countId: string) {
 /**
  * Batches actual-quantity entry onto count lines (`count.enter`).
  *
+ * The wire is the SEMANTIC actuals command of RESOLUTION-025 —
+ * `PUT /inventory-counts/{countId}/actuals` with the closed body
+ * `{ actuals: [{ lineId, actualQuantity }], expectedRowVersion }` — so the
+ * batch carries the COUNT's aggregate row version and no per-line version, and
+ * it commits completely or changes nothing.
+ *
  * There is deliberately **no `onError` invalidation** here, and that absence is
  * load-bearing rather than an oversight. The quantity-entry workspace feeds the
  * loaded page to react-hook-form through its reseed effects, and a refetch on
@@ -232,14 +239,33 @@ export function useStartCountMutation(countId: string) {
  *
  * A `409` is surfaced instead through `isConflictError(error)` at the call
  * boundary, which hands it to `useCountConflictRecovery`. The save is never
- * retried automatically: this operation accepts no `Idempotency-Key`, so a
- * retry cannot be made safe.
+ * retried automatically: the client cannot know whether the first attempt
+ * landed, so it never re-sends on its own.
  */
 export function useUpdateCountLinesMutation(countId: string) {
   const invalidate = useCountInvalidation()
+  // One idempotency key per BATCH (RESOLUTION-025). The same batch sent again
+  // after an uncertain outcome is an EQUIVALENT retry and reuses the key, so
+  // the server can answer with the original result instead of applying the
+  // batch twice; a DIFFERENT batch gets a new key, because the server pairs
+  // the key with the request it was issued for.
+  const batchKeyRef = useRef<{ readonly signature: string; readonly key: IdempotencyKey } | null>(
+    null,
+  )
   return useMutation({
-    mutationFn: (request: UpdateCountLinesRequest) => countService.updateLines(countId, request),
-    onSuccess: invalidate,
+    mutationFn: (request: UpdateCountLinesRequest) => {
+      const signature = JSON.stringify(request)
+      if (batchKeyRef.current?.signature !== signature) {
+        batchKeyRef.current = { signature, key: createIdempotencyKey() }
+      }
+      return countService.updateLines(countId, request, batchKeyRef.current.key)
+    },
+    onSuccess: () => {
+      // The batch landed, so the next save is a NEW user-approved execution and
+      // gets a new key.
+      batchKeyRef.current = null
+      invalidate()
+    },
   })
 }
 

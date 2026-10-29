@@ -1,36 +1,27 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { http } from 'msw'
 import type { ReactNode } from 'react'
 import { FormProvider, useForm, useWatch, type Resolver, type UseFormReturn } from 'react-hook-form'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
 import { fixtureUuid } from '@/test/msw/factories'
-import { okPageJson } from '@/test/msw/envelope'
-import { server } from '@/test/msw/server'
-import { createQueryClient } from '@/shared/services/query.client'
 import {
   createEmptyQuantityLine,
   documentLinesSchema,
   type DocumentLinesContainer,
 } from '@/shared/documents/schemas/document-lines.schemas'
 import type { ReturnEligibleItem } from '@/modules/custody/types/return.types'
+import { formatNumber } from '@/shared/utils/format'
 import { ReturnLineAssetSelector } from './return-line-asset-selector'
 
-const API_BASE_URL = '/api/v1'
 const ISSUE_DOC_ID = fixtureUuid(155)
 const MATERIAL_ID = fixtureUuid(41)
+const DURABLE_QTY_MATERIAL_ID = fixtureUuid(43)
+const DURABLE_SERIAL_MATERIAL_ID = fixtureUuid(44)
 const ASSET_A_ID = fixtureUuid(60)
 const ASSET_B_ID = fixtureUuid(61)
-
-vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
-  useActiveScopeContext: () => ({
-    activeScopeCacheKey: { kind: 'enterprise' } as unknown,
-  }),
-}))
 
 function eligibleAsset(assetSequence: number, subjectId: string): ReturnEligibleItem {
   return {
@@ -49,20 +40,63 @@ function eligibleAsset(assetSequence: number, subjectId: string): ReturnEligible
   }
 }
 
-const ELIGIBLE_ASSETS = [eligibleAsset(1, ASSET_A_ID), eligibleAsset(2, ASSET_B_ID)]
+function eligibleQuantity(availableQuantity: number, issuedQuantity = 10): ReturnEligibleItem {
+  return {
+    subjectType: 'MaterialQuantity',
+    subjectId: fixtureUuid(71),
+    materialId: DURABLE_QTY_MATERIAL_ID,
+    materialNameAr: 'أسطوانة غاز',
+    materialNameEn: 'Gas Cylinder',
+    materialCode: 'DUR-GAS-01',
+    materialKind: 'Durable',
+    trackingType: 'Quantity',
+    serialNumber: null,
+    assetNumber: null,
+    availableQuantity,
+    issuedQuantity,
+  }
+}
 
-function createAssetKindLine(
+function eligibleUnit(serialNumber: string, subjectId: string): ReturnEligibleItem {
+  return {
+    subjectType: 'TrackedUnit',
+    subjectId,
+    materialId: DURABLE_SERIAL_MATERIAL_ID,
+    materialNameAr: 'جهاز قياس',
+    materialNameEn: 'Measuring Device',
+    materialCode: 'DUR-MEAS-01',
+    materialKind: 'Durable',
+    trackingType: 'Serial',
+    serialNumber,
+    assetNumber: null,
+    availableQuantity: 1,
+    issuedQuantity: 1,
+  }
+}
+
+const ELIGIBLE_ASSETS = [eligibleAsset(1, ASSET_A_ID), eligibleAsset(2, ASSET_B_ID)]
+const ELIGIBLE_UNITS = [eligibleUnit('SN-DUR-0001', fixtureUuid(72))]
+
+function createLine(
+  materialId: string,
+  materialKind: string,
   overrides: Partial<DocumentLinesContainer['lines'][number]> = {},
 ): DocumentLinesContainer['lines'][number] {
   return {
     ...createEmptyQuantityLine(),
-    materialId: MATERIAL_ID,
-    materialNameAr: 'حاسوب محمول',
-    materialKind: 'Asset',
+    materialId,
+    materialNameAr: 'مادة اختبار',
+    materialKind,
     materialDomainId: '00000000-0000-4000-8000-000000000020',
     quantity: 2,
     ...overrides,
   }
+}
+
+function createAssetKindLine(
+  overrides: Partial<DocumentLinesContainer['lines'][number]> = {},
+): DocumentLinesContainer['lines'][number] {
+  return createLine(MATERIAL_ID, 'Asset', overrides)
 }
 
 /** RHF host exposing the form (`lines` container) the selector mutates. */
@@ -76,14 +110,12 @@ function createHost(initialLines: DocumentLinesContainer['lines']) {
       mode: 'onSubmit',
     })
     return (
-      <QueryClientProvider client={createQueryClient()}>
-        <FormProvider {...created}>
-          <form aria-label="test-form" onSubmit={(event) => event.preventDefault()}>
-            {children}
-            <LinesOutput form={created} />
-          </form>
-        </FormProvider>
-      </QueryClientProvider>
+      <FormProvider {...created}>
+        <form aria-label="test-form" onSubmit={(event) => event.preventDefault()}>
+          {children}
+          <LinesOutput form={created} />
+        </form>
+      </FormProvider>
     )
   }
   return { Host }
@@ -101,39 +133,42 @@ function linesValue(): DocumentLinesContainer['lines'] {
     : (JSON.parse(slot.textContent ?? '[]') as DocumentLinesContainer['lines'])
 }
 
-function useEligibleItemsHandler(items: readonly ReturnEligibleItem[]) {
-  server.use(http.get(`${API_BASE_URL}/returns/eligible-items`, () => okPageJson([...items])))
-}
-
-afterEach(() => {
-  server.resetHandlers()
-})
-
-describe('ReturnLineAssetSelector (FIX-R2)', () => {
-  it('renders nothing unless the line is Asset-kind with a material', () => {
-    useEligibleItemsHandler(ELIGIBLE_ASSETS)
-    const { Host } = createHost([createEmptyQuantityLine()])
+describe('ReturnLineAssetSelector (FIX-R2 / o098.5)', () => {
+  it('renders nothing unless the line carries an Asset or Durable material', () => {
+    const { Host } = createHost([
+      createEmptyQuantityLine(),
+      createLine(fixtureUuid(42), 'Consumable'),
+    ])
     render(
       <Host>
-        <ReturnLineAssetSelector index={0} originalIssueDocumentId={ISSUE_DOC_ID} />
+        <ReturnLineAssetSelector
+          index={0}
+          originalIssueDocumentId={ISSUE_DOC_ID}
+          items={ELIGIBLE_ASSETS}
+          isLoading={false}
+        />
+        <ReturnLineAssetSelector
+          index={1}
+          originalIssueDocumentId={ISSUE_DOC_ID}
+          items={ELIGIBLE_ASSETS}
+          isLoading={false}
+        />
       </Host>,
     )
     expect(document.querySelector('[data-slot="return-line-asset-selector"]')).toBeNull()
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 
-  it('hints to choose the original issue first and never queries with an empty id', () => {
-    let eligibleCalls = 0
-    server.use(
-      http.get(`${API_BASE_URL}/returns/eligible-items`, () => {
-        eligibleCalls += 1
-        return okPageJson([...ELIGIBLE_ASSETS])
-      }),
-    )
+  it('hints to choose the original issue first for an Asset line', () => {
     const { Host } = createHost([createAssetKindLine()])
     render(
       <Host>
-        <ReturnLineAssetSelector index={0} originalIssueDocumentId={undefined} />
+        <ReturnLineAssetSelector
+          index={0}
+          originalIssueDocumentId={undefined}
+          items={[]}
+          isLoading={false}
+        />
       </Host>,
     )
 
@@ -141,23 +176,25 @@ describe('ReturnLineAssetSelector (FIX-R2)', () => {
       screen.getByText('اختر سند الصرف الأصلي أولاً لعرض الأصول المستردة ضمن هذا البند.'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
-    expect(eligibleCalls).toBe(0)
   })
 
-  it('writes the picked subjectIds into lines.<index>.assetIds and flags mismatches', async () => {
+  it('writes the picked asset subjectIds into lines.<index>.assetIds and flags mismatches', async () => {
     const user = userEvent.setup()
-    useEligibleItemsHandler(ELIGIBLE_ASSETS)
     const { Host } = createHost([createAssetKindLine()])
     render(
       <Host>
-        <ReturnLineAssetSelector index={0} originalIssueDocumentId={ISSUE_DOC_ID} />
+        <ReturnLineAssetSelector
+          index={0}
+          originalIssueDocumentId={ISSUE_DOC_ID}
+          items={ELIGIBLE_ASSETS}
+          isLoading={false}
+        />
       </Host>,
     )
 
-    // The chips surface once the eligible row is resolved; a line that has not
-    // matched its full quantity yet shows the Arabic count guard.
+    // A line that has not matched its full quantity yet shows the Arabic count guard.
     expect(
-      await screen.findByText('المحدد 0 من 2 — يجب أن يساوي عدد الأصول المحددة الكمية.'),
+      screen.getByText('المحدد 0 من 2 — يجب أن يساوي عدد الأصول المحددة الكمية.'),
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('checkbox', { name: 'AST-2026-0001 — حاسوب محمول' }))
@@ -174,11 +211,15 @@ describe('ReturnLineAssetSelector (FIX-R2)', () => {
   })
 
   it('flags a non-integer quantity on the asset line', () => {
-    useEligibleItemsHandler(ELIGIBLE_ASSETS)
     const { Host } = createHost([createAssetKindLine({ quantity: 1.5 })])
     render(
       <Host>
-        <ReturnLineAssetSelector index={0} originalIssueDocumentId={ISSUE_DOC_ID} />
+        <ReturnLineAssetSelector
+          index={0}
+          originalIssueDocumentId={ISSUE_DOC_ID}
+          items={ELIGIBLE_ASSETS}
+          isLoading={false}
+        />
       </Host>,
     )
     expect(screen.getByRole('alert')).toHaveTextContent(
@@ -186,16 +227,118 @@ describe('ReturnLineAssetSelector (FIX-R2)', () => {
     )
   })
 
-  it('reports an empty eligible set in Arabic', async () => {
-    useEligibleItemsHandler([])
+  it('reports an empty eligible asset set in Arabic', () => {
     const { Host } = createHost([createAssetKindLine()])
     render(
       <Host>
-        <ReturnLineAssetSelector index={0} originalIssueDocumentId={ISSUE_DOC_ID} />
+        <ReturnLineAssetSelector
+          index={0}
+          originalIssueDocumentId={ISSUE_DOC_ID}
+          items={[]}
+          isLoading={false}
+        />
       </Host>,
     )
     expect(
-      await screen.findByText('لا توجد أصول مستردة مطابقة لهذه المادة في سند الصرف الأصلي.'),
+      screen.getByText('لا توجد أصول مستردة مطابقة لهذه المادة في سند الصرف الأصلي.'),
     ).toBeInTheDocument()
+  })
+
+  it('shows the remaining durable custody and flags a quantity above it', () => {
+    const { Host } = createHost([createLine(DURABLE_QTY_MATERIAL_ID, 'Durable', { quantity: 5 })])
+    render(
+      <Host>
+        <ReturnLineAssetSelector
+          index={0}
+          originalIssueDocumentId={ISSUE_DOC_ID}
+          items={[eligibleQuantity(3)]}
+          isLoading={false}
+        />
+      </Host>,
+    )
+
+    expect(
+      screen.getByText(`الكمية المتبقية في العهدة: ${formatNumber(3)} من ${formatNumber(10)}`),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      `الكمية المطلوبة تتجاوز الكمية المتبقية في العهدة (${formatNumber(3)}).`,
+    )
+  })
+
+  it('accepts a durable quantity within the remaining custody', () => {
+    const { Host } = createHost([createLine(DURABLE_QTY_MATERIAL_ID, 'Durable', { quantity: 2 })])
+    render(
+      <Host>
+        <ReturnLineAssetSelector
+          index={0}
+          originalIssueDocumentId={ISSUE_DOC_ID}
+          items={[eligibleQuantity(3)]}
+          isLoading={false}
+        />
+      </Host>,
+    )
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('reports a durable material with no remaining custody', () => {
+    const { Host } = createHost([createLine(DURABLE_QTY_MATERIAL_ID, 'Durable')])
+    render(
+      <Host>
+        <ReturnLineAssetSelector
+          index={0}
+          originalIssueDocumentId={ISSUE_DOC_ID}
+          items={[]}
+          isLoading={false}
+        />
+      </Host>,
+    )
+    expect(
+      screen.getByText('لا توجد عهدة متبقية قابلة للإرجاع لهذه المادة في سند الصرف الأصلي.'),
+    ).toBeInTheDocument()
+  })
+
+  it('puts the picked serial unit on batchNumber and pins the quantity to 1', async () => {
+    const user = userEvent.setup()
+    const { Host } = createHost([
+      createLine(DURABLE_SERIAL_MATERIAL_ID, 'Durable', { quantity: 0 }),
+    ])
+    render(
+      <Host>
+        <ReturnLineAssetSelector
+          index={0}
+          originalIssueDocumentId={ISSUE_DOC_ID}
+          items={ELIGIBLE_UNITS}
+          isLoading={false}
+        />
+      </Host>,
+    )
+
+    await user.click(screen.getByRole('radio', { name: 'SN-DUR-0001 — جهاز قياس' }))
+
+    await waitFor(() => {
+      expect(linesValue()[0]?.batchNumber).toBe('SN-DUR-0001')
+      expect(linesValue()[0]?.quantity).toBe(1)
+    })
+  })
+
+  it('flags a serial line whose quantity is not 1', () => {
+    const { Host } = createHost([
+      createLine(DURABLE_SERIAL_MATERIAL_ID, 'Durable', {
+        quantity: 2,
+        batchNumber: 'SN-DUR-0001',
+      }),
+    ])
+    render(
+      <Host>
+        <ReturnLineAssetSelector
+          index={0}
+          originalIssueDocumentId={ISSUE_DOC_ID}
+          items={ELIGIBLE_UNITS}
+          isLoading={false}
+        />
+      </Host>,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('يجب أن تكون كمية الوحدة التسلسلية 1.')
   })
 })

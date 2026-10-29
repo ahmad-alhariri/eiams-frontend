@@ -1,69 +1,62 @@
 import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
-import { ADJUSTMENT_PURPOSE_LABELS_AR } from '@/modules/adjustment/types/adjustment.types'
 import { useCountAdjustmentReportQuery } from '@/modules/reports/hooks/use-reports-queries'
-import type { ListCountAdjustmentReportQuery } from '@/modules/reports/types/reports.types'
+import type {
+  CountAdjustmentsReportRow,
+  ListCountAdjustmentReportQuery,
+} from '@/modules/reports/types/reports.types'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
-import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
+import { DatePicker } from '@/shared/ui/date-picker'
 import { AsyncSelect } from '@/shared/ui/async-select'
-import { Input } from '@/shared/ui/input'
 import { ExportButton } from '@/shared/ui/export-button'
 import { PrintButton } from '@/shared/ui/print-button'
 import { pageRows } from '@/shared/utils/table-data'
-import { formatDateTime } from '@/shared/utils/format'
-import type { InventoryAdjustment } from '@/shared/types/generated/eiams-v1'
+import { formatNumber } from '@/shared/utils/format'
 
-const adjustmentColumnHelper = createColumnHelper<typeof dataTableFeatures, InventoryAdjustment>()
-
-const REASON_PREVIEW_LENGTH = 40
-
-function truncateReason(reason: string): string {
-  return reason.length > REASON_PREVIEW_LENGTH
-    ? `${reason.slice(0, REASON_PREVIEW_LENGTH)}…`
-    : reason
-}
-
-function toIsoDateTime(value: string): string | undefined {
-  if (value === '') return undefined
-  const date = new Date(value)
-  return Number.isNaN(date.valueOf()) ? undefined : date.toISOString()
-}
+const adjustmentColumnHelper = createColumnHelper<
+  typeof dataTableFeatures,
+  CountAdjustmentsReportRow
+>()
 
 /**
- * Count & adjustment report (e23-t08). Server-paged adjustment document
- * projection; purpose and lifecycle state come directly from the contract and
- * retain their D-ADJ-01 meanings (Draft → Posted → Reversed). The frontend
- * never calculates variance or infers a count-to-adjustment match — counts
- * remain a separately contracted projection per D-RPT-01 §"V1 contract
- * matrix".
+ * Count & adjustment report (`GET /reports/count-adjustments`).
+ *
+ * The live endpoint answers with a per-warehouse SUMMARY: the counts, the
+ * variance and the adjustment counters the server computed for that warehouse
+ * inside the requested window
+ * (`Application/Reports/CountAdjustments/CountAdjustmentsReportRow.cs:3-13`).
+ * The frontend renders those numbers; it never recomputes a variance and never
+ * matches a count to an adjustment.
+ *
+ * The controller binds `warehouseId`, `fromUtc`, `toUtc` and the one-based
+ * pagination (`Web.Api/Controllers/Reports/GetCountAdjustmentsReportController.cs:25-30`).
  */
 function CountAdjustmentReportTableImpl() {
   const pagination = useServerPagination()
   const { page: currentPage, pageSize, setPage, setPageSize } = pagination
   const [warehouseId, setWarehouseId] = useState<string | undefined>()
-  const [dateFromInput, setDateFromInput] = useState('')
-  const [dateToInput, setDateToInput] = useState('')
-
-  const dateFrom = toIsoDateTime(dateFromInput)
-  const dateTo = toIsoDateTime(dateToInput)
+  const [dateFrom, setDateFrom] = useState<Date | undefined>()
+  const [dateTo, setDateTo] = useState<Date | undefined>()
+  const dateFromIso = dateFrom ? dateFrom.toISOString() : undefined
+  const dateToIso = dateTo ? dateTo.toISOString() : undefined
 
   const warehouseSelector = useScopedWarehouseSelector()
 
   const queryInput = useMemo<ListCountAdjustmentReportQuery>(
     () => ({
-      pageIndex: currentPage - 1,
+      page: currentPage,
       pageSize,
       ...(warehouseId === undefined ? {} : { warehouseId }),
-      ...(dateFrom === undefined ? {} : { dateFrom }),
-      ...(dateTo === undefined ? {} : { dateTo }),
+      ...(dateFromIso === undefined ? {} : { fromUtc: dateFromIso }),
+      ...(dateToIso === undefined ? {} : { toUtc: dateToIso }),
     }),
-    [currentPage, dateFrom, dateTo, pageSize, warehouseId],
+    [currentPage, dateFromIso, dateToIso, pageSize, warehouseId],
   )
 
   const reportQuery = useCountAdjustmentReportQuery(queryInput)
@@ -81,72 +74,82 @@ function CountAdjustmentReportTableImpl() {
     (value: string | null) => resetPageAndSet(setWarehouseId, value ?? undefined),
     [resetPageAndSet],
   )
+
   const handleDateFromChange = useCallback(
-    (value: string) => resetPageAndSet(setDateFromInput, value),
+    (date: Date | undefined) => resetPageAndSet(setDateFrom, date),
     [resetPageAndSet],
   )
+
   const handleDateToChange = useCallback(
-    (value: string) => resetPageAndSet(setDateToInput, value),
+    (date: Date | undefined) => resetPageAndSet(setDateTo, date),
     [resetPageAndSet],
   )
 
   const columns = useMemo(
     () =>
       adjustmentColumnHelper.columns([
-        adjustmentColumnHelper.accessor('documentReference', {
-          id: 'DocumentReference',
-          header: 'رقم السند',
-          enableSorting: false,
-          cell: ({ getValue }) => (
-            <span dir="ltr" className="font-mono text-sm font-semibold text-foreground">
-              {getValue()}
-            </span>
-          ),
-        }),
-        adjustmentColumnHelper.accessor('purpose', {
-          id: 'Purpose',
-          header: 'الغرض',
-          enableSorting: false,
-          cell: ({ getValue }) => ADJUSTMENT_PURPOSE_LABELS_AR[getValue()],
-        }),
-        adjustmentColumnHelper.accessor('status', {
-          id: 'Status',
-          header: 'الحالة',
-          enableSorting: false,
-          cell: ({ getValue }) => <StatusBadge entity="adjustment" status={getValue()} />,
-        }),
-        adjustmentColumnHelper.accessor((row) => row.warehouse.displayName, {
+        adjustmentColumnHelper.accessor((row) => row.warehouseName, {
           id: 'Warehouse',
           header: 'المستودع',
           enableSorting: false,
-        }),
-        adjustmentColumnHelper.accessor('countReference', {
-          id: 'CountReference',
-          header: 'مرجع الجرد',
-          enableSorting: false,
-          cell: ({ getValue }) =>
-            getValue() === null || getValue() === undefined ? (
-              '—'
-            ) : (
-              <span dir="ltr">{getValue()}</span>
-            ),
-        }),
-        adjustmentColumnHelper.accessor('reason', {
-          id: 'Reason',
-          header: 'السبب',
-          enableSorting: false,
-          cell: ({ getValue }) => (
-            <span className="text-sm text-muted-foreground">{truncateReason(getValue())}</span>
+          cell: ({ row }) => (
+            <div className="flex flex-col">
+              <span className="font-medium text-foreground">{row.original.warehouseName}</span>
+              <span dir="ltr" className="font-mono text-xs text-muted-foreground">
+                {row.original.warehouseCode}
+              </span>
+            </div>
           ),
         }),
-        adjustmentColumnHelper.accessor((row) => row.createdAt ?? null, {
-          id: 'CreatedAt',
-          header: 'تاريخ الإنشاء',
+        adjustmentColumnHelper.accessor('countCount', {
+          id: 'CountCount',
+          header: 'عدد الجرد',
           enableSorting: false,
-          cell: ({ getValue }) => {
-            const value = getValue()
-            return value === null ? '—' : formatDateTime(value)
-          },
+          cell: ({ getValue }) => <span dir="ltr">{formatNumber(getValue())}</span>,
+        }),
+        adjustmentColumnHelper.accessor('closedCountCount', {
+          id: 'ClosedCountCount',
+          header: 'الجرد المغلق',
+          enableSorting: false,
+          cell: ({ getValue }) => <span dir="ltr">{formatNumber(getValue())}</span>,
+        }),
+        adjustmentColumnHelper.accessor('varianceLineCount', {
+          id: 'VarianceLineCount',
+          header: 'أسطر الفروقات',
+          enableSorting: false,
+          cell: ({ getValue }) => <span dir="ltr">{formatNumber(getValue())}</span>,
+        }),
+        adjustmentColumnHelper.accessor('netVariance', {
+          id: 'NetVariance',
+          header: 'صافي الفروقات',
+          enableSorting: false,
+          cell: ({ getValue }) => (
+            <span dir="ltr" className="font-semibold text-foreground">
+              {formatNumber(getValue(), { maxFractionDigits: 3 })}
+            </span>
+          ),
+        }),
+        adjustmentColumnHelper.accessor('adjustmentCount', {
+          id: 'AdjustmentCount',
+          header: 'عدد التسويات',
+          enableSorting: false,
+          cell: ({ getValue }) => <span dir="ltr">{formatNumber(getValue())}</span>,
+        }),
+        adjustmentColumnHelper.accessor('postedAdjustmentCount', {
+          id: 'PostedAdjustmentCount',
+          header: 'التسويات المرحلة',
+          enableSorting: false,
+          cell: ({ getValue }) => <span dir="ltr">{formatNumber(getValue())}</span>,
+        }),
+        adjustmentColumnHelper.accessor('adjustmentDifference', {
+          id: 'AdjustmentDifference',
+          header: 'فرق التسويات',
+          enableSorting: false,
+          cell: ({ getValue }) => (
+            <span dir="ltr" className="font-semibold text-foreground">
+              {formatNumber(getValue(), { maxFractionDigits: 3 })}
+            </span>
+          ),
         }),
       ]),
     [],
@@ -156,7 +159,7 @@ function CountAdjustmentReportTableImpl() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="تقرير الجرد والتسويات"
-        subtitle="قراءة فقط، تعتمد على الخادم. لا يحتسب المتصفح فروقات الجرد أو يطابق الجرد مع التسويات."
+        subtitle="ملخص لكل مستودع: الجرد والفروقات والتسويات كما يحسبها الخادم. لا يحتسب المتصفح الفروقات ولا يطابق الجرد مع التسويات."
         toolbar={
           <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
@@ -172,20 +175,18 @@ function CountAdjustmentReportTableImpl() {
             </div>
             <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
               <span>من تاريخ</span>
-              <Input
-                type="datetime-local"
-                value={dateFromInput}
-                onChange={(event) => handleDateFromChange(event.currentTarget.value)}
-                aria-label="تصفية حسب تاريخ البداية"
+              <DatePicker
+                key="date-from"
+                ariaLabel="تصفية حسب تاريخ البداية"
+                onChange={handleDateFromChange}
               />
             </div>
             <div className="flex min-w-44 flex-col gap-2 text-sm font-medium text-foreground">
               <span>إلى تاريخ</span>
-              <Input
-                type="datetime-local"
-                value={dateToInput}
-                onChange={(event) => handleDateToChange(event.currentTarget.value)}
-                aria-label="تصفية حسب تاريخ النهاية"
+              <DatePicker
+                key="date-to"
+                ariaLabel="تصفية حسب تاريخ النهاية"
+                onChange={handleDateToChange}
               />
             </div>
 
@@ -202,8 +203,8 @@ function CountAdjustmentReportTableImpl() {
                 filters={
                   warehouseId !== undefined
                     ? {
-                        ...(dateFrom !== undefined ? { dateFrom } : {}),
-                        ...(dateTo !== undefined ? { dateTo } : {}),
+                        ...(dateFromIso !== undefined ? { dateFrom: dateFromIso } : {}),
+                        ...(dateToIso !== undefined ? { dateTo: dateToIso } : {}),
                         warehouseId,
                       }
                     : undefined
@@ -215,8 +216,8 @@ function CountAdjustmentReportTableImpl() {
         }
       />
       <ContentCard
-        title="قائمة التسويات"
-        description="كل تسوية ضمن النطاق الحالي مع غرضها وحالتها ومرجع الجرد إن وُجد."
+        title="ملخص الجرد والتسويات"
+        description="لكل مستودع: عدد الجرد والفروقات والتسويات كما يحسبها الخادم."
       >
         <DataTableServer
           columns={columns}
@@ -225,13 +226,13 @@ function CountAdjustmentReportTableImpl() {
           isError={reportQuery.isError}
           onRetry={() => void reportQuery.refetch()}
           errorTitle="تعذّر تحميل تقرير الجرد والتسويات"
-          errorMessage="تعذّر جلب قائمة التسويات. حاول مرة أخرى."
+          errorMessage="تعذّر جلب ملخص الجرد والتسويات. حاول مرة أخرى."
           emptyTitle="لا توجد تسويات"
           emptyDescription="لم يتم العثور على تسويات تطابق معايير التصفية الحالية."
           page={currentPage}
           pageSize={pageSize}
-          totalCount={page?.meta.totalItems}
-          totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
+          totalCount={page?.totalItems}
+          totalPages={Math.max(page?.totalPages ?? 1, 1)}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
         />

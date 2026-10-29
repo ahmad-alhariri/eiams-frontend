@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router'
 import { ROUTE_PATHS } from '@/config/routes'
 import { InventoryLowStockBadge } from '@/modules/inventory/components/inventory-low-stock-badge'
 import { useInventoryBalanceQuery } from '@/modules/inventory/hooks/use-inventory-queries'
+import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
 import { ErrorState } from '@/shared/feedback/error-state'
 import { LoadingSpinner } from '@/shared/feedback/loading-spinner'
 import { ContentCard } from '@/shared/layout/content-card'
@@ -28,6 +29,7 @@ function InventoryBalanceDetailPage() {
   if (balanceId === undefined || balanceId === '') {
     return (
       <div dir="rtl" className="min-w-0">
+        <PageHeader title="تفاصيل الرصيد" />
         <ErrorState
           title="تعذّر تحديد الرصيد"
           description="رابط الرصيد غير مكتمل. ارجع إلى قائمة الأرصدة ثم اختر سجلاً صالحاً."
@@ -56,12 +58,20 @@ function InventoryBalanceDetailPage() {
     const apiError = normalizeApiError(balanceQuery.error)
     const isNotFound = apiError.status === 404
     const title = isNotFound ? 'الرصيد غير متاح' : 'تعذّر تحميل تفاصيل الرصيد'
+    // Prefer the shared code table's copy; `detailAr` is null for many codes
+    // (including a 401), so its `titleAr` is what keeps the message specific.
+    // The connection sentence remains only for a code the table does not cover.
+    const sharedCopy = arabicCopyForCode(apiError.code)
     const description = isNotFound
       ? 'لا يتوفر هذا الرصيد ضمن نطاق العمل الحالي، أو لم يعد موجوداً.'
-      : (apiError.detailAr ?? 'تعذّر جلب بيانات الرصيد. تحقق من الاتصال ثم أعد المحاولة.')
+      : (sharedCopy?.detailAr ??
+        sharedCopy?.titleAr ??
+        apiError.detailAr ??
+        'تعذّر جلب بيانات الرصيد. تحقق من الاتصال ثم أعد المحاولة.')
 
     return (
       <div dir="rtl" className="min-w-0">
+        <PageHeader title="تفاصيل الرصيد" />
         <ErrorState
           title={title}
           description={description}

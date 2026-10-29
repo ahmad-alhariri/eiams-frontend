@@ -33,9 +33,31 @@ export function CountToAdjustmentLaunch({ count }: { count: InventoryCount }) {
   const [createError, setCreateError] = useState<string | null>(null)
 
   const settlement = count.settlement
-  if (!canCreate || !isCountAdjustmentEligible(count.status)) {
+  const eligible = isCountAdjustmentEligible(count.status)
+
+  if (!canCreate) {
     return null
   }
+
+  // Defect 1: the server only accepts adjustments from CLOSED counts.
+  if (!eligible) {
+    return (
+      <ContentCard
+        title="إنشاء سند تسوية"
+        description="فروقات هذه الجلسة لا تُعدّل الأرصدة بنفسها؛ تُرحَّل عبر سند تسوية مرتبط بالجلسة يحمل أسباب الفروقات."
+      >
+        <div className="grid gap-3">
+          <Button type="button" disabled className="w-fit">
+            إنشاء مسودة سند تسوية لفروقات الجلسة
+          </Button>
+          <p className="text-sm text-muted-foreground">
+            يتطلب إنشاء سند التسوية أن تكون جلسة الجرد مغلقة (الحالة الحالية لا تسمح).
+          </p>
+        </div>
+      </ContentCard>
+    )
+  }
+
   // Defensive `settlement` guard: until the backend serves the frozen detail
   // projection there is nothing settlement-driven to render, never a crash.
   if (

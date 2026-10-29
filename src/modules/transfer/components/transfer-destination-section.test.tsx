@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
+import { useEffect } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { FormProvider, useForm } from 'react-hook-form'
 
@@ -44,16 +45,19 @@ function TestHarness({
     defaultValues: {
       petal: {
         transferInfo: { destinationWarehouseId: '', transferReason: '' },
-        destinationWarehouseName: '',
       },
       header: { warehouseId: SOURCE_WAREHOUSE_ID },
       lines: [],
     } as unknown as TransferPetalContainer,
   })
   // Expose live petal state so tests can assert the selection-time capture.
-  if (onPetal !== undefined) {
-    form.watch(() => onPetal(form.getValues()))
-  }
+  useEffect(() => {
+    if (onPetal === undefined) return
+    return form.subscribe({
+      formState: { values: true },
+      callback: () => onPetal(form.getValues()),
+    })
+  }, [form, onPetal])
   return (
     <QueryClientProvider client={client}>
       <FormProvider {...form}>
@@ -89,7 +93,14 @@ describe('TransferDestinationSection (e17-t03)', () => {
     expect(screen.getByLabelText('سبب التحويل')).toBeInTheDocument()
   })
 
-  it('captures the id and selection-time warehouse name on pick', async () => {
+  it('caps the reason textarea at the 200-character domain limit', () => {
+    useHandlers()
+    render(<TestHarness />)
+
+    expect(screen.getByLabelText('سبب التحويل')).toHaveAttribute('maxlength', '200')
+  })
+
+  it('captures the destination warehouse id on pick', async () => {
     useHandlers()
     let petalState: TransferPetalContainer | undefined
     const user = userEvent.setup()
@@ -105,7 +116,6 @@ describe('TransferDestinationSection (e17-t03)', () => {
 
     await vi.waitFor(() => {
       expect(petalState?.petal.transferInfo.destinationWarehouseId).toBe(DESTINATION_WAREHOUSE_ID)
-      expect(petalState?.petal.destinationWarehouseName).toBe('مستودع الفرع الشمالي')
     })
   })
 

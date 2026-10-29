@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { okJson, okPageJson } from '@/test/msw/envelope'
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import type { PropsWithChildren } from 'react'
@@ -321,5 +321,39 @@ describe('AssetDetailPage', () => {
     expect(retry.className).toContain('h-8')
     // The hand-rolled element was a raw <button> with no design-system slot.
     expect(container.querySelector('button:not([data-slot="button"])')).toBeNull()
+  })
+
+  // F-27: a missing asset and a failed read are DIFFERENT facts. The shared
+  // copy table owns the Arabic for the server's `ASSETS_NOT_FOUND`, so the
+  // 404 speaks the mapped sentence while the page's own "تعذّر تحميل الأصل"
+  // stays for a genuine load failure.
+  it('shows the mapped not-found copy when the server answers 404', async () => {
+    server.use(
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () =>
+        errJson(404, { code: 'ASSETS_NOT_FOUND' }),
+      ),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/current-status`, () => okJson(currentStatus())),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () => okJson([])),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () => okPageJson([])),
+    )
+    renderPage(createDeterministicClient())
+
+    expect(await screen.findByText('لم يتم العثور على الأصل.')).toBeInTheDocument()
+    // The generic load-failure copy no longer covers a missing row.
+    expect(screen.queryByText('تعذّر تحميل الأصل')).not.toBeInTheDocument()
+    expect(screen.getByText('لا يوجد أصل بهذا المعرّف ضمن نطاق العمل الحالي.')).toBeInTheDocument()
+  })
+
+  it('keeps the load-failure copy when the read fails', async () => {
+    server.use(
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}`, () => new HttpResponse(null, { status: 500 })),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/current-status`, () => okJson(currentStatus())),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/custody-timeline`, () => okJson([])),
+      http.get(`${API_BASE_URL}/assets/${ASSET_ID}/movements`, () => okPageJson([])),
+    )
+    renderPage(createDeterministicClient())
+
+    expect(await screen.findByText('تعذّر تحميل الأصل')).toBeInTheDocument()
+    expect(screen.queryByText('لم يتم العثور على الأصل.')).not.toBeInTheDocument()
   })
 })

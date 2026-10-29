@@ -21,14 +21,16 @@ import type {
   UpdateRoleMetadataRequest,
   UserRoleScopeProjection,
 } from '@/modules/admin/types/role.types'
+import { pathWithId } from '@/shared/services/api-path'
 
 /**
  * Route constants, declared locally rather than checked against
- * `keyof paths` from `shared/types/generated/eiams-v1`.
+ * `keyof paths` from the deleted generated artifact.
  *
- * That artifact is frozen migration scaffolding which `whhu.5` deletes outright,
- * so `satisfies keyof paths` guarded these constants against a document that is
- * meant to disappear: the check's passing said nothing about the live contract.
+ * That artifact was frozen migration scaffolding and has now been deleted
+ * outright, so `satisfies keyof paths` guarded these constants against a
+ * document that was meant to disappear: the check's passing said nothing about
+ * the live contract.
  * `auth.service.ts` removed the same clause for the same reason and records it
  * in its own header. The real guard on a path is an integration test that
  * exercises the endpoint, which is what `admin.service.test.ts` does.
@@ -77,10 +79,6 @@ const ASSIGNMENT_NOT_FOUND_CODE = 'USER_ROLE_SCOPES_ASSIGNMENT_NOT_FOUND'
  * both go through `requestPage`.
  */
 const FULL_PAGE_QUERY = { page: 1, pageSize: 100 } as const
-
-function pathWithId(path: string, parameter: string, id: string): string {
-  return path.replace(parameter, encodeURIComponent(id))
-}
 
 export interface AdminService {
   listPermissions: () => Promise<readonly PermissionCatalogEntry[]>

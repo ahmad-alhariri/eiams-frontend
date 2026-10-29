@@ -39,7 +39,11 @@ function InventoryBalanceReportTableImpl() {
 
   const queryInput = useMemo<ListInventoryReportQuery>(
     () => ({
-      pageIndex: currentPage - 1,
+      // The live controller binds a ONE-based `page`
+      // (`PaginationQueryParameters.Page`, `[Range(1, MaximumPage)]`); the
+      // snapshot-era `pageIndex` was never bound, so every list stayed on its
+      // first page.
+      page: currentPage,
       pageSize,
       ...(search.trim() === '' ? {} : { search: search.trim() }),
       ...(warehouseId === undefined ? {} : { warehouseId }),
@@ -158,8 +162,8 @@ function InventoryBalanceReportTableImpl() {
           emptyDescription="لم يتم العثور على أرصدة تطابق معايير التصفية الحالية."
           page={currentPage}
           pageSize={pageSize}
-          totalCount={page?.meta.totalItems}
-          totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
+          totalCount={page?.totalItems}
+          totalPages={Math.max(page?.totalPages ?? 1, 1)}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           searchQuery={search}

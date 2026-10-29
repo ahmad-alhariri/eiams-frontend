@@ -2,7 +2,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 
-import { ROUTE_PATHS } from '@/config/routes'
+import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
 import { InventoryLowStockBadge } from '@/modules/inventory/components/inventory-low-stock-badge'
 import { useInventoryBalancesQuery } from '@/modules/inventory/hooks/use-inventory-queries'
@@ -11,6 +11,7 @@ import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
+import { normalizeApiError } from '@/shared/services/api-error'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { dataTableFeatures, type DataTableSortState } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
@@ -184,6 +185,9 @@ function InventoryBalancesPage() {
   )
 
   const page = balancesQuery.data
+  // `normalizeApiError` owns code→Arabic resolution; using `titleAr` as well as
+  // `detailAr` keeps a 401 on its session-expired copy instead of a generic one.
+  const balancesError = balancesQuery.isError ? normalizeApiError(balancesQuery.error) : null
 
   return (
     <div dir="rtl" className="min-w-0">
@@ -240,9 +244,20 @@ function InventoryBalancesPage() {
       />
 
       <ContentCard
-        title="قائمة الأرصدة"
+        title="قائمة أرصدة المخزون"
         description="ابحث باسم المستودع أو المادة، ثم صفِّ النتائج حسب المستودع أو المادة أو حالة التنبيه."
       >
+        <p className="text-sm text-muted-foreground">
+          هذه الصفحة تعرض <span className="font-semibold text-foreground">المخزون</span> في
+          المستودعات، وليست العهد: ما يُصرف إلى حائز ينشئ صف عهدة منفصلاً. العهد المفتوحة تُعرض في{' '}
+          <Link
+            className="text-primary underline-offset-4 hover:underline"
+            to={ROUTE_PATHS.custodyActive}
+          >
+            {ROUTE_METADATA.custodyActive.labelAr}
+          </Link>
+          .
+        </p>
         <DataTableServer
           columns={columns}
           data={pageRows(page, balancesQuery.isError)}
@@ -250,7 +265,11 @@ function InventoryBalancesPage() {
           isError={balancesQuery.isError}
           onRetry={() => void balancesQuery.refetch()}
           errorTitle="تعذّر تحميل أرصدة المخزون"
-          errorMessage="تعذّر جلب قائمة الأرصدة. حاول مرة أخرى."
+          errorMessage={
+            balancesError === null
+              ? 'تعذّر جلب قائمة الأرصدة. حاول مرة أخرى.'
+              : (balancesError.detailAr ?? balancesError.titleAr)
+          }
           emptyTitle="لا توجد أرصدة مخزون"
           emptyDescription="لم يتم العثور على أرصدة تطابق معايير البحث الحالية."
           page={currentPage}

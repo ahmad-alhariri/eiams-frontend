@@ -1,3 +1,4 @@
+import { reportApiError, normalizeApiError } from '@/shared/services/api-error'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { IconBuildingWarehouse, IconLock, IconShieldCheck, IconUser } from '@tabler/icons-react'
 import { useForm } from 'react-hook-form'
@@ -6,7 +7,6 @@ import { useLoginMutation } from '@/modules/auth/hooks/use-login-mutation'
 import { loginSchema, type LoginFormValues } from '@/modules/auth/schemas/auth.schemas'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import { toast } from '@/shared/ui/toast-manager'
@@ -34,15 +34,12 @@ function LoginPage() {
       form.resetField('password')
       toast.success({ title: 'تم التحقق من بيانات الدخول.' })
     } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
       // Credentials must not remain in the form after either outcome. Reset
       // before mapping server feedback so a contract field error stays visible.
       form.resetField('password')
+      const apiError = normalizeApiError(error)
       setFormServerErrors(form, apiError.fieldErrors, { schemaKeys: LOGIN_FIELD_KEYS })
-      toast.error({
-        title: apiError.titleAr,
-        ...(apiError.detailAr === null ? {} : { description: apiError.detailAr }),
-      })
+      reportApiError(error)
     } finally {
       // Removes the observer's completed mutation state, including variables.
       loginMutation.reset()

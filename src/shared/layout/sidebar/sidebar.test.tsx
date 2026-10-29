@@ -9,7 +9,7 @@ import { Sidebar } from '@/shared/layout/sidebar/sidebar'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createQueryClient } from '@/shared/services/query.client'
 import { useUiStore } from '@/shared/store/ui.store'
-import type { SessionResponse } from '@/modules/auth/types/session.types'
+import type { SessionResponse, SessionScope } from '@/modules/auth/types/session.types'
 
 type Mql = {
   matches: boolean
@@ -45,13 +45,14 @@ function renderSidebar(hasPermission?: (codes: readonly string[], mode: 'all' | 
   )
 }
 
-function sessionWith(permissionCodes: readonly string[]): SessionResponse {
-  const activeScope = {
-    scopeType: 'Warehouse' as const,
+function sessionWith(
+  permissionCodes: readonly string[],
+  activeScope: SessionScope = {
+    scopeType: 'Warehouse',
     scopeId: '20000000-0000-4000-8000-000000000001',
     scopeName: 'المستودع المركزي',
-  }
-
+  },
+): SessionResponse {
   return {
     user: {
       id: '10000000-0000-4000-8000-000000000001',
@@ -121,7 +122,7 @@ describe('Sidebar', () => {
 
     expect(screen.getByRole('link', { name: 'المستودعات' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'سندات الاستلام' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('نطاق العمل الحالي: المستودع المركزي')).toBeInTheDocument()
+    expect(screen.getByLabelText('نطاق العمل الحالي: مستودع')).toBeInTheDocument()
 
     act(() => {
       queryClient.setQueryData(authSessionQueryKey, sessionWith(['document.view']))
@@ -131,6 +132,22 @@ describe('Sidebar', () => {
       expect(screen.queryByRole('link', { name: 'المستودعات' })).not.toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'سندات الاستلام' })).toBeInTheDocument()
     })
+  })
+
+  it('renders the Arabic scope label when the server sends an English scope name', () => {
+    // The backend sends `scopeName` verbatim and the enterprise scope's name is the
+    // English word "Enterprise" — it must not reach an Arabic RTL shell as-is.
+    renderSessionSidebar(
+      sessionWith(['user.view'], {
+        scopeType: 'Enterprise',
+        scopeId: null,
+        scopeName: 'Enterprise',
+      }),
+    )
+
+    expect(screen.getByLabelText('نطاق العمل الحالي: مستوى المؤسسة')).toBeInTheDocument()
+    expect(screen.getByText('مستوى المؤسسة')).toBeInTheDocument()
+    expect(screen.queryByText('Enterprise')).not.toBeInTheDocument()
   })
 
   it('marks the active route item and gives inactive items default styling', () => {

@@ -114,56 +114,27 @@ function clampWirePageSize(pageSize: number): number {
 }
 
 /**
- * Builds the pagination half of a list query from a ZERO-BASED UI page index,
- * converting it to the API's one-based `page`.
- *
- * Use this only where the caller genuinely holds a zero-based index (TanStack
- * Table's `pageIndex`, the frozen generated query types). Where the caller holds
- * a one-based page — which is what `useServerPagination` and every DataTable
- * control in this repository produce — use
- * {@link toWireOneBasedPaginationParams} instead: subtracting one there and
- * adding it back here is how `page=0` reached the wire in the first place.
- *
- * Values below `0` clamp to the first page rather than being sent as an invalid
- * `page=0`, which the backend rejects with 400 `REQUEST_VALIDATION_FAILED`.
- * Page size is clamped into the `[1, 100]` range the backend accepts, so an
- * over-large request fails loudly at the server instead of being rejected here.
- *
- * Absent values are omitted entirely so no `undefined` key reaches the wire:
- * axios serializes `{page: undefined}` as the literal string "undefined", which
- * then fails to bind server-side and silently pins the result to page 1.
- */
-export function toWirePaginationParams(input: {
-  readonly pageIndex?: number | undefined
-  readonly pageSize?: number | undefined
-}): Record<string, number> {
-  const params: Record<string, number> = {}
-
-  if (input.pageIndex !== undefined) {
-    params[WIRE_PAGE_FIELD] = Math.max(1, Math.trunc(input.pageIndex) + 1)
-  }
-
-  if (input.pageSize !== undefined) {
-    params[WIRE_PAGE_SIZE_FIELD] = clampWirePageSize(input.pageSize)
-  }
-
-  return params
-}
-
-/**
  * Builds the pagination half of a list query from a ONE-BASED page.
  *
- * The UI page and the wire page are both one-based, so this is an identity
- * conversion plus a clamp — which is the point. It puts the backend's numeric
- * bounds in ONE place (`[1, 21474836]` and `[1, 100]`) instead of letting each
- * list screen hand a raw number to the transport, so a `page=0` or a
- * `pageSize=200` cannot be typed at a call site at all.
+ * This is the ONLY pagination boundary: the zero-based helper that used to sit
+ * beside it (the one that added one to a `pageIndex`) is DELETED, so a stale
+ * caller no longer compiles. The UI page and the wire page are both one-based
+ * — `useServerPagination` and every DataTable control in this repository
+ * produce one-based pages — so this is an identity conversion plus a clamp,
+ * which is the point. It puts the backend's numeric bounds in ONE place
+ * (`[1, 21474836]` and `[1, 100]`) instead of letting each list screen hand a
+ * raw number to the transport, so a `page=0` or a `pageSize=200` cannot be
+ * typed at a call site at all.
  *
  * Both the measured failure (`GET /api/v1/employees?page=0` → 400
  * `REQUEST_VALIDATION_FAILED`, `details.Page = ["The field Page must be between
  * 1 and 21474836."]`) and the silent one (`pageSize: 200` on a list that
  * quietly serves 100 rows, so names past row 100 render as `—`) are now
  * impossible to express from a caller.
+ *
+ * Absent values are omitted entirely so no `undefined` key reaches the wire:
+ * axios serializes `{page: undefined}` as the literal string "undefined", which
+ * then fails to bind server-side and silently pins the result to page 1.
  */
 export function toWireOneBasedPaginationParams(input: {
   readonly page?: number | undefined

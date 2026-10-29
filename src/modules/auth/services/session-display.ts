@@ -1,3 +1,4 @@
+import { ROLE_SCOPE_TYPE_LABELS_AR } from '@/modules/admin/types/role.types'
 import type { SessionScope, SessionUser } from '@/modules/auth/types/session.types'
 
 /**
@@ -47,12 +48,30 @@ export function toSessionUserInitials(user: SessionUser): string {
 /**
  * The Arabic label for the active scope.
  *
+ * The server sends `activeScope.scopeName` verbatim, and for the Enterprise scope that is
+ * the English word "Enterprise" (backend `GetUserSessionQueryHandler`), so the scope TYPE
+ * drives the label — the same Arabic vocabulary the scope Select renders
+ * (`ROLE_SCOPE_TYPE_LABELS_AR`), not a second wording. The server's own name is only the
+ * fallback for a scope type this build does not know.
+ *
  * `activeScope` is required on a loaded session, so an absent label means the scope itself
  * is absent; callers render a neutral fallback rather than `undefined`.
  */
 export function toSessionScopeLabel(scope: SessionScope | undefined): string | undefined {
-  // Optional-chained like `toSessionUserDisplayName`: a scope object that arrives without
-  // its name must degrade to the caller's neutral label, not throw inside the sidebar.
-  const scopeName = scope?.scopeName?.trim()
-  return scopeName === undefined || scopeName.length === 0 ? undefined : scopeName
+  if (scope === undefined) {
+    return undefined
+  }
+
+  switch (scope.scopeType) {
+    case 'Enterprise':
+    case 'Site':
+    case 'Warehouse':
+      return ROLE_SCOPE_TYPE_LABELS_AR[scope.scopeType]
+    default: {
+      // Optional-chained like `toSessionUserDisplayName`: a scope that arrives without
+      // its name must degrade to the caller's neutral label, not throw inside the sidebar.
+      const scopeName = scope.scopeName?.trim()
+      return scopeName === undefined || scopeName.length === 0 ? undefined : scopeName
+    }
+  }
 }

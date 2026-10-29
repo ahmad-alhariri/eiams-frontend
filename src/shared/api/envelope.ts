@@ -111,31 +111,6 @@ function nonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 }
 
-function readPagination(value: unknown): ApiPaginationResponse | null {
-  if (!isRecord(value)) {
-    return null
-  }
-
-  const { page, page_size: pageSize } = value
-
-  if (typeof page !== 'number' || typeof pageSize !== 'number') {
-    return null
-  }
-
-  const numeric = (key: string): number | null =>
-    typeof value[key] === 'number' ? (value[key] as number) : null
-
-  return {
-    page,
-    page_size: pageSize,
-    total_items: numeric('total_items'),
-    total_pages: numeric('total_pages'),
-    has_previous_page: value['has_previous_page'] === true,
-    has_next_page: value['has_next_page'] === true,
-    total_count: numeric('total_count'),
-  }
-}
-
 /**
  * A paged list in the shape the UI consumes: one-based, totals resolved.
  * The single translation from wire paging to table paging.
@@ -208,42 +183,6 @@ function unwrapEnvelope<T>(value: ApiResponse<T>): ApiSuccessResponse<T> {
  */
 export function unwrapData<T>(value: ApiResponse<T>): T {
   return unwrapEnvelope(value).data
-}
-
-/**
- * Unwraps a paged list into `ApiPage`.
- *
- * A response with no pagination block is a single page, not an error:
- * `ApiResults.Success` and some lists legitimately omit it, and a single-page
- * list must still render.
- */
-export function unwrapPage<T>(value: ApiResponse<readonly T[]>): ApiPage<T> {
-  const envelope = unwrapEnvelope(value)
-  const data = Array.isArray(envelope.data) ? envelope.data : []
-  const pagination = readPagination(envelope.pagination)
-
-  if (pagination === null) {
-    return {
-      data,
-      page: 1,
-      page_size: data.length,
-      total_items: data.length,
-      total_pages: 1,
-      has_previous_page: false,
-      has_next_page: false,
-      total_count: data.length,
-    }
-  }
-
-  return {
-    ...pagination,
-    data,
-    // total_count and total_items carry the same value today; total_count is the
-    // one the UI means, and the first non-null wins so neither absence nor a
-    // future rename of the other leaves the table showing "0 results".
-    total_count: pagination.total_count ?? pagination.total_items ?? data.length,
-    total_pages: pagination.total_pages ?? 1,
-  }
 }
 
 /**

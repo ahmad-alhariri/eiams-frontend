@@ -1,29 +1,31 @@
+// The document engine's IN-MEMORY model lives in the test tree
+// (`document-engine.types.ts`), not in the deleted generated artifact: the
+// harness keeps one nested document and projects it into the live wire
+// contract on every response (see `warehouse-document-handlers.ts`).
 import type {
   ActionAvailability,
-  Asset,
-  AssetCustody,
-  AssetMovement,
-  AuditLog,
-  AuditLogEntry,
   DocumentActionResult,
-  DocumentActionType,
   DocumentAttachment,
   DocumentLifecycleEvent,
   DocumentLine,
   DocumentPolicy,
-  DocumentStatus,
-  FieldError,
   LifecycleActorSnapshot,
   LifecycleEventType,
   NamedReference,
   OperationalAdvisory,
-  PageMeta,
   PolicyBlocker,
-  ProblemDetails,
-  Permission,
-  Role,
   WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
+} from '@/test/msw/document-engine.types'
+import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
+import type { DocumentStatus } from '@/shared/documents/types/document-wire.types'
+// The asset registry rows are minted against the LIVE wire contracts
+// (`asset.types.ts`): flat rows with `id`/`currentStatus`, no nested material
+// or warehouse reference, and no holder display name — the API sends none.
+import type {
+  Asset,
+  AssetCustodyTimelineRow,
+  AssetMovement,
+} from '@/modules/asset/types/asset.types'
 import type {
   AuthTokenResponse,
   SessionResponse,
@@ -38,7 +40,7 @@ import type {
 } from '@/modules/warehouse/types/warehouse.api-types'
 // txq4: Site / OrganizationalUnit / Employee / ExternalParty / Warehouse are
 // typed against the handwritten contracts, NOT the frozen generated snapshot.
-// Importing them from `@/shared/types/generated/eiams-v1` is what let these
+// Importing them from the deleted generated artifact is what let these
 // factories keep minting `warehouseId` / `nameAr` / nested `site` fixtures while
 // production code had already moved to `id` / `name` — the suite validated
 // fiction against itself. For ExternalParty the generated snapshot was worse
@@ -58,6 +60,16 @@ import type {
 // the service that reads them; using them here makes the factories mint the
 // same shape the pages render.
 import type { InventoryBalance, StockMovement } from '@/modules/inventory/types/inventory.api-types'
+// The audit ledger is minted against the HANDWRITTEN wire contracts, not the
+// frozen generated snapshot: the wire record is `id` (never `auditLogId`),
+// `createdAtUtc` (never `occurredAt`), `userId` (never `occurredBy`), and the
+// list projection carries NO entries at all — `AuditLogListItemResponse` has no
+// `Entries` member, so a list row can never hold a redacted secret.
+import type {
+  AuditLogDetail,
+  AuditLogEntry,
+  AuditLogHeader,
+} from '@/modules/audit/types/audit.api-types'
 // The catalog master-data records are minted against the HANDWRITTEN contracts,
 // not the frozen generated snapshot: the wire says `id` (never
 // `domainId`/`categoryId`/`familyId`/`unitId`), `name` (never `nameAr`), and
@@ -78,7 +90,6 @@ import type {
   UserRoleScopeProjection,
 } from '@/modules/admin/types/role.types'
 import type { UserDetailProjection, UserDirectoryRow } from '@/modules/admin/types/user.types'
-import type { ScopeContext } from '@/shared/types/generated/eiams-v1'
 
 /** Contract-backed fixture helpers for MSW tests.
  *
@@ -175,37 +186,7 @@ export function createNamedReference(
   )
 }
 
-export function createPageMeta(overrides: FixtureOverrides<PageMeta> = {}): PageMeta {
-  return withOverrides({ pageIndex: 1, pageSize: 20, totalItems: 0, totalPages: 0 }, overrides)
-}
-
-export function createFieldError(overrides: FixtureOverrides<FieldError> = {}): FieldError {
-  return withOverrides(
-    { field: 'nameAr', code: 'validation.required', messageAr: 'هذا الحقل مطلوب.' },
-    overrides,
-  )
-}
-
-export function createProblemDetails(
-  overrides: FixtureOverrides<ProblemDetails> = {},
-): ProblemDetails {
-  return withOverrides(
-    {
-      code: 'validation.failed',
-      detailAr: 'تعذر التحقق من البيانات المدخلة.',
-      fieldErrors: [],
-      status: 422,
-      titleAr: 'تعذر إتمام الطلب',
-      traceId: 'fixture-trace-id',
-      type: 'https://eiams.example/problems/validation.failed',
-    },
-    overrides,
-  )
-}
-
 /**
- * One row of the administration directory, in the served shape.
- *
  * Distinct from `createUserDetail` below because the backend serves two different
  * records: the directory row additionally carries the user's sole role-and-scope
  * assignment, while the single-user read omits it.
@@ -251,37 +232,10 @@ export function createUserDetail(
   )
 }
 
-export function createPermission(overrides: FixtureOverrides<Permission> = {}): Permission {
-  return withOverrides(
-    {
-      permissionId: fixtureUuid(13),
-      code: 'admin.user.view',
-      nameAr: 'عرض المستخدمين',
-      descriptionAr: 'عرض دليل حسابات المستخدمين.',
-    },
-    overrides,
-  )
-}
-
-export function createRole(overrides: FixtureOverrides<Role> = {}): Role {
-  return withOverrides(
-    {
-      roleId: fixtureUuid(14),
-      code: 'SYSTEM_ADMIN',
-      nameAr: 'مدير النظام',
-      permissionCodes: ['admin.user.view', 'admin.user.manage'],
-      rowVersion: 1,
-      status: 'Active',
-    },
-    overrides,
-  )
-}
-
 /**
- * The role administration projection. Distinct from `createRole` above because the
- * assignment surface still carries the stale generated shape (`roleId`, `code`,
- * `status`), while the role catalogue and permission matrix consume the handwritten
- * `RoleProjection`. Migrating the assignment projection is tracked separately.
+ * The role administration projection. The role catalogue and the permission
+ * matrix consume the handwritten `RoleProjection`; the assignment surface
+ * consumes `UserRoleScopeProjection` below.
  */
 export function createRoleProjection(
   overrides: FixtureOverrides<RoleProjection> = {},
@@ -340,10 +294,26 @@ export function createUserRoleScope(
   )
 }
 
-export function createScopeContext(overrides: FixtureOverrides<ScopeContext> = {}): ScopeContext {
+/**
+ * The session's active scope, in the HANDWRITTEN shape (`SessionScope`).
+ *
+ * The frozen snapshot called this record `ScopeContext` and named its Arabic
+ * label `displayName`; the session endpoint sends `scopeName`
+ * (`SessionResponse.activeScope`), so the factory mints the live shape and
+ * still accepts the legacy `displayName` key as an alias for it.
+ */
+export function createScopeContext(
+  overrides: FixtureOverrides<SessionScope> & { readonly displayName?: string } = {},
+): SessionScope {
+  const { displayName, ...rest } = overrides
+  const defaults: SessionScope = {
+    scopeType: 'Warehouse',
+    scopeId: fixtureUuid(12),
+    scopeName: 'المستودع المركزي',
+  }
   return withOverrides(
-    { scopeType: 'Warehouse', scopeId: fixtureUuid(12), displayName: 'المستودع المركزي' },
-    overrides,
+    defaults,
+    displayName === undefined ? rest : { ...rest, scopeName: displayName },
   )
 }
 
@@ -412,7 +382,6 @@ export function createAuthTokenResponse(
       accessToken: 'fixture-access-token',
       expiresInSeconds: 900,
       session: createSession(),
-      tokenType: 'Bearer',
     },
     overrides,
   )
@@ -504,19 +473,29 @@ export function createUnitOfMeasure(
 }
 
 /**
- * THE document-engine material, and deliberately still typed against the
- * frozen generated `Material`.
+ * `GET /catalog/materials` — the LIVE `MaterialResponse`, and it is FLAT.
  *
- * The document ledger types that embed it — `DocumentLine.material`,
- * `InventoryBalance.material`, `StockMovement.material`, `Asset.material` — are
- * all still generated-snapshot shapes, so re-pointing this factory would mint a
- * record whose consumers are typed against fields it no longer carries.
- * Migrating that engine is its own epic, and a half-migrated factory would
- * just move the fiction.
+ * Read against the running API and against the OpenAPI snapshot
+ * (`eiams-backend-v1.openapi.json`; schemas
+ * `Application.Materials.GetList.MaterialResponse` and
+ * `Application.Materials.GetById.MaterialResponse` are identical, and both
+ * declare `additionalProperties: false`): the record carries the DERIVED domain
+ * pair `materialDomainId` / `materialDomainName` (FamilyId → Category →
+ * MaterialDomain; there is no direct FK) and the material's OWN base unit
+ * `baseUnitId` / `baseUnitSymbol`. There is NO nested `materialDomain` /
+ * `unit` reference on this endpoint, and the snapshot declares no such member.
  *
- * What that means in practice: NEVER serve this from a `/catalog/materials`
- * handler. `wireMaterial` in `./catalog-wire-fixtures` mints the real
- * `catalog.api-types.Material` for every catalog-list consumer.
+ * `status` is the STRING the wire serves (`"Active"`), never the ordinal the
+ * `PUT /catalog/materials/{id}/status` body takes: the read projection and the
+ * status command are two different contracts.
+ *
+ * `catalogVersion` is the ONE version field in this module (it is not
+ * `rowVersion`), `requiresAssetNumber` is SERVER-derived, and `attributes` is
+ * a JSON object STRING or `null`.
+ *
+ * The document engine still embeds a material of its own, and
+ * {@link toDocumentLineMaterial} below is the boundary adapter that projects
+ * THIS record into it.
  */
 export function createMaterial(overrides: FixtureOverrides<Material> = {}): Material {
   return withOverrides(
@@ -717,108 +696,174 @@ export function createInventoryBalance(
   )
 }
 
-/** Immutable, server-redacted audit entry fixture. */
+/**
+ * Immutable, server-redacted audit entry fixture.
+ *
+ * The LIVE entry (`Application.AuditLogs.AuditLogEntryResponse`): `id` (never
+ * `entryId`), `isRedacted` (never `redacted`) and `redactionReason` — a server
+ * REASON CODE (`CONFIDENTIAL_CREDENTIAL` / `SENSITIVE_SYSTEM_VALUE`), never an
+ * Arabic sentence. A redacted entry arrives with `oldValue`/`newValue` already
+ * nulled, so the withheld value never exists on the fixture at all.
+ */
 export function createAuditLogEntry(
   overrides: FixtureOverrides<AuditLogEntry> = {},
 ): AuditLogEntry {
   return withOverrides(
     {
-      entryId: fixtureUuid(80),
+      id: fixtureUuid(80),
       fieldName: 'status',
       oldValue: 'Draft',
       newValue: 'Submitted',
-      redacted: false,
-      redactionReasonAr: null,
-    },
-    overrides,
-  )
-}
-
-/** Immutable audit header fixture; list handlers may expose it without entries. */
-export function createAuditLog(overrides: FixtureOverrides<AuditLog> = {}): AuditLog {
-  return withOverrides(
-    {
-      action: 'Update',
-      auditLogId: fixtureUuid(81),
-      entityDisplay: 'سند استلام تجريبي',
-      entityId: fixtureUuid(200),
-      entityType: 'WarehouseDocument',
-      entries: [createAuditLogEntry()],
-      occurredAt: FIXTURE_TIMESTAMP,
-      occurredBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مدقق تجريبي' }),
-      summaryAr: 'تم تحديث السند.',
-      traceId: 'fixture-audit-trace-id',
-    },
-    overrides,
-  )
-}
-
-/** Asset registry read model with server-derived status (e18-t01). */
-export function createAsset(overrides: FixtureOverrides<Asset> = {}): Asset {
-  return withOverrides(
-    {
-      assetId: fixtureUuid(50),
-      assetNumber: 'AST-2026-0001',
-      serialNumber: 'SN-889900',
-      derivedStatus: 'InStock',
-      material: createNamedReference({ id: fixtureUuid(24), displayName: 'حاسوب مكتبي' }),
-      currentWarehouse: createNamedReference({
-        id: fixtureUuid(30),
-        displayName: 'المستودع المركزي',
-      }),
-      rowVersion: 1,
-    },
-    overrides,
-  )
-}
-
-/** One custody timeline row (active or historical) for an asset. */
-export function createAssetCustody(overrides: FixtureOverrides<AssetCustody> = {}): AssetCustody {
-  return withOverrides(
-    {
-      assetId: fixtureUuid(50),
-      assetNumber: 'AST-2026-0001',
-      custodyId: fixtureUuid(51),
-      custodyKind: 'Operational',
-      fromTs: FIXTURE_TIMESTAMP,
-      holder: {
-        displayName: 'مديرية المعلوماتية',
-        id: fixtureUuid(20),
-        secondaryLabelAr: null,
-        status: 'Active',
-        type: 'OrganizationalUnit',
-      },
-      issueDocumentId: fixtureUuid(151),
-      rowVersion: 1,
-      status: 'Active',
-      subjectType: 'Asset',
-      toTs: null,
+      isRedacted: false,
+      redactionReason: null,
+      fieldDisplayAr: null,
+      fieldDisplayEn: null,
     },
     overrides,
   )
 }
 
 /**
- * Immutable asset-movement ledger read model (e18-t05). Same standing as
- * `createStockMovement`: a standalone provenance projection that never derives
- * an asset status or mutates a document. Defaults describe a receipt into a
- * warehouse, so an issue/return/disposal row only has to override `eventType`
- * and the warehouse references it actually moved between.
+ * The audit LIST projection (`AuditLogListItemResponse`) — headers only.
+ *
+ * The list carries no field values and no entries, so this factory has no
+ * `entries` member: a list row can never hold a redacted secret.
+ */
+export function createAuditLog(overrides: FixtureOverrides<AuditLogHeader> = {}): AuditLogHeader {
+  return withOverrides(
+    {
+      id: fixtureUuid(81),
+      operationId: fixtureUuid(82),
+      requestId: null,
+      userId: fixtureUuid(10),
+      entityType: 'WarehouseDocument',
+      entityId: fixtureUuid(200),
+      aggregateType: null,
+      aggregateId: null,
+      action: 'Update',
+      commandName: null,
+      createdAtUtc: FIXTURE_TIMESTAMP,
+      actionDisplayAr: null,
+      actionDisplayEn: null,
+      entityTypeDisplayAr: null,
+      entityTypeDisplayEn: null,
+    },
+    overrides,
+  )
+}
+
+/**
+ * The audit DETAIL projection (`AuditLogDetailsResponse`): the header plus the
+ * ordered field diff. Only this shape carries `entries`.
+ */
+export function createAuditLogDetail(
+  overrides: FixtureOverrides<AuditLogDetail> = {},
+): AuditLogDetail {
+  return withOverrides(
+    {
+      id: fixtureUuid(81),
+      operationId: fixtureUuid(82),
+      requestId: null,
+      userId: fixtureUuid(10),
+      entityType: 'WarehouseDocument',
+      entityId: fixtureUuid(200),
+      aggregateType: null,
+      aggregateId: null,
+      action: 'Update',
+      commandName: null,
+      summary: 'تم تحديث السند.',
+      isSummaryRedacted: false,
+      summaryRedactionReason: null,
+      ipAddress: null,
+      createdAtUtc: FIXTURE_TIMESTAMP,
+      entries: [createAuditLogEntry()],
+      actionDisplayAr: null,
+      actionDisplayEn: null,
+      entityTypeDisplayAr: null,
+      entityTypeDisplayEn: null,
+    },
+    overrides,
+  )
+}
+
+/**
+ * `GET /assets` row (`AssetResponse`): flat, with the server-derived status.
+ *
+ * The live row carries `id` (never `assetId`), `currentStatus` (never
+ * `derivedStatus`), and the material and warehouse as FLAT columns — the API
+ * sends no nested material or warehouse reference and no holder display name.
+ */
+export function createAsset(overrides: FixtureOverrides<Asset> = {}): Asset {
+  return withOverrides(
+    {
+      id: fixtureUuid(50),
+      assetNumber: 'AST-2026-0001',
+      serialNumber: 'SN-889900',
+      materialId: fixtureUuid(24),
+      materialCode: 'IT-HW-PC-001',
+      materialNameAr: 'حاسوب مكتبي',
+      warehouseId: fixtureUuid(30),
+      warehouseCode: 'WH-CENTRAL',
+      warehouseName: 'المستودع المركزي',
+      currentStatus: 'InStock',
+      activeCustodyId: null,
+      holderType: null,
+      holderId: null,
+      acquisitionDate: '2026-01-01',
+      warrantyExpiry: null,
+      rowVersion: 1,
+    },
+    overrides,
+  )
+}
+
+/**
+ * One custody timeline row (`AssetCustodyTimelineResponse`), active or closed.
+ *
+ * The live row names the holder as the typed pair `holderType` + `holderId`
+ * and times the custody with `fromUtc` / `toUtc`. It carries NO holder display
+ * name and NO asset number: the server sends none.
+ */
+export function createAssetCustody(
+  overrides: FixtureOverrides<AssetCustodyTimelineRow> = {},
+): AssetCustodyTimelineRow {
+  return withOverrides(
+    {
+      custodyId: fixtureUuid(51),
+      assetId: fixtureUuid(50),
+      holderType: 'OrganizationalUnit',
+      holderId: fixtureUuid(20),
+      custodyKind: 'Operational',
+      issueDocumentId: fixtureUuid(151),
+      returnDocumentId: null,
+      status: 'Active',
+      fromUtc: FIXTURE_TIMESTAMP,
+      toUtc: null,
+      rowVersion: 1,
+    },
+    overrides,
+  )
+}
+
+/**
+ * One asset-movement ledger row (`AssetMovementResponse`).
+ *
+ * The live row is flat and immutable: `movementType` (never `eventType`),
+ * `movedAtUtc` (never `occurredAt`), and `documentReferenceNumber`. It carries
+ * no warehouse reference and no actor — the API sends neither.
  */
 export function createAssetMovement(
   overrides: FixtureOverrides<AssetMovement> = {},
 ): AssetMovement {
   return withOverrides(
     {
+      id: fixtureUuid(52),
       assetId: fixtureUuid(50),
       documentId: fixtureUuid(150),
-      documentLineId: fixtureUuid(160),
-      documentReference: 'EIAMS-RCV-2026-0001',
-      eventType: 'Received',
-      movementId: fixtureUuid(52),
-      occurredAt: FIXTURE_TIMESTAMP,
-      occurredBy: createNamedReference({ id: fixtureUuid(10), displayName: 'مدير المستودع' }),
-      toWarehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
+      documentReferenceNumber: 'EIAMS-RCV-2026-0001',
+      documentType: 'Receiving',
+      movementType: 'Received',
+      movedAtUtc: FIXTURE_TIMESTAMP,
     },
     overrides,
   )
@@ -1240,23 +1285,21 @@ export function createDocumentAttachment(
 }
 
 /**
- * Projects the REAL catalog record into the material the document engine still
- * embeds in a line.
+ * Projects the REAL catalog record into the material the document engine embeds
+ * in a line.
  *
- * `DocumentLine.material` is one of the shapes the frozen snapshot invented: it
- * nests `baseUnit` / `category` / `domain` / `family` `NamedReference`s, calls
- * the identity `materialId`, carries a `rowVersion`, and pins `materialKind` +
- * `requiresAssetNumber` to a discriminator. The wire record (`Material`) is flat
- * and carries none of that. Only `nameAr` and `code` are ever read off the
- * embedding in production, so those two travel verbatim; every reference below
- * is derived from an identifier the record DOES carry rather than being
- * re-invented, and the enum fields are narrowed to the discriminator that
- * matches the record's own kind.
+ * The engine's line keeps the material INLINE, where the live wire line
+ * denormalises it into `materialId` / `materialCode` / `materialNameAr`. The
+ * embedding names the identity `materialId` and keeps the catalog record's own
+ * flat columns beside the nested references, so a consumer never has to join
+ * the catalog to read a material. Every reference below is derived from an
+ * identifier the record DOES carry rather than being re-invented, and the enum
+ * fields are narrowed to the discriminator that matches the record's own kind.
  *
  * This is a boundary adapter, not a contract — it is deleted when the document
- * engine gets a handwritten line type instead of the generated one. Until then
- * it exists so a line's embedded material is derived from a real material
- * rather than being a second, parallel fiction.
+ * engine gets a live line type instead of an embedded material. Until then it
+ * exists so a line's embedded material is derived from a real material rather
+ * than being a second, parallel fiction.
  */
 export function toDocumentLineMaterial(material: Material): DocumentLine['material'] {
   const domain = createNamedReference({
@@ -1283,15 +1326,14 @@ export function toDocumentLineMaterial(material: Material): DocumentLine['materi
     family,
     familyId: material.familyId,
     hasExpiry: material.hasExpiry,
-    id: material.id,
     materialDomainId: material.materialDomainId,
     materialDomainName: material.materialDomainName,
     materialId: material.id,
     nameAr: material.nameAr,
     nameEn: material.nameEn,
     rowVersion: 1,
-    // The generated embedding has no `Archived` state, and an archived material
-    // is terminal — it is never the material of a live document line.
+    // The embedding has no `Archived` state, and an archived material is
+    // terminal — it is never the material of a live document line.
     status: material.status === 'Archived' ? ('Inactive' as const) : material.status,
     trackingType: material.trackingType,
   }
@@ -1511,16 +1553,4 @@ export function createWarehouseDocument(
     warehouse: createNamedReference({ id: fixtureUuid(30), displayName: 'المستودع المركزي' }),
   }
   return mergeDeep(defaults, overrides)
-}
-
-/** Produces the shared `{ items, meta }` page shape used by v1 list responses. */
-export function createPage<T>(items: readonly T[] = [], meta: FixtureOverrides<PageMeta> = {}) {
-  return {
-    items,
-    meta: createPageMeta({
-      totalItems: items.length,
-      totalPages: items.length === 0 ? 0 : 1,
-      ...meta,
-    }),
-  }
 }

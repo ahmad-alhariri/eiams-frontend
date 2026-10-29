@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ROUTE_PATHS } from '@/config/routes'
-import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseDocument } from '@/test/msw/document-engine.types'
 import {
   createMaterial,
   createWarehouse,

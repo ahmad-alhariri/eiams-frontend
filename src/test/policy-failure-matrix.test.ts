@@ -147,6 +147,12 @@ describe('policy failure vocabulary', () => {
     }
   })
 
+  it("classifies the backend's own dotted signed-copy code as a signed-original gate reason", () => {
+    // The backend states the same requirement under its own code; the canonical
+    // vocabulary accepts it so no surface has to compare it against a literal.
+    expect(isSignedOriginalBlockerCode('WarehouseDocuments.SignedCopyRequired')).toBe(true)
+  })
+
   it('names the single v1 advisory code', () => {
     expect(ACTIVE_SOFT_FREEZE_ADVISORY_CODE).toBe('ActiveSoftFreeze')
   })
@@ -194,6 +200,22 @@ describe('signed-original gate resolves every blocker code to blocked', () => {
   it('exposes the matched code so a consumer can dedupe by code, not by text', () => {
     const gate = signedOriginalGate(missingOriginalPolicy())
     expect(gate.blockerCode).toBe('document.signed_original_missing')
+  })
+
+  it("blocks on the backend's own dotted signed-copy code and exposes it", () => {
+    const gate = signedOriginalGate(
+      wirePolicy({
+        documentId: POLICY_DOCUMENT_ID,
+        status: 'Submitted',
+        signedOriginalSatisfied: false,
+        blockers: [blocker('WarehouseDocuments.SignedCopyRequired')],
+      }),
+    )
+    expect(gate.status).toBe('blocked')
+    // That code HAS a governed Arabic entry, so the copy table speaks instead
+    // of the canonical default the unmapped gate codes fall back to.
+    expect(gate.messageAr).toBe('يجب إرفاق النسخة الموقعة قبل الترحيل.')
+    expect(gate.blockerCode).toBe('WarehouseDocuments.SignedCopyRequired')
   })
 
   it('reports no code when it fell back to the default message', () => {

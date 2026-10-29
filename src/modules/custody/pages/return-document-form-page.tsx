@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMemo, type FormEvent } from 'react'
+import { useCallback, useMemo, type FormEvent } from 'react'
 import type { DeepPartial, Resolver } from 'react-hook-form'
 import { FormProvider, useForm, useWatch } from 'react-hook-form'
 import { Controller } from 'react-hook-form'
@@ -7,8 +7,10 @@ import { useNavigate } from 'react-router'
 import { z } from 'zod'
 
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
+import type { Material } from '@/modules/catalog/types/catalog.types'
 import { ReturnLineAssetSelector } from '@/modules/custody/components/return-line-asset-selector'
 import { ReturnOriginalIssueSelector } from '@/modules/custody/components/return-original-issue-selector'
+import { useReturnEligibleItems } from '@/modules/custody/hooks/use-return-eligible-items'
 import {
   RETURN_REASON_MAX_LENGTH,
   returnInfoFormSchema,
@@ -29,9 +31,11 @@ import {
   documentDraftMutationError,
   useCompleteDraftMutation,
 } from '@/shared/documents/use-document-draft-mutations'
+import { ErrorState } from '@/shared/feedback/error-state'
 import { PageHeader } from '@/shared/layout/page-header'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
+import { formatNumber } from '@/shared/utils/format'
 
 const returnDocumentFormSchema = z.object({
   header: documentHeaderSchema,
@@ -115,6 +119,58 @@ export default function ReturnDocumentFormPage() {
 
   const lines = useWatch({ control: form.control, name: 'lines' }) ?? EMPTY_LINES
 
+  // o098.5: the page owns the eligible-subject query so the per-line picker and
+  // the durable quantity/serial gate below read the SAME server rows.
+  //
+  // The eligible-items read is a SECONDARY read: it only tells WHICH subjects
+  // of the selected original Issue may come back. It used to be collapsed into
+  // an empty list, so a FAILED read rendered exactly like "this Issue holds
+  // nothing to return" — the material picker narrowed itself to consumables
+  // and the durable gate claimed there was no custody left, with no Arabic
+  // reason and no retry. A failed read must stay DISTINGUISHABLE from an
+  // empty one, so the failure gets its OWN surface and the save stays closed
+  // until the rows are readable again.
+  const {
+    items: eligibleItems,
+    isLoading: eligibleItemsLoading,
+    isError: eligibleItemsFailed,
+    retry: retryEligibleItems,
+  } = useReturnEligibleItems(selectedIssueDocumentId)
+
+  /**
+   * Defect 3 — the line's material picker must not offer a material the
+   * selected original Issue cannot return.
+   *
+   * The server's own list of returnable subjects IS the eligible-items read
+   * (assets in active custody, issued durable units, active durable
+   * allocations), so a custody-tracked material (Asset / Durable) is offerable
+   * only when the Issue holds one of its subjects; otherwise the posting rule
+   * refuses the line (`DurableAllocationNotFound` / `TrackedUnitNotFound` /
+   * no matching custody).
+   *
+   * A plain consumable carries NO custody subject: the posting rule checks
+   * custody for Durable materials ONLY and receipts every other line, so a
+   * consumable stays offerable (the live stack posts consumable Returns).
+   */
+  const eligibleMaterialIds = useMemo(
+    () => new Set(eligibleItems.map((item) => item.materialId)),
+    [eligibleItems],
+  )
+  const materialFilter = useCallback(
+    (material: Material) =>
+      material.materialKind === 'Consumable' || eligibleMaterialIds.has(material.id),
+    [eligibleMaterialIds],
+  )
+  // The restriction is defined BY the selected original Issue, and it needs the
+  // eligible rows: while they are still loading the truth is unknown, so the
+  // picker keeps offering everything and the durable gate below holds the save
+  // until the read resolves. A FAILED read is equally unknown — narrowing the
+  // picker on it would hide every durable material as if the Issue held none.
+  const returnMaterialFilter =
+    selectedIssueDocumentId === undefined || eligibleItemsLoading || eligibleItemsFailed
+      ? undefined
+      : materialFilter
+
   /**
    * The server's authoritative Return rules, mirrored client-side so the save
    * never fires against a request it must reject: an Asset-kind line's
@@ -138,6 +194,81 @@ export default function ReturnDocumentFormPage() {
   }, [lines])
 
   /**
+   * Client-side mirror of the server's durable branches (o098.5):
+   * - `TrackingType == Quantity` returns against the ONE active
+   *   `DurableCustodyAllocation` of the original Issue, capped at its remaining
+   *   `availableQuantity` (`ReturnQuantityExceedsActive`);
+   * - `TrackingType == Serial` resolves one issued `TrackedMaterialUnit` and
+   *   matches it on the line's `BatchNumber`, which therefore carries the unit's
+   *   serial number while the quantity stays 1;
+   * - a durable material with no eligible subject would be rejected server-side
+   *   (`DurableAllocationNotFound` / `TrackedUnitNotFound`), so it is blocked.
+   *   The material picker no longer offers such a material (defect 3); this
+   *   branch stays the backstop for a line whose material stopped being
+   *   eligible when the original Issue changed.
+   * The lookup is still loading for a freshly picked issue: stay quiet until it
+   * resolves, and let the server stay authoritative either way.
+   */
+  const durableLinesMessageAr = useMemo(() => {
+    if (selectedIssueDocumentId === undefined) {
+      return null
+    }
+    // A durable line can only be validated against the resolved eligible rows:
+    // while they load we cannot know whether the material is quantity-tracked,
+    // serial-tracked, or out of custody, so the save waits instead of sending a
+    // serial line with an empty `batchNumber` (which the server may reject).
+    if (eligibleItemsLoading) {
+      return lines.some((line) => line?.materialKind === 'Durable' && line.materialId !== '')
+        ? 'جارٍ التحقق من العهدة المتبقية لبنود العهدة قبل الحفظ.'
+        : null
+    }
+    // A FAILED read knows NOTHING about the remaining custody: claiming that
+    // no custody remains would be a statement the server never made. The
+    // failure has its own surface and the save stays closed until the rows are
+    // readable again, so this guard stays quiet.
+    if (eligibleItemsFailed) {
+      return null
+    }
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index]
+      if (line?.materialKind !== 'Durable' || line.materialId === '') continue
+
+      const lineItems = eligibleItems.filter((item) => item.materialId === line.materialId)
+      const quantityItem = lineItems.find((item) => item.subjectType === 'MaterialQuantity')
+      const unitItems = lineItems.filter(
+        (item) =>
+          item.subjectType === 'TrackedUnit' &&
+          item.serialNumber !== null &&
+          item.serialNumber !== '',
+      )
+      const quantity = typeof line.quantity === 'number' ? line.quantity : 0
+
+      if (quantityItem !== undefined) {
+        if (quantity > quantityItem.availableQuantity) {
+          return `البند ${index + 1}: الكمية المطلوبة تتجاوز الكمية المتبقية في العهدة (${formatNumber(
+            quantityItem.availableQuantity,
+          )}).`
+        }
+        continue
+      }
+
+      if (unitItems.length > 0) {
+        const serialNumber = (line.batchNumber ?? '').trim()
+        if (serialNumber === '' || !unitItems.some((item) => item.serialNumber === serialNumber)) {
+          return `البند ${index + 1}: اختر الوحدة التسلسلية المراد إرجاعها.`
+        }
+        if (quantity !== 1) {
+          return `البند ${index + 1}: يجب أن تكون كمية الوحدة التسلسلية 1.`
+        }
+        continue
+      }
+
+      return `البند ${index + 1}: لا توجد عهدة متبقية قابلة للإرجاع لهذه المادة في سند الصرف الأصلي.`
+    }
+    return null
+  }, [eligibleItems, eligibleItemsFailed, eligibleItemsLoading, lines, selectedIssueDocumentId])
+
+  /**
    * Client-side mirror of the server's `WrongWarehouse` check (the server
    * stays authoritative): a non-blocking guard — it only applies once BOTH
    * the header warehouse and the original issue are chosen.
@@ -154,7 +285,11 @@ export default function ReturnDocumentFormPage() {
       : null
 
   const saveDisabled =
-    isSubmitting || wrongWarehouseMessageAr !== null || assetLinesMessageAr !== null
+    isSubmitting ||
+    eligibleItemsFailed ||
+    wrongWarehouseMessageAr !== null ||
+    assetLinesMessageAr !== null ||
+    durableLinesMessageAr !== null
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -162,7 +297,12 @@ export default function ReturnDocumentFormPage() {
     // press inside a text field submits the form implicitly, and any
     // programmatic `form.submit()` bypasses the button. Block the mutation
     // in this handler so no path can leak the save through.
-    if (wrongWarehouseMessageAr !== null || assetLinesMessageAr !== null) {
+    if (
+      eligibleItemsFailed ||
+      wrongWarehouseMessageAr !== null ||
+      assetLinesMessageAr !== null ||
+      durableLinesMessageAr !== null
+    ) {
       return
     }
     void form.handleSubmit((values) => {
@@ -229,7 +369,8 @@ export default function ReturnDocumentFormPage() {
                         سند الصرف الأصلي
                       </label>
                       {/* FIX-R3: options are the server's POSTED Issue documents
-                          (searchable by paper number); never a free-text uuid. */}
+                          (searchable by the system reference — the identifier the
+                          option label leads with); never a free-text uuid. */}
                       <ReturnOriginalIssueSelector
                         value={field.value === '' ? null : field.value}
                         disabled={isSubmitting}
@@ -282,6 +423,19 @@ export default function ReturnDocumentFormPage() {
             }
           />
 
+          {eligibleItemsFailed ? (
+            <ErrorState
+              className="min-h-48"
+              title="تعذّر تحميل المواد القابلة للإرجاع"
+              description="تعذّر جلب المواد القابلة للإرجاع من سند الصرف الأصلي، فلا يمكن حفظ المسودة. حاول مرة أخرى."
+              action={
+                <Button type="button" variant="outline" onClick={retryEligibleItems}>
+                  إعادة المحاولة
+                </Button>
+              }
+            />
+          ) : null}
+
           <section
             data-slot="return-lines-section"
             aria-label="بنود الإرجاع"
@@ -293,10 +447,13 @@ export default function ReturnDocumentFormPage() {
               warehouseId={headerWarehouseId || undefined}
               disabled={isSubmitting}
               includeAssetMaterials
+              materialFilter={returnMaterialFilter}
               assetSlotForLine={(index) => (
                 <ReturnLineAssetSelector
                   index={index}
                   originalIssueDocumentId={selectedIssueDocumentId}
+                  items={eligibleItems}
+                  isLoading={eligibleItemsLoading}
                 />
               )}
             />
@@ -310,6 +467,11 @@ export default function ReturnDocumentFormPage() {
           {assetLinesMessageAr !== null ? (
             <p role="alert" className="text-sm text-destructive">
               {assetLinesMessageAr}
+            </p>
+          ) : null}
+          {durableLinesMessageAr !== null ? (
+            <p role="alert" className="text-sm text-destructive">
+              {durableLinesMessageAr}
             </p>
           ) : null}
           {submitErrorMessage !== null ? (

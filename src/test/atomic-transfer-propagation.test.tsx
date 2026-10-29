@@ -48,6 +48,14 @@ const transferIn = findTransferMovement('TransferIn')
 const sourceBalance = findTransferBalance(scenario.warehouses.source.id)
 const destinationBalance = findTransferBalance(scenario.warehouses.destination.id)
 
+/**
+ * The hook below transforms six lazy page graphs before a single assertion
+ * runs. Under full-suite parallel load that transform outlasts Vitest's DEFAULT
+ * 10 s `hookTimeout` and the file fails with "Hook timed out in 10000ms", so
+ * the budget is scoped to THIS hook.
+ */
+const WARM_LAZY_ROUTES_TIMEOUT = 60_000
+
 beforeAll(async () => {
   await Promise.all([
     import('@/modules/transfer/pages/transfer-document-detail-page'),
@@ -57,7 +65,7 @@ beforeAll(async () => {
     import('@/modules/inventory/pages/inventory-balances-page'),
     import('@/modules/inventory/pages/inventory-balance-detail-page'),
   ])
-})
+}, WARM_LAZY_ROUTES_TIMEOUT)
 
 afterEach(() => {
   activeScope.key = { kind: 'enterprise' }

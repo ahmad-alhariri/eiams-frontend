@@ -21,6 +21,7 @@ import type {
   Uuid,
 } from '@/modules/warehouse/types/warehouse.api-types'
 import type { ApiPage, ResourceIdResponse } from '@/shared/api/api-contracts'
+import { pathWithId } from '@/shared/services/api-path'
 
 const WAREHOUSES_PATH = '/warehouses'
 const WAREHOUSE_PATH = '/warehouses/{warehouseId}'
@@ -48,10 +49,6 @@ const WAREHOUSE_MATERIAL_SETTING_STATUS_PATH = '/warehouse-material-settings/{se
 // this read may paper over.
 const CAPABILITY_READ_PAGE = 1
 const CAPABILITY_READ_PAGE_SIZE = 100
-
-function pathWithId(path: string, parameter: string, id: string): string {
-  return path.replace(parameter, encodeURIComponent(id))
-}
 
 function toQueryString(
   query: Record<string, string | number | boolean | undefined>,

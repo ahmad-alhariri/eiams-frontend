@@ -1,24 +1,20 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
+import { delay, HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
+import { ADJUSTMENT_CONFLICT_GUIDANCE_AR } from '@/modules/adjustment/hooks/use-adjustment-actions'
 import { toast } from '@/shared/ui/toast-manager'
 import { IDEMPOTENCY_KEY_HEADER } from '@/shared/services/mutation-safety'
-import type {
-  DocumentPolicy,
-  ProblemDetails,
-  WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
+import type { DocumentPolicy, WarehouseDocument } from '@/test/msw/document-engine.types'
 import type { AdjustmentDetail } from '@/modules/adjustment/types/adjustment.types'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import {
   createActionAvailability,
   createDocumentPolicy,
   createMaterial,
-  createProblemDetails,
   createSessionRole,
   createSessionScope,
   createSessionUser,
@@ -29,7 +25,7 @@ import {
 } from '@/test/msw/factories'
 import { applyDocumentAction, toWirePolicy } from '@/test/msw/warehouse-document-handlers'
 import { wireDocumentDetails, wireDocumentHistory } from '@/test/msw/document-wire-fixtures'
-import { apiJson, okJson, toWireErrorResponse } from '@/test/msw/envelope'
+import { apiJson, errJson, okJson } from '@/test/msw/envelope'
 import { server } from '@/test/msw/server'
 
 /**
@@ -70,11 +66,18 @@ const API_BASE_URL = '/api/v1'
 const DOCUMENT_ID = '00000000-0000-4000-8000-0000000009a1'
 const ADJUSTMENT_ID = '9d1e0000-0000-4000-8000-0000000000a1'
 
-const PENDING_POLICY_NOTE = 'بانتظار تقييم سياسة المستند من الخادم...'
 const POST_BUTTON_NAME = 'ترحيل السند'
 
-/** Arabic conflict guidance owned by the adjustment actions module. */
-const ADJUSTMENT_CONFLICT_GUIDANCE_AR = 'سند التسوية عدّله مستخدم آخر. أعد تحميل البيانات'
+/**
+ * The note the page shows while the policy read is still in flight.
+ *
+ * Copied from the production line
+ * (`src/shared/documents/pages/document-detail-page.tsx`, the `policy === null`
+ * branch). The string cannot be imported from there — the page owns it inline —
+ * and it is used here only in a POSITIVE assertion, so it can still fail: if
+ * the page ever renders a different note, or none, the case below fails.
+ */
+const PENDING_POLICY_NOTE = /^بانتظار تقييم سياسة المستند/u
 
 // The toast manager is module-mocked; its call history must not leak between
 // cases or the "exactly one Arabic conflict message" assertions become order
@@ -253,17 +256,9 @@ function wireAdjustmentReads() {
   )
 }
 
-/** 409 problem carrying the contract's Arabic conflict sentence. */
-function adjustmentConflictProblem(): ProblemDetails {
-  // The wire carries an English message only; the Arabic the user sees is resolved
-  // from this code via the governed `error-copy-ar.ts` table.
-  return createProblemDetails({
-    code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH',
-    detailAr: null,
-    fieldErrors: [],
-    status: 409,
-    titleAr: 'تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.',
-  })
+/** 409 problem carrying the contract's Arabic conflict sentence (wire envelope). */
+function adjustmentConflictProblem(): ReturnType<typeof errJson> {
+  return errJson(409, { code: 'WAREHOUSE_DOCUMENTS_ROW_VERSION_MISMATCH' })
 }
 
 describe('F-1 — a failed policy read degrades only the policy-dependent surface (SAD.md:230)', () => {
@@ -315,7 +310,6 @@ describe('F-1 — a failed policy read degrades only the policy-dependent surfac
     expect(policyError).toHaveTextContent('تعذّر تحميل سياسة السند')
     expect(policyError).toHaveTextContent('بيانات السند أعلاه صحيحة')
     expect(policyError).toHaveAttribute('role', 'alert')
-    expect(screen.queryByText(PENDING_POLICY_NOTE)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'إرسال للترحيل' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'إلغاء' })).not.toBeInTheDocument()
     // (d) No disabled lifecycle button is left with no explanation anywhere.
@@ -336,11 +330,15 @@ describe('F-1 — a failed policy read degrades only the policy-dependent surfac
     expect(screen.getByRole('button', { name: 'إلغاء' })).toBeEnabled()
     expect(policyRequests).toBe(2)
     await waitFor(() => expect(policyErrorState(container)).toBeNull())
-    expect(screen.queryByText(PENDING_POLICY_NOTE)).not.toBeInTheDocument()
   })
 
   it('keeps the loading note — not the error — while the policy read is merely pending', async () => {
     const document = detailFixture()
+    // A REAL delay in the handler. With a handler that answers immediately the
+    // read is already settled before the first assertion runs, so the pending
+    // state is never observed and the case cannot fail: it would pass whether
+    // the page showed the pending note, the error, or nothing at all.
+    const POLICY_READ_DELAY_MS = 500
 
     server.use(
       http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}`, () =>
@@ -355,17 +353,29 @@ describe('F-1 — a failed policy read degrades only the policy-dependent surfac
           }),
         ),
       ),
-      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, () =>
-        okJson(toWirePolicy(detailFixture())),
-      ),
+      http.get(`${API_BASE_URL}/warehouse-documents/${DOCUMENT_ID}/policy`, async () => {
+        await delay(POLICY_READ_DELAY_MS)
+        return okJson(toWirePolicy(document))
+      }),
     )
 
     const client = createClient()
     const { container } = renderDocumentDetail(client)
 
-    await screen.findByRole('button', { name: 'إرسال للترحيل' })
+    // (a) The read is still in flight: the policy-dependent surface shows the
+    //     PENDING note, and NOT the error. Both states at once, or neither,
+    //     fails here.
+    expect(await screen.findByText(PENDING_POLICY_NOTE)).toBeInTheDocument()
     expect(policyErrorState(container)).toBeNull()
     expect(screen.queryByText('تعذّر تحميل سياسة السند')).not.toBeInTheDocument()
+    // The lifecycle actions are not offered while the policy is unknown.
+    expect(screen.queryByRole('button', { name: 'إرسال للترحيل' })).not.toBeInTheDocument()
+
+    // (b) Once the read settles, the pending note gives way to the actions the
+    //     server presented.
+    expect(await screen.findByRole('button', { name: 'إرسال للترحيل' })).toBeEnabled()
+    expect(screen.queryByText(PENDING_POLICY_NOTE)).not.toBeInTheDocument()
+    expect(policyErrorState(container)).toBeNull()
   })
 })
 
@@ -423,7 +433,7 @@ describe('F-2 — an adjustment retry reuses one idempotency key; a new action m
         captured.push(request.headers.get(IDEMPOTENCY_KEY_HEADER))
         postCalls += 1
         if (postCalls === 1) {
-          return toWireErrorResponse(adjustmentConflictProblem(), 409)
+          return adjustmentConflictProblem()
         }
         return okJson({ documentId: ADJUSTMENT_ID, warnings: [] })
       }),
@@ -451,7 +461,7 @@ describe('F-3 — a 409 on an adjustment action refetches authoritative state an
         return okJson(adjustmentFixture())
       }),
       http.post(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}/post`, () =>
-        toWireErrorResponse(adjustmentConflictProblem(), 409),
+        adjustmentConflictProblem(),
       ),
     )
 
@@ -483,7 +493,7 @@ describe('F-3 — a 409 on an adjustment action refetches authoritative state an
       }),
       http.post(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}/post`, () =>
         // `detailAr: null` is contract-legal; the local guidance must be reachable.
-        toWireErrorResponse(adjustmentConflictProblem(), 409),
+        adjustmentConflictProblem(),
       ),
     )
 
@@ -511,7 +521,7 @@ describe('F-3 — a 409 on an adjustment action refetches authoritative state an
       }),
       http.post(`${API_BASE_URL}/adjustments/${ADJUSTMENT_ID}/post`, () => {
         postCalls += 1
-        return toWireErrorResponse(adjustmentConflictProblem(), 409)
+        return adjustmentConflictProblem()
       }),
     )
 

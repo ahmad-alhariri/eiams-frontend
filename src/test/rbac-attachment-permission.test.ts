@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { isDocumentMutable, documentReadOnlyReasonAr } from '@/shared/documents/document-read-only'
 import { getActionPermissionCode } from '@/shared/documents/use-document-permissions'
 import { approvedGrant } from '@/test/rbac-role-fixture'
-import type { DocumentStatus } from '@/shared/types/generated/eiams-v1'
+import type { DocumentStatus } from '@/shared/documents/types/document-wire.types'
 
 /**
  * Attachment authorization regression (e24-t06, D-ATT-01 + D-RBAC-01 rule 3).

@@ -13,6 +13,10 @@ import {
   toCompleteDraftAssetLines,
   type AssetLineValues,
 } from '@/shared/documents/schemas/document-lines.schemas'
+import {
+  parseSerialList,
+  serialsOfOtherLines,
+} from '@/shared/documents/components/serial-capture-field'
 
 const MATERIAL_ID = '00000000-0000-4000-8000-000000000024'
 
@@ -241,5 +245,58 @@ describe('asset-line capture schema (e12-t05)', () => {
     if (asset.materialKind === 'Asset') {
       expect(asset.requiresAssetNumber).toBe(true)
     }
+  })
+})
+
+describe('asset-line bulk serial capture (o098.3)', () => {
+  it('applies a captured serial list as one unit per serial with quantity equal to the unit count', () => {
+    const captured = parseSerialList(
+      ['  SN-1001  ', 'SN-1002', 'sn-1001', 'S'.repeat(201), 'SN-9002'].join('\n'),
+      ['sn-9002'],
+    )
+
+    expect(captured.serials).toEqual(['SN-1001', 'SN-1002'])
+    expect(captured.rejected).toEqual([
+      { value: 'sn-1001', reasonAr: 'مكرر داخل القائمة' },
+      { value: 'S'.repeat(201), reasonAr: 'أطول من الحد المسموح (200 حرف)' },
+      { value: 'SN-9002', reasonAr: 'مستخدم في بند آخر' },
+    ])
+
+    const line = validLine({
+      quantity: captured.serials.length,
+      assetInputs: captured.serials.map((serialNumber) => ({ serialNumber })),
+    })
+    const parsed = assetLineSchema.safeParse(line)
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) {
+      return
+    }
+
+    // The wire shape is unchanged: one `assetInputs` entry per serial, and the
+    // asset number stays absent so the server allocates it at post.
+    expect(toCompleteDraftAssetLines([parsed.data])).toEqual([
+      {
+        materialId: MATERIAL_ID,
+        quantity: 2,
+        assetInputs: [{ serialNumber: 'SN-1001' }, { serialNumber: 'SN-1002' }],
+      },
+    ])
+  })
+
+  it('rejects a serial already captured by another line of the same document', () => {
+    const serialsByLine = [['SN-1001', 'SN-1002'], ['SN-3001']]
+
+    const captured = parseSerialList('SN-1001\nSN-3001', serialsOfOtherLines(serialsByLine, 1))
+
+    expect(captured.serials).toEqual(['SN-3001'])
+    expect(captured.rejected).toEqual([{ value: 'SN-1001', reasonAr: 'مستخدم في بند آخر' }])
+    expect(serialsOfOtherLines(serialsByLine, 0)).toEqual(['SN-3001'])
+  })
+
+  it('rejects a serial already on the same row with its own reason', () => {
+    const captured = parseSerialList('SN-1001\nSN-1002', [], ['sn-1001'])
+
+    expect(captured.serials).toEqual(['SN-1002'])
+    expect(captured.rejected).toEqual([{ value: 'SN-1001', reasonAr: 'مكرر في هذا البند' }])
   })
 })

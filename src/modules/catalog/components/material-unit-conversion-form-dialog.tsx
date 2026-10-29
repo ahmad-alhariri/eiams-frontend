@@ -57,6 +57,10 @@ type MaterialUnitConversionFormDialogProps = {
  * existing conversion shows its unit read-only — re-pointing the units means
  * remove-and-add rather than an edit.
  */
+/** A unit may arrive without its type: compare what is there instead of dying on it. */
+const normalizeUnitType = (unitType: string | null | undefined): string =>
+  (unitType ?? '').trim().toLocaleLowerCase('ar')
+
 export function MaterialUnitConversionFormDialog({
   material,
   conversion,
@@ -74,7 +78,7 @@ export function MaterialUnitConversionFormDialog({
     [material.baseUnitId, units],
   )
   /** The backend's comparison is case-insensitive, so the offer must be too. */
-  const baseUnitType = baseUnit?.unitType.trim().toLocaleLowerCase('ar')
+  const baseUnitType = normalizeUnitType(baseUnit?.unitType)
   const selectableUnits = useMemo(
     () =>
       units.filter(
@@ -82,7 +86,7 @@ export function MaterialUnitConversionFormDialog({
           unit.status === 'Active' &&
           unit.id !== material.baseUnitId &&
           !activeUnitIds.has(unit.id) &&
-          unit.unitType.trim().toLocaleLowerCase('ar') === baseUnitType,
+          normalizeUnitType(unit.unitType) === baseUnitType,
       ),
     [activeUnitIds, baseUnitType, material.baseUnitId, units],
   )

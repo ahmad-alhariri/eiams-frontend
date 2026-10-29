@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -193,6 +193,76 @@ describe('IssueDocumentFormPage', () => {
     expect(document.querySelector('[role=alert][class*="text-destructive"]')).toBeNull()
   })
 
+  // eiams-frontend-7eqp. The form-level over-balance alert and the shared
+  // per-line hint sit on ONE screen and state the SAME balance, so they must
+  // render the SAME glyphs. Arabic-Indic digits are the app-wide policy
+  // (`formatNumber`); the alert used to interpolate the raw number, so the
+  // user could not tell the two renderings apart.
+  it('renders the over-balance alert and the per-line hint in the same Arabic-Indic digits', async () => {
+    useHandlers(3)
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('سند صرف جديد')
+    await chooseSourceWarehouse(user)
+    await chooseMaterial(user)
+    const quantity = screen.getByLabelText('الكمية')
+    await user.clear(quantity)
+    await user.type(quantity, '5')
+
+    const alert = await screen.findByText(/^الكمية المطلوبة في البند 1 تتجاوز الرصيد المتاح/)
+    // The balance (3) reads ٣ in the alert, and never as the Latin "3".
+    expect(alert).toHaveTextContent('(٣)')
+    expect(alert).not.toHaveTextContent('3')
+
+    const perLineHint = await screen.findByText(/^الكمية المطلوبة تتجاوز الرصيد المتاح/)
+    expect(perLineHint).toHaveTextContent('(٣)')
+    expect(perLineHint).not.toHaveTextContent('3')
+  }, 40000)
+
+  // eiams-frontend-dtvi / rzt3. Base UI's combobox popup is a MODAL focus
+  // manager: opening it marks the rest of the document aria-hidden. When the
+  // results arrive after the user has already moved on to another field, the
+  // browser refuses to hide the focused element and logs «Blocked aria-hidden
+  // on an element because its descendant retained focus». The panel must not
+  // open behind the user's back, and the focused field must never end up
+  // inside an aria-hidden subtree.
+  it('never leaves the focused field inside an aria-hidden subtree when the material results arrive late', async () => {
+    useHandlers(100)
+    let materialReads = 0
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/materials`, () => {
+        materialReads += 1
+        return okPageJson([material])
+      }),
+    )
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('سند صرف جديد')
+    const materialInput = [...document.querySelectorAll('form input')].find(
+      (input) => input instanceof HTMLInputElement && input.placeholder === 'ابحث عن مادة...',
+    )
+    if (!(materialInput instanceof HTMLInputElement)) throw new Error('material input not found')
+    await user.click(materialInput)
+    await user.type(materialInput, 'pc')
+    // The user moves to the reason field BEFORE the results arrive.
+    const reason = screen.getByLabelText('سبب الصرف')
+    await user.click(reason)
+    await waitFor(() => expect(document.activeElement).toBe(reason))
+
+    // The results land now, with the focus sitting in the reason field.
+    await waitFor(() => expect(materialReads).toBeGreaterThan(0))
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400))
+    })
+
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    expect(reason.closest('[aria-hidden="true"]')).toBeNull()
+    expect(consoleError).not.toHaveBeenCalled()
+  }, 40000)
+
   // e24-t10 / B3. A failed per-line balance read used to become "no stock held"
   // (null), so the form printed a factually false statement about inventory —
   // "الكمية المطلوبة في البند 1 تتجاوز الرصيد المتاح (0)" — with no error and
@@ -238,7 +308,9 @@ describe('IssueDocumentFormPage', () => {
     )
     await user.click(within(failure).getByRole('button', { name: 'إعادة المحاولة' }))
 
-    expect(await screen.findByText(/تتجاوز الرصيد المتاح \(100\)/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/^الكمية المطلوبة في البند 1 تتجاوز الرصيد المتاح \(١٠٠\)/),
+    ).toBeInTheDocument()
     expect(screen.queryByTestId('balance-read-error')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeDisabled()
     expect(postedBody).toBeUndefined()

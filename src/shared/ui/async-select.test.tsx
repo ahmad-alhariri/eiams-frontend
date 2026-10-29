@@ -421,4 +421,46 @@ describe('AsyncSelect', () => {
 
     expect(screen.getByRole('option', { name: '🏭 مستودع دمشق (W1)' })).toBeInTheDocument()
   })
+
+  // eiams-frontend-dtvi / rzt3. Base UI's combobox popup is a MODAL focus
+  // manager: opening it marks the rest of the document aria-hidden. When the
+  // results land after the user has left the control, the field that holds the
+  // focus would be hidden from assistive technology and the browser logs
+  // «Blocked aria-hidden on an element because its descendant retained focus».
+  it('opens the panel while the user is still in the control', async () => {
+    const pending = deferred<Option[]>()
+    const loadOptions = vi.fn(async () => pending.promise)
+    render(<AsyncSelect<WarehousePayload> loadOptions={loadOptions} onValueChange={vi.fn()} />)
+
+    const control = input()
+    control.focus()
+    await typeQuery('مستودع')
+
+    act(() => {
+      pending.resolve(warehouseOptions)
+    })
+    await act(async () => {})
+
+    expect(screen.getByRole('option', { name: 'مستودع دمشق' })).toBeInTheDocument()
+  })
+
+  it('does not open the panel once the user has left the control', async () => {
+    const pending = deferred<Option[]>()
+    const loadOptions = vi.fn(async () => pending.promise)
+    render(<AsyncSelect<WarehousePayload> loadOptions={loadOptions} onValueChange={vi.fn()} />)
+
+    const control = input()
+    control.focus()
+    await typeQuery('مستودع')
+
+    // The user moves to another field before the results arrive.
+    fireEvent.focusOut(control)
+    act(() => {
+      pending.resolve(warehouseOptions)
+    })
+    await act(async () => {})
+
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    expect(control).toHaveAttribute('aria-expanded', 'false')
+  })
 })

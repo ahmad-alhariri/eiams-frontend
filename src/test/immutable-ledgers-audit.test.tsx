@@ -13,15 +13,17 @@ import { assetService } from '@/modules/asset/services/asset.service'
 import { inventoryService } from '@/modules/inventory/services/inventory.service'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { AssetMovementLedger } from '@/modules/asset/components/asset-movement-ledger'
+import { assetQueryKeys } from '@/modules/asset/hooks/use-asset-queries'
+import { auditQueryKeys } from '@/modules/audit/hooks/use-audit-queries'
+import { inventoryQueryKeys } from '@/modules/inventory/hooks/use-inventory-queries'
 import AuditLogExplorerPage from '@/modules/audit/pages/audit-log-explorer-page'
 import AssetCustodyHistoryPage from '@/modules/asset/pages/asset-custody-history-page'
-import { clearScopedQueries } from '@/shared/services/query-keys'
 import { formatDateTime } from '@/shared/utils/format'
 import { createCrossModuleScenario } from '@/test/msw/cross-module-scenarios'
 import {
   createAssetCustody,
-  createAssetMovement,
   createAuditLog,
+  createAuditLogDetail,
   createAuditLogEntry,
   createSession,
   fixtureUuid,
@@ -130,21 +132,88 @@ const LEDGER_WIRE_FRAGMENTS = [
  */
 const WRITABLE_NON_LEDGER_FRAGMENT = '/adjustments'
 
-/** Query-key builders and endpoint constants that name a ledger cache entry. */
-const LEDGER_KEY_TOKENS = [
-  'inventoryQueryKeys.movements',
-  'inventoryQueryKeys.movement',
-  'assetQueryKeys.movements',
-  'assetQueryKeys.custody',
-  'auditQueryKeys.logs',
-  'auditQueryKeys.log',
+interface LedgerKeyBuilder {
+  /** The production export the builder is imported under. */
+  readonly name: string
+  /** The production builder object itself. */
+  readonly builder: object
+  /** The members of that builder that name a ledger cache entry. */
+  readonly ledgerMembers: readonly string[]
+}
+
+/**
+ * The query-key builders that name a ledger cache entry, imported from the
+ * production modules that own them.
+ *
+ * The tokens are DERIVED from the imported objects instead of being typed out
+ * here. A hand-written token ('inventoryQueryKeys.movements') stops matching
+ * the moment somebody renames the key property, and the guard then reports "no
+ * offenders" while the key it was watching is still being written — a rename
+ * would silently disarm the guard. Deriving the member name from the
+ * production object keeps the guard armed through a rename, and the check
+ * below turns "this member is no longer a ledger key" into a loud failure
+ * instead of a silent pass.
+ */
+const LEDGER_KEY_BUILDERS: readonly LedgerKeyBuilder[] = [
+  {
+    name: 'inventoryQueryKeys',
+    builder: inventoryQueryKeys,
+    // `balances` / `balance` are the COMPUTED projection, not the ledger.
+    ledgerMembers: ['movements', 'movement'],
+  },
+  {
+    name: 'assetQueryKeys',
+    builder: assetQueryKeys,
+    // `all` is the namespace root — invalidating it is not a ledger write.
+    ledgerMembers: ['custody', 'movements'],
+  },
+  {
+    name: 'auditQueryKeys',
+    builder: auditQueryKeys,
+    ledgerMembers: ['logs', 'log'],
+  },
+]
+
+/** The ledger query-key tokens, derived from the production builders. */
+const LEDGER_KEY_TOKENS: readonly string[] = LEDGER_KEY_BUILDERS.flatMap(
+  ({ name, builder, ledgerMembers }) =>
+    ledgerMembers.map((member) => {
+      if (!Object.keys(builder).includes(member)) {
+        throw new Error(
+          `Ledger key '${name}.${member}' does not exist in production — the cache-write ` +
+            'guard would silently stop watching the key it was written for.',
+        )
+      }
+      return `${name}.${member}`
+    }),
+)
+
+/**
+ * The wire paths of the ledger endpoints, as the services spell them.
+ *
+ * These are wire constants, not implementation names: a service that changed
+ * one would change the URL the browser calls, which the per-module
+ * `*-wire-contract.test.ts` files already refuse. So a token that stops
+ * matching here is a wire change, not a silent rename.
+ */
+const LEDGER_ENDPOINT_TOKENS = [
   "'/inventory/movements'",
   "'/assets/{assetId}/movements'",
   "'/assets/{assetId}/custody-timeline'",
+  "'/custodies'",
   "'/audit-logs'",
 ] as const
 
-const CACHE_WRITE_VERBS = /\.(setQueryData|updateQueryData|removeQueries|onMutate)\b/u
+/**
+ * The cache calls that can put a value INTO a ledger's cache entry.
+ *
+ * The PLURAL forms are here for the same reason as the singular ones:
+ * `setQueriesData`, `updateQueries` and `resetQueries` write to the cache
+ * exactly as `setQueryData` and `updateQueryData` do, and a guard that only
+ * knew the singular spellings would miss a batch write.
+ */
+const CACHE_WRITE_VERBS =
+  /\.(setQueryData|setQueriesData|updateQueryData|updateQueries|removeQueries|resetQueries|onMutate)\b/u
 
 /** Every mock surface left in the repository: the test harness, and only it. */
 function mockSurfaceSourceFiles(): string[] {
@@ -218,6 +287,26 @@ function registrationsOf(fragments: readonly string[]): Registration[] {
   return found
 }
 
+/**
+ * The fragments the harness never mocks with an attributable registration.
+ *
+ * This is the question the anti-vacuity guard asks, as a FUNCTION, so the same
+ * question can be put to a deliberately malformed fragment and answered with a
+ * failure (see the negative control below). A fragment with no attributable
+ * registration is the vacuity hole: the write scan skips every registration
+ * whose verb it could not attribute, so a fragment nobody mocks makes that
+ * scan report "no offenders" while it is looking at nothing.
+ */
+function ledgerFragmentsWithoutAttributedRegistration(fragments: readonly string[]): string[] {
+  const attributed = registrationsOf(fragments).filter(
+    (registration) => registration.verb !== undefined,
+  )
+
+  return fragments.filter(
+    (fragment) => !attributed.some((registration) => registration.fragment === fragment),
+  )
+}
+
 describe('the five ledgers expose no write path (static proof)', () => {
   it('declares only get/list methods on the three ledger services', () => {
     // The runtime shape is the contract: anything not named get/list would be a
@@ -238,14 +327,6 @@ describe('the five ledgers expose no write path (static proof)', () => {
     expect(Object.keys(auditService).sort()).toEqual(['getAuditLog', 'listAuditLogs'])
   })
 
-  it('keeps every ledger service method on a read verb', () => {
-    for (const service of [inventoryService, assetService, auditService]) {
-      for (const method of Object.keys(service)) {
-        expect(method).toMatch(/^(get|list)[A-Z]/u)
-      }
-    }
-  })
-
   it('issues no write verb from any ledger service', () => {
     for (const [name, source] of Object.entries(LEDGER_SERVICE_SOURCES)) {
       expect(source, `${name} must not call a write verb`).not.toMatch(
@@ -259,10 +340,26 @@ describe('the five ledgers expose no write path (static proof)', () => {
     // after an unrelated mutation is correct and necessary. Seeding a ledger
     // key from the client, or rolling one back, would let the browser author a
     // ledger row — which is exactly what append-only forbids.
+    //
+    // The verb list itself is pinned here, because nothing else can prove it:
+    // the scan below reads PRODUCTION sources, and production happens to use
+    // only the singular spellings today. A regex that quietly lost the PLURAL
+    // forms would still report "no offenders" — the same silent disarm as a
+    // renamed query key — so the batch spellings are checked directly.
+    for (const call of [
+      'queryClient.setQueriesData(assetQueryKeys.movements())',
+      'queryClient.updateQueries(assetQueryKeys.movements())',
+      'queryClient.resetQueries(assetQueryKeys.movements())',
+    ]) {
+      expect(CACHE_WRITE_VERBS.test(call), call).toBe(true)
+    }
+
     const offenders = applicationSourceFiles()
       .map((file) => ({ file, source: readSource(file) }))
       .filter(({ source }) => CACHE_WRITE_VERBS.test(source))
-      .filter(({ source }) => LEDGER_KEY_TOKENS.some((token) => source.includes(token)))
+      .filter(({ source }) =>
+        [...LEDGER_KEY_TOKENS, ...LEDGER_ENDPOINT_TOKENS].some((token) => source.includes(token)),
+      )
       .map(({ file }) => relativeToRepo(file))
     expect(offenders).toEqual([])
   })
@@ -319,40 +416,42 @@ describe('the five ledgers expose no write path (static proof)', () => {
     // mocked at all. That failure mode survives the move, so it is re-anchored
     // on the harness: every ledger fragment must be present, and every
     // registration the scan can attribute to it must be `get`.
-    const registrations = registrationsOf(LEDGER_WIRE_FRAGMENTS)
-    const attributed = registrations.filter((registration) => registration.verb !== undefined)
-    const getVerbs = attributed.filter((registration) => registration.verb === 'get')
-    const otherVerbs = attributed.filter((registration) => registration.verb !== 'get')
+    expect(LEDGER_WIRE_FRAGMENTS).toHaveLength(6)
+    expect(ledgerFragmentsWithoutAttributedRegistration(LEDGER_WIRE_FRAGMENTS)).toEqual([])
 
-    for (const fragment of LEDGER_WIRE_FRAGMENTS) {
-      expect(
-        attributed.filter((registration) => registration.fragment === fragment),
-        `${fragment} has no attributable handler registration in the harness`,
-      ).not.toEqual([])
-    }
+    const attributed = registrationsOf(LEDGER_WIRE_FRAGMENTS).filter(
+      (registration) => registration.verb !== undefined,
+    )
+    const otherVerbs = attributed.filter((registration) => registration.verb !== 'get')
     expect(otherVerbs).toEqual([])
     expect(
-      getVerbs.length,
+      attributed.length,
       'the harness is expected to read every ledger through MSW; an empty set means ' +
         'the ledger read path is no longer exercised and the scan above is hollow',
     ).toBeGreaterThan(0)
   })
 
-  it('drops ledger caches on a session scope change, not through a ledger write', () => {
-    // The one legitimate wholesale eviction: switching the active scope or
-    // signing out drops the whole scoped namespace, ledger entries included.
-    // That is a session boundary, not a browser-authored ledger row, so it is
-    // asserted as behaviour rather than forbidden.
-    const client = new QueryClient()
-    const auditKey = ['scoped', 'enterprise', null, 'audit', 'logs', { pageIndex: 0 }]
-    const custodyKey = ['scoped', 'enterprise', null, 'asset', 'assets', 'A1', 'custody']
-    client.setQueryData(auditKey, ['row'])
-    client.setQueryData(custodyKey, ['row'])
+  it('reports a fragment the harness never mocks, so the guard above is not vacuous', () => {
+    // The negative control for the GUARD ITSELF. A guard that cannot fail is a
+    // guard that is not there: the write scan skips every registration whose
+    // verb it could not attribute, so a fragment the harness never mocks makes
+    // that scan report "no offenders" while it is looking at nothing.
+    //
+    // A deliberately malformed fragment — one that names no endpoint in the
+    // harness — must therefore be REPORTED as unattributable. If this case
+    // ever stopped reporting it, the six-fragment guard above would be a pass
+    // over nothing.
+    //
+    // The fragment is assembled at runtime on purpose: the scan reads THIS
+    // file too, and a literal would be found here as prose — which is a
+    // legitimate "no registration before it" hit, but it would not show that
+    // the fragment is mocked nowhere at all.
+    const malformedFragment = ['/no-such', 'ledger-endpoint'].join('')
 
-    return clearScopedQueries(client).then(() => {
-      expect(client.getQueryData(auditKey)).toBeUndefined()
-      expect(client.getQueryData(custodyKey)).toBeUndefined()
-    })
+    expect(registrationsOf([malformedFragment])).toEqual([])
+    expect(ledgerFragmentsWithoutAttributedRegistration([malformedFragment])).toEqual([
+      malformedFragment,
+    ])
   })
 })
 
@@ -370,7 +469,7 @@ describe('the cross-module ledger graph is consumable through the production ser
       ),
       http.get(`${API_BASE_URL}/assets/:assetId/custody-timeline`, () => okJson(ledgers.custodies)),
       http.get(`${API_BASE_URL}/audit-logs`, ({ request }) => {
-        requested.push(new URL(request.url).searchParams.get('pageIndex') ?? '')
+        requested.push(new URL(request.url).searchParams.get('page') ?? '')
         return okPageJson(ledgers.auditLogs)
       }),
     )
@@ -380,58 +479,84 @@ describe('the cross-module ledger graph is consumable through the production ser
     // zero-based `pageIndex`.
     const balances = await inventoryService.listBalances({ page: 1, pageSize: 10 })
     const stockMovements = await inventoryService.listMovements({ page: 1, pageSize: 10 })
-    const assetMovements = await assetService.listAssetMovements(SCENARIO.assets.returned.assetId, {
+    const assetMovements = await assetService.listAssetMovements(SCENARIO.assets.returned.id, {
       page: 1,
       pageSize: 10,
     })
-    const custodies = await assetService.getAssetCustodyTimeline(SCENARIO.assets.returned.assetId)
-    const auditLogs = await auditService.listAuditLogs({ pageIndex: 0, pageSize: 10 })
+    const custodies = await assetService.getAssetCustodyTimeline(SCENARIO.assets.returned.id)
+    const auditLogs = await auditService.listAuditLogs({ page: 1, pageSize: 10 })
 
     expect(balances.items).toEqual(ledgers.balances)
     expect(stockMovements.items).toEqual(ledgers.stockMovements)
     expect(assetMovements.items).toEqual(ledgers.assetMovements)
     expect(custodies).toEqual(ledgers.custodies)
-    expect(requested).toEqual(['0'])
-    // D-AUD-02: the list read is headers only. Entries stay out of the cache.
-    expect(auditLogs.items.map((log) => log.entries)).toEqual([[], [], []])
+    // The wire page is ONE-based (`PaginationQueryParameters.Page`), so the
+    // first page is `1` — `pageIndex` is not a parameter the server binds.
+    expect(requested).toEqual(['1'])
+    // D-AUD-02: the list read is headers only. The live list projection
+    // (`AuditLogListItemResponse`) has no `entries` member at all, so a list
+    // row can never carry a redacted secret.
+    expect(auditLogs.items.map((log) => 'entries' in log)).toEqual([false, false, false])
   })
 
-  it('keeps the redacted audit entry server-redacted through the detail read', async () => {
-    const redactedLog = SCENARIO.ledgers.auditLogs.find((log) =>
-      log.entries.some((entry) => entry.redacted),
-    )
-    if (!redactedLog) throw new Error('scenario is expected to carry a redacted audit entry')
-    const redactedEntry = redactedLog.entries.find((entry) => entry.redacted)!
+  it('drops a value the server leaked on a redacted entry, before it reaches the cache', async () => {
+    // The field diff lives on the DETAIL (`AuditLogDetailsResponse`); the list
+    // projection carries headers only, so the redacted entry is read here.
+    //
+    // The SERVER redacts (`AuditRedactionService.RedactEntry` nulls the values
+    // of a sensitive field). Asserting that a server-redacted fixture comes
+    // back redacted only grades the FIXTURE against itself — it cannot fail.
+    // What CAN fail is the CLIENT's own boundary: the audit service sanitizes
+    // every entry before it is cached, so a malformed or leaky server
+    // response must not put the withheld value into the React Query cache,
+    // where the UI would read it before the display layer ever sees it.
+    const leakyEntry = createAuditLogEntry({
+      id: fixtureUuid(4305),
+      fieldName: 'authorizationHeader',
+      oldValue: 'Bearer super-secret-token',
+      newValue: 'Bearer super-secret-token-2',
+      isRedacted: true,
+      redactionReason: 'CONFIDENTIAL_CREDENTIAL',
+    })
+    const plainEntry = createAuditLogEntry({
+      id: fixtureUuid(4306),
+      fieldName: 'documentStatus',
+      oldValue: 'Draft',
+      newValue: 'Posted',
+    })
+    const leakyDetail = createAuditLogDetail({
+      id: fixtureUuid(4305),
+      isSummaryRedacted: true,
+      summary: '{"authorizationHeader":"Bearer super-secret-token"}',
+      entries: [leakyEntry, plainEntry],
+    })
 
     server.use(
       http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, () =>
-        apiJson(redactedLog, { status: 200 }),
+        apiJson(leakyDetail, { status: 200 }),
       ),
     )
 
-    const detail = await auditService.getAuditLog(redactedLog.auditLogId)
+    const detail = await auditService.getAuditLog(leakyDetail.id)
 
-    expect(detail.auditLogId).toBe(redactedLog.auditLogId)
-    expect(detail.entries).toEqual(redactedLog.entries)
-    expect(detail.entries.at(-1)).toEqual(redactedEntry)
-    // The withheld value never existed on the fixture, and the sanitizer must
-    // not reintroduce one.
-    expect(redactedEntry).not.toHaveProperty('oldValue')
-    expect(redactedEntry).not.toHaveProperty('newValue')
-    expect(redactedEntry.redactionReasonAr).toBeTruthy()
-  })
-
-  it('seeds an asset movement and a custody row from the shared factories', () => {
-    // The scenario graph predates `createAssetMovement` and writes its rows as
-    // literals; the factory is the supported way to author one, so pin that it
-    // produces a contract-complete append-only row.
-    const movement = createAssetMovement({ eventType: 'Issued', toWarehouse: undefined })
-    const custody = createAssetCustody({ status: 'Closed', toTs: '2026-08-23T10:00:00.000Z' })
-
-    expect(movement).toMatchObject({ eventType: 'Issued', assetId: expect.any(String) })
-    expect(movement).not.toHaveProperty('fromWarehouse')
-    expect(custody.status).toBe('Closed')
-    expect(createAssetMovement().eventType).toBe('Received')
+    const redacted = detail.entries[0]
+    expect(redacted?.isRedacted).toBe(true)
+    expect(redacted?.oldValue).toBeNull()
+    expect(redacted?.newValue).toBeNull()
+    // The entry keeps its identity and the server's REASON CODE — it is still
+    // auditable, it just no longer carries the value.
+    expect(redacted?.id).toBe(fixtureUuid(4305))
+    expect(redacted?.redactionReason).toBe('CONFIDENTIAL_CREDENTIAL')
+    // An entry the server did NOT redact keeps its values — the boundary
+    // redacts the withheld field, it does not blank the whole diff.
+    expect(detail.entries[1]).toMatchObject({
+      oldValue: 'Draft',
+      newValue: 'Posted',
+      isRedacted: false,
+    })
+    // The operation summary has its own boundary: a redacted summary must not
+    // survive into the cache either.
+    expect(detail.summary).toBeNull()
   })
 })
 
@@ -446,7 +571,7 @@ describe('AuditDetail read branches', () => {
               code: 'audit.not_found',
               message: 'لم يُعثر على سجل التدقيق المطلوب.',
             })
-          : apiJson(createAuditLog(), { status: 200 }),
+          : apiJson(createAuditLogDetail(), { status: 200 }),
       ),
     )
 
@@ -459,12 +584,12 @@ describe('AuditDetail read branches', () => {
   })
 
   it('renders the empty branch for an audit log with zero field entries', async () => {
-    const auditLog = createAuditLog({ auditLogId: fixtureUuid(4301), entries: [] })
+    const auditLog = createAuditLogDetail({ id: fixtureUuid(4301), entries: [] })
     server.use(
       http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, () => apiJson(auditLog, { status: 200 })),
     )
 
-    renderWithProviders(<AuditLogExplorerPage />, `/audit?auditLogId=${auditLog.auditLogId}`)
+    renderWithProviders(<AuditLogExplorerPage />, `/audit?auditLogId=${auditLog.id}`)
 
     expect(
       await screen.findByText('لا توجد حقول متغيّرة مسجّلة لعملية التدقيق هذه.'),
@@ -472,17 +597,17 @@ describe('AuditDetail read branches', () => {
   })
 
   it('falls back to the fixed Arabic redaction reason when the server sends none', async () => {
-    // `redactionReasonAr` is nullable in the contract; D-AUD-02 requires a
+    // `redactionReason` is a nullable server CODE; D-AUD-02 requires a
     // fixed Arabic sentence rather than an empty gap.
-    const auditLog = createAuditLog({
-      auditLogId: fixtureUuid(4302),
+    const auditLog = createAuditLogDetail({
+      id: fixtureUuid(4302),
       entries: [
         createAuditLogEntry({
           fieldName: 'authorizationHeader',
           oldValue: null,
           newValue: null,
-          redacted: true,
-          redactionReasonAr: null,
+          isRedacted: true,
+          redactionReason: null,
         }),
       ],
     })
@@ -490,7 +615,7 @@ describe('AuditDetail read branches', () => {
       http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, () => apiJson(auditLog, { status: 200 })),
     )
 
-    renderWithProviders(<AuditLogExplorerPage />, `/audit?auditLogId=${auditLog.auditLogId}`)
+    renderWithProviders(<AuditLogExplorerPage />, `/audit?auditLogId=${auditLog.id}`)
 
     expect(await screen.findByText('القيمة محجوبة وفق سياسة التدقيق.')).toBeInTheDocument()
     expect(screen.getAllByText('قيمة محجوبة').length).toBeGreaterThan(0)
@@ -501,10 +626,13 @@ describe('AuditDetail read branches', () => {
 
   it('round-trips list → detail → back through the shared auditLogId param', async () => {
     const user = userEvent.setup()
-    const auditLog = createAuditLog({
-      auditLogId: fixtureUuid(4303),
-      entityDisplay: 'سند ترحيل تجريبي',
-      summaryAr: 'تم ترحيل السند.',
+    // The LIST serves the header projection; the DETAIL serves the field diff.
+    const auditLog = createAuditLog({ id: fixtureUuid(4303) })
+    const auditLogDetail = createAuditLogDetail({
+      id: auditLog.id,
+      entityId: fixtureUuid(4303),
+      entityType: 'WarehouseDocument',
+      summary: 'تم ترحيل السند.',
       entries: [
         createAuditLogEntry({ fieldName: 'documentStatus', oldValue: 'Draft', newValue: 'Posted' }),
       ],
@@ -514,21 +642,28 @@ describe('AuditDetail read branches', () => {
       http.get(`${API_BASE_URL}/audit-logs`, () => okPageJson([auditLog])),
       http.get(`${API_BASE_URL}/audit-logs/:auditLogId`, ({ params }) => {
         detailRequests.push(String(params['auditLogId']))
-        return apiJson(auditLog, { status: 200 })
+        return apiJson(auditLogDetail, { status: 200 })
       }),
     )
 
     renderWithProviders(<AuditLogExplorerPage />)
 
+    // The row's accessible name is built from what the row shows (translated
+    // action, entity, time), not the truncated log id — but the link still
+    // carries the log id in the shared `auditLogId` param.
     const detailLink = await screen.findByRole('link', {
-      name: 'عرض تفاصيل سجل التدقيق 00000000…',
+      name: new RegExp(
+        `^عرض تفاصيل سجل التدقيق: تعديل — WarehouseDocument ${fixtureUuid(200)} — `,
+        'u',
+      ),
     })
+    expect(detailLink).toHaveAttribute('href', `/audit?auditLogId=${auditLog.id}`)
     expect(detailRequests).toEqual([])
 
     await user.click(detailLink)
     expect(await screen.findByRole('heading', { name: 'تفاصيل سجل التدقيق' })).toBeInTheDocument()
-    expect(detailRequests).toEqual([auditLog.auditLogId])
-    expect(screen.getByText('سند ترحيل تجريبي')).toBeInTheDocument()
+    expect(detailRequests).toEqual([auditLog.id])
+    expect(screen.getByText('تم ترحيل السند.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'العودة إلى السجل' }))
     expect(
@@ -543,7 +678,7 @@ describe('AuditDetail read branches', () => {
     const detailRequests: string[] = []
     server.use(
       http.get(`${API_BASE_URL}/audit-logs`, () =>
-        okPageJson([createAuditLog({ auditLogId: fixtureUuid(4304) })]),
+        okPageJson([createAuditLog({ id: fixtureUuid(4304) })]),
       ),
       http.get(/\/api\/v1\/audit-logs\//u, ({ request }) => {
         detailRequests.push(new URL(request.url).pathname)
@@ -567,37 +702,26 @@ describe('AuditDetail read branches', () => {
 describe('the custody timeline surfaces a closed row end time', () => {
   const ASSET_ID = fixtureUuid(4401)
   const CLOSED_TO_TS = '2026-08-23T10:00:00.000Z'
-  // Live wire uses `fromUtc`/`toUtc`; rename here so the page receives the
-  // shape it reads. The factory is reused for the holder/assetNumber fields.
-  const closed = {
-    ...createAssetCustody({
-      assetId: ASSET_ID,
-      assetNumber: 'AST-2026-2001',
-      custodyId: fixtureUuid(4402),
-      fromTs: '2026-08-21T10:00:00.000Z',
-      status: 'Closed',
-      toTs: CLOSED_TO_TS,
-    }),
+  // The factory mints the live wire row: flat `holderType`/`holderId` and
+  // `fromUtc`/`toUtc`, with no embedded holder object and no asset number.
+  const closed = createAssetCustody({
+    assetId: ASSET_ID,
+    custodyId: fixtureUuid(4402),
     fromUtc: '2026-08-21T10:00:00.000Z',
+    status: 'Closed',
     toUtc: CLOSED_TO_TS,
     holderType: 'OrganizationalUnit',
     holderId: fixtureUuid(20),
-  }
-  const active = {
-    ...createAssetCustody({
-      assetId: ASSET_ID,
-      assetNumber: 'AST-2026-2001',
-      custodyId: fixtureUuid(4403),
-      fromTs: '2026-08-24T10:00:00.000Z',
-      holder: { displayName: 'أحمد الخالد' },
-      status: 'Active',
-      toTs: null,
-    }),
+  })
+  const active = createAssetCustody({
+    assetId: ASSET_ID,
+    custodyId: fixtureUuid(4403),
     fromUtc: '2026-08-24T10:00:00.000Z',
+    status: 'Active',
     toUtc: null,
     holderType: 'Employee',
     holderId: fixtureUuid(20),
-  }
+  })
 
   function renderTimeline() {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })

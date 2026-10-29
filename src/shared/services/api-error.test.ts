@@ -23,12 +23,24 @@
  *   - `error.message` is ENGLISH and must never reach a user-facing field.
  *   - `details` carries per-field validation, so forms can actually bind it.
  */
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError } from 'axios'
+
+vi.mock('@/shared/ui/toast-manager', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    dismiss: vi.fn(),
+    promise: vi.fn(),
+  },
+}))
 
 import { arabicCopyForCode, KNOWN_ERROR_CODES } from '@/shared/api/error-copy-ar'
 
-import { normalizeApiError } from './api-error'
+import { normalizeApiError, reportApiError, CONFLICT_GUIDANCE_AR } from './api-error'
+import { toast } from '@/shared/ui/toast-manager'
 
 const REQUEST_ID = '0f9a3c2e-0000-4000-8000-000000000001'
 
@@ -263,6 +275,53 @@ describe('normalizeApiError — real backend envelope', () => {
     expect(result.code).toBe('USERS_NOT_FOUND')
     expect(result.titleAr).toBe(arabicCopyForCode('USERS_NOT_FOUND')?.titleAr)
   })
+
+  it('drops the pseudo-field `body` from details rather than attaching it (violation rule v)', () => {
+    const result = normalizeApiError(
+      responseError(
+        wireError('REQUEST_VALIDATION_FAILED', 'x', { body: ['Invalid format.'] }),
+        400,
+      ),
+    )
+    expect(result.fieldErrors).toEqual([])
+    expect(result.code).toBe('REQUEST_VALIDATION_FAILED')
+  })
+
+  it('tolerates ASP.NET bracket subscripts and reduces to the last segment (rule vi)', () => {
+    const result = normalizeApiError(
+      responseError(
+        wireError('REQUEST_VALIDATION_FAILED', 'x', {
+          'lines[0].quantity': ['Value required.'],
+        }),
+        400,
+      ),
+    )
+    expect(result.fieldErrors.map((f) => f.field)).toContain('quantity')
+  })
+
+  it('tolerates a `$.` prefix in field paths (rule vii)', () => {
+    const result = normalizeApiError(
+      responseError(
+        wireError('REQUEST_VALIDATION_FAILED', 'x', {
+          '$.nameAr': ['Too short.'],
+        }),
+        400,
+      ),
+    )
+    expect(result.fieldErrors.map((f) => f.field)).toContain('nameAr')
+  })
+
+  it('never translates raw .NET annotations; only the two sanitized strings map (rule viii)', () => {
+    const result = normalizeApiError(
+      responseError(
+        wireError('REQUEST_VALIDATION_FAILED', '.NET annotation: System.ArgumentException'),
+        400,
+      ),
+    )
+    expect(result.titleAr).not.toContain('ArgumentException')
+    expect(result.titleAr).not.toContain('.NET')
+    expect(arabicLettersOnly(result.titleAr)).toBe(true)
+  })
 })
 
 describe('Arabic copy table integrity', () => {
@@ -303,5 +362,71 @@ describe('Arabic copy table integrity', () => {
       return copy === null || copy.titleAr.trim() === '' || !arabicLettersOnly(copy.titleAr)
     })
     expect(empty).toEqual([])
+  })
+
+  describe('reportApiError', () => {
+    beforeEach(() => {
+      vi.mocked(toast.error).mockClear()
+    })
+
+    it('409 with no detailAr renders shared conflict guidance', () => {
+      const error = responseError(wireError('VERSION_MISMATCH', 'Conflict'), 409)
+      reportApiError(error)
+      expect(toast.error).toHaveBeenCalledWith({
+        title: expect.any(String),
+        description: CONFLICT_GUIDANCE_AR,
+      })
+    })
+
+    it('409 WITH detailAr renders detailAr from Arabic copy table', () => {
+      const error = responseError(
+        wireError('CUSTODIES_CANNOT_REVERSE_CHANGED_CUSTODY', 'Conflict'),
+        409,
+      )
+      reportApiError(error)
+      expect(toast.error).toHaveBeenCalledWith({
+        title: 'تغيّرت حالة العهدة بعد العملية الأصلية، لذلك لا يمكن عكس السند.',
+        description: 'راجع حركة الأصل بعد هذا السند قبل طلب العكس.',
+      })
+    })
+
+    it('non-409 with no detailAr renders title only (no description)', () => {
+      const error = responseError(wireError('NOT_FOUND', 'Not found'), 404)
+      reportApiError(error)
+      expect(toast.error).toHaveBeenCalledWith({
+        title: expect.any(String),
+      })
+    })
+
+    it('non-409 with detailAr renders it from Arabic copy table', () => {
+      const error = responseError(wireError('USER_ROLE_SCOPES_NO_ASSIGNMENT', 'x'), 404)
+      reportApiError(error)
+      expect(toast.error).toHaveBeenCalledWith({
+        title: 'حسابك غير مرتبط بأي دور.',
+        description: 'تواصل مع مسؤول النظام لإتمام إسناد دور لك.',
+      })
+    })
+
+    it('never surfaces the wire details map as the toast description', () => {
+      const error = responseError(
+        wireError('VERSION_MISMATCH', 'Conflict', { detailAr: 'تفاصيل' }),
+        409,
+      )
+      reportApiError(error)
+      expect(toast.error).toHaveBeenCalledWith({
+        title: expect.any(String),
+        description: CONFLICT_GUIDANCE_AR,
+      })
+      expect(JSON.stringify(vi.mocked(toast.error).mock.calls)).not.toContain('تفاصيل')
+    })
+
+    it('honours options.conflictGuidanceAr override', () => {
+      const error = responseError(wireError('VERSION_MISMATCH', 'Conflict'), 409)
+      reportApiError(error, { conflictGuidanceAr: 'تجاوز مخصص' })
+      expect(toast.error).toHaveBeenCalledWith({
+        title: expect.any(String),
+        description: 'تجاوز مخصص',
+      })
+    })
   })
 })

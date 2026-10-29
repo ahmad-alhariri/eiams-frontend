@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
@@ -62,10 +62,11 @@ export function useDocumentListQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     ...options,
     queryKey:
       scope === undefined
-        ? queryKeys.public(DOCUMENT_RESOURCE, 'documents', filters)
+        ? queryKeys.unscoped(DOCUMENT_RESOURCE, 'documents', filters)
         : documentQueryKeys.documents(scope, filters),
     queryFn: () => documentService.listDocuments(filters),
     enabled: scope !== undefined && (options.enabled ?? true),
@@ -82,7 +83,7 @@ export function useDocumentDetailQuery(
     ...options,
     queryKey:
       scope === undefined || documentId === null
-        ? queryKeys.public(DOCUMENT_RESOURCE, 'documents', documentId)
+        ? queryKeys.unscoped(DOCUMENT_RESOURCE, 'documents', documentId)
         : documentQueryKeys.document(scope, documentId),
     queryFn: () => documentService.getDocument(documentId ?? ''),
     enabled: scope !== undefined && documentId !== null && (options.enabled ?? true),
@@ -99,7 +100,7 @@ export function useDocumentHistoryQuery(
     ...options,
     queryKey:
       scope === undefined || documentId === null
-        ? queryKeys.public(DOCUMENT_RESOURCE, 'documents', documentId, 'history')
+        ? queryKeys.unscoped(DOCUMENT_RESOURCE, 'documents', documentId, 'history')
         : documentQueryKeys.history(scope, documentId),
     queryFn: () => documentService.getDocumentHistory(documentId ?? ''),
     enabled: scope !== undefined && documentId !== null && (options.enabled ?? true),
@@ -116,7 +117,7 @@ export function useDocumentPolicyQuery(
     ...options,
     queryKey:
       scope === undefined || documentId === null
-        ? queryKeys.public(DOCUMENT_RESOURCE, 'documents', documentId, 'policy')
+        ? queryKeys.unscoped(DOCUMENT_RESOURCE, 'documents', documentId, 'policy')
         : documentQueryKeys.policy(scope, documentId),
     queryFn: () => documentService.getDocumentPolicy(documentId ?? ''),
     enabled: scope !== undefined && documentId !== null && (options.enabled ?? true),

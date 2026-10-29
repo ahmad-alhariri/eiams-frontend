@@ -91,6 +91,53 @@ The query function calls the injected/domain service. Hooks use the shared
 stale-time policy and only override it with a named policy constant. They do
 not mirror server records into Zustand or local component state.
 
+### Query keys and invalidation targets
+
+Keys and invalidation targets are one convention, not two: an invalidation
+target is a **prefix of a query key** and only works when its shape matches the
+factory's.
+
+1. **Build every key through a factory.** Application keys are
+   `queryKeys.public(...)`, `queryKeys.scoped(...)`, or the auth module's
+   `authSessionQueryKey`. A hand-written `['scoped', kind, id, resource]` array
+   duplicates the factory's internal tuple layout and goes stale silently —
+   the defect `eiams-frontend-jkel` filed, where a hand-derived prefix matched
+   no real key at all.
+2. **Invalidate with a factory-built prefix of the resource.** Use
+   `queryKeys.scoped(scope, RESOURCE)` (or a module helper that wraps it, such
+   as `assetQueryKeys.all(scope)`). Never hand-write the array, and never pass
+   a bare namespace fragment such as `['scoped']`, which sweeps every resource
+   in every scope.
+3. **Cross-module invalidation names the owning module's constant.** Import
+   the resource constant from the module that owns it — for example
+   `ASSET_RESOURCE`, `CUSTODY_RESOURCE`, `DOCUMENT_RESOURCE`,
+   `INVENTORY_RESOURCE`, `COUNT_RESOURCE`, `RETURN_RESOURCE`,
+   `REPORTS_RESOURCE` or `AUDIT_RESOURCE` — and export it there if it is not
+   exported yet. A mirrored string literal drifts from its owner.
+4. **Invalidate exactly the resources the mutation can change.** One policy per
+   domain, shared by its query hook and its action hook, covering the resources
+   the contract response affects. Removing a target requires a test that proves
+   the read still refreshes: seed the cached key, run the mutation, assert
+   `getQueryState(key)?.isInvalidated === true`. Asserting that
+   `invalidateQueries` was called proves nothing about whether the key matched.
+5. **The scan enforces this.** The guard in
+   `src/test/feature-service-composition-standard-scans.test.ts` reports
+   hand-derived prefixes, and its derivation window looks both before and after
+   the match, so a `const prefix = [...]` written above the `queryKey:` line is
+   caught too.
+
+The adjustment domain is the worked example. Its one shared policy targets
+`adjustments` (list/detail lifecycle), `inventory` (balances and movements),
+`asset` (registry/status), `custody` (Active rows closed by disposal),
+`document` (the adjustment IS a warehouse document: its own document detail,
+policy and attachment reads change when it is posted), `inventory-counts`
+(the settlement projection is `Settled` iff the linked adjustment is Posted),
+`return` (eligible-items lists filter Active custody), `reports` (all report
+projections: count-adjustment, inventory, assets, documents and dashboard) and
+`audit` (posting appends entries). Catalog, organization, admin, warehouse,
+receiving, issue and transfer stay out because an adjustment post cannot change
+them.
+
 On a successful mutation, invalidate/refetch the exact authoritative query
 keys affected by the contract response. Do not optimistically create ledger,
 lifecycle, balance, custody, or asset-history records. A scope change is owned

@@ -6,11 +6,9 @@ import { http } from 'msw'
 import { environment } from '@/config/env'
 import { apiClient } from '@/shared/services/api.client'
 import { signedOriginalGate } from '@/shared/documents/document-policy-gates'
-import type {
-  DocumentActionType,
-  DocumentStatus,
-  WarehouseDocument,
-} from '@/shared/types/generated/eiams-v1'
+import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
+import type { DocumentStatus } from '@/shared/documents/types/document-wire.types'
+import type { WarehouseDocument } from '@/test/msw/document-engine.types'
 import {
   actionRequiresReason,
   createDocumentPolicy,
@@ -974,7 +972,9 @@ describe('canonical lifecycle engine vs the mutable MSW store', () => {
     const {
       data: { data: paged },
     } = await apiClient.get<ApiSuccessResponse<DocumentLifecycleHistory>>(
-      `${historyUrl()}?pageIndex=0&pageSize=1`,
+      // The wire page is ONE-based (`PaginationQueryParameters.Page`), so the
+      // first page is `1` — `pageIndex` is not a parameter the server binds.
+      `${historyUrl()}?page=1&pageSize=1`,
     )
     expect(paged.events).toEqual(first.events)
   })

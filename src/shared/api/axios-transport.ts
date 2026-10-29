@@ -3,6 +3,7 @@ import type { ApiSuccessResponse, ApiPage } from './api-contracts'
 import type { ApiRequest } from './api-transport'
 import { propagateRequestId } from './request-id'
 import { normalizePagination } from './pagination'
+import { unwrapData } from './envelope'
 
 /**
  * Projects an `ApiRequest` onto an Axios config.
@@ -36,6 +37,10 @@ function toAxiosConfig<TBody>(request: Readonly<ApiRequest<TBody>>): AxiosReques
   }
 }
 
+function isNoContentBody(value: unknown): boolean {
+  return value === null || value === undefined || value === ''
+}
+
 export function createAxiosTransport(client: AxiosInstance) {
   return {
     /**
@@ -58,7 +63,10 @@ export function createAxiosTransport(client: AxiosInstance) {
     async request<TResponse, TBody = unknown>(request: ApiRequest<TBody>): Promise<TResponse> {
       const response = await client.request<ApiSuccessResponse<TResponse>>(toAxiosConfig(request))
       propagateRequestId()
-      return response.data.data
+      if (isNoContentBody(response.data)) {
+        return undefined as TResponse
+      }
+      return unwrapData(response.data)
     },
 
     async requestPage<TItem>(request: Readonly<ApiRequest>): Promise<ApiPage<TItem>> {
@@ -66,9 +74,15 @@ export function createAxiosTransport(client: AxiosInstance) {
         toAxiosConfig(request),
       )
       propagateRequestId()
-      const pagination = normalizePagination(response.data.pagination)
+      const pagination = normalizePagination(
+        isNoContentBody(response.data)
+          ? null
+          : (response.data as ApiSuccessResponse<ReadonlyArray<TItem>>).pagination,
+      )
       return {
-        items: (response.data.data as ReadonlyArray<TItem>) ?? [],
+        items: isNoContentBody(response.data)
+          ? []
+          : ((unwrapData(response.data) as ReadonlyArray<TItem>) ?? []),
         page: pagination.page,
         pageSize: pagination.pageSize,
         totalItems: pagination.totalItems,

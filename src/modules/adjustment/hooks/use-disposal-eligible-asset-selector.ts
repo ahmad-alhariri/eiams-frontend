@@ -60,7 +60,7 @@ export function useDisposalEligibleAssetSelector(
 
       const trimmedSearch = search.trim()
       const query = {
-        pageIndex: 0,
+        page: 1,
         pageSize: Math.max(1, maxResults),
         warehouseId,
         ...(trimmedSearch === '' ? {} : { search: trimmedSearch }),

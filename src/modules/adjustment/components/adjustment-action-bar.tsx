@@ -9,6 +9,7 @@ import {
   actionAvailabilityReasonAr,
   policyBlockerMessageAr,
 } from '@/shared/documents/document-policy-gates'
+import { isSignedOriginalBlocker } from '@/shared/documents/policy-blocker-codes'
 import type {
   DocumentActionAvailability,
   DocumentPolicyAdvisory,
@@ -84,7 +85,12 @@ export function AdjustmentActionBar({
   // "blocked" from `blockers.length > 0` disabled Post even when the server
   // presented it as Enabled, diverging from the shared LifecycleActionBar for an
   // identical policy payload.
-  const hasBlockers = blockers.length > 0
+  //
+  // eiams-frontend-n31q: the signed-original reason is stated once per screen,
+  // by the attachment gate row this bar is always mounted beside — so this bar
+  // omits that blocker instead of printing the identical sentence twice.
+  const alertedBlockers = blockers.filter((blocker) => !isSignedOriginalBlocker(blocker))
+  const hasBlockers = alertedBlockers.length > 0
 
   if (!canSeePost && !canSeeReverse && status !== 'Draft' && status !== 'Posted') {
     return null
@@ -94,7 +100,7 @@ export function AdjustmentActionBar({
     <div data-slot="adjustment-action-bar" className="grid gap-3">
       {hasBlockers ? (
         <div role="alert" className="flex flex-col gap-1 rounded-md bg-destructive/5 px-3 py-2">
-          {blockers.map((blocker) => (
+          {alertedBlockers.map((blocker) => (
             <p key={blocker.code} className="text-sm font-medium text-destructive">
               {policyBlockerMessageAr(blocker)}
             </p>

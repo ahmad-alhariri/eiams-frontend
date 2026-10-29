@@ -5,11 +5,12 @@ import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { DOCUMENT_CONFLICT_GUIDANCE_AR } from '@/shared/documents/use-document-lifecycle-actions'
 import { createQueryClient } from '@/shared/services/query.client'
 import type { ScopeCacheKey } from '@/shared/services/query-keys'
 import { Toaster } from '@/shared/ui/toaster'
 import type { WarehouseDocumentDetails } from '@/shared/documents/types/document-wire.types'
-import type { WarehouseDocument } from '@/shared/types/generated/eiams-v1'
+import type { WarehouseDocument } from '@/test/msw/document-engine.types'
 import {
   createDocumentPolicy,
   createWarehouseDocument,
@@ -274,7 +275,9 @@ describe('useDocumentLifecycleAction family', () => {
           .length,
       ).toBeGreaterThan(0),
     )
-    await waitFor(() => expect(screen.getAllByText(/أعد تحميل البيانات/).length).toBeGreaterThan(0))
+    await waitFor(() =>
+      expect(screen.getAllByText(DOCUMENT_CONFLICT_GUIDANCE_AR).length).toBeGreaterThan(0),
+    )
 
     const cached = client.getQueryData<WarehouseDocument>(SCOPED_DOCUMENT_KEY)
     expect(cached?.documentStatus).toBe('Submitted')

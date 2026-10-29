@@ -31,6 +31,7 @@ import { useConfirm } from '@/shared/hooks/use-confirm'
 import { ContentCard } from '@/shared/layout/content-card'
 import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
+import { formatDateTime } from '@/shared/utils/format'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
@@ -223,16 +224,16 @@ export default function CountDetailPage() {
               </div>
             </DetailField>
             <DetailField label="بدأت في" ltr>
-              {count.startedAtUtc ?? '—'}
+              {count.startedAtUtc === null ? '—' : formatDateTime(count.startedAtUtc)}
             </DetailField>
             <DetailField label="اكتملت في" ltr>
-              {count.completedAtUtc ?? '—'}
+              {count.completedAtUtc === null ? '—' : formatDateTime(count.completedAtUtc)}
             </DetailField>
             <DetailField label="أُغلقت في" ltr>
-              {count.closedAtUtc ?? '—'}
+              {count.closedAtUtc === null ? '—' : formatDateTime(count.closedAtUtc)}
             </DetailField>
             <DetailField label="أُلغيت في" ltr>
-              {count.abortedAtUtc ?? '—'}
+              {count.abortedAtUtc === null ? '—' : formatDateTime(count.abortedAtUtc)}
             </DetailField>
           </dl>
         </ContentCard>

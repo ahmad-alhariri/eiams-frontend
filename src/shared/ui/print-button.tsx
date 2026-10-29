@@ -59,7 +59,7 @@ export function PrintButton({
     >
       {isLoading ? (
         /* Spinner — use Loader2 to match the Button's loading spinner */
-        <IconPrinter className="size-4 animate-spin" aria-hidden />
+        <IconPrinter className="size-4 animate-spin motion-reduce:animate-none" aria-hidden />
       ) : (
         <IconPrinter className="size-4" aria-hidden />
       )}

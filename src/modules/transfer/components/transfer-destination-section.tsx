@@ -1,9 +1,19 @@
 import { useFormContext } from 'react-hook-form'
 
-import type { TransferPetalContainer } from '@/modules/transfer/schemas/transfer-info.schema'
+import {
+  TRANSFER_REASON_MAX_LENGTH,
+  type TransferPetalContainer,
+} from '@/modules/transfer/schemas/transfer-info.schema'
 import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
-import { FormField, FormItem, FormLabel, FormMessage, useFormField } from '@/shared/forms/form'
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  useFormField,
+} from '@/shared/forms/form'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { Textarea } from '@/shared/ui/textarea'
 
@@ -12,7 +22,7 @@ interface DestinationSelectorControlProps {
   sourceWarehouseId: string | undefined
   value: string
   disabled: boolean
-  onValueChange: (selection: { id: string; displayName: string } | null) => void
+  onValueChange: (destinationWarehouseId: string | null) => void
 }
 
 /**
@@ -36,11 +46,7 @@ function DestinationSelectorControl({
         const options = await selector.loadOptions(query)
         return options.filter((option) => option.value !== sourceWarehouseId)
       }}
-      onValueChange={(next, option) =>
-        onValueChange(
-          next === null || option === undefined ? null : { id: next, displayName: option.label },
-        )
-      }
+      onValueChange={onValueChange}
       disabled={disabled || !selector.scopeReady}
       inputProps={{
         id: formItemId,
@@ -66,8 +72,8 @@ export interface TransferDestinationSectionProps {
 /**
  * TransferInfo petal editor (e17-t03). Registers the destination warehouse
  * capture and the transfer reason under the page's `petal.transferInfo.*`
- * name prefix, plus the selection-time `destinationWarehouseName` sibling
- * (declared in `TransferPetalContainer`, transfer-info.schema.ts).
+ * name prefix. The live petal carries the destination warehouse as an ID
+ * (`TransferDraftDetails`), so there is no display-name sibling to capture.
  *
  * RHF contract: reads and writes the page's form context through
  * useFormContext — pages compose the spine group, this petal group, and the
@@ -98,13 +104,8 @@ export function TransferDestinationSection({
                 sourceWarehouseId={sourceWarehouseId}
                 value={field.value}
                 disabled={disabled}
-                onValueChange={(selection) => {
-                  field.onChange(selection?.id ?? '')
-                  if (selection !== null && selection.id !== field.value) {
-                    form.setValue('petal.destinationWarehouseName', selection.displayName, {
-                      shouldValidate: false,
-                    })
-                  }
+                onValueChange={(destinationWarehouseId) => {
+                  field.onChange(destinationWarehouseId ?? '')
                 }}
               />
               <FormMessage />
@@ -118,13 +119,17 @@ export function TransferDestinationSection({
           render={({ field }) => (
             <FormItem>
               <FormLabel>سبب التحويل</FormLabel>
-              <Textarea
-                {...field}
-                rows={2}
-                maxLength={500}
-                placeholder="سبب تحويل المواد..."
-                aria-label="سبب التحويل"
-              />
+              {/* `FormControl` puts the field id on the control, so the label's
+                  `for` points at the textarea the user actually types in. */}
+              <FormControl>
+                <Textarea
+                  {...field}
+                  rows={2}
+                  maxLength={TRANSFER_REASON_MAX_LENGTH}
+                  placeholder="سبب تحويل المواد..."
+                  aria-label="سبب التحويل"
+                />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}

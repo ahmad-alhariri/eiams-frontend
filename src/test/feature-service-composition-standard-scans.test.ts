@@ -7,6 +7,8 @@ import {
   moduleHookFiles,
   readSource,
   relativeToRepo,
+  silentSecondaryReadOffenders,
+  silentSecondaryReadOffendersIn,
   withoutAllowMarkers,
 } from './support/source-scan'
 
@@ -72,7 +74,7 @@ const EXPECTED_HOOK_FILES = 49
 // ---------------------------------------------------------------------------
 
 /**
- * A scoped cache key is built by `queryKeys.scoped`/`queryKeys.public`. A
+ * A scoped cache key is built by `queryKeys.scoped`/`queryKeys.unscoped`/`queryKeys.public`. A
  * hand-derived prefix is a silent correctness hazard, not a style nit: keys
  * produced that way are invisible to `clearScopedQueries` (which matches the
  * `scoped` namespace) and to the module's own invalidation, so a scope change or
@@ -98,26 +100,51 @@ const KEY_NAMESPACE_OWNERS = [
   'src/modules/auth/services/session-lifecycle.ts',
 ] as const
 
+/**
+ * The ONE implementation of this rule, parameterised by source.
+ *
+ * The file scan and every negative control run through here on purpose. An
+ * earlier version kept a separate copy for the controls, so reverting the
+ * production window to forward-only left the backward-looking control green:
+ * a control that exercises different code than production proves nothing about
+ * the detector it is meant to validate. Reported once per line, at the anchor
+ * that put the key at a derivable position.
+ */
+function handDerivedKeyOffendersIn(repoPath: string, source: string): string[] {
+  const offenders: string[] = []
+  const lines = source.split(/\r?\n/u)
+  lines.forEach((line, index) => {
+    const atKeyPosition = HAND_DERIVED_KEY.some((pattern) => pattern.test(line))
+    if (!atKeyPosition) return
+    // Two-stage filter: the construct must show the hand-derivation itself.
+    // A bare `queryKey: [` is not evidence; reaching into the layout, or
+    // re-deriving the scope parts, is.
+    // The derivation may sit ABOVE this line (a `const prefix = [...]` the key
+    // is then spread from), so the window looks both ways. A forward-only
+    // window missed exactly the backward-looking shape this rule exists for.
+    const window = lines.slice(Math.max(0, index - 4), index + 5).join(' ')
+    const derives =
+      /key\[\d+\]/u.test(window) ||
+      /['"]scoped['"]/u.test(window) ||
+      /['"]public['"]/u.test(window) ||
+      /['"]unscoped['"]/u.test(window) ||
+      /\.kind/u.test(window) ||
+      /'id' in \w+/u.test(window)
+    if (derives) offenders.push(`${repoPath}:${index + 1}`)
+  })
+  return offenders
+}
+
 function handDerivedKeyOffenders(files: readonly string[]): string[] {
   const offenders: string[] = []
   for (const file of files) {
     if ((KEY_NAMESPACE_OWNERS as readonly string[]).includes(relativeToRepo(file))) continue
-    const lines = withoutAllowMarkers(readSource(file), 'hand-derived-query-key').split(/\r?\n/u)
-    lines.forEach((line, index) => {
-      const atKeyPosition = HAND_DERIVED_KEY.some((pattern) => pattern.test(line))
-      if (!atKeyPosition) return
-      // Two-stage filter: the construct must show the hand-derivation itself.
-      // A bare `queryKey: [` is not evidence; reaching into the layout, or
-      // re-deriving the scope parts, is.
-      const window = lines.slice(index, index + 5).join(' ')
-      const derives =
-        /key\[\d+\]/u.test(window) ||
-        /['"]scoped['"]/u.test(window) ||
-        /['"]public['"]/u.test(window) ||
-        /\.kind/u.test(window) ||
-        /'id' in \w+/u.test(window)
-      if (derives) offenders.push(`${relativeToRepo(file)}:${index + 1}`)
-    })
+    offenders.push(
+      ...handDerivedKeyOffendersIn(
+        relativeToRepo(file),
+        withoutAllowMarkers(readSource(file), 'hand-derived-query-key'),
+      ),
+    )
   }
   return offenders
 }
@@ -131,29 +158,15 @@ function handDerivedKeyOffenders(files: readonly string[]): string[] {
  * the page collapses `query.data ?? fallback` and renders as though the data
  * were empty, and the UI then states something it has no basis to state.
  *
- * A bare `?? null` scan is useless (172 hits, no discriminating power), so the
- * check correlates the collapse with the ABSENCE of an error branch for the
- * SAME query variable. File-scoped correlation would false-positive on any file
- * holding two components, so it is variable-specific.
+ * The DETECTOR lives in `support/source-scan.ts` and is shared with the
+ * repository-wide scan (`silent-secondary-read-scan.test.ts`), so the rule has
+ * ONE implementation: a second copy of this logic is exactly how the control
+ * for scan 3 drifted from the rule it was meant to validate. The file scan and
+ * every negative control below therefore run through the same function, and
+ * the correlation is VARIABLE-SPECIFIC (`X.isError`, not "does this file
+ * mention isError") because eight files declare more than one component and
+ * handle an error somewhere.
  */
-const COLLAPSED_READ = /(\w+)\??\.data\s*\?\?\s*(?:null|\[\]|\{\})/gu
-
-function silentSecondaryReadOffenders(files: readonly string[]): string[] {
-  const offenders: string[] = []
-  for (const file of files) {
-    const source = withoutAllowMarkers(readSource(file), 'silent-secondary-read')
-    for (const match of source.matchAll(COLLAPSED_READ)) {
-      const variable = match[1]
-      if (variable === undefined) continue
-      const handlesError = new RegExp(`\\b${variable}\\s*(?:\\??\\.\\s*)?(?:isError|error)\\b`, 'u')
-      if (!handlesError.test(source)) {
-        const line = source.slice(0, match.index).split(/\r?\n/u).length
-        offenders.push(`${relativeToRepo(file)}:${line}`)
-      }
-    }
-  }
-  return offenders
-}
 
 // ---------------------------------------------------------------------------
 // Scan 3 — an idempotency key is minted once per user intent
@@ -232,12 +245,37 @@ describe('feature service composition standard (source scans)', () => {
         "  return { queryKey: ['scoped', scope.kind, 'id' in scope ? scope.id : null] },",
         '}',
       ].join('\n')
-      expect(handDerivedKeyOffendersFor(probe)).toHaveLength(1)
+      expect(handDerivedKeyOffendersIn('probe', probe)).toHaveLength(1)
+    })
+
+    it('reports a backward-looking hand-derived scoped key prefix', () => {
+      // The prefix is built ABOVE the invalidate call, so only a window that
+      // looks backwards can see `'scoped'`, `.kind` and the `'id' in` probe
+      // that make the derivation visible.
+      const probe = [
+        "const prefix = ['scoped', scope.kind, 'id' in scope ? scope.id : null, 'inventory-counts'] as const",
+        'void client.invalidateQueries({ queryKey: [...prefix] })',
+      ].join('\n')
+      expect(handDerivedKeyOffendersIn('probe', probe)).toHaveLength(1)
+    })
+
+    it('reports a derivation four lines above the key position', () => {
+      // A forward-only window sees only the `queryKey:` line here and returns
+      // zero, so this control turns red if the shared implementation is
+      // reverted. Four lines is the far edge of the lookback window.
+      const probe = [
+        "const parts = ['scoped']",
+        'const kind = scope.kind',
+        'const id = scope.id',
+        "const prefix = [...parts, kind, id, 'inventory-counts']",
+        'void client.invalidateQueries({ queryKey: [...prefix] })',
+      ].join('\n')
+      expect(handDerivedKeyOffendersIn('probe', probe)).toHaveLength(1)
     })
 
     it('does not report a key built through queryKeys.scoped', () => {
       const probe = ["  queryKey: queryKeys.scoped(scope, 'custody'),"].join('\n')
-      expect(handDerivedKeyOffendersFor(probe)).toHaveLength(0)
+      expect(handDerivedKeyOffendersIn('probe', probe)).toHaveLength(0)
     })
 
     it('does not report the modules that own the namespace literals', () => {
@@ -259,7 +297,7 @@ describe('feature service composition standard (source scans)', () => {
         '  return <p>{q.data ?? []}</p>',
         '}',
       ].join('\n')
-      expect(silentSecondaryReadOffendersFor(probe)).toHaveLength(1)
+      expect(silentSecondaryReadOffendersIn('probe', probe)).toHaveLength(1)
     })
 
     it('accepts a collapsed read whose query handles its error', () => {
@@ -270,7 +308,7 @@ describe('feature service composition standard (source scans)', () => {
         '  return <p>{q.data ?? []}</p>',
         '}',
       ].join('\n')
-      expect(silentSecondaryReadOffendersFor(probe)).toHaveLength(0)
+      expect(silentSecondaryReadOffendersIn('probe', probe)).toHaveLength(0)
     })
 
     it('correlates per variable, so an unrelated error branch does not excuse it', () => {
@@ -282,7 +320,7 @@ describe('feature service composition standard (source scans)', () => {
         '  return <p>{q.data ?? []}</p>',
         '}',
       ].join('\n')
-      expect(silentSecondaryReadOffendersFor(probe)).toHaveLength(1)
+      expect(silentSecondaryReadOffendersIn('probe', probe)).toHaveLength(1)
     })
 
     it('no component collapses a failed read into an empty value', () => {
@@ -341,35 +379,6 @@ describe('feature service composition standard (source scans)', () => {
 
 // Probe variants reuse the production predicates against a source string rather
 // than a file, which is what makes the negative control possible at all.
-function handDerivedKeyOffendersFor(source: string): string[] {
-  const lines = source.split(/\r?\n/u)
-  const found: string[] = []
-  lines.forEach((line, index) => {
-    if (!HAND_DERIVED_KEY.some((pattern) => pattern.test(line))) return
-    const window = lines.slice(index, index + 5).join(' ')
-    const derives =
-      /key\[\d+\]/u.test(window) ||
-      /['"]scoped['"]/u.test(window) ||
-      /['"]public['"]/u.test(window) ||
-      /\.kind/u.test(window) ||
-      /'id' in \w+/u.test(window)
-    if (derives) found.push(`probe:${index + 1}`)
-  })
-  return found
-}
-
-function silentSecondaryReadOffendersFor(source: string): string[] {
-  const found: string[] = []
-  for (const match of source.matchAll(COLLAPSED_READ)) {
-    const variable = match[1]
-    if (variable === undefined) continue
-    if (!new RegExp(`\\b${variable}\\s*(?:\\??\\.\\s*)?(?:isError|error)\\b`, 'u').test(source)) {
-      found.push('probe:1')
-    }
-  }
-  return found
-}
-
 function unsafeIdempotencyMintOffendersFor(source: string): string[] {
   return idempotencyMintOffendersIn('probe', source)
 }

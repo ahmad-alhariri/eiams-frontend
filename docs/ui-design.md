@@ -142,6 +142,8 @@ typography: {
 | Badge text         | 11px (0.6875rem) | Semibold (600) | White                  |
 | Button             | 14px (0.875rem)  | Semibold (600) | —                      |
 
+The numeral (digit) rendering policy for Arabic copy is defined in the design tokens: [design tokens §11 — Numerals (digits)](design-tokens.md#11-numerals-digits).
+
 ---
 
 ## 3. Spacing & Layout

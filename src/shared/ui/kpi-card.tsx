@@ -1,7 +1,28 @@
 import { memo } from 'react'
 
 import { cn } from '@/shared/utils/class-names'
-import type { KpiValue } from '@/shared/types/generated/eiams-v1'
+
+/**
+ * The metric shape this card renders.
+ *
+ * Handwritten here because it is the card's OWN prop type, not a wire DTO: the
+ * card takes a code, an Arabic label, a numeric value, an optional unit and an
+ * optional change percentage. The frozen generated snapshot described the same
+ * five fields, but importing them from there made a shared design-system
+ * component depend on migration scaffolding scheduled for deletion.
+ */
+export interface KpiValue {
+  /** Stable metric identifier — also selects the decorative icon. */
+  readonly code: string
+  /** Arabic metric label. */
+  readonly labelAr: string
+  /** The metric value; the server owns every number that reaches it. */
+  readonly value: number
+  /** Arabic unit shown under the value; falls back to `labelAr`. */
+  readonly unitAr?: string | null
+  /** Change against the previous period, when the source provides one. */
+  readonly changePercent?: number | null
+}
 
 /**
  * Trend arrow — SVG arrow indicating direction of `changePercent`.

@@ -103,9 +103,11 @@ function SidebarScopeIndicator({ collapsed }: { collapsed: boolean }) {
   // This is a cache observer only. Authentication hydration owns fetching and
   // replacement of the authoritative session query.
   const session = useCachedSession()
-  const scopeName = toSessionScopeLabel(session?.activeScope)
+  // The Arabic scope label, derived from the scope type: the server's own scope name
+  // is the English word "Enterprise" for the enterprise scope.
+  const scopeLabel = toSessionScopeLabel(session?.activeScope)
   const accessibleLabel =
-    scopeName === undefined ? 'نطاق العمل غير محدد' : `نطاق العمل الحالي: ${scopeName}`
+    scopeLabel === undefined ? 'نطاق العمل غير محدد' : `نطاق العمل الحالي: ${scopeLabel}`
 
   return (
     <div
@@ -115,7 +117,7 @@ function SidebarScopeIndicator({ collapsed }: { collapsed: boolean }) {
         'mx-2 mb-2 rounded-md bg-sidebar-accent text-xs text-sidebar-foreground',
         collapsed ? 'flex size-8 items-center justify-center p-0' : 'p-3',
       )}
-      title={scopeName === undefined ? 'نطاق العمل غير محدد' : scopeName}
+      title={scopeLabel === undefined ? 'نطاق العمل غير محدد' : scopeLabel}
     >
       {collapsed ? (
         <span aria-hidden className="size-2 rounded-full bg-golden-wheat" />
@@ -123,7 +125,7 @@ function SidebarScopeIndicator({ collapsed }: { collapsed: boolean }) {
         <>
           <span className="block text-sidebar-border">نطاق العمل</span>
           <span className="mt-1 block truncate font-semibold">
-            {scopeName ?? 'لم يُحدّد نطاق العمل'}
+            {scopeLabel ?? 'لم يُحدّد نطاق العمل'}
           </span>
         </>
       )}

@@ -2,7 +2,7 @@
  * Handwritten session contract, aligned field-for-field with the backend's
  * `Application.Users.GetSession.UserSessionResponse` (D-SRS-01).
  *
- * This deliberately does NOT come from `shared/types/generated/eiams-v1`. That document
+ * This deliberately does NOT come from the deleted generated artifact. That document
  * was generated from an OpenAPI snapshot that predates the singular session projection,
  * so its `SessionResponse` had no `role` at all and its `ScopeContext` named the scope's
  * label `displayName` while the server sends `scopeName`. Reading through it produced
@@ -49,8 +49,10 @@ export interface SessionRole {
 }
 
 /**
- * The server-assigned active scope. `scopeName` is the Arabic label shown in the sidebar
- * and header. `scopeId` is null only for the Enterprise scope.
+ * The server-assigned active scope. `scopeName` is the server's own name for the scope; the
+ * sidebar and header derive their Arabic label from `scopeType` (`toSessionScopeLabel`) and
+ * fall back to this name only for a scope type this build does not know. `scopeId` is null
+ * only for the Enterprise scope.
  */
 export interface SessionScope {
   readonly scopeType: SessionScopeType
@@ -79,6 +81,5 @@ export interface LoginRequest {
 export interface AuthTokenResponse {
   readonly accessToken: string
   readonly expiresInSeconds: number
-  readonly tokenType: 'Bearer'
   readonly session: SessionResponse
 }

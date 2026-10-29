@@ -1,4 +1,4 @@
-﻿import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
@@ -73,7 +73,7 @@ describe('organizational-unit mutation cache invalidation', () => {
     await act(async () => {
       await result.current.update.mutateAsync({
         orgUnitId: unit.id,
-        request: { name: 'Ø§Ù„ÙˆØ­Ø¯Ø© Ø§Ù„Ù…Ø­Ø¯Ù‘Ø«Ø©', unitType: 'Section' },
+        request: { name: 'الوحدة المحدّثة', unitType: 'Section' },
       })
     })
 
@@ -81,7 +81,7 @@ describe('organizational-unit mutation cache invalidation', () => {
     await waitFor(() => expect(detailRequests).toBeGreaterThanOrEqual(2))
     // `PUT /organizational-units/{id}` binds name and unitType only: neither
     // `siteId` nor `parentId` (re-siting and re-parenting are not exposed).
-    expect(updateBodies).toEqual([{ name: 'Ø§Ù„ÙˆØ­Ø¯Ø© Ø§Ù„Ù…Ø­Ø¯Ù‘Ø«Ø©', unitType: 'Section' }])
+    expect(updateBodies).toEqual([{ name: 'الوحدة المحدّثة', unitType: 'Section' }])
   })
 
   it('sends an integer status command body in BOTH directions, with no version guard', async () => {
@@ -130,7 +130,7 @@ describe('organizational-unit mutation cache invalidation', () => {
 
     // `[JsonRequired] int Status`: the ORDINAL, never the status name the read
     // served, and NOTHING else. OrganizationalUnit is not a versioned aggregate,
-    // so there is no `expectedRowVersion` to send â€” and the body is
+    // so there is no `expectedRowVersion` to send — and the body is
     // `additionalProperties: false`, so sending one would be a 400.
     expect(statusBodies).toEqual([{ status: 1 }, { status: 0 }])
     for (const body of statusBodies) {

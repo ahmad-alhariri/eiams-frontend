@@ -2,10 +2,10 @@
 
 **Status:** Approved frontend and provisional API contract decision
 **Decision ID:** D-RBAC-01
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Beads:** `eiams-frontend-e01-t07`
 **Decision date:** 2026-08-09
-**Last reconciled:** 2026-09-27 (`eiams-frontend-e24-t07`)
+**Last reconciled:** 2026-10-28 (`eiams-frontend-8haa`, D-RBAC-01-A1)
 
 ## Provenance and authority
 
@@ -25,7 +25,10 @@ behind `main` plus missing a ratified addendum.
 Consequences of the rule:
 
 - If this file and the system repository disagree, **the system repository
-  wins**, and this file is wrong until reconciled.
+  wins**, and this file is wrong until reconciled. As of 2026-10-26
+  (`eiams-frontend-whhu.19.10`, `eiams-frontend-whhu.19.11`) the two copies are
+  reconciled: the system-repository copy's role-seed rows match this body
+  (per-scope `WH_MGR`; `custody.assign` on `WH_KEEPER` only).
 - The body below (canonical vocabulary, route matrix, guard behavior, role seed
   reference) is owned and maintained **here**, and is kept accurate against the
   decisions it cites.
@@ -274,12 +277,11 @@ row in this table:
 | `WH_MGR` | one row, "all engine codes", any scope | three rows, per scope | D-RBAC-02 and D-RBAC-03 make Enterprise and Site supervisory. The old row granted a Site- or Enterprise-scoped manager the power to post and count, which is the opposite of both addenda. |
 | `WH_MGR` (Warehouse) | included `submit/revise/count.enter` | excludes them | D-WH-01 separation of duties; preparation is a keeper workflow. |
 
-The approved policy document is itself marked *partially approved; not yet an
-authorization, catalog, or role-grant migration*. The `SYSTEM_ADMIN` and
-`DATA_MANAGER` rows are therefore aligned to the approved intent but await
-formal owner ratification — tracked in
-`eiams-frontend-8haa`. Do not treat those two rows as settled; the
-`WH_MGR` and `WH_KEEPER` rows follow ratified decisions.
+The `SYSTEM_ADMIN` and `DATA_MANAGER` rows were ratified on 2026-10-28 by
+addendum D-RBAC-01-A1 (`docs/adr/0005-ratify-system-admin-and-data-manager-role-rows.md`),
+which is the canonical text; this file cites it by ID and date and does not copy its
+prose. Those two rows are settled. The `WH_MGR` and `WH_KEEPER` rows follow
+ratified decisions.
 
 ## Downstream frontend behavior
 

@@ -40,6 +40,7 @@ import type {
   ListMaterialUnitConversionsQuery,
 } from '@/modules/catalog/types/catalog.api-types'
 import type { ResourceIdResponse } from '@/shared/api/api-contracts'
+import { pathWithId } from '@/shared/services/api-path'
 
 // Real routes (the transport prefixes `/api/v1`). The 404 traps this file used
 // to carry: `/catalog/material-domains`, `/catalog/material-categories` and
@@ -65,10 +66,6 @@ const MATERIAL_UNIT_CONVERSION_PATH =
 
 /** The query shape `ApiRequest.query` accepts. */
 type WireQuery = Readonly<Record<string, string | number | boolean | undefined>>
-
-function pathWithId(path: string, parameter: string, id: string): string {
-  return path.replace(parameter, encodeURIComponent(id))
-}
 
 /**
  * THE PAGINATION BOUNDARY, and it is deliberately an IDENTITY plus a clamp —

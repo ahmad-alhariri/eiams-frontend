@@ -12,7 +12,7 @@ import type {
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 
-const REPORTS_RESOURCE = 'reports'
+export const REPORTS_RESOURCE = 'reports'
 
 export const reportsQueryKeys = {
   inventory: (scope: ScopeCacheKey, query: ListInventoryReportQuery) =>
@@ -35,15 +35,16 @@ const EMPTY_QUERY = {} as const
 
 /**
  * Server-paginated inventory balance report. Scope-keyed, OPERATIONAL stale
- * time (D-RPT-01 §"Scope and caching"); the page resets `pageIndex` to 0 on
- * any allowed filter change before invoking this hook.
+ * time (D-RPT-01 §"Scope and caching"); the page resets to the FIRST page
+ * (one-based, the number the wire binds) on any allowed filter change before
+ * invoking this hook.
  */
 export function useInventoryReportQuery(query: ListInventoryReportQuery = EMPTY_QUERY) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(REPORTS_RESOURCE, 'inventory', query)
+        ? queryKeys.unscoped(REPORTS_RESOURCE, 'inventory', query)
         : reportsQueryKeys.inventory(scope, query),
     queryFn: () => reportsService.getInventoryReport(query),
     enabled: scope !== undefined,
@@ -57,7 +58,7 @@ export function useAssetReportQuery(query: ListAssetReportQuery = EMPTY_QUERY) {
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(REPORTS_RESOURCE, 'assets', query)
+        ? queryKeys.unscoped(REPORTS_RESOURCE, 'assets', query)
         : reportsQueryKeys.assets(scope, query),
     queryFn: () => reportsService.getAssetReport(query),
     enabled: scope !== undefined,
@@ -71,7 +72,7 @@ export function useCountAdjustmentReportQuery(query: ListCountAdjustmentReportQu
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(REPORTS_RESOURCE, 'countAdjustment', query)
+        ? queryKeys.unscoped(REPORTS_RESOURCE, 'countAdjustment', query)
         : reportsQueryKeys.countAdjustment(scope, query),
     queryFn: () => reportsService.getCountAdjustmentReport(query),
     enabled: scope !== undefined,
@@ -87,7 +88,7 @@ export function useOperationalDocumentsReportQuery(
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(REPORTS_RESOURCE, 'documents', query)
+        ? queryKeys.unscoped(REPORTS_RESOURCE, 'documents', query)
         : reportsQueryKeys.documents(scope, query),
     queryFn: () => reportsService.getOperationalDocumentsReport(query),
     enabled: scope !== undefined,
@@ -105,7 +106,7 @@ export function useDashboardReportQuery(query: ListDashboardReportQuery = EMPTY_
   return useQuery({
     queryKey:
       scope === undefined
-        ? queryKeys.public(REPORTS_RESOURCE, 'dashboard', query)
+        ? queryKeys.unscoped(REPORTS_RESOURCE, 'dashboard', query)
         : reportsQueryKeys.dashboard(scope, query),
     queryFn: () => reportsService.getDashboardReport(query),
     enabled: scope !== undefined,

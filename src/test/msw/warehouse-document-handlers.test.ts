@@ -23,7 +23,8 @@ import {
   documentActionIdempotency,
   readIdempotencyKey,
 } from '@/test/msw/warehouse-document-handlers'
-import type { DocumentActionType, DocumentStatus } from '@/shared/types/generated/eiams-v1'
+import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
+import type { DocumentStatus } from '@/shared/documents/types/document-wire.types'
 
 const IDEMPOTENCY_KEY = '00000000-0000-4000-8000-00000000ffff'
 const SECOND_IDEMPOTENCY_KEY = '00000000-0000-4000-8000-00000000fffd'

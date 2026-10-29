@@ -27,12 +27,13 @@ const packageManifest = JSON.parse(packageJsonRaw) as PackageManifest
 const componentsConfig = JSON.parse(componentsJsonRaw) as ComponentsConfig
 
 const requiredScripts = [
-  // The OpenAPI generator scripts (api:types:generate / api:types:check /
-  // api:types:dry) are intentionally NOT required: per ADR-0001 (D-INT-02) the
-  // generated artifact at src/shared/types/generated/eiams-v1.ts is frozen
-  // migration scaffolding, not part of the active CI gate. The scripts still
-  // exist for whhu.13 writers and whhu.5 retirement; they are intentionally
-  // absent from this required list.
+  // The OpenAPI generator scripts (`api:types:generate` / `api:types:check` /
+  // `api:types:dry`) and `contract:validate` are intentionally NOT required:
+  // per ADR-0001 (D-INT-02) the generated artifact they produced was frozen
+  // migration scaffolding, and the generator, its scripts, its provisional
+  // snapshot and its dependencies have all been deleted. The contract
+  // drift gate (`contract:drift`) compares the LIVE API against the
+  // committed consumer baseline and is the gate that remains.
   'dev',
   'build',
   'lint',
@@ -55,7 +56,7 @@ describe('foundation reproducibility', () => {
     }
 
     expect(packageManifest.scripts?.['quality']).toBe(
-      'pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run test && pnpm run build',
+      'pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run test && pnpm run build && pnpm run budget:bundle',
     )
   })
 

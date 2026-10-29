@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { okPageJson } from '@/test/msw/envelope'
+import { okJson, okPageJson } from '@/test/msw/envelope'
 import { countNameHandlers } from '@/test/msw/count-wire-fixtures'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { delay, HttpResponse, http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
 import { toArabicDigits } from '@/shared/utils/format'
@@ -303,6 +303,48 @@ describe('CountVarianceReview (e20-t07)', () => {
 
     await screen.findByText('حاسوب مكتبي')
     expect(screen.queryByRole('button', { name: 'إكمال الجلسة' })).toBeNull()
+  }, 20000)
+
+  it('shows a neutral placeholder, never the raw material id, while the name loads', async () => {
+    const pendingMaterialId = 'material-name-still-loading'
+    useHandlers([
+      { ...matchingLine, material: { id: pendingMaterialId, displayName: 'ورق تصوير A4' } },
+    ])
+    // A REAL delay: an immediate answer settles the read before the first
+    // assertion, so the pending state could never be observed.
+    server.use(
+      http.get(`${API_BASE_URL}/catalog/materials/${pendingMaterialId}`, async () => {
+        await delay(500)
+        return okJson({ id: pendingMaterialId, nameAr: 'ورق تصوير A4' })
+      }),
+    )
+    renderReview({ permissions: [], canComplete: false, onComplete: vi.fn() })
+
+    expect(await screen.findByText('جارٍ تحميل اسم المادة...')).toBeInTheDocument()
+    expect(screen.queryByText(pendingMaterialId)).toBeNull()
+
+    // The resolved Arabic name replaces the placeholder.
+    expect(await screen.findByText('ورق تصوير A4')).toBeInTheDocument()
+    expect(screen.queryByText('جارٍ تحميل اسم المادة...')).toBeNull()
+    expect(screen.queryByText(pendingMaterialId)).toBeNull()
+  }, 20000)
+
+  it('shows a dash, never the raw material id, when the name lookup fails', async () => {
+    const failedMaterialId = 'material-name-not-found'
+    useHandlers([
+      { ...varianceWithReason, material: { id: failedMaterialId, displayName: 'حاسوب مكتبي' } },
+    ])
+    server.use(
+      http.get(
+        `${API_BASE_URL}/catalog/materials/${failedMaterialId}`,
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+    )
+    renderReview({ permissions: [], canComplete: false, onComplete: vi.fn() })
+
+    const row = (await screen.findByText(/تالف ولم يُرصد/)).closest('tr')!
+    await waitFor(() => expect(row.querySelectorAll('td')[0]?.textContent).toBe('—'))
+    expect(row.textContent).not.toContain(failedMaterialId)
   }, 20000)
 
   it('shows the close action on Completed status with count.close permission', async () => {

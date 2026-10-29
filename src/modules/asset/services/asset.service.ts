@@ -12,16 +12,13 @@ import type {
   ListAssetMovementsQuery,
   ListAssetsQuery,
 } from '@/modules/asset/types/asset.types'
+import { pathWithId } from '@/shared/services/api-path'
 
 const ASSETS_PATH = '/assets'
 const ASSET_PATH = '/assets/{assetId}'
 const ASSET_CURRENT_STATUS_PATH = '/assets/{assetId}/current-status'
 const ASSET_CUSTODY_TIMELINE_PATH = '/assets/{assetId}/custody-timeline'
 const ASSET_MOVEMENTS_PATH = '/assets/{assetId}/movements'
-
-function pathWithId(path: string, parameter: string, id: string): string {
-  return path.replace(parameter, encodeURIComponent(id))
-}
 
 /**
  * Sends a list query through the ONE shared pagination clamp.

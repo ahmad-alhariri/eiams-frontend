@@ -28,7 +28,6 @@ const sessionFixture: SessionResponse = {
 const tokenResponse: AuthTokenResponse = {
   accessToken: 'in-memory-refresh-token',
   expiresInSeconds: 300,
-  tokenType: 'Bearer',
   session: sessionFixture,
 }
 
@@ -138,6 +137,7 @@ describe('auth session lifecycle', () => {
 
     await lifecycle.hydrate()
     queryClient.setQueryData(queryKeys.scoped({ kind: 'warehouse', id: 'wh-1' }, 'balances'), [10])
+    queryClient.setQueryData(queryKeys.unscoped('catalog'), ['unscoped data'])
     queryClient.setQueryData(queryKeys.public('catalog'), ['material'])
 
     // The second refresh is the adapter's one allowed retry attempt and fails.
@@ -158,6 +158,8 @@ describe('auth session lifecycle', () => {
       )
       .toBeUndefined()
     expect(queryClient.getQueryData(queryKeys.public('catalog'))).toEqual(['material'])
+    // unscoped (placeholder, never populated) is evicted with protected cache; public survives
+    expect(queryClient.getQueryData(queryKeys.unscoped('catalog'))).toBeUndefined()
     expect(sessionStore.getState().status).toBe('unauthenticated')
   })
 })
