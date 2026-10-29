@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { organizationService } from '@/modules/organization/services/organization.service'
@@ -52,6 +52,7 @@ export function useOrganizationsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'organizations', query)
@@ -81,6 +82,7 @@ export function useSitesQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'sites', query)
@@ -110,6 +112,7 @@ export function useOrganizationalUnitsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'organizational-units', query)
@@ -136,6 +139,7 @@ export function useOrganizationalUnitQuery(orgUnitId: string | undefined) {
 export function useEmployeesQuery(query: ListEmployeesQuery = EMPTY_QUERY) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'employees', query)
@@ -169,6 +173,7 @@ export function useExternalPartiesQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'external-parties', query)

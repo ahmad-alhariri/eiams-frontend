@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { inventoryService } from '@/modules/inventory/services/inventory.service'
@@ -30,6 +30,7 @@ function useActiveScopeCacheKey() {
 export function useInventoryBalancesQuery(query: ListInventoryBalancesQuery = EMPTY_QUERY) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(INVENTORY_RESOURCE, 'balances', query)
@@ -56,6 +57,7 @@ export function useInventoryBalanceQuery(balanceId: string | undefined) {
 export function useStockMovementsQuery(query: ListStockMovementsQuery = EMPTY_QUERY) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(INVENTORY_RESOURCE, 'movements', query)

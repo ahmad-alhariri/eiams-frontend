@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { ASSET_RESOURCE } from '@/modules/asset/hooks/use-asset-queries'
@@ -105,6 +105,7 @@ export function useAdjustmentInvalidation() {
 export function useAdjustmentsListQuery(query: ListAdjustmentsQuery) {
   const scope = useActiveScopeContext()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope.activeScopeCacheKey === undefined
         ? ['adjustments', 'unscoped', query]
@@ -139,6 +140,7 @@ export function useDisposalEligibleAssetsQuery(
 ) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined
         ? ['adjustments', 'disposal-eligible-assets', 'unscoped', query]

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { assetService } from '@/modules/asset/services/asset.service'
@@ -31,6 +31,7 @@ function useActiveScopeCacheKey() {
 export function useAssetsQuery(query: ListAssetsQuery) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'assets', query)
@@ -88,6 +89,7 @@ export function useAssetMovementsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined || assetId === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'movements', assetId, query)

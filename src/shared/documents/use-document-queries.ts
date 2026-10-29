@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
@@ -62,6 +62,7 @@ export function useDocumentListQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     ...options,
     queryKey:
       scope === undefined

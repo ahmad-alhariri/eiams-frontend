@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { warehouseService } from '@/modules/warehouse/services/warehouse.service'
 import type {
@@ -53,6 +53,7 @@ function useActiveScopeCacheKey() {
 export function useWarehousesQuery(query: ListWarehousesQuery = EMPTY_QUERY) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(WAREHOUSE_RESOURCE, 'warehouses', query)
@@ -79,6 +80,7 @@ export function useWarehouseQuery(warehouseId: string | undefined) {
 export function useWarehouseCapabilitiesQuery(warehouseId: string | undefined) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined || warehouseId === undefined
         ? queryKeys.unscoped(WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'capabilities')
@@ -121,6 +123,7 @@ export function useWarehouseMaterialSettingsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined || warehouseId === undefined
         ? queryKeys.unscoped(

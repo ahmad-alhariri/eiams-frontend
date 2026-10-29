@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { assetQueryKeys } from '@/modules/asset/hooks/use-asset-queries'
@@ -38,6 +38,7 @@ export function useCustodiesQuery(query: ListCustodiesQuery) {
     queryFn: () => custodyService.listCustodies(query),
     enabled: scope.activeScopeCacheKey !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -61,6 +62,7 @@ export function usePendingCustodiesQuery(warehouseId: string, page: number, page
     queryFn: () => custodyService.listPendingCustodies(query),
     enabled: scope.activeScopeCacheKey !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
+    placeholderData: keepPreviousData,
   })
 }
 

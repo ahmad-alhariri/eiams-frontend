@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import {
@@ -98,6 +98,7 @@ function useCountInvalidation() {
 export function useInventoryCountsQuery(query: ListCountsQuery) {
   const scope = useActiveScopeContext()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope.activeScopeCacheKey === undefined
         ? ['inventory-counts', 'unscoped', query]
@@ -129,6 +130,7 @@ export function useCountLinesQuery(
 ) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined || countId == null
         ? ['inventory-counts', 'lines', 'unscoped', countId, query]
@@ -148,6 +150,7 @@ export function useCountLinesQuery(
 export function useAllCountLinesQuery(countId: string | undefined | null) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined || countId == null
         ? ['inventory-counts', 'lines', 'all', 'unscoped', countId]

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { adminService } from '@/modules/admin/services/admin.service'
@@ -70,6 +70,7 @@ export function useRoleQuery(roleId: string | undefined) {
 export function useUsersQuery(query: ListUsersQuery = EMPTY_QUERY) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(ADMIN_RESOURCE, 'users', query)

@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { returnService } from '@/modules/custody/services/return.service'
@@ -39,6 +39,7 @@ export function useReturnEligibleItems(
   const enabled = scope !== undefined && originalIssueDocumentId !== undefined
 
   const query = useQuery({
+    placeholderData: keepPreviousData,
     queryKey:
       scope === undefined || originalIssueDocumentId === undefined
         ? queryKeys.unscoped(RETURN_RESOURCE, 'eligible-items')
