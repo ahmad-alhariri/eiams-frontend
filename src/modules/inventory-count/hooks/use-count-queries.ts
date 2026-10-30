@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import {
@@ -21,7 +21,11 @@ import type {
 import { countService } from '@/modules/inventory-count/services/count.service'
 import { createIdempotencyKey, type IdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import {
+  keepPreviousDataInSameScope,
+  queryKeys,
+  type ScopeCacheKey,
+} from '@/shared/services/query-keys'
 
 export const COUNT_RESOURCE = 'inventory-counts'
 // The server caps a page at PaginationDefaults.MaximumPageSize (100); asking for
@@ -98,7 +102,7 @@ function useCountInvalidation() {
 export function useInventoryCountsQuery(query: ListCountsQuery) {
   const scope = useActiveScopeContext()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope.activeScopeCacheKey),
     queryKey:
       scope.activeScopeCacheKey === undefined
         ? ['inventory-counts', 'unscoped', query]
@@ -130,7 +134,7 @@ export function useCountLinesQuery(
 ) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined || countId == null
         ? ['inventory-counts', 'lines', 'unscoped', countId, query]
@@ -150,7 +154,7 @@ export function useCountLinesQuery(
 export function useAllCountLinesQuery(countId: string | undefined | null) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined || countId == null
         ? ['inventory-counts', 'lines', 'all', 'unscoped', countId]

@@ -73,6 +73,7 @@ export function AssetMovementLedger({ assetId }: AssetMovementLedgerProps) {
       columns={columns}
       data={pageRows(movementsQuery.data, movementsQuery.isError)}
       isLoading={movementsQuery.isLoading}
+      isFetching={movementsQuery.isFetching}
       isError={movementsQuery.isError}
       onRetry={() => void movementsQuery.refetch()}
       errorTitle="تعذّر تحميل سجل الحركات"

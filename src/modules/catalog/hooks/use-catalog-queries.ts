@@ -1,6 +1,6 @@
 import { catalogService } from '@/modules/catalog/services/catalog.service'
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import type {
   ListMaterialCategoriesQuery,
@@ -11,7 +11,11 @@ import type {
   ListUnitsOfMeasureQuery,
 } from '@/modules/catalog/types/catalog.api-types'
 import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import {
+  keepPreviousDataInSameScope,
+  queryKeys,
+  type ScopeCacheKey,
+} from '@/shared/services/query-keys'
 
 const CATALOG_RESOURCE = 'catalog'
 
@@ -73,7 +77,7 @@ export function useUnitsOfMeasureQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,
@@ -107,7 +111,7 @@ export function useMaterialDomainsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,
@@ -141,7 +145,7 @@ export function useMaterialCategoriesQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,
@@ -175,7 +179,7 @@ export function useMaterialFamiliesQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,
@@ -209,7 +213,7 @@ export function useMaterialsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,
@@ -244,7 +248,7 @@ export function useMaterialUnitConversionsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,

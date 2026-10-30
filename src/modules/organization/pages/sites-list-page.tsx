@@ -253,6 +253,7 @@ function SitesListPage() {
           columns={columns}
           data={pageRows(page, sitesQuery.isError)}
           isLoading={sitesQuery.isLoading}
+          isFetching={sitesQuery.isFetching}
           isError={sitesQuery.isError}
           onRetry={() => void sitesQuery.refetch()}
           errorTitle="تعذّر تحميل المواقع"

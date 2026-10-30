@@ -262,6 +262,7 @@ export default function ActiveCustodyListPage() {
           columns={columns}
           data={pageRows(custodiesQuery.data, custodiesQuery.isError)}
           isLoading={custodiesQuery.isLoading}
+          isFetching={custodiesQuery.isFetching}
           isError={custodiesQuery.isError}
           onRetry={() => void custodiesQuery.refetch()}
           errorTitle="تعذّر تحميل العهد"

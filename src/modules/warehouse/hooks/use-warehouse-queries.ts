@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { warehouseService } from '@/modules/warehouse/services/warehouse.service'
 import type {
@@ -6,7 +6,11 @@ import type {
   ListWarehousesQuery,
 } from '@/modules/warehouse/types/warehouse.types'
 import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import {
+  keepPreviousDataInSameScope,
+  queryKeys,
+  type ScopeCacheKey,
+} from '@/shared/services/query-keys'
 
 const WAREHOUSE_RESOURCE = 'warehouse'
 const EMPTY_QUERY = {} as const
@@ -53,7 +57,7 @@ function useActiveScopeCacheKey() {
 export function useWarehousesQuery(query: ListWarehousesQuery = EMPTY_QUERY) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(WAREHOUSE_RESOURCE, 'warehouses', query)
@@ -80,7 +84,7 @@ export function useWarehouseQuery(warehouseId: string | undefined) {
 export function useWarehouseCapabilitiesQuery(warehouseId: string | undefined) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined || warehouseId === undefined
         ? queryKeys.unscoped(WAREHOUSE_RESOURCE, 'warehouses', warehouseId, 'capabilities')
@@ -123,7 +127,7 @@ export function useWarehouseMaterialSettingsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined || warehouseId === undefined
         ? queryKeys.unscoped(

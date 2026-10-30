@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { ASSET_RESOURCE } from '@/modules/asset/hooks/use-asset-queries'
@@ -24,7 +24,11 @@ import { reportApiError } from '@/shared/services/api-error'
 import { toast } from '@/shared/ui/toast-manager'
 import { createIdempotencyKey, type IdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import {
+  keepPreviousDataInSameScope,
+  queryKeys,
+  type ScopeCacheKey,
+} from '@/shared/services/query-keys'
 
 const ADJUSTMENT_RESOURCE = 'adjustments'
 
@@ -105,7 +109,7 @@ export function useAdjustmentInvalidation() {
 export function useAdjustmentsListQuery(query: ListAdjustmentsQuery) {
   const scope = useActiveScopeContext()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope.activeScopeCacheKey),
     queryKey:
       scope.activeScopeCacheKey === undefined
         ? ['adjustments', 'unscoped', query]
@@ -140,7 +144,7 @@ export function useDisposalEligibleAssetsQuery(
 ) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined
         ? ['adjustments', 'disposal-eligible-assets', 'unscoped', query]

@@ -252,6 +252,7 @@ function MaterialFamiliesPage() {
             familiesQuery.isError,
           )}
           isLoading={familiesQuery.isLoading}
+          isFetching={familiesQuery.isFetching}
           isError={familiesQuery.isError}
           onRetry={() => void familiesQuery.refetch()}
           errorTitle="تعذّر تحميل عائلات المواد"

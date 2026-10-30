@@ -1,10 +1,14 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { auditService } from '@/modules/audit/services/audit.service'
 import type { ListAuditLogsQuery } from '@/modules/audit/types/audit.types'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import {
+  keepPreviousDataInSameScope,
+  queryKeys,
+  type ScopeCacheKey,
+} from '@/shared/services/query-keys'
 
 export const AUDIT_RESOURCE = 'audit'
 const EMPTY_QUERY = {} as const
@@ -24,7 +28,7 @@ function useActiveScopeCacheKey() {
 export function useAuditLogsQuery(query: ListAuditLogsQuery = EMPTY_QUERY) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(AUDIT_RESOURCE, 'logs', query)

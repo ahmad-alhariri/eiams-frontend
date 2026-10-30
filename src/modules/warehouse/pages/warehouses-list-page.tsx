@@ -246,6 +246,7 @@ function WarehousesListPage() {
           columns={columns}
           data={pageRows(page, warehousesQuery.isError)}
           isLoading={warehousesQuery.isLoading}
+          isFetching={warehousesQuery.isFetching}
           isError={warehousesQuery.isError}
           onRetry={() => void warehousesQuery.refetch()}
           errorTitle="تعذّر تحميل المستودعات"

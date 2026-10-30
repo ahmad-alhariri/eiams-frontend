@@ -63,16 +63,23 @@ so the previous page's rows stay on screen while the next page loads. The
 import comes from `@tanstack/react-query` (TanStack v5 exports
 `keepPreviousData`).
 
+That bare placeholder was replaced in `eiams-frontend-e25-t07` by
+`keepPreviousDataInSameScope(scope)`, which keeps the same behaviour only while
+the active scope is unchanged. See the resolved limitation below.
+
 This was deliberately NOT set as a client-level default. A default would keep
 the previous SCOPE's rows visible when the active scope changes, which in a
 multi-warehouse system is worse than a blank table.
 
-### Known limitation
+### Known limitation (resolved)
 
 `keepPreviousData` keeps the previous rows for the duration of one request
-whatever changed the key, including the scope. The audit does not solve the
-scope case; a scope-aware placeholder (one that compares the scope segment of
-the previous key with the current scope) is the correct follow-up.
+whatever changed the key, including the scope. That limitation was resolved by
+`eiams-frontend-e25-t07`: `keepPreviousDataInSameScope(scope)` in
+`src/shared/services/query-keys.ts` compares the previous query key's
+`['scoped', kind, id]` prefix with the active scope and refuses the placeholder
+when they differ, so a scope switch shows the skeleton instead of the former
+scope's rows. See `docs/server-table-workflow-audit.md`.
 
 ## Two readings the audit corrected
 

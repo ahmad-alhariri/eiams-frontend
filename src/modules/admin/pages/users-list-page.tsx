@@ -264,6 +264,7 @@ function UsersListPage() {
           columns={columns}
           data={pageRows(page, usersQuery.isError)}
           isLoading={usersQuery.isLoading}
+          isFetching={usersQuery.isFetching}
           isError={usersQuery.isError}
           onRetry={() => void usersQuery.refetch()}
           errorTitle="تعذّر تحميل المستخدمين"

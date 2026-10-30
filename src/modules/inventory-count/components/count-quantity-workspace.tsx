@@ -342,6 +342,7 @@ export function CountQuantityWorkspace({
           columns={columns}
           data={pageRows(serverPage, linesQuery.isError)}
           isLoading={linesQuery.isLoading}
+          isFetching={linesQuery.isFetching}
           isError={linesQuery.isError}
           onRetry={() => void linesQuery.refetch()}
           errorTitle="تعذّر تحميل بنود الجرد"

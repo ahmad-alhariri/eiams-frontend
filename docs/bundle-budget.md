@@ -2,17 +2,17 @@
 
 **Status:** Enforced in CI
 **Bead:** `eiams-frontend-e25-t06`
-**Derived:** 2026-10-28
+**Derived:** 2026-10-28, re-derived 2026-10-30
 **Mechanism:** `scripts/check-bundle-budget.mjs` plus `src/test/lazy-route-budget.test.ts`
 
 ## What these numbers are, and what they are not
 
 No product document states a bundle size target. The numbers below are
-**regression ceilings**: they were derived from a production build on
-2026-10-28 so that a change which quietly inflates the shipped bundle, or
-quietly replaces a lazily imported route page with a static import, **fails
-the build** instead of reaching users. They are not performance targets and
-they are not a claim that the current bundle is the right size.
+**regression ceilings**: they were derived from a production build (2026-10-28,
+re-derived 2026-10-30) so that a change which quietly inflates the shipped
+bundle, or quietly replaces a lazily imported route page with a static import,
+**fails the build** instead of reaching users. They are not performance targets
+and they are not a claim that the current bundle is the right size.
 
 Raising a ceiling is a deliberate act: edit `src/config/bundle-budget.json`
 and say why in the commit. Silently raising it to make a gate green defeats
@@ -27,8 +27,8 @@ copy to drift.
 | Ceiling | Value | Measured from |
 | --- | --- | --- |
 | `maxJsChunkCount` | 168 | count of `dist/assets/*.js` |
-| `maxJsTotalBytes` | 1609146 | summed size of `dist/assets/*.js` |
-| `maxLargestChunkBytes` | 342842 | largest single `dist/assets/*.js` |
+| `maxJsTotalBytes` | 1612779 | summed size of `dist/assets/*.js` |
+| `maxLargestChunkBytes` | 344020 | largest single `dist/assets/*.js` |
 | `routePageCount` | 59 | `getWiredRouteKeys().length` |
 
 Re-measure with `pnpm run build`, then sum the sizes of the files in

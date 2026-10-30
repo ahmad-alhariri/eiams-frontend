@@ -155,6 +155,17 @@ function DataTableServer<T extends RowData = RowData>({
     [page, pageSize, totalPages, onPageChange, onPageSizeChange],
   )
 
+  // The server total can shrink under the page (a delete, a narrower filter):
+  // `useServerPagination.setPage` only clamps to >= 1, so the view could sit on
+  // page 5 of 2 and request rows the server no longer has. The table is the
+  // first layer that sees both the current page and the server's page count.
+  const lastPage = Math.max(1, totalPages)
+  useEffect(() => {
+    if (totalCount !== undefined && page > lastPage) {
+      onPageChange(lastPage)
+    }
+  }, [lastPage, onPageChange, page, totalCount])
+
   const showSearch = searchQuery !== undefined && onSearchChange !== undefined
 
   return (
@@ -164,7 +175,7 @@ function DataTableServer<T extends RowData = RowData>({
           searchQuery={searchQuery}
           onSearchChange={onSearchChange}
           placeholder={searchPlaceholder}
-          isLoading={tableProps.isLoading ?? false}
+          isLoading={Boolean(tableProps.isLoading || tableProps.isFetching)}
         />
       ) : null}
       <DataTable {...tableProps} />

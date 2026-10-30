@@ -224,6 +224,7 @@ export function CountVarianceReview({
       <DataTableServer
         columns={countLineColumns}
         data={visibleRows}
+        isFetching={false}
         emptyTitle="لا توجد بنود في هذه الجلسة"
         emptyDescription="لم يُلتقط أي بند ضمن نطاق هذه الجلسة. راجع نطاق الجرد ثم أعد تحميل الصفحة."
         page={page}

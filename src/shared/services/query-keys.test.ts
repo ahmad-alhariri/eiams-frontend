@@ -4,6 +4,7 @@ import { createQueryClient } from '@/shared/services/query.client'
 import {
   clearScopedQueries,
   invalidateScopedQueries,
+  keepPreviousDataInSameScope,
   queryKeys,
   removeScopedQueries,
 } from '@/shared/services/query-keys'
@@ -69,5 +70,33 @@ describe('query-key conventions', () => {
       client.getQueryData(queryKeys.scoped({ kind: 'site', id: 'site-1' }, 'documents')),
     ).toBeUndefined()
     expect(client.getQueryData(queryKeys.public('catalog'))).toEqual(['material'])
+  })
+
+  it('keeps the previous rows only while the active scope is unchanged', () => {
+    const site = { kind: 'site', id: 'site-1' } as const
+    const otherSite = { kind: 'site', id: 'site-2' } as const
+    const keepWithinSite = keepPreviousDataInSameScope(site)
+    const previousRows = ['page 2 row']
+
+    expect(
+      keepWithinSite(previousRows, {
+        queryKey: queryKeys.scoped(site, 'documents', { page: 1 }),
+      }),
+    ).toEqual(previousRows)
+    expect(
+      keepWithinSite(previousRows, {
+        queryKey: queryKeys.scoped(otherSite, 'documents', { page: 1 }),
+      }),
+    ).toBeUndefined()
+    expect(
+      keepWithinSite(previousRows, {
+        queryKey: queryKeys.scoped({ kind: 'warehouse', id: 'wh-1' }, 'documents', { page: 1 }),
+      }),
+    ).toBeUndefined()
+    expect(
+      keepWithinSite(previousRows, { queryKey: queryKeys.public('documents') }),
+    ).toBeUndefined()
+    expect(keepWithinSite(previousRows, undefined)).toBeUndefined()
+    expect(keepPreviousDataInSameScope(undefined)(previousRows, undefined)).toBeUndefined()
   })
 })

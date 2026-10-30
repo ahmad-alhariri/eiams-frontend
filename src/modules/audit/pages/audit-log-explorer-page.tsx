@@ -307,6 +307,7 @@ function AuditLogExplorerPageImpl() {
           columns={columns}
           data={pageRows(page, auditLogsQuery.isError)}
           isLoading={auditLogsQuery.isLoading}
+          isFetching={auditLogsQuery.isFetching}
           isError={auditLogsQuery.isError}
           onRetry={() => void auditLogsQuery.refetch()}
           errorTitle="تعذّر تحميل سجل التدقيق"

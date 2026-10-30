@@ -166,6 +166,7 @@ export default function AssetRegistryListPage() {
           columns={columns}
           data={pageRows(assetsQuery.data, assetsQuery.isError)}
           isLoading={assetsQuery.isLoading}
+          isFetching={assetsQuery.isFetching}
           isError={assetsQuery.isError}
           onRetry={() => void assetsQuery.refetch()}
           errorTitle="تعذّر تحميل الأصول"

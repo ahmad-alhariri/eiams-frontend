@@ -214,6 +214,7 @@ function UnitsOfMeasurePage() {
           columns={columns}
           data={pageRows(unitsPage, unitsQuery.isError)}
           isLoading={unitsQuery.isLoading}
+          isFetching={unitsQuery.isFetching}
           isError={unitsQuery.isError}
           onRetry={() => void unitsQuery.refetch()}
           errorTitle="تعذّر تحميل وحدات القياس"

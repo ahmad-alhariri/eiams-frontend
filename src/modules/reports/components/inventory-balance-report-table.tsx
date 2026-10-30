@@ -154,6 +154,7 @@ function InventoryBalanceReportTableImpl() {
           columns={columns}
           data={pageRows(page, reportQuery.isError)}
           isLoading={reportQuery.isLoading}
+          isFetching={reportQuery.isFetching}
           isError={reportQuery.isError}
           onRetry={() => void reportQuery.refetch()}
           errorTitle="تعذّر تحميل تقرير أرصدة المخزون"

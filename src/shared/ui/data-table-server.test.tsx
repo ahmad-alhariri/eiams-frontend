@@ -319,4 +319,126 @@ describe('DataTableServer', () => {
     await user.click(screen.getByRole('button', { name: 'إعادة المحاولة' }))
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps the previous rows visible and announces a refresh while isFetching', () => {
+    const { container } = render(
+      <DataTableServer
+        columns={columns}
+        data={warehouseRows}
+        isFetching
+        page={2}
+        pageSize={10}
+        totalCount={37}
+        totalPages={4}
+        onPageChange={vi.fn()}
+        onPageSizeChange={vi.fn()}
+      />,
+    )
+
+    // A page change must not blank the table...
+    expect(screen.getByText('مستودع دمشق')).toBeInTheDocument()
+    // ...and must say that the rows on screen are being replaced.
+    expect(screen.getByRole('status')).toHaveTextContent('جارٍ تحديث البيانات...')
+    expect(container.querySelector('[data-slot="data-table"]')).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('keeps the status region mounted so the refresh is announced', () => {
+    const { rerender } = render(
+      <DataTableServer
+        columns={columns}
+        data={warehouseRows}
+        page={1}
+        pageSize={10}
+        totalCount={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        onPageSizeChange={vi.fn()}
+      />,
+    )
+
+    // The live region exists BEFORE the refresh starts...
+    const status = screen.getByRole('status')
+    expect(status).toBeEmptyDOMElement()
+
+    rerender(
+      <DataTableServer
+        columns={columns}
+        data={warehouseRows}
+        isFetching
+        page={2}
+        pageSize={10}
+        totalCount={37}
+        totalPages={4}
+        onPageChange={vi.fn()}
+        onPageSizeChange={vi.fn()}
+      />,
+    )
+
+    // ...and it is the SAME element that now carries the text: a live region
+    // mounted together with its text is usually never announced.
+    expect(screen.getByRole('status')).toBe(status)
+    expect(status).toHaveTextContent('جارٍ تحديث البيانات...')
+  })
+
+  it('shows the first-load skeleton, not stale rows, while the first request runs', () => {
+    render(
+      <DataTableServer
+        columns={columns}
+        data={undefined}
+        isLoading
+        isFetching
+        page={1}
+        pageSize={10}
+        totalCount={undefined}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        onPageSizeChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('status', { name: 'جاري تحميل الجدول...' })).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByText('جارٍ تحديث البيانات...')).not.toBeInTheDocument()
+  })
+
+  it('moves off a page the shrinking server total no longer has', () => {
+    const onPageChange = vi.fn()
+
+    render(
+      <DataTableServer
+        columns={columns}
+        data={[]}
+        page={5}
+        pageSize={10}
+        totalCount={12}
+        totalPages={2}
+        onPageChange={onPageChange}
+        onPageSizeChange={vi.fn()}
+      />,
+    )
+
+    expect(onPageChange).toHaveBeenCalledWith(2)
+  })
+
+  it('scrolls the table inside its own container instead of widening the page', () => {
+    const { container } = render(
+      <DataTableServer
+        columns={columns}
+        data={warehouseRows}
+        page={1}
+        pageSize={10}
+        totalCount={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        onPageSizeChange={vi.fn()}
+      />,
+    )
+
+    const card = container.querySelector('[data-slot="data-table"]')
+    const scrollContainer = card?.querySelector('div')
+
+    expect(card).toHaveClass('max-w-full')
+    expect(scrollContainer).toHaveClass('min-w-0', 'max-w-full', 'overflow-x-auto')
+    expect(container.querySelector('[data-slot="data-table-server"]')).toHaveClass('min-w-0')
+  })
 })

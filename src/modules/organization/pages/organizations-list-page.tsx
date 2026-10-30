@@ -239,6 +239,7 @@ function OrganizationsListPage() {
           columns={columns}
           data={pageRows(page, organizationsQuery.isError)}
           isLoading={organizationsQuery.isLoading}
+          isFetching={organizationsQuery.isFetching}
           isError={organizationsQuery.isError}
           onRetry={() => void organizationsQuery.refetch()}
           errorTitle="تعذّر تحميل الجهات"

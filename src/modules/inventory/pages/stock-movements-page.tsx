@@ -380,6 +380,7 @@ function StockMovementsPage() {
           columns={columns}
           data={pageRows(page, movementsQuery.isError) as StockMovement[] | null | undefined}
           isLoading={movementsQuery.isLoading}
+          isFetching={movementsQuery.isFetching}
           isError={movementsQuery.isError}
           onRetry={() => void movementsQuery.refetch()}
           errorTitle="تعذّر تحميل حركات المخزون"

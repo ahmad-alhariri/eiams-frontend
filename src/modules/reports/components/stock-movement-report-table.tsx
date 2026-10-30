@@ -286,6 +286,7 @@ function StockMovementReportTableImpl() {
           columns={columns}
           data={pageRows(page, movementsQuery.isError)}
           isLoading={movementsQuery.isLoading}
+          isFetching={movementsQuery.isFetching}
           isError={movementsQuery.isError}
           onRetry={() => void movementsQuery.refetch()}
           errorTitle="تعذّر تحميل تقرير حركات المخزون"

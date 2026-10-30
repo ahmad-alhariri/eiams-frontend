@@ -1,8 +1,8 @@
 {
   "measuredAt": "2026-10-30",
-  "note": "REGRESSION CEILINGS derived from a production build, not performance targets. Raise them deliberately, never silently. Re-derived on 2026-10-30 for the session-bootstrap fix (eiams-frontend-cwjc): the chunk count is unchanged; the total and the largest chunk grew by the added public-route/device-hint logic, not by a regression.",
+  "note": "REGRESSION CEILINGS derived from a production build, not performance targets. Raise them deliberately, never silently. Re-derived on 2026-10-30 for eiams-frontend-cwjc (session bootstrap): the chunk count is unchanged; the total and the largest chunk grew by the added public-route/device-hint logic, not by a regression. Re-derived again on 2026-10-30 for eiams-frontend-e25-t07 (server-table workflow hardening): the scope-aware placeholders, the isFetching refresh state and the pagination clamp add 1494 bytes to the shared table/query chunks (1394 from the hardening itself, 100 from its fix round: the report queries' placeholder and the permanently mounted refresh status); the chunk count and the largest chunk are unchanged.",
   "maxJsChunkCount": 168,
-  "maxJsTotalBytes": 1611285,
+  "maxJsTotalBytes": 1612779,
   "maxLargestChunkBytes": 344020,
   "routePageCount": 59
 }

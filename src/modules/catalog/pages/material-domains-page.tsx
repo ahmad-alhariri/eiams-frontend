@@ -236,6 +236,7 @@ function MaterialDomainsPage() {
           columns={columns}
           data={pageRows(domainsPage, domainsQuery.isError)}
           isLoading={domainsQuery.isLoading}
+          isFetching={domainsQuery.isFetching}
           isError={domainsQuery.isError}
           onRetry={() => void domainsQuery.refetch()}
           errorTitle="تعذّر تحميل مجالات التصنيف"

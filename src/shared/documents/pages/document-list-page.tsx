@@ -269,6 +269,7 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
           columns={columns}
           data={pageRows(documentListQuery.data, documentListQuery.isError)}
           isLoading={documentListQuery.isLoading}
+          isFetching={documentListQuery.isFetching}
           isError={documentListQuery.isError}
           onRetry={() => void documentListQuery.refetch()}
           errorTitle="تعذّر تحميل السندات"

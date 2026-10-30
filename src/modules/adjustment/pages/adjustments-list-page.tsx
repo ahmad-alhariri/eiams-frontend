@@ -239,6 +239,7 @@ export default function AdjustmentsListPage() {
           columns={columns}
           data={[...(adjustmentsQuery.data?.items ?? [])]}
           isLoading={adjustmentsQuery.isLoading}
+          isFetching={adjustmentsQuery.isFetching}
           isError={adjustmentsQuery.isError}
           onRetry={() => void adjustmentsQuery.refetch()}
           errorTitle="تعذّر تحميل سندات التسوية"

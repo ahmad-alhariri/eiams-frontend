@@ -262,6 +262,7 @@ function InventoryBalancesPage() {
           columns={columns}
           data={pageRows(page, balancesQuery.isError)}
           isLoading={balancesQuery.isLoading}
+          isFetching={balancesQuery.isFetching}
           isError={balancesQuery.isError}
           onRetry={() => void balancesQuery.refetch()}
           errorTitle="تعذّر تحميل أرصدة المخزون"
