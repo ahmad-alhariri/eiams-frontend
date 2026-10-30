@@ -73,7 +73,7 @@ export function WarehouseCapabilitiesOverview({ warehouseId }: { warehouseId: st
       description="المجالات والعمليات المسموح بها لهذا المستودع. تُطبَّق القدرة عند ترحيل المستندات."
       action={editor}
     >
-      <div className="overflow-x-auto">
+      <div className="min-w-0 overflow-x-auto">
         <table className="w-full min-w-[34rem] text-start">
           <caption className="sr-only">المجالات والعمليات المسموح بها للمستودع</caption>
           <thead className="border-b border-border text-sm text-muted-foreground">

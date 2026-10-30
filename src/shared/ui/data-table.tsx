@@ -209,7 +209,13 @@ function DataTable<T extends RowData = RowData>({
         {showRefreshing ? 'جارٍ تحديث البيانات...' : ''}
       </p>
       <div className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
-        <table className="w-full min-w-full caption-bottom text-sm">
+        {/*
+          A table-cell link is an INLINE box: 20px tall, below the 40px mobile
+          touch floor and below WCAG 2.5.8's 24x24. On a phone the link
+          becomes a 40px-tall flex box. The rule targets the LINK only, so the
+          cell's non-link content keeps its own height.
+        */}
+        <table className="w-full min-w-full caption-bottom text-sm max-sm:[&_a]:inline-flex max-sm:[&_a]:items-center max-sm:[&_a]:min-h-10">
           <thead className="sticky top-0 z-10 bg-primary">
             {headerGroups.map((headerGroup, groupIndex) => (
               <tr key={headerGroup.id}>
@@ -246,7 +252,7 @@ function DataTable<T extends RowData = RowData>({
                         <button
                           type="button"
                           onClick={() => handleSortChange(header.column.id)}
-                          className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-inherit outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-ring"
+                          className="inline-flex min-h-10 items-center gap-1 rounded px-1 py-0.5 text-inherit outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-ring sm:min-h-0"
                         >
                           <span className="whitespace-nowrap">
                             <table.FlexRender header={header} />

@@ -136,7 +136,7 @@ function SelectedMaterialChip({
         aria-label={`إزالة المادة ${materialId}`}
         disabled={disabled}
         onClick={onRemove}
-        className="text-muted-foreground transition-colors hover:text-destructive"
+        className="text-muted-foreground transition-colors hover:text-destructive focus-visible:text-destructive focus-visible:ring-2 focus-visible:ring-ring"
       >
         <IconX size={14} aria-hidden />
       </button>

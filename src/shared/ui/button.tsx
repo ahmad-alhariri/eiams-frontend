@@ -23,14 +23,18 @@ const buttonVariants = cva(
       size: {
         default:
           'h-10 gap-2 px-4 in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3',
-        xs: "h-7 gap-1 px-2 text-xs in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: 'h-8 gap-1.5 px-3 in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pe-2 has-data-[icon=inline-start]:ps-2',
+        // The compact sizes keep their ui-design.md 5.1 height from the `sm`
+        // breakpoint up (28/32px) and reach the 40px touch floor below it, so
+        // a phone gets a 40px target without changing the desktop design.
+        xs: "h-10 gap-1 px-2 text-xs sm:h-7 in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: 'h-10 gap-1.5 px-3 sm:h-8 in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pe-2 has-data-[icon=inline-start]:ps-2',
         lg: 'h-12 gap-2 px-6 has-data-[icon=inline-end]:pe-4 has-data-[icon=inline-start]:ps-4',
-        icon: 'size-9',
         'icon-xs':
-          "size-7 in-data-[slot=button-group]:rounded-md [&_svg:not([class*='size-'])]:size-3",
-        'icon-sm': 'size-8 in-data-[slot=button-group]:rounded-md',
+          "size-10 in-data-[slot=button-group]:rounded-md sm:size-7 [&_svg:not([class*='size-'])]:size-3",
+        'icon-sm': 'size-10 in-data-[slot=button-group]:rounded-md sm:size-8',
         'icon-lg': 'size-10',
+        // standard-allow: touch-target-floor — this 36px icon size is the shared CALENDAR's day cell (src/shared/ui/calendar.tsx). Measured: 7 columns x 36px = 252px, plus the date popover's 10px padding on each side = a 272px popover, which fits the 360px viewport with 88px to spare; a 40px cell would make it 300px, wider than the 280px date field the popover opens from.
+        icon: 'size-9',
       },
     },
     defaultVariants: {

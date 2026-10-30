@@ -477,7 +477,7 @@ function AsyncSelect<T>({
                       key={option.value}
                       value={option}
                       disabled={option.disabled}
-                      className="relative flex w-full min-w-0 cursor-default items-center gap-2 rounded-sm border-s-2 border-transparent py-2 pe-3 ps-3 text-start text-base outline-none select-none data-selected:border-s-accent data-highlighted:bg-muted data-highlighted:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50"
+                      className="relative flex min-h-10 w-full min-w-0 cursor-default items-center gap-2 rounded-sm border-s-2 border-transparent py-2 pe-3 ps-3 text-start text-base outline-none select-none data-selected:border-s-accent data-highlighted:bg-muted data-highlighted:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50"
                     >
                       {renderOptionWithHighlight(option, trimmedQuery)}
                     </Combobox.Item>

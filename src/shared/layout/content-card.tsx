@@ -26,7 +26,7 @@ function ContentCard({
       {...props}
       data-slot="content-card"
       className={cn(
-        'mb-6 flex flex-col rounded-xl border border-border bg-popover p-6 text-card-foreground shadow-card [--card-spacing:--spacing(6)]',
+        'mb-6 flex min-w-0 flex-col rounded-xl border border-border bg-popover p-6 text-card-foreground shadow-card [--card-spacing:--spacing(6)]',
         className,
       )}
     >

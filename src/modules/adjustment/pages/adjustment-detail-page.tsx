@@ -132,7 +132,7 @@ export default function AdjustmentDetailPage() {
           {adjustment.lines.length === 0 ? (
             <p className="text-sm text-muted-foreground">لا توجد بنود على هذا السند.</p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-border">
+            <div className="min-w-0 overflow-x-auto rounded-lg border border-border">
               <table data-slot="adjustment-lines-table" className="w-full min-w-130 text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-start text-muted-foreground">

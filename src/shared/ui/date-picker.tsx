@@ -102,7 +102,10 @@ function DatePicker({
               }
               onChange?.(undefined)
             }}
-            className="absolute end-9 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors select-none outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            // 24px wide (it must not cover the calendar icon or the date text
+            // on either side) but 40px tall, so the touch target reaches the
+            // mobile floor without changing the trigger's layout.
+            className="absolute end-9 top-1/2 flex h-10 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors select-none outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <IconX aria-hidden className="size-4" />
           </button>

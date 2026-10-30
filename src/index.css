@@ -4,6 +4,16 @@
 @import '@fontsource-variable/inter';
 @import '@fontsource-variable/noto-sans-arabic';
 
+/*
+ * Tailwind v4 auto-detects every source file in the repository, so the class
+ * names written in documentation and in test fixtures were being compiled
+ * into the production CSS as DEAD RULES (e.g. `.ml-2`, `.w-[420px]`). These
+ * two exclusions keep the shipped stylesheet to the classes the application
+ * actually renders. The paths are relative to this file.
+ */
+@source not '../docs';
+@source not '../src/test';
+
 @custom-variant dark (&:is(.dark *));
 
 @theme {

@@ -27,12 +27,28 @@ copy to drift.
 | Ceiling | Value | Measured from |
 | --- | --- | --- |
 | `maxJsChunkCount` | 168 | count of `dist/assets/*.js` |
-| `maxJsTotalBytes` | 1612779 | summed size of `dist/assets/*.js` |
-| `maxLargestChunkBytes` | 344020 | largest single `dist/assets/*.js` |
+| `maxJsTotalBytes` | 1613293 | summed size of `dist/assets/*.js` |
+| `maxLargestChunkBytes` | 344082 | largest single `dist/assets/*.js` |
 | `routePageCount` | 59 | `getWiredRouteKeys().length` |
 
 Re-measure with `pnpm run build`, then sum the sizes of the files in
 `dist/assets`.
+
+### Re-derivation log
+
+| Date | Bead | Change | Chunk count | Total JS bytes | Largest chunk |
+| --- | --- | --- | --- | --- | --- |
+| 2026-10-28 | `eiams-frontend-e25-t06` | first derivation | 168 | 1609146 | 342842 |
+| 2026-10-29 | live-API merge | merged production code | 168 | 1610964 | 343958 |
+| 2026-10-30 | `eiams-frontend-cwjc` | session bootstrap (device hints, public-route logic) | 168 | 1611285 | 344020 |
+| 2026-10-30 | `eiams-frontend-e25-t07` | server-table workflow hardening (scope-aware placeholders, refresh state, pagination clamp) | 168 | 1612779 | 344020 |
+| 2026-10-30 | `eiams-frontend-e25-t04` | responsive workflow audit (mobile touch-target floor on the shared Button, checkbox hit area, date-picker clear button, logical drawer inset) | 168 | 1613066 | 344064 |
+| 2026-10-30 | `eiams-frontend-e25-t04` (fix round) | element-level touch-target fixes (header brand link, table-cell link rule, print trigger, shared select and dropdown options) | 168 | 1613293 | 344082 |
+
+The `e25-t04` growth is 287 bytes of Tailwind class names in the shared UI
+chunks, 44 of them in the largest chunk (`index-*.js`); its fix round adds a
+further 227 bytes for the same reason. No module, chunk or route was added,
+and the route page count is unchanged at 59.
 
 ## The lazy-route invariant
 
