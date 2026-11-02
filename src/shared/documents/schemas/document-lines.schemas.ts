@@ -6,7 +6,7 @@ import type {
   DocumentType,
   OpeningType,
 } from '@/shared/documents/types/document-wire.types'
-import type { Material } from '@/modules/catalog/types/catalog.types'
+import type { Material } from '@/shared/types/catalog.wire-types'
 
 /**
  * Document-line capture schemas and draft mappings for the shared document

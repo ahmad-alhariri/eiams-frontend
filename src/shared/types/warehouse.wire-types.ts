@@ -7,9 +7,9 @@
  * re-exports them, so every existing module import keeps compiling.
  */
 
-export type Uuid = string
+import type { RecordStatus, Uuid } from '@/shared/types/wire-primitives'
 
-export type RecordStatus = 'Active' | 'Inactive'
+export type { RecordStatus, Uuid }
 
 /**
  * The six warehouse-capability operations the backend exposes

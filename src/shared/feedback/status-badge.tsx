@@ -1,6 +1,5 @@
 import { IconCheck, type Icon } from '@tabler/icons-react'
 
-import type { AdjustmentStatus } from '@/modules/adjustment/types/adjustment.types'
 import { Badge, type BadgeProps } from '@/shared/ui/badge'
 
 type DocumentStatusValue = 'Draft' | 'Submitted' | 'Posted' | 'Reversed' | 'Cancelled' | 'Rejected'
@@ -16,6 +15,12 @@ type RecordStatusValue = 'Active' | 'Inactive'
 type UserAccountStatusValue = 'Active' | 'Suspended'
 type WarehouseInitializationStatusValue =
   'NotInitialized' | 'Initialized' | 'ZeroStock' | 'Reversed'
+/**
+ * The adjustment's OWN lifecycle (the wire's `InventoryAdjustmentStatus`):
+ * `Draft | Posted | Reversed`. It is NOT the shared document engine's
+ * `DocumentStatus`, which the same payload carries separately.
+ */
+type AdjustmentStatusValue = 'Draft' | 'Posted' | 'Reversed'
 
 type StatusEntity =
   | 'document'
@@ -29,7 +34,7 @@ type StatusEntity =
 
 type StatusValue =
   | DocumentStatusValue
-  | AdjustmentStatus
+  | AdjustmentStatusValue
   | AssetStatusValue
   | CustodyStatusValue
   | InventoryCountStatusValue
@@ -60,7 +65,7 @@ const STATUS_REGISTRY: Record<StatusEntity, Record<string, StatusMeta>> = {
     Draft: DRAFT_ENTRY,
     Posted: POSTED_ENTRY,
     Reversed: REVERSED_ENTRY,
-  } satisfies Record<AdjustmentStatus, StatusMeta>,
+  } satisfies Record<AdjustmentStatusValue, StatusMeta>,
   asset: {
     InStock: { label: 'في المخزن', variant: 'success' },
     Issued: { label: 'مصروف', variant: 'default' },

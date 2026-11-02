@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import type { GallerySection } from '@/app/gallery/gallery-sections'
 import type { Employee } from '@/modules/organization/types/organization.types'
-import { useEmployeeSelector } from '@/shared/selectors/adapters/employee-selector'
+import { useEmployeeSelector } from '@/modules/organization/selectors/employee-selector'
 import { useWarehouseSelector } from '@/shared/selectors/adapters/warehouse-selector'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'

@@ -27,7 +27,7 @@ const SCANNED = applicationSourceFiles().filter(
   (file) => !relativeToRepo(file).startsWith('src/app/gallery/'),
 )
 // +5 (P0-1): shared warehouse wire-types/active-scope and the document list seams.
-const EXPECTED_SCANNED_FILES = 394 // +1: shared scope vocabulary
+const EXPECTED_SCANNED_FILES = 396 // +2: shared wire primitives + catalog wire types
 
 const RAW_KEEP_PREVIOUS = /^keepPreviousData\b/u
 

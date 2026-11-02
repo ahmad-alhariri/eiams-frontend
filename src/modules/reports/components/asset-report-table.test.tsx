@@ -33,7 +33,7 @@ vi.mock('@/modules/auth/hooks/use-permission', async (importOriginal) => {
   }
 })
 
-import { ExportButton } from '@/shared/ui/export-button'
+import { ExportButton } from '@/modules/reports/components/export-button'
 import { formatNumber } from '@/shared/utils/format'
 
 import type { AssetsReportRow } from '@/modules/reports/types/reports.types'

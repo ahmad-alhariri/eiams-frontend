@@ -8,11 +8,11 @@ import type {
   Site,
 } from '@/modules/organization/types/organization.types'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
-import { useEmployeeSelector } from '@/shared/selectors/adapters/employee-selector'
+import { useEmployeeSelector } from '@/modules/organization/selectors/employee-selector'
 import { useMaterialSelector } from '@/shared/selectors/adapters/material-selector'
-import { useNamedReferenceSelector } from '@/shared/selectors/adapters/named-reference-selector'
-import { useOrgUnitSelector } from '@/shared/selectors/adapters/org-unit-selector'
-import { useSiteSelector } from '@/shared/selectors/adapters/site-selector'
+import { useNamedReferenceSelector } from '@/modules/catalog/selectors/named-reference-selector'
+import { useOrgUnitSelector } from '@/modules/organization/selectors/org-unit-selector'
+import { useSiteSelector } from '@/modules/organization/selectors/site-selector'
 import { useWarehouseSelector } from '@/shared/selectors/adapters/warehouse-selector'
 import {
   createEntitySelectorAdapter,
