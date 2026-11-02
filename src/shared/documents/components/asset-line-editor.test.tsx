@@ -154,15 +154,15 @@ describe('AssetLineEditor', () => {
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'إضافة بند أصل' }))
-    expect(screen.getByText('بند الأصول 1')).toBeInTheDocument()
+    expect(screen.getByText('بند الأصول ١')).toBeInTheDocument()
     expect(screen.queryByText(/لم تُضف بنود أصول بعد/)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'إضافة بند أصل' }))
-    expect(screen.getByText('بند الأصول 2')).toBeInTheDocument()
+    expect(screen.getByText('بند الأصول ٢')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'حذف البند 2' }))
-    expect(screen.queryByText('بند الأصول 2')).not.toBeInTheDocument()
-    expect(screen.getByText('بند الأصول 1')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'حذف البند ٢' }))
+    expect(screen.queryByText('بند الأصول ٢')).not.toBeInTheDocument()
+    expect(screen.getByText('بند الأصول ١')).toBeInTheDocument()
   })
 
   it('searches Asset materials in scope, excludes other kinds, and seeds one unit per selection', async () => {
@@ -189,12 +189,12 @@ describe('AssetLineEditor', () => {
       expect(line?.assetInputs).toHaveLength(1)
       expect(line?.quantity).toBe(1)
     })
-    expect(screen.getByText('الوحدة 1')).toBeInTheDocument()
+    expect(screen.getByText('الوحدة ١')).toBeInTheDocument()
     expect(screen.getByLabelText('رقم الأصل (اختياري)')).toBeInTheDocument()
     expect(screen.getByLabelText('الرقم التسلسلي (اختياري)')).toBeInTheDocument()
     expect(screen.getByLabelText('تاريخ الحصول (اختياري)')).toBeInTheDocument()
     expect(screen.getByLabelText('تاريخ انتهاء الضمان (اختياري)')).toBeInTheDocument()
-    expect(quantityText()).toBe('1 قطعة')
+    expect(quantityText()).toBe('١ قطعة')
   })
 
   it('adding and removing units derives the quantity and captures per-unit values', async () => {
@@ -205,10 +205,10 @@ describe('AssetLineEditor', () => {
     await user.click(screen.getByRole('button', { name: 'إضافة بند أصل' }))
     await selectMaterial('طابعة ليزر')
 
-    await user.click(screen.getByRole('button', { name: 'إضافة وحدة/أصل إلى البند 1' }))
+    await user.click(screen.getByRole('button', { name: 'إضافة وحدة/أصل إلى البند ١' }))
     await waitFor(() => {
-      expect(screen.getByText('الوحدة 2')).toBeInTheDocument()
-      expect(quantityText()).toBe('2 قطعة')
+      expect(screen.getByText('الوحدة ٢')).toBeInTheDocument()
+      expect(quantityText()).toBe('٢ قطعة')
     })
     await waitFor(() => {
       const line = linesValue()[0]
@@ -224,10 +224,10 @@ describe('AssetLineEditor', () => {
     fireEvent.change(firstExpiry!, { target: { value: '2027-03-01' } })
     await waitFor(() => expect(linesValue()[0]?.assetInputs[0]?.warrantyExpiry).toBe('2027-03-01'))
 
-    await user.click(screen.getByRole('button', { name: 'حذف الوحدة 2 من البند 1' }))
+    await user.click(screen.getByRole('button', { name: 'حذف الوحدة ٢ من البند ١' }))
     await waitFor(() => {
-      expect(screen.queryByText('الوحدة 2')).not.toBeInTheDocument()
-      expect(quantityText()).toBe('1 قطعة')
+      expect(screen.queryByText('الوحدة ٢')).not.toBeInTheDocument()
+      expect(quantityText()).toBe('١ قطعة')
       const line = linesValue()[0]
       expect(line?.assetInputs).toHaveLength(1)
       expect(line?.quantity).toBe(1)
@@ -258,8 +258,8 @@ describe('AssetLineEditor', () => {
       ])
       expect(linesValue()[0]?.quantity).toBe(3)
     })
-    expect(screen.getByText('الوحدة 3')).toBeInTheDocument()
-    expect(quantityText()).toBe('3 قطعة')
+    expect(screen.getByText('الوحدة ٣')).toBeInTheDocument()
+    expect(quantityText()).toBe('٣ قطعة')
     expect(screen.getAllByLabelText('الرقم التسلسلي (اختياري)')).toHaveLength(3)
     expect(screen.getByLabelText('التقاط الأرقام التسلسلية')).toHaveValue('')
   })
@@ -506,8 +506,8 @@ describe('AssetLineEditor', () => {
     expect(screen.getAllByLabelText('الرقم التسلسلي (اختياري)')[0]).toBeDisabled()
     expect(screen.getAllByLabelText('تاريخ الحصول (اختياري)')[0]).toBeDisabled()
     expect(screen.getAllByLabelText('تاريخ انتهاء الضمان (اختياري)')[0]).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'حذف الوحدة 1 من البند 1' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'إضافة وحدة/أصل إلى البند 1' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'حذف البند 1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'حذف الوحدة ١ من البند ١' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'إضافة وحدة/أصل إلى البند ١' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'حذف البند ١' })).toBeDisabled()
   })
 })

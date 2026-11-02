@@ -301,7 +301,7 @@ describe('F-1 — a failed policy read degrades only the policy-dependent surfac
     ).toBeInTheDocument()
     expect(screen.getByText('حبر طابعة')).toBeInTheDocument()
     expect(screen.getByText('2026/0901')).toBeInTheDocument()
-    expect(screen.getAllByText('الإصدار: 1').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('الإصدار: ١').length).toBeGreaterThan(0)
 
     // (b) The policy-dependent surface is a retryable Arabic error, not a
     //     "still waiting" note and not a row of unexplained disabled buttons.

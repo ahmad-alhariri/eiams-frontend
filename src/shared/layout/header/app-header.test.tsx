@@ -28,8 +28,8 @@ describe('AppHeader', () => {
   it('shows the damask badge with the count when notifications exist', () => {
     renderHeader({ notificationsCount: 3 })
 
-    expect(screen.getByLabelText('3 إشعارات غير مقروءة')).toBeInTheDocument()
-    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.getByLabelText('٣ إشعارات غير مقروءة')).toBeInTheDocument()
+    expect(screen.getByText('٣')).toBeInTheDocument()
   })
 
   it('keeps the breadcrumb region empty until e05-t06 provides the trail', () => {

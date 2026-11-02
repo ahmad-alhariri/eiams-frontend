@@ -146,7 +146,7 @@ const ALLOW_WINDOW_LINES = 4
  * the right line. This returns the indexes instead, so the same four-line
  * window is honoured without moving anything.
  */
-function excusedLines(source: string, rule: string): Set<number> {
+export function excusedLines(source: string, rule: string): Set<number> {
   const dropped = new Set<number>()
   for (const marker of allowMarkersIn(source)) {
     if (marker.rule !== rule) continue

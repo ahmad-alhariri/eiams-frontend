@@ -1,38 +1,17 @@
 import type { ComponentPropsWithoutRef } from 'react'
 
 import { useActiveCounterpartOptions } from '@/modules/organization/hooks/use-counterpart-lookups'
-import {
-  AsyncSelect,
-  type AsyncSelectProps,
-  type AsyncSelectOption,
-} from '@/shared/ui/async-select'
-import type { IssueRecipientType } from '@/modules/issue/schemas/issue-info.schema'
 import type {
   CounterpartOperation,
   CounterpartReference,
   CounterpartResolution,
   CounterpartType,
 } from '@/modules/organization/types/counterpart-lookup.types'
-
-/**
- * Map the contract `CounterpartType` quartet to the wire's `CounterpartType`.
- * The contract names match the wire names for these four kinds:
- * Employee | OrganizationalUnit | Site | External. The Issue petal uses
- * a separate vocabulary in `issue-info.schema.ts` so the schema can be
- * tighter than the backend wire.
- */
-function issueRecipientTypeToCounterpartType(recipientType: IssueRecipientType): CounterpartType {
-  switch (recipientType) {
-    case 'Employee':
-      return 'Employee'
-    case 'OrganizationalUnit':
-      return 'OrganizationalUnit'
-    case 'Site':
-      return 'Site'
-    case 'External':
-      return 'External'
-  }
-}
+import {
+  AsyncSelect,
+  type AsyncSelectProps,
+  type AsyncSelectOption,
+} from '@/shared/ui/async-select'
 
 export interface CounterpartSelectProps {
   value?: string | null
@@ -60,8 +39,8 @@ export interface CounterpartSelectProps {
   disabled?: boolean
   readOnly?: boolean
   placeholder?: string
-  /** Issue-petal-only convenience that maps to `type` via the schema vocabulary. */
-  recipientType?: IssueRecipientType
+  /** Recipient type; since the Issue schema's quartet is identical, this is the contract `CounterpartType`. */
+  recipientType?: CounterpartType
   inputProps?: ComponentPropsWithoutRef<'input'>
 }
 
@@ -74,14 +53,14 @@ export interface CounterpartSelectProps {
  */
 function pickSearchOptions(
   operation: CounterpartOperation | undefined,
-  recipientType: IssueRecipientType | undefined,
+  recipientType: CounterpartType | undefined,
   type: string | undefined,
 ): { operation: CounterpartOperation; type?: CounterpartType } {
   const resolvedOperation: CounterpartOperation = operation ?? 'Issue'
   if (recipientType !== undefined) {
     return {
       operation: resolvedOperation,
-      type: issueRecipientTypeToCounterpartType(recipientType),
+      type: recipientType,
     }
   }
   if (type !== undefined) {

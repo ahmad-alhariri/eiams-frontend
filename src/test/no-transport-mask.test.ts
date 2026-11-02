@@ -164,7 +164,8 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
     // new application files. They read no test support, so the no-offenders
     // assertion below stays green.
-    assertScannedFiles(PRODUCTION_FILES, 409)
+    // +5 (P0-1): shared warehouse wire-types/active-scope and the document list seams.
+    assertScannedFiles(PRODUCTION_FILES, 415) // +1: shared scope vocabulary
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

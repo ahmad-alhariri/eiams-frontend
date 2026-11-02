@@ -33,7 +33,8 @@ const SCANNED = applicationSourceFiles()
 // announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
 // new application files. They read no test support, so the no-offenders
 // assertion below stays green.
-const EXPECTED_SCANNED_FILES = 409
+// +5 (P0-1): shared warehouse wire-types/active-scope and the document list seams.
+const EXPECTED_SCANNED_FILES = 415 // +1: shared scope vocabulary
 
 /** An INFINITE (looping) animation. The one-shot enter/exit transitions use
  * a different mechanism (motion-reduce:data-open:animate-none), so they are

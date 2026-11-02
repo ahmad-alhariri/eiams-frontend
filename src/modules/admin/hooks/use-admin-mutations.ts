@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { adminService } from '@/modules/admin/services/admin.service'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
-import { queryKeys } from '@/shared/services/query-keys'
+import { queryKeys, RESOURCES } from '@/shared/services/query-keys'
 import type { SetUserStatusRequest, UpdateUserRequest } from '@/modules/admin/types/user.types'
 import type {
   ReplaceRolePermissionsRequest,
@@ -27,7 +27,7 @@ function useInvalidateAdmin() {
   return async () => {
     if (activeScopeCacheKey !== undefined) {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.scoped(activeScopeCacheKey, 'admin'),
+        queryKey: queryKeys.scoped(activeScopeCacheKey, RESOURCES.admin),
         exact: false,
       })
     }

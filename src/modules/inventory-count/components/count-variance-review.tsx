@@ -16,7 +16,7 @@ import { Button } from '@/shared/ui/button'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
-import { toArabicDigits } from '@/shared/utils/format'
+import { formatNumber, toArabicDigits } from '@/shared/utils/arabic-numbers'
 import { listRows } from '@/shared/utils/table-data'
 
 /** Rows per review page; the shared bar offers 10/25/50/100. */
@@ -52,7 +52,7 @@ const countLineColumns = countLineColumnHelper.columns([
   countLineColumnHelper.accessor('snapshotQuantity', {
     id: 'snapshotQuantity',
     header: 'الكمية الدفترية',
-    cell: ({ getValue }) => <span className="ltr">{getValue()}</span>,
+    cell: ({ getValue }) => <span>{formatNumber(getValue())}</span>,
   }),
   countLineColumnHelper.accessor('actualQuantity', {
     id: 'actualQuantity',
@@ -242,12 +242,14 @@ export function CountVarianceReview({
           </Button>
           {unentered.length > 0 ? (
             <p role="alert" className="text-sm text-destructive">
-              لا يمكن إكمال الجلسة قبل إدخال الكمية الفعلية لكل بند ({unentered.length} بند).
+              لا يمكن إكمال الجلسة قبل إدخال الكمية الفعلية لكل بند (
+              {formatNumber(unentered.length)} بند).
             </p>
           ) : null}
           {missingReason.length > 0 ? (
             <p role="alert" className="text-sm text-destructive">
-              لا يمكن إكمال الجلسة قبل إدخال سبب لكل بند ذي فرق ({missingReason.length} بند).
+              لا يمكن إكمال الجلسة قبل إدخال سبب لكل بند ذي فرق (
+              {formatNumber(missingReason.length)} بند).
             </p>
           ) : null}
           {completeError ? (

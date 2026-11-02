@@ -20,6 +20,31 @@ export const queryKeys = {
     [SCOPED_PREFIX, ...scopeParts(scope), resource, ...parts] as const,
 }
 
+/**
+ * The single vocabulary of cache "resources" shared by scoped and unscoped
+ * keys. Module-local `*_RESOURCE` constants must derive from this table so a
+ * cross-module invalidation (e.g. adjustment) reaches the exact strings its
+ * target modules key their caches under, without importing from those modules.
+ */
+export const RESOURCES = {
+  /** Kept verbatim from each module's former local constant. */
+  adjustment: 'adjustments',
+  admin: 'admin',
+  asset: 'asset',
+  audit: 'audit',
+  catalog: 'catalog',
+  count: 'inventory-counts',
+  custody: 'custody',
+  custodyReturn: 'return',
+  counterpart: 'counterparts',
+  document: 'document',
+  inventory: 'inventory',
+  organization: 'organization',
+  receiving: 'receiving',
+  reports: 'reports',
+  warehouse: 'warehouse',
+} as const
+
 function matchesScope(queryKey: QueryKey, scope: ScopeCacheKey) {
   const [prefix, kind, id] = queryKey
   const [scopeKind, scopeId] = scopeParts(scope)

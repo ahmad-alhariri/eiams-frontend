@@ -8,10 +8,12 @@ import {
   DOCUMENT_LIST_ROUTE_ENTRIES,
   type DocumentRouteEntry,
 } from '@/shared/documents/document-route-entries'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useActiveScopeContext } from '@/shared/documents/active-scope'
 import type { DocumentListFilters } from '@/shared/documents/use-document-queries'
 import { useDocumentListQuery } from '@/shared/documents/use-document-queries'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
+import type { OptionLoader } from '@/shared/selectors/selector-adapter'
+import type { DocumentWarehouseSelectorBinding } from '@/shared/documents/document-header-form'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
@@ -26,6 +28,7 @@ import type {
   DocumentStatus,
   WarehouseDocumentSummary,
 } from '@/shared/documents/types/document-wire.types'
+import type { Warehouse } from '@/shared/types/warehouse.wire-types'
 import { formatDate, formatDateTime } from '@/shared/utils/format'
 import { pageRows } from '@/shared/utils/table-data'
 
@@ -36,7 +39,23 @@ export interface DocumentListPageProps {
    * When omitted, the page derives the entry from the current route path.
    */
   entry?: DocumentRouteEntry
+  /**
+   * The scope-aware warehouse binding the document pages inject from
+   * `modules/warehouse` (`useScopedWarehouseSelector()`). When omitted (bare
+   * test mounts and the router entries that mount this page directly), the
+   * fallback keeps the filter rendering identically: scope readiness still
+   * derives from the active session scope, while the loader resolves to an
+   * empty list because no module service is bound here.
+   */
+  warehouseSelector?: DocumentWarehouseSelectorBinding
 }
+
+/**
+ * The binding the warehouse filter consumes: the shared type from
+ * {@link document-header-form}; structurally compatible with
+ * `useScopedWarehouseSelector()`'s full result (which also carries `options`).
+ */
+const UNBOUND_WAREHOUSE_OPTIONS: OptionLoader<Warehouse> = async () => []
 
 const DOCUMENT_STATUS_LABELS_AR: Readonly<Record<DocumentStatus, string>> = {
   Draft: 'مسودة',
@@ -58,7 +77,7 @@ const documentColumnHelper = createColumnHelper<
  * type detail route. The table is a contract-backed server-side list (search,
  * status filter, warehouse filter, pagination) — no client-side data.
  */
-function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) {
+function DocumentListPage({ entry: explicitEntry, warehouseSelector }: DocumentListPageProps = {}) {
   const location = useLocation()
   const routeEntry = explicitEntry ?? DOCUMENT_LIST_ROUTE_ENTRIES[location.pathname]
   const documentType = routeEntry?.documentType
@@ -69,7 +88,14 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
   const [status, setStatus] = useState<DocumentStatus | undefined>()
   const [warehouseId, setWarehouseId] = useState<string | undefined>()
 
-  const warehouseSelector = useScopedWarehouseSelector()
+  // The document pages own the warehouse binding (production loader + scope);
+  // the shared page only reads scope readiness for bare mounts it renders
+  // itself (router entries with no page seam, isolated tests).
+  const { activeScopeCacheKey } = useActiveScopeContext()
+  const warehouseFilterSelector = warehouseSelector ?? {
+    loadOptions: UNBOUND_WAREHOUSE_OPTIONS,
+    scopeReady: activeScopeCacheKey !== undefined,
+  }
 
   const handleSearchChange = useCallback(
     (query: string) => {
@@ -251,8 +277,8 @@ function DocumentListPage({ entry: explicitEntry }: DocumentListPageProps = {}) 
               <AsyncSelect
                 value={warehouseId ?? null}
                 onValueChange={handleWarehouseChange}
-                loadOptions={warehouseSelector.loadOptions}
-                disabled={!warehouseSelector.scopeReady}
+                loadOptions={warehouseFilterSelector.loadOptions}
+                disabled={!warehouseFilterSelector.scopeReady}
                 placeholder="تصفية حسب المستودع..."
                 inputProps={{ 'aria-label': 'تصفية حسب المستودع' }}
               />

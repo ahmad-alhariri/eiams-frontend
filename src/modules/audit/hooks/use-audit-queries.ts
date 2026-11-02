@@ -7,10 +7,11 @@ import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import {
   keepPreviousDataInSameScope,
   queryKeys,
+  RESOURCES,
   type ScopeCacheKey,
 } from '@/shared/services/query-keys'
 
-export const AUDIT_RESOURCE = 'audit'
+export const AUDIT_RESOURCE = RESOURCES.audit
 const EMPTY_QUERY = {} as const
 
 export const auditQueryKeys = {

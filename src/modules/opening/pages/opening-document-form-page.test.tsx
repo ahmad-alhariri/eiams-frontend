@@ -216,7 +216,7 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('option', { name: material.nameAr }))
   await user.type(screen.getByLabelText('الكمية'), '10')
 
-  await user.click(screen.getByLabelText('نوع الافتتاحية للبند 1'))
+  await user.click(screen.getByLabelText('نوع الافتتاحية للبند ١'))
   await user.click(await screen.findByRole('option', { name: 'افتتاحية أولية' }))
 
   return openingAsOfDate
@@ -276,7 +276,7 @@ describe('OpeningDocumentFormPage', () => {
       ),
     ).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'بنود الرصيد الافتتاحي' })).toBeInTheDocument()
-    expect(screen.getByLabelText('نوع الافتتاحية للبند 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('نوع الافتتاحية للبند ١')).toBeInTheDocument()
     expect(screen.getByText('بنود الأصول (أصل ثابت لكل وحدة)')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'إضافة بند أصل' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'حفظ المسودة' })).toBeInTheDocument()
@@ -298,7 +298,7 @@ describe('OpeningDocumentFormPage', () => {
   it('preselects Initial on the first line so the common path needs no extra click', () => {
     render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
 
-    expect(screen.getByLabelText('نوع الافتتاحية للبند 1')).toHaveTextContent('افتتاحية أولية')
+    expect(screen.getByLabelText('نوع الافتتاحية للبند ١')).toHaveTextContent('افتتاحية أولية')
   })
 
   it('refuses to save when a line carries no openingType', async () => {
@@ -312,7 +312,7 @@ describe('OpeningDocumentFormPage', () => {
     // A freshly added row starts blank; the requirement — not the first-line
     // default — is what has to stop the submit on it.
     await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
-    expect(screen.getByLabelText('نوع الافتتاحية للبند 2')).toHaveTextContent('اختر النوع')
+    expect(screen.getByLabelText('نوع الافتتاحية للبند ٢')).toHaveTextContent('اختر النوع')
 
     await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
 
@@ -400,10 +400,10 @@ describe('OpeningDocumentFormPage', () => {
     const user = userEvent.setup()
     render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
 
-    await user.click(screen.getByRole('button', { name: 'حذف البند 1' }))
+    await user.click(screen.getByRole('button', { name: 'حذف البند ١' }))
     await fillHeader(user)
     await fillAssetLine(user)
-    await user.click(screen.getByRole('button', { name: 'إضافة وحدة/أصل إلى البند 1' }))
+    await user.click(screen.getByRole('button', { name: 'إضافة وحدة/أصل إلى البند ١' }))
     await user.type(screen.getAllByLabelText('الرقم التسلسلي (اختياري)')[1]!, 'SN-78')
     await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
 
@@ -489,7 +489,7 @@ describe('OpeningDocumentFormPage', () => {
     const user = userEvent.setup()
     render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
 
-    await user.click(screen.getByRole('button', { name: 'حذف البند 1' }))
+    await user.click(screen.getByRole('button', { name: 'حذف البند ١' }))
     await fillHeader(user)
     await fillAssetLine(user)
 
@@ -555,7 +555,7 @@ describe('OpeningDocumentFormPage', () => {
     const user = userEvent.setup()
     render(<OpeningDocumentFormPage />, { wrapper: createWrapper() })
 
-    await user.click(screen.getByRole('button', { name: 'حذف البند 1' }))
+    await user.click(screen.getByRole('button', { name: 'حذف البند ١' }))
     await fillHeader(user)
     await fillAssetLine(user)
 
@@ -678,7 +678,7 @@ describe('OpeningDocumentFormPage', () => {
     await user.clear(quantityInput)
     await user.type(quantityInput, '0')
 
-    await user.click(screen.getByLabelText('نوع الافتتاحية للبند 1'))
+    await user.click(screen.getByLabelText('نوع الافتتاحية للبند ١'))
     await user.click(await screen.findByRole('option', { name: 'افتتاحية أولية' }))
 
     await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
@@ -705,7 +705,7 @@ describe('OpeningDocumentFormPage', () => {
     await user.clear(quantityInput)
     await user.type(quantityInput, '-5')
 
-    await user.click(screen.getByLabelText('نوع الافتتاحية للبند 1'))
+    await user.click(screen.getByLabelText('نوع الافتتاحية للبند ١'))
     await user.click(await screen.findByRole('option', { name: 'افتتاحية أولية' }))
 
     await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))

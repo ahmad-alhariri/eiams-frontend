@@ -27,6 +27,7 @@ import {
   DocumentHeaderSection,
   documentHeaderSchema,
 } from '@/shared/documents/document-header-form'
+import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import {
   assetLineSchema,
   createEmptyQuantityLine,
@@ -168,6 +169,7 @@ export default function OpeningDocumentFormPage() {
   const capabilityGate = combineCapabilityGates(quantityCapabilityGate, assetCapabilityGate)
   const isCapabilityUnverified = capabilityGate.status !== 'ready'
   const isSaving = form.formState.isSubmitting || createMutation.isPending
+  const warehouseSelector = useScopedWarehouseSelector()
   const submitErrorMessage =
     createMutation.error === null ? null : documentDraftMutationError(createMutation.error)
   const headerWarehouseId = useWatch({ control: form.control, name: 'header.warehouseId' })
@@ -258,7 +260,11 @@ export default function OpeningDocumentFormPage() {
           noValidate
           className="grid gap-5"
         >
-          <DocumentHeaderSection documentType="Opening" disabled={isSaving} />
+          <DocumentHeaderSection
+            documentType="Opening"
+            disabled={isSaving}
+            warehouseSelector={warehouseSelector}
+          />
           <section
             data-slot="opening-policy-notice"
             aria-labelledby="opening-policy-notice-title"

@@ -1,4 +1,4 @@
-import { ROLE_SCOPE_TYPE_LABELS_AR } from '@/modules/admin/types/role.types'
+import { ROLE_SCOPE_TYPE_LABELS_AR } from '@/shared/types/scope.types'
 import type { SessionScope, SessionUser } from '@/modules/auth/types/session.types'
 
 /**

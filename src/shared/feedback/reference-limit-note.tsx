@@ -1,3 +1,5 @@
+import { formatNumber } from '@/shared/utils/arabic-numbers'
+
 /**
  * Says, in Arabic, that a reference directory does not fit on one page.
  *
@@ -34,7 +36,7 @@ export function ReferenceLimitNote({ loadedCount, totalCount, hint }: ReferenceL
 
   return (
     <p role="status" className="text-sm text-muted-foreground">
-      يعرض النظام أول {loadedCount} عنصراً من أصل {totalCount}
+      يعرض النظام أول {formatNumber(loadedCount)} عنصراً من أصل {formatNumber(totalCount)}
       {hint === undefined ? '.' : ` — ${hint}`}
     </p>
   )

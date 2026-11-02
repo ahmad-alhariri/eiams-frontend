@@ -245,6 +245,7 @@ export function MaterialFormDialog({
                           dir="ltr"
                           disabled={isPending}
                           maxLength={255}
+                          // standard-allow: latin-attribute-example — the English material name belongs to an English-language field
                           placeholder="Desktop Computer"
                           onChange={(event) => field.onChange(event.currentTarget.value || null)}
                         />

@@ -8,9 +8,9 @@ import {
 } from '@/modules/receiving/services/receiving.service'
 import type { OptionLoader } from '@/shared/selectors/selector-adapter'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import { queryKeys, RESOURCES, type ScopeCacheKey } from '@/shared/services/query-keys'
 
-const RECEIVING_RESOURCE = 'receiving'
+const RECEIVING_RESOURCE = RESOURCES.receiving
 
 /** The contract's minimum suggestion query length; AsyncSelect enforces it too. */
 export const SUPPLIER_SEARCH_MIN_LENGTH = 2

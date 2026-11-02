@@ -1,4 +1,4 @@
-import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
+import type { Warehouse } from '@/shared/types/warehouse.wire-types'
 
 import {
   createEntitySelectorAdapter,

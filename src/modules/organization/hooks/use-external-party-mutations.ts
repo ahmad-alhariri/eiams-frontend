@@ -2,14 +2,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { organizationService } from '@/modules/organization/services/organization.service'
-import { queryKeys } from '@/shared/services/query-keys'
+import { queryKeys, RESOURCES } from '@/shared/services/query-keys'
 import {
   statusCommandValue,
   type RecordStatus,
   type UpdateExternalPartyRequest,
 } from '@/modules/organization/types/organization.types'
 
-const ORGANIZATION_RESOURCE = 'organization'
+const ORGANIZATION_RESOURCE = RESOURCES.organization
 
 type UpdateExternalPartyVariables = {
   externalPartyId: string

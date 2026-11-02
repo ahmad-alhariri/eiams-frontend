@@ -24,7 +24,8 @@ import {
  * offending site, so a paginated query a cheap grep misses surfaces itself.
  */
 const SCANNED = applicationSourceFiles()
-const EXPECTED_SCANNED_FILES = 409
+// +5 (P0-1): shared warehouse wire-types/active-scope and the document list seams.
+const EXPECTED_SCANNED_FILES = 415 // +1: shared scope vocabulary
 
 const NAMED_STALE_TIME = /staleTime\s*:\s*(OPERATIONAL_STALE_TIME|MASTER_DATA_STALE_TIME)\b/u
 const SESSION_STALE_TIME = /staleTime\s*:\s*Number\.POSITIVE_INFINITY\b/u

@@ -1,4 +1,4 @@
-import type { CapabilityOperation } from '@/modules/warehouse/types/warehouse.types'
+import type { CapabilityOperation } from '@/shared/types/warehouse.wire-types'
 import { normalizeWireErrorCode } from '@/shared/api/envelope'
 import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
 import type { DocumentActionType } from '@/shared/documents/types/document-action.types'

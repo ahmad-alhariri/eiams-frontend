@@ -12,11 +12,12 @@ import { custodyService } from '@/modules/custody/services/custody.service'
 import {
   keepPreviousDataInSameScope,
   queryKeys,
+  RESOURCES,
   type ScopeCacheKey,
 } from '@/shared/services/query-keys'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 
-export const CUSTODY_RESOURCE = 'custody'
+export const CUSTODY_RESOURCE = RESOURCES.custody
 
 export const custodyQueryKeys = {
   custodies: (scope: ScopeCacheKey, query: ListCustodiesQuery) =>

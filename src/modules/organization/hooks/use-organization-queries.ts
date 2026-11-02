@@ -13,10 +13,11 @@ import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
 import {
   keepPreviousDataInSameScope,
   queryKeys,
+  RESOURCES,
   type ScopeCacheKey,
 } from '@/shared/services/query-keys'
 
-const ORGANIZATION_RESOURCE = 'organization'
+const ORGANIZATION_RESOURCE = RESOURCES.organization
 const EMPTY_QUERY = {} as const
 
 type OrganizationQueryOptions = {

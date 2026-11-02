@@ -24,10 +24,11 @@ import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import {
   keepPreviousDataInSameScope,
   queryKeys,
+  RESOURCES,
   type ScopeCacheKey,
 } from '@/shared/services/query-keys'
 
-export const COUNT_RESOURCE = 'inventory-counts'
+export const COUNT_RESOURCE = RESOURCES.count
 // The server caps a page at PaginationDefaults.MaximumPageSize (100); asking for
 // more answers 400 and the variance review never loads.
 const ALL_COUNT_LINES_PAGE_SIZE = 100

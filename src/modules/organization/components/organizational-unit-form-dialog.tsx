@@ -209,6 +209,7 @@ export function OrganizationalUnitFormDialog({
                       <Input
                         {...field}
                         disabled={isPending || referencesUnavailable}
+                        // standard-allow: latin-attribute-example — the unit name example belongs to an English-language field
                         placeholder="مثال: Department"
                       />
                     </FormControl>

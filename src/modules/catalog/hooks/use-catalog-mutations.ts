@@ -18,7 +18,7 @@ import {
   type UpdateUnitOfMeasureRequest,
 } from '@/modules/catalog/types/catalog.types'
 import { isConcurrencyConflict } from '@/shared/services/mutation-safety'
-import { queryKeys } from '@/shared/services/query-keys'
+import { queryKeys, RESOURCES } from '@/shared/services/query-keys'
 import {
   ConflictRecoveryDialog,
   type ConflictRecoveryDialogCopy,
@@ -79,7 +79,7 @@ function useInvalidateCatalog() {
 
     await queryClient.invalidateQueries({
       // Hierarchy names and units are embedded in downstream catalog responses.
-      queryKey: queryKeys.scoped(activeScopeCacheKey, 'catalog'),
+      queryKey: queryKeys.scoped(activeScopeCacheKey, RESOURCES.catalog),
       exact: false,
     })
   }

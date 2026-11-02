@@ -9,10 +9,11 @@ import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
 import {
   keepPreviousDataInSameScope,
   queryKeys,
+  RESOURCES,
   type ScopeCacheKey,
 } from '@/shared/services/query-keys'
 
-const WAREHOUSE_RESOURCE = 'warehouse'
+const WAREHOUSE_RESOURCE = RESOURCES.warehouse
 const EMPTY_QUERY = {} as const
 
 export const warehouseQueryKeys = {

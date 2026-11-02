@@ -6,6 +6,7 @@ import type { DocumentLinesContainer } from '@/shared/documents/schemas/document
 import { ErrorState } from '@/shared/feedback/error-state'
 import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/utils/class-names'
+import { formatNumber } from '@/shared/utils/arabic-numbers'
 
 export interface IssueLineAssetSelectorProps {
   index: number
@@ -56,7 +57,8 @@ export function IssueLineAssetSelector({
       className="grid gap-2 rounded-md border border-dashed border-border p-3"
     >
       <span className="text-sm font-medium text-foreground">
-        الأصول المحددة للبند: {selected.length} من {quantity} (يجب أن يساوي المحدد الكمية)
+        الأصول المحددة للبند: {formatNumber(selected.length)} من {formatNumber(quantity)} (يجب أن
+        يساوي المحدد الكمية)
       </span>
       {isError ? (
         // The assets read is a SECONDARY read: the line itself is already
@@ -114,7 +116,8 @@ export function IssueLineAssetSelector({
       )}
       {!isLoading && !isError && assets.length > 0 && countMismatch ? (
         <p role="alert" className="text-sm text-destructive">
-          المحدد {selected.length} من {quantity} — يجب أن يساوي عدد الأصول المحددة الكمية.
+          المحدد {formatNumber(selected.length)} من {formatNumber(quantity)} — يجب أن يساوي عدد
+          الأصول المحددة الكمية.
         </p>
       ) : null}
     </div>

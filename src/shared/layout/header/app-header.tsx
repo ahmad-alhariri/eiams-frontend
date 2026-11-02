@@ -4,6 +4,7 @@ import { IconBell, IconMenu2 } from '@tabler/icons-react'
 import { cn } from '@/shared/utils/class-names'
 import { useUiStore } from '@/shared/store/ui.store'
 import { ROUTE_PATHS } from '@/config/routes'
+import { toArabicDigits } from '@/shared/utils/arabic-numbers'
 
 export interface HeaderUser {
   displayName: string
@@ -100,10 +101,10 @@ function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHe
           <IconBell size={20} aria-hidden />
           {notificationsCount > 0 ? (
             <span
-              aria-label={`${notificationsCount} إشعارات غير مقروءة`}
+              aria-label={`${toArabicDigits(notificationsCount)} إشعارات غير مقروءة`}
               className="absolute top-1 end-1 flex size-4 items-center justify-center rounded-full bg-damask text-[10px] leading-none text-white"
             >
-              {notificationsCount}
+              {toArabicDigits(notificationsCount)}
             </span>
           ) : null}
         </button>

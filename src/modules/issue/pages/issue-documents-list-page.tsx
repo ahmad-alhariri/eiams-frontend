@@ -1,4 +1,5 @@
 import { ISSUE_DOCUMENT_LIST_ENTRY } from '@/shared/documents/document-route-entries'
+import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import DocumentListPage from '@/shared/documents/pages/document-list-page'
 
 /**
@@ -10,5 +11,11 @@ import DocumentListPage from '@/shared/documents/pages/document-list-page'
  * scope-aware document transport — no issue-specific endpoint or service.
  */
 export default function IssueDocumentsListPage() {
-  return <DocumentListPage entry={ISSUE_DOCUMENT_LIST_ENTRY} />
+  const warehouseSelector = useScopedWarehouseSelector()
+  return (
+    <DocumentListPage
+      entry={ISSUE_DOCUMENT_LIST_ENTRY}
+      warehouseSelector={warehouseSelector}
+    />
+  )
 }

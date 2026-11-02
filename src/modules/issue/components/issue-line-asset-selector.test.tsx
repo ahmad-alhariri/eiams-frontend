@@ -113,7 +113,7 @@ describe('IssueLineAssetSelector (e16-t05 / D-IAR-01)', () => {
       screen.getByText(
         (_, element) =>
           element?.tagName === 'SPAN' &&
-          element.textContent === 'الأصول المحددة للبند: 1 من 2 (يجب أن يساوي المحدد الكمية)',
+          element.textContent === 'الأصول المحددة للبند: ١ من ٢ (يجب أن يساوي المحدد الكمية)',
       ),
     ).toBeInTheDocument()
     expect(screen.getByText(/يجب أن يساوي عدد الأصول المحددة الكمية/)).toBeInTheDocument()
@@ -124,7 +124,7 @@ describe('IssueLineAssetSelector (e16-t05 / D-IAR-01)', () => {
       screen.getByText(
         (_, element) =>
           element?.tagName === 'SPAN' &&
-          element.textContent === 'الأصول المحددة للبند: 2 من 2 (يجب أن يساوي المحدد الكمية)',
+          element.textContent === 'الأصول المحددة للبند: ٢ من ٢ (يجب أن يساوي المحدد الكمية)',
       ),
     ).toBeInTheDocument()
     expect(screen.queryByText(/يجب أن يساوي عدد الأصول المحددة الكمية/)).toBeNull()

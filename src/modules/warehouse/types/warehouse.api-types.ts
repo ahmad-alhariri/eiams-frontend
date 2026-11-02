@@ -38,19 +38,18 @@
  * (warehouseId, domainId, operation).
  */
 
-export type Uuid = string
-export type RecordStatus = 'Active' | 'Inactive'
+import type { CapabilityOperation, RecordStatus, Uuid } from '@/shared/types/warehouse.wire-types'
 
-/**
- * The six warehouse-capability operations the backend exposes
- * (`Domain/Common/OperationType.cs`). Adjustment was missing from the
- * frozen frontend union, which silently dropped a granted Adjustment on
- * any save — the `addOperation` POST would succeed but the read never
- * surfaced the toggle, and the editor rendered an "incomplete" matrix
- * without telling the user.
- */
-export type CapabilityOperation =
-  'Receiving' | 'Issue' | 'Transfer' | 'Count' | 'Return' | 'Adjustment' | 'Opening'
+// The wire types the shared layer also addresses live in the shared warehouse
+// wire-types file; the module re-exports them so module importers keep one
+// source (`modules → shared` direction is preserved).
+export type {
+  CapabilityOperation,
+  ListWarehousesQuery,
+  RecordStatus,
+  Uuid,
+  Warehouse,
+} from '@/shared/types/warehouse.wire-types'
 
 /**
  * The backend serialises `OperationType` as the enum NAME STRING (not the
@@ -115,29 +114,9 @@ export interface MaterialDomain {
 }
 
 // ---------------------------------------------------------------------------
-// Warehouses
+// Warehouses — the `Warehouse` response type lives in the shared wire-types
+// (re-exported above).
 // ---------------------------------------------------------------------------
-
-/**
- * `siteId` is a FLAT field on the wire. There is no nested `site` reference,
- * so a site label must be resolved by joining against the sites list — it
- * is not present on a warehouse record.
- *
- * `warehouseType` is a free-form string on the wire (backend `string`, not
- * an enum); observed live as "Storage". Deliberately not narrowed to a
- * union.
- */
-export interface Warehouse {
-  readonly id: Uuid
-  readonly siteId: Uuid
-  readonly organizationalUnitId?: Uuid | null
-  readonly name: string
-  readonly code: string
-  readonly warehouseType: string
-  readonly canHoldStock: boolean
-  readonly status: RecordStatus
-  readonly rowVersion: number
-}
 
 export interface WarehouseCreateRequest {
   readonly siteId: Uuid
@@ -296,14 +275,6 @@ export function statusOrdinal(status: RecordStatus): number {
 // ---------------------------------------------------------------------------
 // Query types (filter shapes)
 // ---------------------------------------------------------------------------
-
-export interface ListWarehousesQuery {
-  readonly page?: number
-  readonly pageSize?: number
-  readonly search?: string
-  readonly siteId?: string
-  readonly status?: RecordStatus
-}
 
 export interface ListWarehouseMaterialSettingsQuery {
   readonly page?: number

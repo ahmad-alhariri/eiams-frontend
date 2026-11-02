@@ -13,9 +13,9 @@ import type {
   SearchCounterpartsQuery,
 } from '@/modules/organization/types/counterpart-lookup.types'
 import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import { queryKeys, RESOURCES, type ScopeCacheKey } from '@/shared/services/query-keys'
 
-const COUNTERPART_RESOURCE = 'counterparts'
+const COUNTERPART_RESOURCE = RESOURCES.counterpart
 const WRITE_PAGE_SIZE = 10
 
 export const counterpartLookupQueryKeys = {

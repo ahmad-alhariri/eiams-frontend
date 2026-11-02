@@ -281,6 +281,7 @@ export function WarehouseFormDialog({
                       value={field.value}
                       disabled={isPending}
                       onValueChange={field.onChange}
+                      // standard-allow: latin-attribute-example — the warehouse name example belongs to an English-language field
                       placeholder="مثال: Storage"
                     />
                   </FormControl>

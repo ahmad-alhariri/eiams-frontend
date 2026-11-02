@@ -46,7 +46,8 @@ import {
 // announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
 // new application files. They read no test support, so the no-offenders
 // assertion below stays green.
-const EXPECTED_SCANNED_FILES = 409
+// +5 since 409 (P0-1): shared `types/warehouse.wire-types.ts` and
+const EXPECTED_SCANNED_FILES = 415 // +1: shared scope vocabulary
 
 describe('a failed secondary read stays distinguishable (source scan)', () => {
   it('scans the expected production file set, so a narrowed glob cannot pass silently', () => {

@@ -162,7 +162,7 @@ describe('DocumentDetailPage', () => {
 
     expect(screen.getAllByText('مرحّل').length).toBeGreaterThan(0)
     expect(screen.getAllByText('إيصال استلام').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('الإصدار: 2').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('الإصدار: ٢').length).toBeGreaterThan(0)
     // The detail read carries the poster as a user id, not a display reference,
     // so the field states the id rather than a name the server never sent.
     expect(screen.getByText('00000000-0000-4000-8000-00000000000a')).toBeInTheDocument()

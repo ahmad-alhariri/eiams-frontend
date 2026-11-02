@@ -35,7 +35,8 @@ import {
 const SCANNED = applicationSourceFiles().filter(
   (file) => !relativeToRepo(file).startsWith('src/app/gallery/'),
 )
-const EXPECTED_SCANNED_FILES = 388
+// +5 (P0-1): shared warehouse wire-types/active-scope and the document list seams.
+const EXPECTED_SCANNED_FILES = 394 // +1: shared scope vocabulary
 
 const BUTTON_FILE = 'src/shared/ui/button.tsx'
 

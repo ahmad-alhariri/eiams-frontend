@@ -39,7 +39,7 @@ import { ConflictRecoveryDialog } from '@/shared/ui/conflict-recovery-dialog'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { toast } from '@/shared/ui/toast-manager'
-import { toArabicDigits } from '@/shared/utils/format'
+import { formatNumber, toArabicDigits } from '@/shared/utils/arabic-numbers'
 import { pageRows } from '@/shared/utils/table-data'
 
 /** Rows requested on first render; the shared bar offers 10/25/50/100. */
@@ -218,7 +218,7 @@ export function CountQuantityWorkspace({
         countLineColumnHelper.accessor('snapshotQuantity', {
           id: 'snapshotQuantity',
           header: 'الكمية الدفترية',
-          cell: ({ getValue }) => <span className="ltr">{getValue()}</span>,
+          cell: ({ getValue }) => <span>{formatNumber(getValue())}</span>,
         }),
         countLineColumnHelper.display({
           id: 'actualQuantity',

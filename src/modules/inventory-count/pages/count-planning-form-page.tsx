@@ -27,6 +27,7 @@ import { Button } from '@/shared/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { Textarea } from '@/shared/ui/textarea'
 import { IconX } from '@tabler/icons-react'
+import { toArabicDigits } from '@/shared/utils/arabic-numbers'
 
 const COUNT_TYPES = Object.keys(INVENTORY_COUNT_TYPE_LABELS_AR) as readonly CountType[]
 const SCOPE_TYPES = Object.keys(INVENTORY_COUNT_SCOPE_LABELS_AR) as readonly CountScopeType[]
@@ -90,7 +91,7 @@ const countPlanningFormSchema = z
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['materialIds'],
-          message: `يجب ألا تتجاوز المواد المحددة ${MAX_SELECTED_MATERIALS} مادة.`,
+          message: `يجب ألا تتجاوز المواد المحددة ${toArabicDigits(MAX_SELECTED_MATERIALS)} مادة.`,
         })
       }
     }
@@ -112,7 +113,7 @@ function scopeHintAr(scopeType: CountScopeType | undefined): string | undefined 
     case 'MaterialDomain':
       return 'اختر مجال المواد الذي تُجرد موادّه.'
     case 'SelectedMaterials':
-      return `اختر ما يصل إلى ${MAX_SELECTED_MATERIALS} مادة ضمن نطاقك.`
+      return `اختر ما يصل إلى ${toArabicDigits(MAX_SELECTED_MATERIALS)} مادة ضمن نطاقك.`
     default:
       return undefined
   }
@@ -373,7 +374,8 @@ export default function CountPlanningFormPage() {
           {scopeType === 'SelectedMaterials' ? (
             <div className="grid gap-2">
               <label className="text-sm font-medium text-foreground">
-                المواد المحددة ({materialIds?.length ?? 0}/{MAX_SELECTED_MATERIALS})
+                المواد المحددة ({toArabicDigits(materialIds?.length ?? 0)}/
+                {toArabicDigits(MAX_SELECTED_MATERIALS)})
               </label>
               <AsyncSelect
                 value={null}

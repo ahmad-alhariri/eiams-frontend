@@ -80,9 +80,7 @@ export function createAxiosTransport(client: AxiosInstance) {
           : (response.data as ApiSuccessResponse<ReadonlyArray<TItem>>).pagination,
       )
       return {
-        items: isNoContentBody(response.data)
-          ? []
-          : ((unwrapData(response.data) as ReadonlyArray<TItem>) ?? []),
+        items: isNoContentBody(response.data) ? [] : (unwrapData(response.data) ?? []),
         page: pagination.page,
         pageSize: pagination.pageSize,
         totalItems: pagination.totalItems,

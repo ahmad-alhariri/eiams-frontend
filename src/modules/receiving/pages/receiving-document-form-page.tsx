@@ -19,6 +19,7 @@ import {
   DocumentHeaderSection,
   documentHeaderSchema,
 } from '@/shared/documents/document-header-form'
+import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
 import {
   assetLineSchema,
   createEmptyQuantityLine,
@@ -98,6 +99,7 @@ export default function ReceivingDocumentFormPage() {
     mode: 'onChange',
   })
   const isSubmitting = form.formState.isSubmitting
+  const warehouseSelector = useScopedWarehouseSelector()
   const submitErrorMessage =
     createMutation.error === null ? null : documentDraftMutationError(createMutation.error)
   const headerWarehouseId = useWatch({ control: form.control, name: 'header.warehouseId' })
@@ -154,6 +156,7 @@ export default function ReceivingDocumentFormPage() {
         >
           <DocumentHeaderSection
             documentType="Receiving"
+            warehouseSelector={warehouseSelector}
             petalSlot={<ReceivingPetalForm disabled={isSubmitting} />}
             disabled={isSubmitting}
           />

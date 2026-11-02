@@ -129,7 +129,13 @@ export function UnitOfMeasureFormDialog({
                 <FormItem>
                   <FormLabel>نوع الوحدة</FormLabel>
                   <FormControl>
-                    <Input {...field} dir="ltr" disabled={isPending} placeholder="Quantity" />
+                    <Input
+                      {...field}
+                      dir="ltr"
+                      disabled={isPending}
+                      // standard-allow: latin-attribute-example — the unit type is the server's own wire value
+                      placeholder="Quantity"
+                    />
                   </FormControl>
                   <p className="text-sm text-muted-foreground">
                     نص حر يحدده النظام، مثل الكمية أو الوزن أو الطول.

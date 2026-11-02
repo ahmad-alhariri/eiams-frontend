@@ -141,10 +141,10 @@ function SiteDetailPage() {
           <DetailField label="الحالة">
             <StatusBadge entity="record" status={site.status} />
           </DetailField>
-          <DetailField label="OٕU,O1U+U^OٕO+" className="sm:col-span-2">
+          <DetailField label="العنوان" className="sm:col-span-2">
             {site.location ?? '—'}
           </DetailField>
-          <DetailField label="U.O1OٕU`U? OٕU,OٕUٕOc OٕU,U.OٕU,UٕOc" className="sm:col-span-2" ltr>
+          <DetailField label="معرّف الجهة المالكة" className="sm:col-span-2" ltr>
             {site.organizationId ?? '—'}
           </DetailField>
         </dl>

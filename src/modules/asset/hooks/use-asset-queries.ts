@@ -7,10 +7,11 @@ import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import {
   keepPreviousDataInSameScope,
   queryKeys,
+  RESOURCES,
   type ScopeCacheKey,
 } from '@/shared/services/query-keys'
 
-export const ASSET_RESOURCE = 'asset'
+export const ASSET_RESOURCE = RESOURCES.asset
 
 export const assetQueryKeys = {
   /** Namespace root — the target for cross-module invalidation (e.g. custody). */

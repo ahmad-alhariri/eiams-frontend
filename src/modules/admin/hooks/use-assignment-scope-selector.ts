@@ -17,7 +17,7 @@ import {
   type OptionLoader,
 } from '@/shared/selectors/selector-adapter'
 import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys } from '@/shared/services/query-keys'
+import { queryKeys, RESOURCES } from '@/shared/services/query-keys'
 
 const DEFAULT_MAX_RESULTS = 10
 
@@ -186,7 +186,7 @@ export function useAssignmentScopeLabel(
   return useQuery({
     queryKey:
       scope === undefined || scopeId === null
-        ? queryKeys.unscoped('admin', 'assignment-scope-label', scopeType, scopeId)
+        ? queryKeys.unscoped(RESOURCES.admin, 'assignment-scope-label', scopeType, scopeId)
         : scopeType === 'Site'
           ? organizationQueryKeys.site(scope, scopeId)
           : warehouseQueryKeys.warehouse(scope, scopeId),

@@ -14,10 +14,11 @@ import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
 import {
   keepPreviousDataInSameScope,
   queryKeys,
+  RESOURCES,
   type ScopeCacheKey,
 } from '@/shared/services/query-keys'
 
-const CATALOG_RESOURCE = 'catalog'
+const CATALOG_RESOURCE = RESOURCES.catalog
 
 /**
  * The catalog module's cache namespace.

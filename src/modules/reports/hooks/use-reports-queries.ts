@@ -13,10 +13,11 @@ import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import {
   keepPreviousDataInSameScope,
   queryKeys,
+  RESOURCES,
   type ScopeCacheKey,
 } from '@/shared/services/query-keys'
 
-export const REPORTS_RESOURCE = 'reports'
+export const REPORTS_RESOURCE = RESOURCES.reports
 
 export const reportsQueryKeys = {
   inventory: (scope: ScopeCacheKey, query: ListInventoryReportQuery) =>

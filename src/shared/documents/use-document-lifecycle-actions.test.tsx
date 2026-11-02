@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DOCUMENT_CONFLICT_GUIDANCE_AR } from '@/shared/documents/use-document-lifecycle-actions'
 import { createQueryClient } from '@/shared/services/query.client'
-import type { ScopeCacheKey } from '@/shared/services/query-keys'
+import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
 import { Toaster } from '@/shared/ui/toaster'
 import type { WarehouseDocumentDetails } from '@/shared/documents/types/document-wire.types'
 import type { WarehouseDocument } from '@/test/msw/document-engine.types'
@@ -384,6 +384,48 @@ describe('useDocumentLifecycleAction family', () => {
 
     await waitFor(() => expect(cachedDocument(client)?.documentStatus).toBe('Posted'))
     expect(cachedDocument(client)?.rowVersion).toBe(2)
+  })
+
+  it('a successful Post invalidates the whole active scope, not only the document detail', async () => {
+    const { client, toastWrapper } = createHarness()
+    const scope: ScopeCacheKey = { kind: 'enterprise' }
+    const store = {
+      documents: [
+        createWarehouseDocument({
+          documentId: DOCUMENT_ID,
+          documentStatus: 'Submitted',
+          rowVersion: 1,
+          policy: createDocumentPolicy({
+            documentId: DOCUMENT_ID,
+            documentStatus: 'Submitted',
+            rowVersion: 1,
+            signedOriginalSatisfied: true,
+          }),
+        }),
+      ],
+    }
+    useMutableDocumentHandlers(store)
+
+    // Seed two SAME-SCOPE caches the posting itself never touches: the document
+    // LIST and an inventory read. A scoped-only-document invalidation would
+    // leave both fresh; the regression is that neither may survive the Post.
+    const documentListKey = documentQueryKeys.documents(scope, {})
+    const inventoryKey = queryKeys.scoped(scope, 'inventory', 'balances')
+    client.setQueryData(documentListKey, [])
+    client.setQueryData(inventoryKey, [])
+
+    const { result } = renderHook(() => usePostDocumentMutation(DOCUMENT_ID), {
+      wrapper: toastWrapper,
+    })
+
+    act(() => {
+      result.current.mutate({ rowVersion: 1, idempotencyKey: 'post-key-invalidate' })
+    })
+
+    await waitFor(() => expect(screen.getByText('تم ترحيل السند بنجاح')).toBeInTheDocument())
+    await waitFor(() => expect(client.getQueryState(documentListKey)?.isInvalidated).toBe(true))
+    expect(client.getQueryState(inventoryKey)?.isInvalidated).toBe(true)
+    expect(result.current.error).toBeNull()
   })
 
   it('reverses a Posted document with a reason: cache updated and Arabic success toast', async () => {

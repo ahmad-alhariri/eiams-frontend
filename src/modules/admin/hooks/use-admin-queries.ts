@@ -7,10 +7,11 @@ import { MASTER_DATA_STALE_TIME, OPERATIONAL_STALE_TIME } from '@/shared/service
 import {
   keepPreviousDataInSameScope,
   queryKeys,
+  RESOURCES,
   type ScopeCacheKey,
 } from '@/shared/services/query-keys'
 
-const ADMIN_RESOURCE = 'admin'
+const ADMIN_RESOURCE = RESOURCES.admin
 const EMPTY_QUERY = {} as const
 
 export const adminQueryKeys = {

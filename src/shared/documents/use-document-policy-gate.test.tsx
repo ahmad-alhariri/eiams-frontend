@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { createQueryClient } from '@/shared/services/query.client'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 import { okJson } from '@/test/msw/envelope'
 import {
@@ -163,9 +164,18 @@ describe('useDocumentPolicyGate', () => {
         materialNameAr: 'ورق تصوير A4',
       },
     ]
-    const { result } = renderHook(() => useDocumentPolicyGate(DOCUMENT_ID, { lines: draftLines }), {
-      wrapper: createWrapper(),
-    })
+    // The capability path goes through the injected production binding now
+    // that the shared gate no longer imports the module hook itself.
+    const { result } = renderHook(
+      () =>
+        useDocumentPolicyGate(DOCUMENT_ID, {
+          lines: draftLines,
+          capabilityValidation: useWarehouseCapabilityValidation,
+        }),
+      {
+        wrapper: createWrapper(),
+      },
+    )
 
     await waitFor(() => expect(result.current.preflight).not.toBeNull())
 
@@ -256,9 +266,16 @@ describe('useDocumentPolicyGate', () => {
         materialNameAr: 'حبر طابعة',
       },
     ]
-    const { result } = renderHook(() => useDocumentPolicyGate(DOCUMENT_ID, { lines: draftLines }), {
-      wrapper: createWrapper(),
-    })
+    // The capability path goes through the injected production binding now
+    // that the shared gate no longer imports the module hook itself.
+    const { result } = renderHook(
+      () =>
+        useDocumentPolicyGate(DOCUMENT_ID, {
+          lines: draftLines,
+          capabilityValidation: useWarehouseCapabilityValidation,
+        }),
+      { wrapper: createWrapper() },
+    )
 
     await waitFor(() => expect(result.current.preflight).not.toBeNull())
     await waitFor(() =>

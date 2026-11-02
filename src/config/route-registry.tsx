@@ -75,7 +75,7 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   documentIssue: lazy(() => import('@/modules/issue/pages/issue-documents-list-page')),
   documentIssueNew: lazy(() => import('@/modules/issue/pages/issue-document-form-page')),
   documentIssueDetail: lazy(() => import('@/modules/issue/pages/issue-document-detail-page')),
-  documentTransfer: lazy(() => import('@/shared/documents/pages/document-list-page')),
+  documentTransfer: lazy(() => import('@/modules/transfer/pages/transfer-documents-list-page')),
   documentTransferNew: lazy(() => import('@/modules/transfer/pages/transfer-document-form-page')),
   documentTransferDetail: lazy(
     () => import('@/modules/transfer/pages/transfer-document-detail-page'),
@@ -83,7 +83,7 @@ const PAGES: Partial<Record<RouteKey, LazyPage>> = {
   documentOpening: lazy(() => import('@/modules/opening/pages/opening-documents-list-page')),
   documentOpeningNew: lazy(() => import('@/modules/opening/pages/opening-document-form-page')),
   documentOpeningDetail: lazy(() => import('@/shared/documents/pages/document-detail-page')),
-  documentReturn: lazy(() => import('@/shared/documents/pages/document-list-page')),
+  documentReturn: lazy(() => import('@/modules/custody/pages/return-documents-list-page')),
   documentReturnNew: lazy(() => import('@/modules/custody/pages/return-document-form-page')),
   documentReturnDetail: lazy(() => import('@/modules/custody/pages/return-document-detail-page')),
   adjustments: lazy(() => import('@/modules/adjustment/pages/adjustments-list-page')),

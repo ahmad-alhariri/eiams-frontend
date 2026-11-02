@@ -2,13 +2,6 @@ import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
-import { ASSET_RESOURCE } from '@/modules/asset/hooks/use-asset-queries'
-import { AUDIT_RESOURCE } from '@/modules/audit/hooks/use-audit-queries'
-import { CUSTODY_RESOURCE } from '@/modules/custody/hooks/use-custody-queries'
-import { RETURN_RESOURCE } from '@/modules/custody/hooks/use-return-eligible-items'
-import { INVENTORY_RESOURCE } from '@/modules/inventory/hooks/use-inventory-queries'
-import { COUNT_RESOURCE } from '@/modules/inventory-count/hooks/use-count-queries'
-import { REPORTS_RESOURCE } from '@/modules/reports/hooks/use-reports-queries'
 import type {
   AdjustmentDraftRequest,
   AdjustmentUpdateRequest,
@@ -19,7 +12,6 @@ import type {
 import { adjustmentService } from '@/modules/adjustment/services/adjustment.service'
 import { documentService } from '@/shared/documents/document-transport'
 import type { PaperReferenceInput } from '@/shared/documents/use-document-draft-mutations'
-import { DOCUMENT_RESOURCE } from '@/shared/documents/use-document-queries'
 import { reportApiError } from '@/shared/services/api-error'
 import { toast } from '@/shared/ui/toast-manager'
 import { createIdempotencyKey, type IdempotencyKey } from '@/shared/services/mutation-safety'
@@ -27,10 +19,11 @@ import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import {
   keepPreviousDataInSameScope,
   queryKeys,
+  RESOURCES,
   type ScopeCacheKey,
 } from '@/shared/services/query-keys'
 
-const ADJUSTMENT_RESOURCE = 'adjustments'
+const ADJUSTMENT_RESOURCE = RESOURCES.adjustment
 
 export const adjustmentQueryKeys = {
   adjustments: (scope: ScopeCacheKey, query: ListAdjustmentsQuery) =>
@@ -81,14 +74,14 @@ export function useAdjustmentInvalidation() {
     // receiving, issue and transfer — an adjustment post cannot change them.
     const resources = [
       ADJUSTMENT_RESOURCE,
-      INVENTORY_RESOURCE,
-      ASSET_RESOURCE,
-      CUSTODY_RESOURCE,
-      DOCUMENT_RESOURCE,
-      COUNT_RESOURCE,
-      RETURN_RESOURCE,
-      REPORTS_RESOURCE,
-      AUDIT_RESOURCE,
+      RESOURCES.inventory,
+      RESOURCES.asset,
+      RESOURCES.custody,
+      RESOURCES.document,
+      RESOURCES.count,
+      RESOURCES.custodyReturn,
+      RESOURCES.reports,
+      RESOURCES.audit,
     ] as const
     for (const resource of resources) {
       // Built by the shared factory rather than by hand. A hand-derived prefix

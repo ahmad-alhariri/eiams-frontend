@@ -209,7 +209,7 @@ describe('SitesListPage', () => {
     const dialog = screen.getByRole('dialog')
 
     expect(await within(dialog).findByRole('status')).toBeInTheDocument()
-    expect(within(dialog).getByText(/يعرض النظام أول 1 عنصراً من أصل 101/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/يعرض النظام أول ١ عنصراً من أصل ١٠١/)).toBeInTheDocument()
   })
 
   it('updates an existing site by sending only the fields the update body binds', async () => {
