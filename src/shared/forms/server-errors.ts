@@ -1,6 +1,6 @@
 import type { FieldPath, FieldValues, UseFormReturn } from 'react-hook-form'
 
-import type { FieldError } from '@/shared/services/api-error'
+import { normalizeApiError, type FieldError } from '@/shared/services/api-error'
 
 /**
  * Flattens contract FieldError payloads into a field → Arabic message map
@@ -75,4 +75,34 @@ export function setFormServerErrors<TValues extends FieldValues>(
       }
     },
   })
+}
+
+/**
+ * Runs a form submit and maps a rejected write back onto the form fields.
+ *
+ * Every production dialog needs the same three steps: drop the errors of the
+ * previous attempt, run the caller's submit, and turn the contract field
+ * errors into inline Arabic messages. Repeating that in each dialog puts the
+ * error path in six places, and a dialog that forgets a step keeps a stale
+ * message on screen. The key list stays with the caller: it is the dialog's
+ * own allow-list, and a dialog that shows a create-only field as a note has no
+ * form field to carry that error.
+ */
+export async function submitWithServerErrors<TValues extends FieldValues>(
+  form: UseFormReturn<TValues>,
+  values: TValues,
+  onSubmit: (values: TValues) => Promise<void>,
+  schemaKeys?: readonly string[],
+): Promise<void> {
+  form.clearErrors()
+  try {
+    await onSubmit(values)
+  } catch (error: unknown) {
+    const apiError = normalizeApiError(error)
+    setFormServerErrors(
+      form,
+      apiError.fieldErrors,
+      schemaKeys === undefined ? undefined : { schemaKeys },
+    )
+  }
 }

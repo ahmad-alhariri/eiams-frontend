@@ -18,8 +18,7 @@ import {
 import type { Material, MaterialFamily, UnitOfMeasure } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { useConfirm } from '@/shared/hooks/use-confirm'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { Button } from '@/shared/ui/button'
 import { Checkbox } from '@/shared/ui/checkbox'
 import {
@@ -173,27 +172,18 @@ export function MaterialFormDialog({
     [confirmClassificationChange, form],
   )
 
-  const submit = async (values: MaterialFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: [
-          'code',
-          'nameAr',
-          'nameEn',
-          'familyId',
-          'baseUnitId',
-          'materialKind',
-          'trackingType',
-          'hasExpiry',
-          'attributes',
-        ],
-      })
-    }
-  }
+  const submit = (values: MaterialFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, [
+      'code',
+      'nameAr',
+      'nameEn',
+      'familyId',
+      'baseUnitId',
+      'materialKind',
+      'trackingType',
+      'hasExpiry',
+      'attributes',
+    ])
 
   return (
     <>

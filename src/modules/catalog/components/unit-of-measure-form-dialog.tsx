@@ -8,8 +8,7 @@ import {
 } from '@/modules/catalog/schemas/unit-of-measure.schemas'
 import type { UnitOfMeasure } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -62,17 +61,8 @@ export function UnitOfMeasureFormDialog({
     })
   }, [form, open, unit])
 
-  const submit = async (values: UnitOfMeasureFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['name', 'symbol', 'unitType'],
-      })
-    }
-  }
+  const submit = (values: UnitOfMeasureFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, ['name', 'symbol', 'unitType'])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
