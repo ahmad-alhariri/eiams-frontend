@@ -316,3 +316,15 @@ and `useUpdateRoleMetadataMutation` exist but have no calling UI. So nothing yet
 grey out the scope-type control for a seeded role. When that form is built it must render
 those scopes read-only for seeded roles rather than relying on the backend to reject the
 save; the backend guard is the enforcement, not the affordance.
+# Addendum 4: where the scope vocabulary lives in the frontend (2026-11-02)
+
+The scope-type vocabulary (`RoleScopeType` and its Arabic labels
+`ROLE_SCOPE_TYPE_LABELS_AR`) now lives in
+`src/shared/types/scope.types.ts`. `src/modules/admin/types/role.types.ts`
+re-exports it unchanged, so every existing import keeps working and the Arabic
+label values are byte-identical to the ones ratified above.
+
+The move was forced by an import cycle: the auth module's session display
+needed the labels, and the admin module's mutations needed the auth module's
+session lifecycle. The vocabulary describes a scope rather than a role, so it
+belongs with the shared types instead of inside the admin feature.

@@ -108,19 +108,30 @@ factory's.
    as `assetQueryKeys.all(scope)`). Never hand-write the array, and never pass
    a bare namespace fragment such as `['scoped']`, which sweeps every resource
    in every scope.
-3. **Cross-module invalidation names the owning module's constant.** Import
-   the resource constant from the module that owns it — for example
-   `ASSET_RESOURCE`, `CUSTODY_RESOURCE`, `DOCUMENT_RESOURCE`,
-   `INVENTORY_RESOURCE`, `COUNT_RESOURCE`, `RETURN_RESOURCE`,
-   `REPORTS_RESOURCE` or `AUDIT_RESOURCE` — and export it there if it is not
-   exported yet. A mirrored string literal drifts from its owner.
+3. **Cross-module invalidation names the resource, and the resource has one
+   owner.** The cache vocabulary lives in the `RESOURCES` registry in
+   `src/shared/services/query-keys.ts`. A module keeps its own constant name as
+   an alias — `export const ASSET_RESOURCE = RESOURCES.asset` — and every
+   cross-module invalidation reads the registry, never the owning module's hook.
+   A mirrored string literal drifts from its owner, and importing the owner's
+   constant makes every feature depend on its neighbour: add the resource to
+   `RESOURCES` first, then alias it in the module that owns it.
 4. **Invalidate exactly the resources the mutation can change.** One policy per
    domain, shared by its query hook and its action hook, covering the resources
    the contract response affects. Removing a target requires a test that proves
    the read still refreshes: seed the cached key, run the mutation, assert
    `getQueryState(key)?.isInvalidated === true`. Asserting that
    `invalidateQueries` was called proves nothing about whether the key matched.
-5. **The scan enforces this.** The guard in
+5. **A document lifecycle mutation invalidates the whole active scope.**
+   Posting a warehouse document changes balances, stock movements, asset status,
+   custody rows and the document lists at once, and which resources change depends
+   on the document type and its lines. The document lifecycle therefore calls
+   `invalidateScopedQueries(queryClient, activeScopeCacheKey)` (see
+   `src/shared/services/query-keys.ts`) instead of naming resources. A scope
+   invalidation cannot leak into another scope and cannot miss a resource the
+   contract changed. The narrower per-resource policy below stays correct for the
+   mutations whose effect really is bounded, such as an adjustment post.
+6. **The scan enforces this.** The guard in
    `src/test/feature-service-composition-standard-scans.test.ts` reports
    hand-derived prefixes, and its derivation window looks both before and after
    the match, so a `const prefix = [...]` written above the `queryKey:` line is

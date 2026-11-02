@@ -115,6 +115,24 @@ WH_MGR:     Submitted → (review) → Post → Posted
 ```
 
 This prevents a single user from both creating and finalising a document without oversight.
+### 3.2 Frontend source boundaries
+
+The layers above are source boundaries too, and they are enforced in the tree:
+
+- `src/modules/<domain>` owns its feature end to end: pages, components, hooks,
+  schemas, services and types.
+- `src/shared` owns the document spine, the UI kit, the API transport and the
+  infrastructure every feature uses.
+- `src/shared` never imports a feature module. Where a shared component needs a
+  feature runtime (an option loader, a capability validator), the feature binds
+  it at the page seam and the shared component receives it as a prop with an
+  explicit unbound fallback.
+- A wire contract the shared spine genuinely needs lives in `src/shared/types`
+  (`warehouse.wire-types.ts`, `scope.types.ts`), not in a global type registry.
+
+The audit that produced this arrangement, including the findings that were
+withdrawn after verification, is in
+`docs/frontend-architecture-audit-2026-11-02.md`.
 
 ---
 

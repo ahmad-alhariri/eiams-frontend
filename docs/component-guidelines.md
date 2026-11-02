@@ -154,6 +154,12 @@ Forms must support:
 - keyboard operation and focus on actionable invalid fields;
 - contract-level concurrency/version fields where required;
 - lifecycle-state read-only behavior for non-Draft documents.
+A form whose write can be rejected shares one path: `submitWithServerErrors(form,
+values, onSubmit, fieldKeys)` in `src/shared/forms/server-errors.ts` clears the
+previous attempt's errors, awaits the mutation, and maps the rejected write onto
+the owning fields with Arabic copy. The dialog keeps its own list of owned field
+keys, because a dialog that renders a field as a note has no form field to carry
+the error. Do not copy the submit-and-map block into a new dialog.
 
 ## 8. Data tables
 

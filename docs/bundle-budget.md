@@ -2,14 +2,14 @@
 
 **Status:** Enforced in CI
 **Bead:** `eiams-frontend-e25-t06`
-**Derived:** 2026-10-28, re-derived 2026-10-30
+**Derived:** 2026-10-28, re-derived 2026-10-30 and 2026-11-02
 **Mechanism:** `scripts/check-bundle-budget.mjs` plus `src/test/lazy-route-budget.test.ts`
 
 ## What these numbers are, and what they are not
 
 No product document states a bundle size target. The numbers below are
 **regression ceilings**: they were derived from a production build (2026-10-28,
-re-derived 2026-10-30) so that a change which quietly inflates the shipped
+re-derived 2026-10-30 and 2026-11-02) so that a change which quietly inflates the shipped
 bundle, or quietly replaces a lazily imported route page with a static import,
 **fails the build** instead of reaching users. They are not performance targets
 and they are not a claim that the current bundle is the right size.
@@ -26,9 +26,9 @@ copy to drift.
 
 | Ceiling | Value | Measured from |
 | --- | --- | --- |
-| `maxJsChunkCount` | 168 | count of `dist/assets/*.js` |
-| `maxJsTotalBytes` | 1613293 | summed size of `dist/assets/*.js` |
-| `maxLargestChunkBytes` | 344082 | largest single `dist/assets/*.js` |
+| `maxJsChunkCount` | 169 | count of `dist/assets/*.js` |
+| `maxJsTotalBytes` | 1615445 | summed size of `dist/assets/*.js` |
+| `maxLargestChunkBytes` | 344550 | largest single `dist/assets/*.js` |
 | `routePageCount` | 59 | `getWiredRouteKeys().length` |
 
 Re-measure with `pnpm run build`, then sum the sizes of the files in
@@ -44,11 +44,20 @@ Re-measure with `pnpm run build`, then sum the sizes of the files in
 | 2026-10-30 | `eiams-frontend-e25-t07` | server-table workflow hardening (scope-aware placeholders, refresh state, pagination clamp) | 168 | 1612779 | 344020 |
 | 2026-10-30 | `eiams-frontend-e25-t04` | responsive workflow audit (mobile touch-target floor on the shared Button, checkbox hit area, date-picker clear button, logical drawer inset) | 168 | 1613066 | 344064 |
 | 2026-10-30 | `eiams-frontend-e25-t04` (fix round) | element-level touch-target fixes (header brand link, table-cell link rule, print trigger, shared select and dropdown options) | 168 | 1613293 | 344082 |
+| 2026-11-02 | frontend architecture remediation | shared-to-module dependency direction, scope-wide invalidation, centralized query-resource vocabulary, and the Arabic-digit conversions that shipped with them | 169 | 1615445 | 344550 |
 
 The `e25-t04` growth is 287 bytes of Tailwind class names in the shared UI
 chunks, 44 of them in the largest chunk (`index-*.js`); its fix round adds a
 further 227 bytes for the same reason. No module, chunk or route was added,
 and the route page count is unchanged at 59.
+
+The 2026-11-02 growth is three new lazy chunks (34 bytes for the shared
+active-scope shim, 268 bytes for each of the two document-list route wrappers) plus
+the byte cost of the Arabic-digit work that was in the tree at the same time. The
+scope vocabulary is type-only and emits no chunk, and no route was added, so the
+route page count is unchanged at 59. The measured bundle is now 1,615,035 bytes,
+which is 410 bytes UNDER the ceiling, so the ceiling was deliberately left where it
+is rather than re-derived downwards.
 
 ## The lazy-route invariant
 
