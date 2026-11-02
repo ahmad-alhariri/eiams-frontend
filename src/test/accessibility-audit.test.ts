@@ -34,7 +34,7 @@ const SCANNED = applicationSourceFiles()
 // new application files. They read no test support, so the no-offenders
 // assertion below stays green.
 // +5 (P0-1): shared warehouse wire-types/active-scope and the document list seams.
-const EXPECTED_SCANNED_FILES = 417 // +2: shared wire primitives + catalog wire types
+const EXPECTED_SCANNED_FILES = 413 // +2: shared wire primitives + catalog wire types
 
 /** An INFINITE (looping) animation. The one-shot enter/exit transitions use
  * a different mechanism (motion-reduce:data-open:animate-none), so they are

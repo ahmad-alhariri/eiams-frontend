@@ -83,7 +83,7 @@ Three things were structurally sound and were deliberately left alone:
 | Category | File / symbol | Evidence | Classification | Action | Risk |
 | --- | --- | --- | --- | --- | --- |
 | Dependency | `react-pdf`, `@react-pdf/renderer` | zero library imports in `src/`; every "PDF" hit is user-visible copy (`src/app/gallery/gallery-sections.tsx:54`, `src/shared/feedback/file-dropzone.tsx:59`) | VERIFIED_UNUSED | removed with `pnpm remove`; the lockfile lost 611 lines | MEDIUM, and now closed: the build and the full suite passed after removal |
-| Component | `src/shared/ui/radio-group.tsx` | imported only by its own test (`src/shared/ui/selection-primitives.test.tsx:15`); the `RadioGroup` used elsewhere comes from `@base-ui/react` (`src/shared/ui/dropdown-menu.tsx:134`) | VERIFIED_UNUSED | candidate for deletion, not done here: the shared UI kit was out of scope for this work | LOW |
+| Component | `src/shared/ui/radio-group.tsx` | imported only by its own test (`src/shared/ui/selection-primitives.test.tsx:15`); the `RadioGroup` used elsewhere comes from `@base-ui/react` (`src/shared/ui/dropdown-menu.tsx:134`) | VERIFIED_UNUSED | **deleted** (batch B1) | LOW |
 | Test file | `src/shared/ui/action-text-entry-primitives.test.tsx` | the name matches no component; the file tests Button, Input and Textarea | VERIFIED_UNUSED (mislabel) | candidate for rename, not done here | LOW |
 | Service | `src/shared/services/api.client.ts` | imported only by `src/contract-smoke/*` and one app-router test; no production module imports it | TEST-ONLY | keep: it is the contract-smoke harness | LOW |
 | Dependency | `msw` | every import sits under `src/test/` | TEST-ONLY | keep | LOW |

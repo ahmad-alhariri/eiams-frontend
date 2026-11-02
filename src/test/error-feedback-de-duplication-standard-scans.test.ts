@@ -46,7 +46,7 @@ describe('error-feedback-de-duplication-standard-scans', () => {
   // `shared/layout/route-keys.ts` are new application files. Neither raises a
   // toast, so the no-offenders assertions below stay green.
   // +5 (P0-1): shared warehouse wire-types/active-scope, the transfer/return
-  const EXPECTED_SCANNED_FILES = 379 // +2: shared wire primitives + catalog wire types
+  const EXPECTED_SCANNED_FILES = 413 // +2: shared wire primitives + catalog wire types
   assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
 
   // Fence 1 — only api-error.ts may build the toast.error({ title, ...(detailAr === null ? {} : { description }) }) shape

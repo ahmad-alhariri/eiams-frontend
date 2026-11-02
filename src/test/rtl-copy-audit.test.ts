@@ -21,7 +21,7 @@ import {
 const SCANNED = applicationSourceFiles().filter(
   (file) => !relativeToRepo(file).startsWith('src/app/gallery/'),
 )
-const EXPECTED_SCANNED_FILES = 396 // +2: shared wire primitives + catalog wire types
+const EXPECTED_SCANNED_FILES = 413 // +2: shared wire primitives + catalog wire types
 
 /** Attribute names whose value a user reads on screen. */
 const USER_VISIBLE_ATTRIBUTES = [

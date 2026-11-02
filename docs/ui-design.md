@@ -597,15 +597,7 @@ boxShadow: {
     background-position: 200% 0;
   }
 }
-@keyframes pulse-dot {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(66, 129, 119, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(66, 129, 119, 0);
-  }
-}
+/* pulse-dot removed — 0 production uses */
 ```
 
 ---
@@ -696,10 +688,7 @@ export default {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
         },
-        "pulse-dot": {
-          "0%, 100%": { boxShadow: "0 0 0 0 rgba(66, 129, 119, 0.4)" },
-          "50%": { boxShadow: "0 0 0 8px rgba(66, 129, 119, 0)" },
-        },
+        /* pulse-dot removed — 0 uses */
       },
     },
   },

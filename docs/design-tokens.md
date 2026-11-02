@@ -134,7 +134,7 @@ success color.
 | Token | Duration | Use |
 | --- | --- | --- |
 | `animate-shimmer` | 1.5s linear infinite | Skeleton loading |
-| `animate-pulse-dot` | 2s infinite | Current timeline marker |
+| `animate-pulse-dot` | — | **deleted** (0 uses) |
 | Page transition | 200ms | Route/page fade |
 | Modal transition | 250ms | Scale and fade open |
 | Sidebar transition | 300ms | Width/drawer change |

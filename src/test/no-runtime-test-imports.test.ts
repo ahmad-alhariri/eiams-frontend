@@ -178,7 +178,7 @@ import {
 // announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
 // new application files. They read no test support, so the no-offenders
 // assertion below stays green.
-const SCANNED_FILE_COUNT = 417 // +2: shared wire primitives + catalog wire types
+const SCANNED_FILE_COUNT = 413 // +2: shared wire primitives + catalog wire types
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

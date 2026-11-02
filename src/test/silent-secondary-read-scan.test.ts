@@ -47,7 +47,7 @@ import {
 // new application files. They read no test support, so the no-offenders
 // assertion below stays green.
 // +5 since 409 (P0-1): shared `types/warehouse.wire-types.ts` and
-const EXPECTED_SCANNED_FILES = 417 // +2: shared wire primitives + catalog wire types
+const EXPECTED_SCANNED_FILES = 413 // +2: shared wire primitives + catalog wire types
 
 describe('a failed secondary read stays distinguishable (source scan)', () => {
   it('scans the expected production file set, so a narrowed glob cannot pass silently', () => {

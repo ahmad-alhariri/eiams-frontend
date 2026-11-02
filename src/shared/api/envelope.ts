@@ -142,26 +142,6 @@ export interface ApiPage<T> extends ApiPaginationResponse {
  * backend sends both today with the same value; if one is ever dropped or renamed,
  * a table must not fall back to showing "0 results".
  */
-export interface UiPage<T> {
-  readonly items: readonly T[]
-  readonly page: number
-  readonly pageSize: number
-  readonly totalCount: number
-  readonly totalPages: number
-  readonly hasNextPage: boolean
-}
-
-export function toUiPage<T>(page: ApiPage<T>): UiPage<T> {
-  return {
-    items: page.data,
-    page: page.page,
-    pageSize: page.page_size,
-    totalCount: page.total_count ?? page.total_items ?? page.data.length,
-    totalPages: page.total_pages ?? 1,
-    hasNextPage: page.has_next_page,
-  }
-}
-
 function unwrapEnvelope<T>(value: ApiResponse<T>): ApiSuccessResponse<T> {
   if (isApiErrorResponse(value)) {
     throw new Error(`Unwrap expected a success envelope but received "${value.error.code}".`)

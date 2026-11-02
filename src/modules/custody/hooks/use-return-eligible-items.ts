@@ -6,11 +6,7 @@ import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-con
 import { returnService } from '@/modules/custody/services/return.service'
 import type { ReturnEligibleItem } from '@/modules/custody/types/return.types'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
-import {
-  keepPreviousDataInSameScope,
-  queryKeys,
-  RESOURCES,
-} from '@/shared/services/query-keys'
+import { keepPreviousDataInSameScope, queryKeys, RESOURCES } from '@/shared/services/query-keys'
 
 export const RETURN_RESOURCE = RESOURCES.custodyReturn
 

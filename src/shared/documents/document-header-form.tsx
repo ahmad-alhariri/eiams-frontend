@@ -331,11 +331,10 @@ export function DocumentHeaderSection({
   // The pages own the warehouse binding (production loader + scope); the
   // shared section only reads scope readiness for bare mounts it renders
   // itself (gallery, isolated tests).
-  const selector =
-    warehouseSelector ?? {
-      loadOptions: UNBOUND_WAREHOUSE_OPTIONS,
-      scopeReady: activeScopeCacheKey !== undefined,
-    }
+  const selector = warehouseSelector ?? {
+    loadOptions: UNBOUND_WAREHOUSE_OPTIONS,
+    scopeReady: activeScopeCacheKey !== undefined,
+  }
   const headerValues = useWatch({
     control: form.control,
     name: HEADER_VALUE_NAMES,

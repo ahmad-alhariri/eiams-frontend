@@ -13,9 +13,6 @@ import DocumentListPage from '@/shared/documents/pages/document-list-page'
 export default function IssueDocumentsListPage() {
   const warehouseSelector = useScopedWarehouseSelector()
   return (
-    <DocumentListPage
-      entry={ISSUE_DOCUMENT_LIST_ENTRY}
-      warehouseSelector={warehouseSelector}
-    />
+    <DocumentListPage entry={ISSUE_DOCUMENT_LIST_ENTRY} warehouseSelector={warehouseSelector} />
   )
 }

@@ -62,7 +62,6 @@ A government-grade **Document-Driven** inventory and asset management system. Ev
 | Forms        | React Hook Form + Zod                                                          |
 | HTTP         | Axios                                                                          |
 | Icons        | Tabler Icons                                                                   |
-| Charts       | Recharts                                                                       |
 | Date         | Day.js                                                                         |
 | File Upload  | react-dropzone                                                                 |
 | PDF          | react-pdf (viewer) + @react-pdf/renderer (report exports)                    |

@@ -256,11 +256,11 @@ After a fresh production build:
 | `.min-w-[600px]` | present | **gone** | — |
 | `.max-md:right-0` | present | **gone** | — |
 | `.text-left` | present | present | `src/app/gallery/demos/selector-adapters-demo.tsx:142` |
-| `.after:-inset-x-3` | present | present | `src/shared/ui/switch.tsx:16`, `src/shared/ui/radio-group.tsx:25` |
+| `.after:-inset-x-3` | present | **gone** | — (switch.tsx / radio-group.tsx deleted) |
 
-The two rules that remain are **not** dead: `.text-left` is used by the
-dev-only gallery's selector-adapters demo and `.after:-inset-x-3` by the
-shared switch and radio group. Excluding the gallery from the content
+The remaining rule is **not** dead: `.text-left` is used by the
+dev-only gallery's selector-adapters demo. `.after:-inset-x-3` is gone
+because `switch.tsx` and `radio-group.tsx` were deleted. Excluding the gallery from the content
 detection as well would remove `.text-left` from the production stylesheet,
 but it would also strip EVERY utility the dev-only gallery uses and leave
 that QA surface unstyled, so the gallery stays in the scan.
