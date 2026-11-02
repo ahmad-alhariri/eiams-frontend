@@ -40,9 +40,9 @@ import { DatePicker } from '@/shared/ui/date-picker'
 import { cn } from '@/shared/utils/class-names'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { CapabilityOperation } from '@/modules/warehouse/types/warehouse.types'
+import type { CapabilityOperation } from '@/shared/types/warehouse.wire-types'
 import type { DocumentType } from '@/shared/documents/types/document-wire.types'
-import type { Material, MaterialUnitConversion } from '@/modules/catalog/types/catalog.types'
+import type { Material, MaterialUnitConversion } from '@/shared/types/catalog.wire-types'
 import { toArabicDigits } from '@/shared/utils/arabic-numbers'
 
 // The editor is a component file by contract; its schema and draft mapper live

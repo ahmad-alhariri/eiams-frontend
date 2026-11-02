@@ -57,12 +57,20 @@ import type {
   Material,
   MaterialKind,
   MaterialStatus,
+  MaterialUnitConversion,
   NamedReference,
   TrackingType,
 } from '@/shared/types/catalog.wire-types'
 
 export type { RecordStatus, Uuid }
-export type { Material, MaterialKind, MaterialStatus, NamedReference, TrackingType }
+export type {
+  Material,
+  MaterialKind,
+  MaterialStatus,
+  MaterialUnitConversion,
+  NamedReference,
+  TrackingType,
+}
 
 /**
  * Status as the backend ACCEPTS it in a `Set*Status` command body for
@@ -414,31 +422,6 @@ export type MaterialPage = ApiPage<Material>
 // ---------------------------------------------------------------------------
 // Material Unit Conversions
 // ---------------------------------------------------------------------------
-
-/**
- * `{ id, materialId, fromUnitId, toBaseUnitId, factor }`.
- *
- * NO `status` field — a conversion is not a suspendable master record; its
- * lifecycle is DELETE, not status change. That is also why
- * {@link MaterialUnitConversionPage} has no status filter and why the service
- * exposes `removeMaterialUnitConversion` and NO
- * `setMaterialUnitConversionStatus`.
- *
- * `factor` is a JSON **NUMBER** on the wire (`"factor":12.000000`), even
- * though the column is `DECIMAL(18,6)`. The shared `api-contracts.ts` design
- * note about `PositiveDecimal18_6` string transport describes the DOCUMENT
- * decimals; this field was verified live as a number, and the frozen
- * generated snapshot's `factor: string` is the fiction. Keep `number` — a
- * string here would fail JSON binding against the `decimal Factor` the
- * controllers declare.
- */
-export interface MaterialUnitConversion {
-  readonly id: Uuid
-  readonly materialId: Uuid
-  readonly fromUnitId: Uuid
-  readonly toBaseUnitId: Uuid
-  readonly factor: number
-}
 
 /** `POST /catalog/materials/{materialId}/unit-conversions` body — all three
  *  members `[JsonRequired]`. `toBaseUnitId` is the material's own base unit. */

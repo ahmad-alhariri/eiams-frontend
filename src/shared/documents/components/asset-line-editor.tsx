@@ -33,8 +33,8 @@ import type { OptionLoader } from '@/shared/selectors/selector-adapter'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
-import type { CapabilityOperation } from '@/modules/warehouse/types/warehouse.types'
-import type { Material } from '@/modules/catalog/types/catalog.types'
+import type { CapabilityOperation } from '@/shared/types/warehouse.wire-types'
+import type { Material } from '@/shared/types/catalog.wire-types'
 import { formatNumber, toArabicDigits } from '@/shared/utils/arabic-numbers'
 
 // The editor is a component file by contract; its schema and draft mapper live
