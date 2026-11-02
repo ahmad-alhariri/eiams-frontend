@@ -52,6 +52,9 @@ function createRecordingTransport(respond: (request: ApiRequest) => unknown): Re
         void _request
         throw new Error('reports-export.service never requests an empty body.')
       },
+      async requestBlob(): Promise<Blob> {
+        throw new Error('reports-export.service never requests a blob.')
+      },
     },
   }
 }

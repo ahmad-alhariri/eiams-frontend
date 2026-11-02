@@ -50,7 +50,7 @@ export function useCustodyRowQuery(custodyId: string | undefined) {
         if (found !== undefined) {
           return found
         }
-        if (pageNumber >= page.totalPages) {
+        if (page.totalPages !== null && pageNumber >= page.totalPages) {
           return null
         }
         pageNumber += 1

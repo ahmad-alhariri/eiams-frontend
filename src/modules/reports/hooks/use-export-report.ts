@@ -18,7 +18,10 @@ import {
   type ReportExportType,
   reportsExportService,
 } from '@/modules/reports/services/reports-export.service'
-import { apiClient } from '@/shared/services/api.client'
+import { apiTransport } from '@/shared/api/transport'
+import { normalizeApiError, reportApiError } from '@/shared/services/api-error'
+import { normalizeWireErrorCode } from '@/shared/api/envelope'
+import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
 
 // ---------------------------------------------------------------------------
 // Download trigger
@@ -124,27 +127,34 @@ export function useExportReport(options: UseExportReportOptions) {
       }
 
       if (status.status === 'failed') {
-        throw new Error(status.error ?? 'Export job failed.')
+        const errCopy = arabicCopyForCode(
+          status.error ? normalizeWireErrorCode(status.error) : null,
+        ) ?? { titleAr: 'فشل تصدير التقرير.', detailAr: null }
+        throw new Error(errCopy.titleAr)
       }
 
       if (status.status !== 'ready') {
-        throw new Error('Export timed out.')
+        throw new Error('انتهى وقت تصدير التقرير.')
       }
 
-      // Fetch the actual file from the download URL
-      const downloadResponse = await apiClient.get(status.downloadUrl, {
-        responseType: 'blob',
-        validateStatus: (s) => s < 500,
-      })
+      // Fetch the actual file from the download URL through the shared transport
+      let blob: Blob
+      try {
+        blob = await apiTransport.requestBlob({ path: status.downloadUrl, method: 'GET' })
+      } catch (e) {
+        const normalized = normalizeApiError(e)
+        reportApiError(e)
+        throw new Error(normalized.titleAr ?? 'فشل تحميل ملف التقرير.', { cause: e })
+      }
 
-      if (!downloadResponse.data) {
-        throw new Error('No file returned from download URL.')
+      if (!blob || blob.size === 0) {
+        throw new Error('لم يتم إرجاع ملف من عنوان التحميل.')
       }
 
       const readyStatus = status as ExportJobStatusReady
       const filename = `EIAMS_${reportType}_${filters?.dateFrom ?? 'start'}_${filters?.dateTo ?? 'end'}.${format}`
-      void readyStatus.recordCount // exported for future telemetry; not shown to user
-      triggerDownload(downloadResponse.data as Blob, filename)
+      void readyStatus.recordCount
+      triggerDownload(blob, filename)
       return { type: 'async', jobId: result.jobId, downloadUrl: status.downloadUrl }
     },
   })

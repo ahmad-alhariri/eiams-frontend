@@ -78,4 +78,7 @@ export interface ApiTransport {
   requestPage<TItem>(request: Readonly<ApiRequest>): Promise<ApiPage<TItem>>
 
   requestEmpty<TBody = unknown>(request: Readonly<ApiRequest<TBody>>): Promise<void>
+
+  /** Download a file as Blob; inherits the same axios instance (refresh/retry, gateway guard). */
+  requestBlob(request: Readonly<ApiRequest>): Promise<Blob>
 }

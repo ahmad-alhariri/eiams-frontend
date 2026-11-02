@@ -262,8 +262,8 @@ function WarehousesListPage() {
           }
           page={currentPage}
           pageSize={pageSize}
-          totalCount={page?.totalItems}
-          totalPages={Math.max(page?.totalPages ?? 1, 1)}
+          totalCount={page?.totalItems ?? null}
+          totalPages={page?.totalPages ?? null}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           searchQuery={search}

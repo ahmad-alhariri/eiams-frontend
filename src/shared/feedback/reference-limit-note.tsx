@@ -24,13 +24,18 @@ export interface ReferenceLimitNoteProps {
   /** Rows the reference query actually holds — `page.items.length`. */
   readonly loadedCount: number | undefined
   /** Rows the server reports in scope — `page.totalItems`. */
-  readonly totalCount: number | undefined
+  readonly totalCount: number | null | undefined
   /** Optional Arabic sentence appended after the limit statement. */
   readonly hint?: string
 }
 
 export function ReferenceLimitNote({ loadedCount, totalCount, hint }: ReferenceLimitNoteProps) {
-  if (loadedCount === undefined || totalCount === undefined || totalCount <= loadedCount) {
+  if (
+    loadedCount === undefined ||
+    totalCount === undefined ||
+    totalCount === null ||
+    totalCount <= loadedCount
+  ) {
     return null
   }
 

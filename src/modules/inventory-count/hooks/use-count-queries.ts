@@ -62,7 +62,7 @@ async function listAllCountLines(countId: string): Promise<readonly InventoryCou
     pageSize: ALL_COUNT_LINES_PAGE_SIZE,
   })
   const remainingPages = await Promise.all(
-    Array.from({ length: Math.max(0, firstPage.totalPages - 1) }, (_, index) =>
+    Array.from({ length: Math.max(0, (firstPage.totalPages ?? 1) - 1) }, (_, index) =>
       countService.listLines(countId, {
         page: index + 2,
         pageSize: ALL_COUNT_LINES_PAGE_SIZE,

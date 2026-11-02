@@ -273,8 +273,8 @@ function UsersListPage() {
           emptyDescription="لم يتم العثور على مستخدمين يطابقون معايير البحث الحالية."
           page={currentPage}
           pageSize={pageSize}
-          totalCount={page?.meta.totalItems}
-          totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
+          totalCount={page?.meta.totalItems ?? null}
+          totalPages={page?.meta.totalPages ?? null}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           searchQuery={search}

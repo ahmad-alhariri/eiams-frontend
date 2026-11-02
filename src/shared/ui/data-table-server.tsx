@@ -22,9 +22,9 @@ export interface DataTableServerProps<T extends RowData = RowData> extends Omit<
    * Total server-side record count for the current filters. `undefined`
    * while the count is pending hides the range text.
    */
-  totalCount: number | undefined
-  /** Total page count for the current filters, e.g. pagination.pageCount(totalCount). */
-  totalPages: number
+  totalCount: number | null | undefined
+  /** Total page count for the current filters. Null when the server has not computed it (cursor page). */
+  totalPages: number | null
   /** Navigates to a 1-based page, mirroring ServerPaginationState.setPage. */
   onPageChange: (page: number) => void
   /** Changes rows per page, mirroring ServerPaginationState.setPageSize. */
@@ -147,7 +147,9 @@ function DataTableServer<T extends RowData = RowData>({
       pageSize,
       offset: (page - 1) * pageSize,
       // totalPages arrives pre-computed from the parent (fetch owner).
-      pageCount: () => totalPages,
+      // Unknown total (cursor/keyset): assume at least one page so controls stay usable;
+      // never coerce to 0 (would render "0 results").
+      pageCount: () => totalPages ?? 1,
       setPage: onPageChange,
       setPageSize: onPageSizeChange,
       reset: () => onPageChange(1),
@@ -159,9 +161,9 @@ function DataTableServer<T extends RowData = RowData>({
   // `useServerPagination.setPage` only clamps to >= 1, so the view could sit on
   // page 5 of 2 and request rows the server no longer has. The table is the
   // first layer that sees both the current page and the server's page count.
-  const lastPage = Math.max(1, totalPages)
+  const lastPage = Math.max(1, totalPages ?? 1)
   useEffect(() => {
-    if (totalCount !== undefined && page > lastPage) {
+    if (totalCount !== undefined && totalCount !== null && page > lastPage) {
       onPageChange(lastPage)
     }
   }, [lastPage, onPageChange, page, totalCount])
@@ -179,7 +181,7 @@ function DataTableServer<T extends RowData = RowData>({
         />
       ) : null}
       <DataTable {...tableProps} />
-      <ServerPaginationControls pagination={pagination} totalCount={totalCount} />
+      <ServerPaginationControls pagination={pagination} totalCount={totalCount ?? undefined} />
     </div>
   )
 }

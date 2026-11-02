@@ -41,8 +41,8 @@ import type { ApiPaginationResponse } from './api-contracts'
 export interface NormalizedPaginationInput {
   readonly page: number
   readonly pageSize: number
-  readonly totalItems: number
-  readonly totalPages: number
+  readonly totalItems: number | null
+  readonly totalPages: number | null
   readonly hasPreviousPage: boolean
   readonly hasNextPage: boolean
   readonly totalCount: number | null
@@ -68,8 +68,8 @@ export function normalizePagination(
     return {
       page: 1,
       pageSize: 0,
-      totalItems: 0,
-      totalPages: 0,
+      totalItems: null,
+      totalPages: null,
       hasPreviousPage: false,
       hasNextPage: false,
       totalCount: null,

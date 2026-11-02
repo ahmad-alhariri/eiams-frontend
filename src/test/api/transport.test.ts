@@ -46,7 +46,7 @@ import type { ApiRequest, ApiTransport } from '@/shared/api/api-transport'
  *   - `transport-failure.test.ts` — errors, cancellation, request IDs.
  */
 
-const TRANSPORT_METHODS = ['request', 'requestPage', 'requestEmpty'] as const
+const TRANSPORT_METHODS = ['request', 'requestPage', 'requestEmpty', 'requestBlob'] as const
 
 /** Every method name the interface exposes, taken from the interface's type. */
 type TransportMember = keyof ApiTransport
@@ -65,14 +65,15 @@ const TRANSPORT_SHAPE = {
   request: true,
   requestPage: true,
   requestEmpty: true,
+  requestBlob: true,
 } satisfies Readonly<Record<TransportMember, true>>
 
 describe('ApiTransport interface', () => {
-  it('exposes exactly the three focused methods', () => {
+  it('exposes exactly the four focused methods', () => {
     // Runtime half: the two agree, so a member cannot be declared-and-forgotten
     // or listed-and-absent.
     expect(Object.keys(TRANSPORT_SHAPE).sort()).toEqual([...TRANSPORT_METHODS].sort())
-    expect(TRANSPORT_METHODS).toHaveLength(3)
+    expect(TRANSPORT_METHODS).toHaveLength(4)
   })
 
   it('carries no module-specific endpoint in its request shape', () => {

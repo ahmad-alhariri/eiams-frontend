@@ -252,8 +252,8 @@ export default function AdjustmentsListPage() {
           }
           page={pagination.page}
           pageSize={pagination.pageSize}
-          totalCount={adjustmentsQuery.data?.totalItems}
-          totalPages={Math.max(adjustmentsQuery.data?.totalPages ?? 1, 1)}
+          totalCount={adjustmentsQuery.data?.totalItems ?? null}
+          totalPages={adjustmentsQuery.data?.totalPages ?? null}
           onPageChange={pagination.setPage}
           onPageSizeChange={pagination.setPageSize}
         />

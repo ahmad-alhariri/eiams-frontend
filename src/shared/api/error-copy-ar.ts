@@ -716,7 +716,12 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
   },
 }
 
-const ALL: Readonly<Record<string, ArabicErrorCopy>> = { ...REQUEST, ...AUTH, ...DOMAIN }
+const EXPORT: Readonly<Record<string, ArabicErrorCopy>> = {
+  EXPORT_TIMEOUT: { titleAr: 'انتهى وقت تصدير التقرير.', detailAr: null },
+  EXPORT_NO_FILE: { titleAr: 'لم يتم إرجاع ملف من عنوان التحميل.', detailAr: null },
+}
+
+const ALL: Readonly<Record<string, ArabicErrorCopy>> = { ...REQUEST, ...AUTH, ...DOMAIN, ...EXPORT }
 
 /** Arabic copy for a normalized wire code, or null when the code is unmapped. */
 export function arabicCopyForCode(code: string | null): ArabicErrorCopy | null {

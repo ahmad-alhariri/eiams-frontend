@@ -13,7 +13,8 @@ import {
   type RefreshSessionRequest,
   type SessionAdapter,
 } from '@/shared/services/session-adapter'
-import { unwrapData, type ApiSuccessResponse } from '@/shared/api/envelope'
+import { unwrapData } from '@/shared/api/envelope'
+import type { ApiSuccessResponse } from '@/shared/api/api-contracts'
 import type { AuthTokenResponse } from '@/modules/auth/types/session.types'
 
 /**

@@ -56,8 +56,8 @@ export interface ApiSuccessResponse<T> {
 export interface ApiPaginationResponse {
   readonly page: number
   readonly page_size: number
-  readonly total_items: number
-  readonly total_pages: number
+  readonly total_items: number | null
+  readonly total_pages: number | null
   readonly has_previous_page: boolean
   readonly has_next_page: boolean
   readonly total_count: number | null
@@ -73,8 +73,8 @@ export interface ApiPage<TItem> {
   readonly items: ReadonlyArray<TItem>
   readonly page: number
   readonly pageSize: number
-  readonly totalItems: number
-  readonly totalPages: number
+  readonly totalItems: number | null
+  readonly totalPages: number | null
   readonly hasPreviousPage: boolean
   readonly hasNextPage: boolean
 }
@@ -107,15 +107,23 @@ export interface ApiResponseMeta {
  *    is mapped to safe Arabic fallback (`GATEWAY_PROBLEM.detailAr` already exists); `request_id`
  *    is propagated.
  */
+/** Field-level validation detail (wire shape, preserved from envelope). */
+export type ApiErrorDetails = Record<string, unknown>
+
+export interface ApiError {
+  readonly code: string
+  readonly message: string
+  readonly details: ApiErrorDetails
+  readonly request_id: string
+}
+
 export interface ApiErrorResponse {
   readonly success: false
-  readonly error: {
-    readonly code: string
-    readonly message: string
-    readonly details: unknown
-    readonly request_id: string
-  }
+  readonly error: ApiError
 }
+
+/** Generic response union (success | error envelope). */
+export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse
 
 /** Minimal resource identity response (mutation return shape per backend contract §2.1). */
 export interface ResourceIdResponse {

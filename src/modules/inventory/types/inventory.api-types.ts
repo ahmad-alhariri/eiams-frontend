@@ -52,9 +52,9 @@ export interface PageMeta {
   readonly pageIndex: number
   readonly pageSize: number
   readonly itemCount: number
-  readonly totalItems: number
-  readonly totalCount: number
-  readonly totalPages: number
+  readonly totalItems: number | null
+  readonly totalCount: number | null
+  readonly totalPages: number | null
   readonly hasNextPage: boolean
   readonly hasPreviousPage: boolean
 }
