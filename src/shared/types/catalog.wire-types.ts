@@ -7,7 +7,8 @@
  * every existing module import keeps compiling.
  */
 
-import type { Uuid } from '@/shared/types/wire-primitives'
+import type { RecordStatus, Uuid } from '@/shared/types/wire-primitives'
+export type { NamedReference } from '@/shared/types/wire-primitives'
 
 /**
  * Material status as the backend SERVES it — a superset of {@link RecordStatus}
@@ -40,18 +41,6 @@ export type MaterialKind = 'Consumable' | 'Durable' | 'Asset'
  * it cannot save.
  */
 export type TrackingType = 'Quantity' | 'Serial'
-
-/**
- * Retained for the shared selector adapters (`named-reference-selector.ts`)
- * and for call sites that still render their own label lookups. NO catalog
- * projection nests one any more — the material record carries flat
- * `materialDomainId`/`materialDomainName`/`baseUnitId`/`baseUnitSymbol`
- * instead — so do not reintroduce it into these contracts.
- */
-export interface NamedReference {
-  readonly id: string
-  readonly displayName: string
-}
 
 /**
  * THE ONE VERSIONED AGGREGATE IN THIS MODULE — and the field is
@@ -129,4 +118,12 @@ export interface MaterialUnitConversion {
   readonly fromUnitId: Uuid
   readonly toBaseUnitId: Uuid
   readonly factor: number
+}
+
+/** `{ id, name, code, status }` — canonical owner; re-exported by catalog module. */
+export interface MaterialDomain {
+  readonly id: Uuid
+  readonly name: string
+  readonly code: string
+  readonly status: RecordStatus
 }

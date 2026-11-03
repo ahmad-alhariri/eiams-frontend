@@ -52,9 +52,10 @@
 // Shared types
 // ---------------------------------------------------------------------------
 
-import type { RecordStatus, Uuid } from '@/shared/types/wire-primitives'
+import type { RecordStatus, RecordStatusOrdinal, Uuid } from '@/shared/types/wire-primitives'
 import type {
   Material,
+  MaterialDomain,
   MaterialKind,
   MaterialStatus,
   MaterialUnitConversion,
@@ -62,9 +63,10 @@ import type {
   TrackingType,
 } from '@/shared/types/catalog.wire-types'
 
-export type { RecordStatus, Uuid }
+export type { RecordStatus, RecordStatusOrdinal, Uuid }
 export type {
   Material,
+  MaterialDomain,
   MaterialKind,
   MaterialStatus,
   MaterialUnitConversion,
@@ -93,21 +95,8 @@ export type {
  * `status` field read off a record as a command body; the shapes are
  * incompatible on purpose.
  */
-export type RecordStatusOrdinal = 0 | 1
-
-/**
- * `RecordStatus` → the integer a `Set*Status` command body requires.
- *
- * Build command bodies through this map (`statusCommandValue(target)`) rather
- * than writing bare `0`/`1` at each call site: the ordinals are only meaningful
- * next to the table on {@link RecordStatusOrdinal}, and a naked `0` at a call
- * site is indistinguishable from a falsy guard to the next reader. Same idiom
- * as `organization.api-types.ts` (`statusCommandValue`).
- */
-export const statusCommandValue: Readonly<Record<RecordStatus, RecordStatusOrdinal>> = {
-  Active: 0,
-  Inactive: 1,
-}
+/** Re-exported from the shared wire-primitives home; see {@link RecordStatusOrdinal}. */
+export { statusCommandValue } from '@/shared/types/wire-primitives'
 
 /**
  * Material status as `SetMaterialStatus` ACCEPTS it: the ordinal of
@@ -221,13 +210,7 @@ export type UnitOfMeasurePage = ApiPage<UnitOfMeasure>
 // Material Domains
 // ---------------------------------------------------------------------------
 
-/** `{ id, name, code, status }` — `name`, not `nameAr`. */
-export interface MaterialDomain {
-  readonly id: Uuid
-  readonly name: string
-  readonly code: string
-  readonly status: RecordStatus
-}
+/** MaterialDomain lives in `shared/types/catalog.wire-types`; re-exported from here. */
 
 /** `POST /catalog/domains` body. No `status`: a new domain is Active by
  *  definition, and status is a separate guarded command. */

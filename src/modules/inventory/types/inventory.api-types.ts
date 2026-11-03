@@ -7,7 +7,8 @@
  *   LineId, MovementType (string), QuantityDelta (decimal), PostedAtUtc, PostedBy
  */
 
-export type Uuid = string
+import type { Uuid } from '@/shared/types/wire-primitives'
+export type { Uuid } from '@/shared/types/wire-primitives'
 
 export type MovementType =
   'Issue' | 'Opening' | 'Receipt' | 'TransferIn' | 'TransferOut' | 'AdjustmentIn' | 'AdjustmentOut'

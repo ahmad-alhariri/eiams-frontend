@@ -29,61 +29,17 @@
  */
 
 // ---------------------------------------------------------------------------
-// Shared types
+// Shared types (single-owner, re-exported from shared homes)
 // ---------------------------------------------------------------------------
 
-/**
- * Status as the backend SERVES it: every response projection and every query
- * filter serialises the domain `RecordStatus` enum by NAME (`"Active"` /
- * `"Inactive"`).
- *
- * Never use this type for a `Set*Status` command body — see
- * {@link RecordStatusCommandValue}. The read/write split is not an inconsistency
- * to be smoothed over; it is the whole reason there are two types.
- */
-export type RecordStatus = 'Active' | 'Inactive'
-
-/**
- * Status as the backend ACCEPTS it in a `Set*Status` command body.
- *
- * Every such controller is `record RequestBody([JsonRequired] int Status)`, so
- * the wire value is the enum ORDINAL, not its name:
- *
- * ```text
- *   domain RecordStatus   |   wire `status`
- *  ---------------------- + ---------------
- *   Active               |   0
- *   Inactive             |   1
- * ```
- *
- * `{"status":"Active"}` is a JSON binding failure (400): ASP.NET cannot convert
- * a JSON string into `int`, and `[JsonRequired]` means an omitted `status` fails
- * the same way. So do not "helpfully" reuse a `status` field read off a record
- * as a command body — the shapes are incompatible on purpose.
- */
-export type RecordStatusCommandValue = 0 | 1
-
-/**
- * `RecordStatus` → the integer a `Set*Status` command body requires.
- *
- * Build command bodies through this map (`statusCommandValue(target)`) rather
- * than writing bare `0`/`1` at each call site: the ordinals are only meaningful
- * next to the table on {@link RecordStatusCommandValue}, and a naked `0` at a
- * call site is indistinguishable from a falsy guard to the next reader.
- */
-export const statusCommandValue: Readonly<Record<RecordStatus, RecordStatusCommandValue>> = {
-  Active: 0,
-  Inactive: 1,
-}
-
-/** Matches backend NamedReference: { id: Uuid, displayName: string } */
-export interface NamedReference {
-  readonly id: string
-  readonly displayName: string
-}
-
-/** Matches backend Uuid: string (GUID) */
-export type Uuid = string
+import type { RecordStatus, RecordStatusCommandValue, Uuid } from '@/shared/types/wire-primitives'
+export type {
+  NamedReference,
+  RecordStatus,
+  RecordStatusCommandValue,
+  Uuid,
+} from '@/shared/types/wire-primitives'
+export { statusCommandValue } from '@/shared/types/wire-primitives'
 
 /**
  * Every create in this module answers `{ id }` and nothing else: a `Result<Guid>`

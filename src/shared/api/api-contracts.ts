@@ -145,7 +145,8 @@ export interface ResourceIdResponse {
  * is `[JsonRequired] int Status`. The write mapping belongs to the module that
  * owns the command, not to the shared seam.
  */
-export type RecordStatus = 'Active' | 'Inactive'
+/** Re-exported from the shared wire-primitives home (the READ side of the status split). */
+export type { RecordStatus } from '@/shared/types/wire-primitives'
 
 /** Contract-shape validation helpers (not feature-level validation — feature-level `zod` schemas
  * live in `src/modules/<m>/schemas/*.schema.ts`, e.g. `receiving-info.schema.ts`).

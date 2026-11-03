@@ -50,6 +50,7 @@ export type {
   Uuid,
   Warehouse,
 } from '@/shared/types/warehouse.wire-types'
+export type { MaterialDomain } from '@/shared/types/catalog.wire-types'
 
 /**
  * The backend serialises `OperationType` as the enum NAME STRING (not the
@@ -106,12 +107,7 @@ export function isCapabilityOperation(value: string): value is CapabilityOperati
  * no materialDomainId alias and no rowVersion. Used by the warehouse
  * capabilities editor to populate the domain picker.
  */
-export interface MaterialDomain {
-  readonly id: Uuid
-  readonly name: string
-  readonly code: string
-  readonly status: RecordStatus
-}
+// MaterialDomain lives in shared/types/catalog.wire-types; re-exported above.
 
 // ---------------------------------------------------------------------------
 // Warehouses — the `Warehouse` response type lives in the shared wire-types
