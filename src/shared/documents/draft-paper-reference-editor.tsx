@@ -9,6 +9,7 @@ import { normalizeApiError } from '@/shared/services/api-error'
 import { isConcurrencyConflict } from '@/shared/services/mutation-safety'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
+import { useDocumentLifecyclePermissions } from './use-document-permissions'
 
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 
@@ -59,6 +60,7 @@ export function DraftPaperReferenceEditor({
   document,
   onConflict,
 }: DraftPaperReferenceEditorProps) {
+  const { isActionPermitted } = useDocumentLifecyclePermissions()
   const form = useForm<DraftPaperReferenceValues>({
     // The cast mirrors every page composing `documentHeaderSchema`: the
     // resolver is internally typed against the schema's input, while the form
@@ -100,7 +102,7 @@ export function DraftPaperReferenceEditor({
     }
   })
 
-  if (document.documentStatus !== 'Draft') {
+  if (document.documentStatus !== 'Draft' || !isActionPermitted('Edit')) {
     return null
   }
 
