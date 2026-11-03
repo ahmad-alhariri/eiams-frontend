@@ -6,11 +6,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { MaterialDomainFormDialog } from './material-domain-form-dialog'
 
 function fieldErrorAxiosError(fieldPath: string) {
-  return new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/', headers: {} }, undefined, {
+  return new axios.AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as unknown as axios.AxiosResponse<any>), undefined, {
     status: 400,
     statusText: 'Bad Request',
     headers: undefined,
-    config: { url: '/', headers: {} },
+    config: { url: '/', headers: {} } as any,
     data: {
       success: false,
       error: {
@@ -48,7 +48,7 @@ describe('MaterialDomainFormDialog server-error contract', () => {
   it('keeps previous generic-error outcome when no field errors map', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockRejectedValue(
-      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/', headers: {} }, undefined, {
+      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as unknown as axios.AxiosResponse<any>), undefined, {
         status: 500,
         data: {
           success: false,

@@ -245,7 +245,7 @@ describe('MaterialUnitConversionFormDialog server-error contract', () => {
   it('renders a contract field error inline in Arabic', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockRejectedValue(
-      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/', headers: {} }, undefined, {
+      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as unknown as axios.AxiosResponse<any>), undefined, {
         status: 400,
         data: {
           success: false,
@@ -256,7 +256,7 @@ describe('MaterialUnitConversionFormDialog server-error contract', () => {
             request_id: 't1',
           },
         },
-      }),
+      } as unknown as axios.AxiosResponse<any>),
     )
     render(
       <MaterialUnitConversionFormDialog
@@ -280,7 +280,7 @@ describe('MaterialUnitConversionFormDialog server-error contract', () => {
   it('keeps previous generic-error outcome when no field errors map', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockRejectedValue(
-      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/', headers: {} }, undefined, {
+      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as unknown as axios.AxiosResponse<any>), undefined, {
         status: 500,
         data: {
           success: false,
