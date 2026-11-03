@@ -1,4 +1,3 @@
-// @ts-nocheck // eslint-disable-line @typescript-eslint/ban-ts-comment
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import axios from 'axios'
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -73,8 +72,6 @@ function DialogHost({ editing }: { editing: boolean }) {
 afterEach(() => {
   activeScope.key = { kind: 'enterprise' }
 })
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 describe('UserFormDialog', () => {
   it('opens the create form with the fields the backend binds', async () => {
@@ -422,13 +419,11 @@ describe('UserFormDialog', () => {
   })
 })
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 describe('UserFormDialog server-error contract', () => {
   it('renders a contract field error inline in Arabic', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockRejectedValue(
-      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/' } as any, undefined, {
+      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/', headers: {} }, undefined, {
         status: 400,
         data: {
           success: false,
@@ -460,7 +455,7 @@ describe('UserFormDialog server-error contract', () => {
   it('keeps previous generic-error outcome when no field errors map', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockRejectedValue(
-      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/' } as any, undefined, {
+      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/', headers: {} }, undefined, {
         status: 500,
         data: {
           success: false,
@@ -471,7 +466,7 @@ describe('UserFormDialog server-error contract', () => {
             request_id: 't2',
           },
         },
-      }),
+      } as unknown as axios.AxiosResponse<any>),
     )
     render(
       <UserFormDialog
@@ -490,12 +485,3 @@ describe('UserFormDialog server-error contract', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })
-
-
-
-
-
-
-/* eslint-enable @typescript-eslint/no-explicit-any */
-
-

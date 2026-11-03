@@ -107,12 +107,7 @@ export function UserFormDialog({
   }, [form, open, user])
 
   const submit = (values: UserFormValues) =>
-    submitWithServerErrors(form, values, onSubmit, [
-      'email',
-      'username',
-      'firstName',
-      'lastName',
-    ])
+    submitWithServerErrors(form, values, onSubmit, ['email', 'username', 'firstName', 'lastName'])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

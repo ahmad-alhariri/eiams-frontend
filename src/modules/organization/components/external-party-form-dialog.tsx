@@ -54,12 +54,7 @@ export function ExternalPartyFormDialog({
   }, [form, open, party])
 
   const submit = (values: ExternalPartyFormValues) =>
-    submitWithServerErrors(form, values, onSubmit, [
-      'nameAr',
-      'code',
-      'contactInfo',
-      'notes',
-    ])
+    submitWithServerErrors(form, values, onSubmit, ['nameAr', 'code', 'contactInfo', 'notes'])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -1,4 +1,3 @@
-// @ts-nocheck // eslint-disable-line @typescript-eslint/ban-ts-comment
 import axios from 'axios'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -63,8 +62,6 @@ function makeConversion(overrides: Partial<MaterialUnitConversion> = {}): Materi
     ...overrides,
   }
 }
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 describe('MaterialUnitConversionFormDialog', () => {
   it('offers only units whose unitType matches the base unit, case-insensitively', async () => {
@@ -244,13 +241,11 @@ describe('MaterialUnitConversionFormDialog', () => {
   })
 })
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 describe('MaterialUnitConversionFormDialog server-error contract', () => {
   it('renders a contract field error inline in Arabic', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockRejectedValue(
-      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/' } as any, undefined, {
+      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/', headers: {} }, undefined, {
         status: 400,
         data: {
           success: false,
@@ -285,7 +280,7 @@ describe('MaterialUnitConversionFormDialog server-error contract', () => {
   it('keeps previous generic-error outcome when no field errors map', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockRejectedValue(
-      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/' } as any, undefined, {
+      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/', headers: {} }, undefined, {
         status: 500,
         data: {
           success: false,
@@ -296,7 +291,7 @@ describe('MaterialUnitConversionFormDialog server-error contract', () => {
             request_id: 't2',
           },
         },
-      }),
+      } as unknown as axios.AxiosResponse<any>),
     )
     render(
       <MaterialUnitConversionFormDialog
@@ -318,12 +313,3 @@ describe('MaterialUnitConversionFormDialog server-error contract', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })
-
-
-
-
-
-
-/* eslint-enable @typescript-eslint/no-explicit-any */
-
-

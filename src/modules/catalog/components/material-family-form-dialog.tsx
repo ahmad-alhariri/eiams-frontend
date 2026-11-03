@@ -79,11 +79,7 @@ export function MaterialFamilyFormDialog({
       form.setError('categoryId', { message: 'اختر تصنيفاً نشطاً للعائلة.' })
       return
     }
-    return submitWithServerErrors(form, values, onSubmit, [
-      'categoryId',
-      'code',
-      'name',
-    ])
+    return submitWithServerErrors(form, values, onSubmit, ['categoryId', 'code', 'name'])
   }
 
   return (
