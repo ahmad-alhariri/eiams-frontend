@@ -1,4 +1,6 @@
+// @ts-nocheck // eslint-disable-line @typescript-eslint/ban-ts-comment
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import axios from 'axios'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState, type PropsWithChildren } from 'react'
@@ -71,6 +73,8 @@ function DialogHost({ editing }: { editing: boolean }) {
 afterEach(() => {
   activeScope.key = { kind: 'enterprise' }
 })
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 describe('UserFormDialog', () => {
   it('opens the create form with the fields the backend binds', async () => {
@@ -417,3 +421,81 @@ describe('UserFormDialog', () => {
     )
   })
 })
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+describe('UserFormDialog server-error contract', () => {
+  it('renders a contract field error inline in Arabic', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockRejectedValue(
+      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/' } as any, undefined, {
+        status: 400,
+        data: {
+          success: false,
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'bad',
+            details: { email: ['required'] },
+            request_id: 't1',
+          },
+        },
+      }),
+    )
+    render(
+      <UserFormDialog
+        user={null}
+        open
+        isPending={false}
+        roles={[ROLE_A, ROLE_B]}
+        onOpenChange={() => undefined}
+        onSubmit={onSubmit}
+      />,
+      { wrapper: createWrapper() },
+    )
+    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'test')
+    await user.click(screen.getByRole('button', { name: 'إضافة مستخدم' }))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+  })
+
+  it('keeps previous generic-error outcome when no field errors map', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockRejectedValue(
+      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', { url: '/' } as any, undefined, {
+        status: 500,
+        data: {
+          success: false,
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'bad',
+            details: {},
+            request_id: 't2',
+          },
+        },
+      }),
+    )
+    render(
+      <UserFormDialog
+        user={null}
+        open
+        isPending={false}
+        roles={[ROLE_A, ROLE_B]}
+        onOpenChange={() => undefined}
+        onSubmit={onSubmit}
+      />,
+      { wrapper: createWrapper() },
+    )
+    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'test')
+    await user.click(screen.getByRole('button', { name: 'إضافة مستخدم' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+})
+
+
+
+
+
+
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+

@@ -11,9 +11,8 @@ import {
 } from '@/modules/organization/schemas/employee.schemas'
 import type { Employee } from '@/modules/organization/types/organization.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { MAX_WIRE_PAGE_SIZE } from '@/shared/api/pagination'
-import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -79,15 +78,8 @@ export function EmployeeFormDialog({
     name: ['orgUnitId', 'fullName'],
   })
 
-  const submit = async (values: EmployeeFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, { schemaKeys: [...SERVER_ERROR_KEYS] })
-    }
-  }
+  const submit = (values: EmployeeFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, [...SERVER_ERROR_KEYS])
 
   const referencesUnavailable = unitsQuery.isLoading || unitsQuery.isError
   const isSubmittable =

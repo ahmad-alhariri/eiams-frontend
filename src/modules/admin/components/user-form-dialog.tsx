@@ -24,8 +24,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
 import {
@@ -107,17 +106,13 @@ export function UserFormDialog({
     })
   }, [form, open, user])
 
-  const submit = async (values: UserFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['email', 'username', 'firstName', 'lastName'],
-      })
-    }
-  }
+  const submit = (values: UserFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, [
+      'email',
+      'username',
+      'firstName',
+      'lastName',
+    ])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

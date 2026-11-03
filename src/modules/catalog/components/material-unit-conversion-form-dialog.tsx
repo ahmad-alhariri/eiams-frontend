@@ -12,8 +12,7 @@ import type {
   UnitOfMeasure,
 } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -112,7 +111,7 @@ export function MaterialUnitConversionFormDialog({
     })
   }, [conversion, form, open])
 
-  const submit = async (values: MaterialUnitConversionFormValues) => {
+  const submit = (values: MaterialUnitConversionFormValues) => {
     if (conversion === null && !selectableUnits.some((unit) => unit.id === values.fromUnitId)) {
       form.setError('fromUnitId', {
         message:
@@ -122,16 +121,7 @@ export function MaterialUnitConversionFormDialog({
       })
       return
     }
-
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['fromUnitId', 'factor'],
-      })
-    }
+    return submitWithServerErrors(form, values, onSubmit, ['fromUnitId', 'factor'])
   }
 
   return (

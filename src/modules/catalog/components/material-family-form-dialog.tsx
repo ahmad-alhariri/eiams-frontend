@@ -8,8 +8,7 @@ import {
 } from '@/modules/catalog/schemas/material-family.schemas'
 import type { MaterialCategory, MaterialFamily } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -75,21 +74,16 @@ export function MaterialFamilyFormDialog({
     })
   }, [family, form, open])
 
-  const submit = async (values: MaterialFamilyFormValues) => {
+  const submit = (values: MaterialFamilyFormValues) => {
     if (!categoryOptions.some((category) => category.id === values.categoryId)) {
       form.setError('categoryId', { message: 'اختر تصنيفاً نشطاً للعائلة.' })
       return
     }
-
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['categoryId', 'code', 'name'],
-      })
-    }
+    return submitWithServerErrors(form, values, onSubmit, [
+      'categoryId',
+      'code',
+      'name',
+    ])
   }
 
   return (
