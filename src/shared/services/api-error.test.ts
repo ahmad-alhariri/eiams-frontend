@@ -38,6 +38,7 @@ vi.mock('@/shared/ui/toast-manager', () => ({
 }))
 
 import { arabicCopyForCode, KNOWN_ERROR_CODES } from '@/shared/api/error-copy-ar'
+import { normalizeWireErrorCode } from '@/shared/api/envelope'
 
 import { normalizeApiError, reportApiError, CONFLICT_GUIDANCE_AR } from './api-error'
 import { toast } from '@/shared/ui/toast-manager'
@@ -428,5 +429,128 @@ describe('Arabic copy table integrity', () => {
         description: 'تجاوز مخصص',
       })
     })
+  })
+})
+
+describe('Arabic error copy precedence — one producer per error', () => {
+  // The audit flagged HTTP 401 as appearing in two sources. The two sources use
+  // DISJOINT key spaces, so the flag was a readability problem, not a defect:
+  //
+  //   PRIMARY   code-keyed table, `error-copy-ar.ts`   key = UPPER_SNAKE code
+  //   FALLBACK  `STATUS_FEEDBACK`, `api-error.ts`      key = HTTP status number
+  //
+  // `AUTH_FEEDBACK` (dot-case keys) sits between them in the chain but can
+  // never fire, because the code reaching it is already normalized. This suite
+  // pins all three facts so a future edit cannot silently reorder them.
+
+  /** The generic per-status wording, as `STATUS_FEEDBACK` holds it. */
+  const STATUS_FEEDBACK: Readonly<Record<number, { titleAr: string }>> = {
+    400: { titleAr: 'تعذر تنفيذ الطلب. راجع البيانات المدخلة.' },
+    401: { titleAr: 'انتهت الجلسة. يرجى تسجيل الدخول مجدداً.' },
+    403: { titleAr: 'لا تملك الصلاحية اللازمة لتنفيذ هذا الإجراء.' },
+    404: { titleAr: 'لم يتم العثور على البيانات المطلوبة.' },
+    409: { titleAr: 'تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.' },
+    413: { titleAr: 'حجم الملف يتجاوز الحد المسموح.' },
+    415: { titleAr: 'نوع الملف غير مدعوم.' },
+    422: { titleAr: 'تعذر تنفيذ الطلب. راجع البيانات المدخلة.' },
+    429: { titleAr: 'توجد طلبات كثيرة. حاول مجدداً بعد قليل.' },
+  }
+
+  it('the primary table wins over the status fallback for every mapped code', () => {
+    // Each pair is (status, code) where BOTH sources have an entry. The table
+    // must win every time — including 409, where the two texts DIFFER.
+    const pairs: readonly (readonly [number, string])[] = [
+      [400, 'REQUEST_VALIDATION_FAILED'],
+      [401, 'AUTHENTICATION_REQUIRED'],
+      [403, 'AUTHORIZATION_FORBIDDEN'],
+      [404, 'RESOURCE_NOT_FOUND'],
+      [409, 'RESOURCE_CONFLICT'],
+      [413, 'REQUEST_BODY_TOO_LARGE'],
+      [415, 'UNSUPPORTED_MEDIA_TYPE'],
+      [422, 'UNPROCESSABLE_ENTITY'],
+      [429, 'RATE_LIMIT_EXCEEDED'],
+    ]
+
+    for (const [status, code] of pairs) {
+      const tableCopy = arabicCopyForCode(code)
+      expect(tableCopy, `no table copy for ${code}`).not.toBeNull()
+
+      const result = normalizeApiError(responseError(wireError(code, 'x'), status))
+      expect(result.code, `${code} @${status}`).toBe(code)
+      // The table's text, never the status fallback's.
+      expect(result.titleAr, `${code} @${status}`).toBe(tableCopy!.titleAr)
+    }
+  })
+
+  it('409 shows the two sources really are distinguishable, and the table wins', () => {
+    // The control for the assertion above: if the two sources could not be
+    // told apart, "the table won" would be a vacuous claim. Here they differ.
+    const tableCopy = arabicCopyForCode('RESOURCE_CONFLICT')
+    expect(tableCopy).not.toBeNull()
+    expect(tableCopy!.titleAr).not.toBe(STATUS_FEEDBACK[409]!.titleAr)
+
+    const mapped = normalizeApiError(responseError(wireError('RESOURCE_CONFLICT', 'x'), 409))
+    expect(mapped.titleAr).toBe(tableCopy!.titleAr)
+
+    // An UNMAPPED 409 code falls through to the status fallback — the other
+    // half of the same contract.
+    const unmapped = normalizeApiError(responseError(wireError('SOMETHING_UNMAPPED', 'x'), 409))
+    expect(unmapped.titleAr).toBe(STATUS_FEEDBACK[409]!.titleAr)
+  })
+
+  it('an unmapped code with a known status renders that status fallback', () => {
+    // The second half of the complement: the code space and the status space
+    // both carry text, and an unmapped code is answered by the status.
+    for (const status of [400, 401, 403, 404, 409, 413, 415, 422, 429]) {
+      const result = normalizeApiError(
+        responseError(wireError('A_CODE_NOT_IN_THE_TABLE', 'x'), status),
+      )
+      expect(result.code).toBe('A_CODE_NOT_IN_THE_TABLE')
+      expect(result.titleAr, `status ${status}`).toBe(STATUS_FEEDBACK[status]!.titleAr)
+    }
+  })
+
+  it('the code space and the status space are disjoint, so no error has two producers', () => {
+    // A code key can never equal a status key: one is `A_Z_0_9`, the other an
+    // integer. This is the structural reason `copy ?? fallbackFeedback(...)`
+    // selects one text and never has to break a tie.
+    const statusKeys = new Set(Object.keys(STATUS_FEEDBACK))
+    for (const code of KNOWN_ERROR_CODES) {
+      expect(statusKeys.has(code), `code key ${code} collides with a status key`).toBe(false)
+    }
+  })
+
+  it('AUTH_FEEDBACK is unreachable: its dot-case keys can never match a normalized code', () => {
+    // The chain's middle step is dead. If this ever starts firing, an unmapped
+    // auth code would suddenly render DIFFERENT text from the generic status
+    // fallback — a second producer for one error. This assertion fails first.
+    const authDotKeys = [
+      'auth.invalid_credentials',
+      'auth.access_expired',
+      'auth.unauthorized',
+      'auth.session_expired',
+      'auth.permission_denied',
+      'auth.origin_denied',
+    ]
+
+    for (const dotKey of authDotKeys) {
+      // The normalizer strips the dots and upper-cases, so the key the fallback
+      // would receive is never the key `AUTH_FEEDBACK` holds.
+      const normalized = normalizeWireErrorCode(dotKey)
+      expect(normalized, dotKey).not.toBe(dotKey)
+      expect(normalized, dotKey).not.toContain('.')
+    }
+  })
+
+  it('an unmapped auth code renders the generic status wording, not the AUTH_FEEDBACK text', () => {
+    // The observable consequence of the reachability fact above, pinned so the
+    // wording cannot change unnoticed. `AUTH_FEEDBACK['auth.invalid_credentials']`
+    // says `بيانات تسجيل الدخول غير صحيحة.`; a 401 with that code does NOT
+    // render it, because the code arrives normalized.
+    const result = normalizeApiError(responseError(wireError('auth.invalid_credentials', 'x'), 401))
+
+    expect(result.code).toBe('AUTH_INVALID_CREDENTIALS')
+    expect(result.titleAr).not.toBe('بيانات تسجيل الدخول غير صحيحة.')
+    expect(result.titleAr).toBe(STATUS_FEEDBACK[401]!.titleAr)
   })
 })

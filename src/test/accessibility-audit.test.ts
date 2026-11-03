@@ -29,7 +29,6 @@ import {
 const SCANNED = applicationSourceFiles()
 
 // Committed count of this scan's own file set (applicationSourceFiles filter); must be re-pinned when application files are added or removed.
-// Committed count of this scan's own file set (applicationSourceFiles filter); must be re-pinned when application files are added or removed.
 const EXPECTED_SCANNED_FILES = 416
 
 /** An INFINITE (looping) animation. The one-shot enter/exit transitions use
