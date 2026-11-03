@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { FormProvider, useForm } from 'react-hook-form'
@@ -11,7 +11,7 @@ import {
   type AdjustmentLineValues,
 } from '@/modules/adjustment/schemas/adjustment-form.schemas'
 
-vi.mock('@/modules/catalog/hooks/use-scoped-material-selector', () => ({
+vi.mock('@/shared/scopes/use-scoped-material-selector', () => ({
   useScopedMaterialSelector: () => ({
     scopeReady: true,
     loadOptions: vi.fn().mockResolvedValue([]),

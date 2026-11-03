@@ -1,4 +1,4 @@
-import { zodResolver } from '@hookform/resolvers/zod'
+﻿import { zodResolver } from '@hookform/resolvers/zod'
 import { useCallback, useState, type FormEvent } from 'react'
 import {
   FormProvider,
@@ -16,7 +16,7 @@ import {
   useCreateDisposalMutation,
 } from '@/modules/adjustment/hooks/use-adjustment-queries'
 import { useRoutePermission } from '@/modules/auth/hooks/use-permission'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { ROUTE_PATHS } from '@/config/routes'
 import { documentHeaderSchema } from '@/shared/documents/document-header-form'
 import { ContentCard } from '@/shared/layout/content-card'

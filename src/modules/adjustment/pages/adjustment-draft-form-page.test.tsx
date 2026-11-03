@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -163,7 +163,7 @@ function usePagedCountLinesHandler() {
   return requestedPages
 }
 
-vi.mock('@/modules/warehouse/hooks/use-scoped-warehouse-selector', () => ({
+vi.mock('@/shared/scopes/use-scoped-warehouse-selector', () => ({
   useScopedWarehouseSelector: () => ({
     scopeReady: true,
     loadOptions: vi.fn().mockImplementation((search: string) =>
@@ -179,7 +179,7 @@ vi.mock('@/modules/warehouse/hooks/use-scoped-warehouse-selector', () => ({
   }),
 }))
 
-vi.mock('@/modules/catalog/hooks/use-scoped-material-selector', () => ({
+vi.mock('@/shared/scopes/use-scoped-material-selector', () => ({
   useScopedMaterialSelector: () => ({
     scopeReady: true,
     loadOptions: vi.fn().mockImplementation((search: string) =>

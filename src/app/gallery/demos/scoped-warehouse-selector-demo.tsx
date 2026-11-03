@@ -1,7 +1,7 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 
 import type { GallerySection } from '@/app/gallery/gallery-sections'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import type { AsyncSelectOption } from '@/shared/ui/async-select'
 import { AsyncSelect } from '@/shared/ui/async-select'

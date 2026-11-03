@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+﻿import { useCallback, useMemo, useState } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { Link } from 'react-router'
 
@@ -12,7 +12,7 @@ import {
 } from '@/modules/adjustment/types/adjustment.types'
 import { useAdjustmentsListQuery } from '@/modules/adjustment/hooks/use-adjustment-queries'
 import { useRoutePermission } from '@/modules/auth/hooks/use-permission'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'

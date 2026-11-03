@@ -1,8 +1,8 @@
-import { IconPlus, IconTrash } from '@tabler/icons-react'
+﻿import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
 
-import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
+import { useScopedMaterialSelector } from '@/shared/scopes/use-scoped-material-selector'
 import {
   useWarehouseCapabilityValidation,
   type CapabilityValidation,

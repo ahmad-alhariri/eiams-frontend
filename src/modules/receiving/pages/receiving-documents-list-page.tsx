@@ -1,5 +1,5 @@
-import { RECEIVING_DOCUMENT_LIST_ENTRY } from '@/shared/documents/document-route-entries'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+﻿import { RECEIVING_DOCUMENT_LIST_ENTRY } from '@/shared/documents/document-route-entries'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import DocumentListPage from '@/shared/documents/pages/document-list-page'
 
 /**

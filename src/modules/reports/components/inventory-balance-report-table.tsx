@@ -1,4 +1,4 @@
-import { createColumnHelper } from '@tanstack/react-table'
+﻿import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
 import { useInventoryReportQuery } from '@/modules/reports/hooks/use-reports-queries'
@@ -6,7 +6,7 @@ import type {
   InventoryReportRow,
   ListInventoryReportQuery,
 } from '@/modules/reports/types/reports.types'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'

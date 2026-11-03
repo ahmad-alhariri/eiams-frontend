@@ -1,4 +1,4 @@
-import { IconPlus, IconTrash } from '@tabler/icons-react'
+﻿import { IconPlus, IconTrash } from '@tabler/icons-react'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
@@ -9,7 +9,7 @@ import {
 } from '@/modules/catalog/hooks/use-catalog-queries'
 import { MATERIAL_KIND_LABELS } from '@/modules/catalog/constants/catalog-labels'
 import { isMaterialKind, policyDescription } from '@/modules/catalog/constants/material-kind-policy'
-import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
+import { useScopedMaterialSelector } from '@/shared/scopes/use-scoped-material-selector'
 import {
   useWarehouseCapabilityValidation,
   type CapabilityValidation,

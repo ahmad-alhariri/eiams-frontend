@@ -1,4 +1,4 @@
-import { zodResolver } from '@hookform/resolvers/zod'
+﻿import { zodResolver } from '@hookform/resolvers/zod'
 import dayjs from 'dayjs'
 import { useCallback, useState, type FormEvent } from 'react'
 import type { DeepPartial, Resolver } from 'react-hook-form'
@@ -27,7 +27,7 @@ import {
   DocumentHeaderSection,
   documentHeaderSchema,
 } from '@/shared/documents/document-header-form'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import {
   assetLineSchema,
   createEmptyQuantityLine,

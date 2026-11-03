@@ -1,7 +1,7 @@
-import { useFieldArray, useFormContext, Controller } from 'react-hook-form'
+﻿import { useFieldArray, useFormContext, Controller } from 'react-hook-form'
 
 import type { AdjustmentFormValues } from '@/modules/adjustment/schemas/adjustment-form.schemas'
-import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
+import { useScopedMaterialSelector } from '@/shared/scopes/use-scoped-material-selector'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'

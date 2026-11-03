@@ -1,4 +1,4 @@
-import { createColumnHelper } from '@tanstack/react-table'
+﻿import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
 import { AssetStatusBadge } from '@/modules/asset/components/asset-status-badge'
@@ -6,7 +6,7 @@ import { ASSET_STATUSES, ASSET_STATUS_LABELS_AR } from '@/modules/asset/asset-st
 import type { AssetCurrentStatus } from '@/modules/asset/types/asset.types'
 import { useAssetReportQuery } from '@/modules/reports/hooks/use-reports-queries'
 import type { AssetsReportRow, ListAssetReportQuery } from '@/modules/reports/types/reports.types'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
