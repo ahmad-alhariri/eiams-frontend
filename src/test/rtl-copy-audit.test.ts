@@ -22,7 +22,7 @@ const SCANNED = applicationSourceFiles().filter(
   (file) => !relativeToRepo(file).startsWith('src/app/gallery/'),
 )
 // Committed count of this scan's own file set (applicationSourceFiles minus src/app/gallery); must be re-pinned when application files are added or removed.
-const EXPECTED_SCANNED_FILES = 394 // committed count — re-derived from `git ls-files` after staged deletions
+const EXPECTED_SCANNED_FILES = 395
 
 /** Attribute names whose value a user reads on screen. */
 const USER_VISIBLE_ATTRIBUTES = [

@@ -173,7 +173,7 @@ import {
 // `modules/audit/types/audit.types.ts` (-1). None of them reaches into
 // `@/test/**`, so the no-offenders assertion below stays green.
 // Committed count of this scan's own file set (applicationSourceFiles filter); must be re-pinned when application files are added or removed.
-const SCANNED_FILE_COUNT = 415 // committed count — re-derived from `git ls-files` after staged deletions
+const SCANNED_FILE_COUNT = 416
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

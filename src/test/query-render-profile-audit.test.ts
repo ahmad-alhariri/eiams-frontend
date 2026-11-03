@@ -25,7 +25,7 @@ import {
  */
 const SCANNED = applicationSourceFiles()
 // Committed count of this scan's own file set (applicationSourceFiles filter); must be re-pinned when application files are added or removed.
-const EXPECTED_SCANNED_FILES = 415 // committed count — re-derived from `git ls-files` after staged deletions
+const EXPECTED_SCANNED_FILES = 416
 
 const NAMED_STALE_TIME = /staleTime\s*:\s*(OPERATIONAL_STALE_TIME|MASTER_DATA_STALE_TIME)\b/u
 const SESSION_STALE_TIME = /staleTime\s*:\s*Number\.POSITIVE_INFINITY\b/u

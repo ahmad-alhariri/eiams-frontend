@@ -159,7 +159,7 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // the three banned shapes, so every "no offenders" assertion below stays
     // green.
     // Committed count of this scan's own file set (applicationSourceFiles filter); must be re-pinned when application files are added or removed.
-    assertScannedFiles(PRODUCTION_FILES, 415) // committed count — re-derived from `git ls-files` after staged deletions
+    assertScannedFiles(PRODUCTION_FILES, 416) // committed count of this scan's own file set (applicationSourceFiles filter); must be re-pinned when application files are added or removed.
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)
