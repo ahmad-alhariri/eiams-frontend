@@ -66,8 +66,8 @@ const HOOK_FILES = moduleHookFiles()
  * `useInvalidateDocumentDetail` hook, so scan 1 (hand-derived key prefix)
  * stays green.
  */
-// Committed count of this scan's own file set (moduleHookFiles); must be re-pinned when application hook files are added or removed.
-const EXPECTED_HOOK_FILES = 39
+// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
+const EXPECTED_HOOK_FILES = 47
 
 // ---------------------------------------------------------------------------
 // Scan 1 — query keys must come from a factory
