@@ -105,7 +105,7 @@ export function useAdjustmentsListQuery(query: ListAdjustmentsQuery) {
     placeholderData: keepPreviousDataInSameScope(scope.activeScopeCacheKey),
     queryKey:
       scope.activeScopeCacheKey === undefined
-        ? ['adjustments', 'unscoped', query]
+        ? queryKeys.unscoped(ADJUSTMENT_RESOURCE, 'adjustments', query)
         : adjustmentQueryKeys.adjustments(scope.activeScopeCacheKey, query),
     queryFn: () => adjustmentService.listAdjustments(query),
     enabled: scope.activeScopeCacheKey !== undefined,
@@ -119,7 +119,7 @@ export function useAdjustmentDetailQuery(adjustmentId: string | undefined | null
   return useQuery({
     queryKey:
       scope === undefined || adjustmentId == null
-        ? ['adjustments', 'adjustment', 'unscoped', adjustmentId]
+        ? queryKeys.unscoped(ADJUSTMENT_RESOURCE, 'adjustment', adjustmentId)
         : adjustmentQueryKeys.adjustment(scope, adjustmentId),
     queryFn: () => adjustmentService.getAdjustment(adjustmentId ?? ''),
     enabled: scope !== undefined && adjustmentId != null && adjustmentId !== '',
@@ -140,7 +140,7 @@ export function useDisposalEligibleAssetsQuery(
     placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined
-        ? ['adjustments', 'disposal-eligible-assets', 'unscoped', query]
+        ? queryKeys.unscoped(ADJUSTMENT_RESOURCE, 'disposal-eligible-assets', query)
         : adjustmentQueryKeys.disposalEligibleAssets(scope, query),
     queryFn: () => adjustmentService.listDisposalEligibleAssets(query),
     enabled: scope !== undefined,

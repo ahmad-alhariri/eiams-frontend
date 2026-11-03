@@ -106,7 +106,7 @@ export function useInventoryCountsQuery(query: ListCountsQuery) {
     placeholderData: keepPreviousDataInSameScope(scope.activeScopeCacheKey),
     queryKey:
       scope.activeScopeCacheKey === undefined
-        ? ['inventory-counts', 'unscoped', query]
+        ? queryKeys.unscoped(COUNT_RESOURCE, 'counts', query)
         : countQueryKeys.counts(scope.activeScopeCacheKey, query),
     queryFn: () => countService.listCounts(query),
     enabled: scope.activeScopeCacheKey !== undefined,
@@ -120,7 +120,7 @@ export function useInventoryCountQuery(countId: string | undefined | null) {
   return useQuery({
     queryKey:
       scope === undefined || countId == null
-        ? ['inventory-counts', 'count', 'unscoped', countId]
+        ? queryKeys.unscoped(COUNT_RESOURCE, 'count', countId)
         : countQueryKeys.count(scope, countId),
     queryFn: () => countService.getCount(countId ?? ''),
     enabled: scope !== undefined && countId != null && countId !== '',
@@ -138,7 +138,7 @@ export function useCountLinesQuery(
     placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined || countId == null
-        ? ['inventory-counts', 'lines', 'unscoped', countId, query]
+        ? queryKeys.unscoped(COUNT_RESOURCE, 'lines', countId, query)
         : countQueryKeys.lines(scope, countId, query),
     queryFn: () => countService.listLines(countId ?? '', query),
     enabled: scope !== undefined && countId != null && countId !== '',
@@ -158,7 +158,7 @@ export function useAllCountLinesQuery(countId: string | undefined | null) {
     placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined || countId == null
-        ? ['inventory-counts', 'lines', 'all', 'unscoped', countId]
+        ? queryKeys.unscoped(COUNT_RESOURCE, 'lines', countId, 'all')
         : countQueryKeys.allLines(scope, countId),
     queryFn: () => listAllCountLines(countId ?? ''),
     enabled: scope !== undefined && countId != null && countId !== '',
@@ -180,7 +180,7 @@ export function useWarehouseFreezeStatusQuery(
   return useQuery({
     queryKey:
       scope.activeScopeCacheKey === undefined || warehouseId === undefined
-        ? ['inventory-counts', 'freeze-status', 'unscoped', warehouseId]
+        ? queryKeys.unscoped(COUNT_RESOURCE, 'freeze-status', warehouseId)
         : countQueryKeys.freezeStatus(scope.activeScopeCacheKey, warehouseId),
     queryFn: () => countService.getFreezeStatus(warehouseId ?? ''),
     enabled:
