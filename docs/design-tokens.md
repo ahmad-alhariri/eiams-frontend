@@ -32,6 +32,7 @@ components where a documented token exists.
 | `damask` | `#6B1F2A` | Critical/attention state |
 | `charcoal` | `#161616` | Primary text |
 | `stone` | `#3D3A3B` | Secondary text |
+| `row-divider` | `#E8ECF0` | Table row separators |
 
 ### 2.2 Semantic roles
 
@@ -103,11 +104,14 @@ and `end`. Do not use `left`, `right`, `ml`, or `mr` for RTL layout decisions.
 | `rounded-md` | 6px | Inputs and buttons |
 | `rounded-lg` | 8px | Dropdowns and standard surfaces |
 | `rounded-xl` | 12px | Cards and major containers |
-| `rounded-4xl` / full | pill | Status badges and avatars |
+| `rounded-2xl` / `rounded-3xl` | 16px / 20px | Larger surfaces |
+| `rounded-4xl` | 24px | Status badges (`Badge`) |
+| `rounded-full` | pill | Avatars, icon wells, round toggles |
 | `shadow-card` | 0 2px 12px / 8% | Content card |
 | `shadow-card-hover` | 0 4px 20px / 12% | Interactive card hover |
 | `shadow-modal` | 0 8px 32px / 15% | Dialog |
 | `shadow-dropdown` | 0 4px 16px / 10% | Select/popover |
+| `shadow-sidebar` | 2px 0 12px / 10% | Sidebar edge |
 | `shadow-toast` | 0 4px 24px / 15% | Toast |
 
 ## 6. Status mapping
@@ -177,8 +181,13 @@ Before adding UI, verify that it:
 
 Arabic user-facing copy renders numbers in **Arabic-Indic digits
 (٠١٢٣٤٥٦٧٨٩)**. Any quantity, balance, or count interpolated into an Arabic
-string goes through the shared formatters in `src/shared/utils/format.ts`;
-`formatNumber` defaults to the `arabic` digits.
+string goes through the shared formatters in `src/shared/utils/arabic-numbers.ts`
+(`formatNumber`, `toArabicDigits`, `formatPercent`); `formatNumber` defaults to
+the `arabic` digits. `src/shared/utils/format.ts` re-exports those three and
+owns the date, time and file-size formatters. An eagerly loaded module (one that
+lands in the entry chunk) must import the number helpers from
+`arabic-numbers.ts` directly, because `format.ts` pulls `dayjs` and its Arabic
+locale into the bundle.
 
 | Value | Formatter | Example |
 | --- | --- | --- |

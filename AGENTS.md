@@ -66,7 +66,7 @@ A government-grade **Document-Driven** inventory and asset management system. Ev
 | Icons        | Tabler Icons                                                                   |
 | Date         | Day.js                                                                         |
 | File Upload  | react-dropzone                                                                 |
-| PDF          | react-pdf (viewer) + @react-pdf/renderer (report exports)                    |
+| PDF          | Browser print (`window.print()` via the shared `PrintButton`) for report exports |
 | Testing      | Vitest + Testing Library + MSW                                                 |
 | API Types    | Handwritten per-module wire contracts (D-INT-02 / ADR-0001), behind the shared `ApiTransport` |
 
@@ -115,11 +115,15 @@ src/
 
 ### Shared Layer Components
 
-- **ui/** — Design system (Button, DataTable, Modal, Form/Input, Form/Select, Form/DatePicker, Badge, PageHeader)
-- **layout/** — AppLayout, Sidebar (RTL, right side), Header
-- **feedback/** — LoadingSpinner, ErrorBoundary, EmptyState
-- **hooks/** — usePermission (RBAC gate), useDebounce, usePagination, useConfirm
+- **ui/** — Design system (Button, Input, Textarea, Select, Checkbox, DatePicker, Card, Badge, Skeleton, Dialog, AlertDialog, ConfirmDialog, Popover, Toast, DataTable, DataTableServer, AsyncSelect, HierarchyTree, KpiCard, PrintButton). The RHF/Zod field bridge lives in `src/shared/forms/form.tsx`.
+- **layout/** — AppLayout, AppChromeBoundary, Sidebar (RTL, right side), AppHeader, Breadcrumb, PageHeader, ContentCard, DetailField, DomainErrorBoundary, RouteFocusAnnouncer, RouteSuspense
+- **feedback/** — LoadingSpinner, FullPageSpinner, TableSkeleton, ErrorBoundary, ErrorState, EmptyState, StatusBadge, FileDropzone, ReferenceLimitNote
+- **hooks/** — useDebounce, useServerPagination, useQueryParams, useConfirm, useSubmitFeedback. The RBAC gate `usePermission` belongs to the auth module (`src/modules/auth/hooks/use-permission.ts`), because it reads the session's permission codes.
 - **services/** — `src/shared/services/api.client.ts` (single Axios instance + 401-refresh / non-JSON gateway interceptors); `src/shared/services/query.client.ts` (TanStack Query config); transport composition at `src/shared/api/transport.ts` (`apiTransport = createAxiosTransport(apiClient)`); interface `ApiTransport` + `RequestContext`/`withSignal` in `src/shared/api/api-transport.ts`; only implementation `createAxiosTransport` in `src/shared/api/axios-transport.ts`.
+- **api/** — every shared wire shape (envelope, pagination, error shapes) in `src/shared/api/api-contracts.ts`; runtime helpers only in `src/shared/api/envelope.ts`.
+- **types/** — shared wire primitives (`Uuid`, `RecordStatus`, status ordinal) in `src/shared/types/wire-primitives.ts`; feature-specific wire vocabularies in `catalog.wire-types.ts` / `warehouse.wire-types.ts`; scope vocabulary in `scope.types.ts`.
+- **scopes/** — the shared cross-feature scope selectors (`use-scoped-warehouse-selector`, `use-scoped-material-selector`).
+- **store/** — `src/shared/store/ui.store.ts` (sidebar collapsed / drawer open only — no server data). The auth module owns `src/modules/auth/store/auth-session.store.ts`, which holds the client-side session *status* only; the user, roles, scopes and permissions come from TanStack Query.
 
 ---
 
@@ -167,7 +171,7 @@ src/
 
 ### RBAC UI
 
-- `usePermission()` hook gates every action button, menu item, and route.
+- `usePermission()` (from `src/modules/auth/hooks/use-permission.ts`) gates every action button, menu item, and route.
 - Never render an action the user can't perform.
 - Permission keys match the .NET backend codes (e.g., `document.create`, `document.post`).
 

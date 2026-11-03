@@ -174,6 +174,12 @@ and `pnpm run budget:bundle` inside the re-derived ceilings (169 chunks,
 1,615,035 B measured against a 1,615,445 B ceiling, largest chunk 344,750 B,
 route count unchanged at 59).
 
+**Note (post-2026-11-02):** later commits re-derived the bundle ceilings; the
+current authoritative figures live in `src/config/bundle-budget.json` and read the
+JSON's append-only `note` field for every re-derivation since
+2026-10-30. This audit's own figures are internally consistent as of its date
+(2026-11-02); no revision of the audit's findings is intended.
+
 Commits: `01b0919` (the five architecture slices, the RTL fence and the
 in-flight Arabic-digit work that shared files with them), `df60767` (the beads
 tracker sync) and `22a911d` (the shared submit path).

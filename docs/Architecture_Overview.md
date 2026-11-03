@@ -8,16 +8,17 @@
 
 ## 1. What Is This Document?
 
-A high-level architectural reference for developers, technical leads, and reviewers. It answers **how the system works** — the layers, patterns, data flow, and key decisions — so you can understand the whole system in ~15 minutes without reading the full PRD (100+ pages) or ERD (38 tables).
+A high-level architectural reference for developers, technical leads, and reviewers. It answers **how the system works** — the layers, patterns, data flow, and key decisions — so you can understand the whole system in ~15 minutes without reading the full PRD or the ERD.
 
 **Related documents:**
 
 | Document | Purpose |
 |----------|---------|
-| `prd_en.md` | Requirements, features, process flows |
-| `EIAMS_ERD_v4_final.md` | Full schema with 38 tables in v1 |
-| `schema.md` | Concise PostgreSQL schema reference |
-| `FRONTEND_AGENTS.md` | Frontend architecture & component guide |
+| `docs/PRD.md` | Requirements, features, process flows (the frontend repo's decision-record copy; the canonical text is the system repo's `docs/PRD.md` — see `AGENTS.md`) |
+| `docs/business-domain-model-v1.md` | Canonical v1 domain model for the frontend and contract planning |
+| `docs/SAD.md` | System analysis and design; §9.1 is the source of the wire-contract design rules |
+| `docs/adr/0001-handwritten-contracts-for-direct-backend-integration.md` | ADR-0001, the handwritten per-module wire contract decision (D-INT-02) |
+| `docs/ui-design.md` | The approved visual language that `docs/design-tokens.md` implements |
 
 ---
 
@@ -120,13 +121,51 @@ This prevents a single user from both creating and finalising a document without
 The layers above are source boundaries too, and they are enforced in the tree:
 
 - `src/modules/<domain>` owns its feature end to end: pages, components, hooks,
-  schemas, services and types.
+  schemas, services and types. Two modules are deliberately thin — `opening`
+  (pages only) and `transfer` (no services or types) — because both are thin
+  compositions over the shared document spine, so a service or type layer would
+  be scaffolding with nothing to hold.
 - `src/shared` owns the document spine, the UI kit, the API transport and the
   infrastructure every feature uses.
-- `src/shared` must never import a feature module at RUNTIME. Type-only shared→module imports are sanctioned infrastructure (`src/shared/services/api.client.ts`, `session-adapter.ts`, `dev-session.ts` each import `AuthTokenResponse` from `@/modules/auth/types/session.types`; `src/shared/documents/active-scope.ts` is the sanctioned single-point shim into auth). The eight shared document-editor / detail-page runtime edges (`asset-line-editor.tsx:5,9`; `quantity-line-editor.tsx:9-12,16`; `document-detail-page.tsx:7`) are an OPEN, separately-tracked item (`eiams-frontend-zhg2`) being fixed by another session — they are not solved and must not be read as feature-free.
-- The two highest-fanout cross-feature scope selectors (`use-scoped-warehouse-selector`, `use-scoped-material-selector`) live in `src/shared/scopes/` (promoted from `warehouse/hooks/` and `catalog/hooks/` in 2026-11-03; they are genuinely shared infrastructure, not any feature's domain contract).
-- A wire contract the shared spine genuinely needs lives in `src/shared/types`
-  (`catalog.wire-types.ts`, `warehouse.wire-types.ts`, `wire-primitives.ts`, `scope.types.ts`), not in a global type registry.
+- `src/shared` must never import a feature module at RUNTIME. Type-only
+  shared→module imports are sanctioned infrastructure (`src/shared/services/api.client.ts`,
+  `session-adapter.ts`, `dev-session.ts` each import `AuthTokenResponse` from
+  `@/modules/auth/types/session.types`; `src/shared/documents/active-scope.ts` is
+  the sanctioned single-point shim into auth). Runtime edges into `auth`
+  (session, permission and scope hooks) are treated as infrastructure and are
+  sanctioned; runtime edges into a FEATURE module are not.
+- The remaining runtime shared→feature edges are in the shared document spine and
+  are an OPEN, separately-tracked item (`eiams-frontend-zhg2`): the catalog
+  material-unit-conversion query and the material-kind label/policy vocabulary in
+  `src/shared/documents/components/quantity-line-editor.tsx:6-11`; the warehouse
+  capability validation in
+  `src/shared/documents/components/asset-line-editor.tsx:6-9`,
+  `src/shared/documents/components/quantity-line-editor.tsx:13-16` and
+  `src/shared/documents/pages/document-detail-page.tsx:7`. The two scope
+  selectors under `src/shared/scopes/` bind their own module's service
+  (`use-scoped-material-selector.ts:4` → catalog,
+  `use-scoped-warehouse-selector.ts:4` → warehouse), which is why they are
+  listed separately above rather than counted as spine edges.
+- The two highest-fanout cross-feature scope selectors (`use-scoped-warehouse-selector`,
+  `use-scoped-material-selector`) live in `src/shared/scopes/` (promoted from
+  `warehouse/hooks/` and `catalog/hooks/` in 2026-11-03; they are genuinely
+  shared infrastructure, not any feature's domain contract).
+- Every WIRE SHAPE the shared layer owns lives in `src/shared/api/api-contracts.ts`
+  — the envelope (`ApiSuccessResponse`, `ApiErrorResponse`, `ApiResponse`), the
+  pagination projection (`ApiPaginationResponse`, `ApiPage`), the error shapes
+  (`ApiError`, `ApiErrorDetails`) and `ResourceIdResponse`. `src/shared/api/envelope.ts`
+  keeps only the runtime helpers over those shapes (`unwrapData`,
+  `isApiSuccessResponse`, `isApiErrorResponse`, `readApiError`,
+  `readTransportError`, `normalizeWireErrorCode`).
+- The shared wire PRIMITIVES live in `src/shared/types/wire-primitives.ts`:
+  `Uuid`, `RecordStatus` (the read side), `RecordStatusOrdinal` /
+  `RecordStatusCommandValue` (the write side), `statusCommandValue` and
+  `NamedReference`. Feature-specific wire vocabularies live in
+  `src/shared/types/catalog.wire-types.ts` and
+  `src/shared/types/warehouse.wire-types.ts`; the shared scope vocabulary lives
+  in `src/shared/types/scope.types.ts`. None of these is a global type registry:
+  each file is a narrow, deliberate extraction of a contract the shared spine
+  genuinely needs.
 
 The audit that produced this arrangement, including the findings that were
 withdrawn after verification, is in
@@ -411,7 +450,9 @@ On update: `UPDATE ... SET row_version = row_version + 1 WHERE row_version = :ol
 | D-SEQ-01 | Numbering | Sequence keyed by `(site, document_type, year)`. |
 | D-CAT-01 | Domain | Derived via Family→Category. Family is mandatory. |
 
-Full details in `prd_en.md` §9.
+Full details in `docs/PRD.md` §9 (the frontend decision record) and, for the
+ratified system-wide text, the canonical documents in the system repository's
+`docs/` — see the doc-ownership rule in `AGENTS.md`.
 
 ---
 
