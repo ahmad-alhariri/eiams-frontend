@@ -85,7 +85,6 @@ export function UnitOfMeasureFormDialog({
               <FormField
                 control={form.control}
                 name="name"
-                rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>اسم الوحدة</FormLabel>
@@ -99,7 +98,6 @@ export function UnitOfMeasureFormDialog({
               <FormField
                 control={form.control}
                 name="symbol"
-                rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>رمز الوحدة</FormLabel>
@@ -114,7 +112,6 @@ export function UnitOfMeasureFormDialog({
             <FormField
               control={form.control}
               name="unitType"
-              rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>نوع الوحدة</FormLabel>

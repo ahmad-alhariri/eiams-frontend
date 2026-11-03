@@ -96,7 +96,6 @@ export function TransferDestinationSection({
         <FormField
           control={form.control}
           name="petal.transferInfo.destinationWarehouseId"
-          rules={{ required: true }}
           render={({ field }) => (
             <FormItem>
               <FormLabel>مستودع الوجهة</FormLabel>
@@ -115,7 +114,6 @@ export function TransferDestinationSection({
         <FormField
           control={form.control}
           name="petal.transferInfo.transferReason"
-          rules={{ required: true }}
           render={({ field }) => (
             <FormItem>
               <FormLabel>سبب التحويل</FormLabel>

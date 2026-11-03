@@ -360,7 +360,6 @@ export function DocumentHeaderSection({
           <FormField
             control={form.control}
             name="header.warehouseId"
-            rules={{ required: true }}
             render={({ field }) => (
               <FormItem>
                 <FormLabel>المستودع</FormLabel>
@@ -378,7 +377,6 @@ export function DocumentHeaderSection({
           <FormField
             control={form.control}
             name="header.paperDocumentNumber"
-            rules={{ required: true }}
             render={({ field }) => (
               <FormItem>
                 <FormLabel>رقم المستند الورقي</FormLabel>
@@ -398,7 +396,6 @@ export function DocumentHeaderSection({
           <FormField
             control={form.control}
             name="header.paperDocumentYear"
-            rules={{ required: true }}
             render={({ field }) => (
               <FormItem>
                 <FormLabel>السنة الورقية</FormLabel>

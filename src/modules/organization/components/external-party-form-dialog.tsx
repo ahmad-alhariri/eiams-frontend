@@ -75,7 +75,6 @@ export function ExternalPartyFormDialog({
             <FormField
               control={form.control}
               name="nameAr"
-              rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>اسم الجهة</FormLabel>

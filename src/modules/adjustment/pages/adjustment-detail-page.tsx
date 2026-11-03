@@ -134,6 +134,9 @@ export default function AdjustmentDetailPage() {
           ) : (
             <div className="min-w-0 overflow-x-auto rounded-lg border border-border">
               <table data-slot="adjustment-lines-table" className="w-full min-w-130 text-sm">
+                <caption className="sr-only">
+                  جدول يسرد بنود الفرق على مستند التصحيح: المادة، فرق الكمية، والسبب.
+                </caption>
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-start text-muted-foreground">
                     <th scope="col" className="px-3 py-2 text-start font-medium">

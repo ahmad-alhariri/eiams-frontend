@@ -142,7 +142,6 @@ export function ReceivingPetalForm({ disabled = false }: ReceivingPetalFormProps
         <FormField
           control={form.control}
           name="petal.receivingInfo.supplierRef"
-          rules={{ required: true }}
           render={({ field }) => (
             <FormItem>
               <FormLabel>المورد</FormLabel>

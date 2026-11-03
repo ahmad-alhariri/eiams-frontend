@@ -216,6 +216,9 @@ function DataTable<T extends RowData = RowData>({
           cell's non-link content keeps its own height.
         */}
         <table className="w-full min-w-full caption-bottom text-sm max-sm:[&_a]:inline-flex max-sm:[&_a]:items-center max-sm:[&_a]:min-h-10">
+          <caption className="sr-only">
+            جدول بيانات قابل للفرز والبحث مع إمكانية اختيار الصفوف.
+          </caption>
           <thead className="sticky top-0 z-10 bg-primary">
             {headerGroups.map((headerGroup, groupIndex) => (
               <tr key={headerGroup.id}>
@@ -283,6 +286,19 @@ function DataTable<T extends RowData = RowData>({
                 <tr
                   key={row.id}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onRowClick(row.original)
+                          }
+                        }
+                      : undefined
+                  }
+                  role={onRowClick ? 'button' : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  aria-label={onRowClick ? 'فتح تفاصيل الصف' : undefined}
                   className={cn(
                     'border-b border-row-divider transition-colors duration-150 hover:bg-ivory',
                     onRowClick && 'cursor-pointer',

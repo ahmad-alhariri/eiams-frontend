@@ -206,7 +206,6 @@ export function MaterialFormDialog({
               <FormField
                 control={form.control}
                 name="nameAr"
-                rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>اسم المادة</FormLabel>
@@ -247,7 +246,6 @@ export function MaterialFormDialog({
                 <FormField
                   control={form.control}
                   name="code"
-                  rules={{ required: true }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>رمز المادة</FormLabel>
@@ -274,7 +272,6 @@ export function MaterialFormDialog({
                 <FormField
                   control={form.control}
                   name="familyId"
-                  rules={{ required: true }}
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>عائلة المادة</FormLabel>
@@ -311,7 +308,6 @@ export function MaterialFormDialog({
                 <FormField
                   control={form.control}
                   name="baseUnitId"
-                  rules={{ required: true }}
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>وحدة القياس الأساسية</FormLabel>
@@ -350,7 +346,6 @@ export function MaterialFormDialog({
                 <FormField
                   control={form.control}
                   name="materialKind"
-                  rules={{ required: true }}
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>نوع المادة</FormLabel>
@@ -385,7 +380,6 @@ export function MaterialFormDialog({
                 <FormField
                   control={form.control}
                   name="trackingType"
-                  rules={{ required: true }}
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>طريقة التتبع</FormLabel>

@@ -111,7 +111,6 @@ function LoginPage() {
                 <FormField
                   control={form.control}
                   name="username"
-                  rules={{ required: true }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>اسم المستخدم</FormLabel>
@@ -138,7 +137,6 @@ function LoginPage() {
                 <FormField
                   control={form.control}
                   name="password"
-                  rules={{ required: true }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>كلمة المرور</FormLabel>

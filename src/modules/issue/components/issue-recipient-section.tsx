@@ -132,7 +132,6 @@ export function IssueRecipientSection({ disabled = false }: IssueRecipientSectio
         <FormField
           control={form.control}
           name="petal.issueTo.recipientType"
-          rules={{ required: true }}
           render={({ field }) => (
             <FormItem>
               <FormLabel>نوع الجهة المستلمة</FormLabel>
@@ -157,7 +156,6 @@ export function IssueRecipientSection({ disabled = false }: IssueRecipientSectio
           <FormField
             control={form.control}
             name="petal.issueTo.recipientId"
-            rules={{ required: true }}
             render={({ field }) => (
               <FormItem>
                 <FormLabel>الجهة المستلمة</FormLabel>
@@ -182,7 +180,6 @@ export function IssueRecipientSection({ disabled = false }: IssueRecipientSectio
         <FormField
           control={form.control}
           name="petal.issueTo.issueReason"
-          rules={{ required: true }}
           render={({ field }) => (
             <FormItem>
               <FormLabel>سبب الصرف</FormLabel>

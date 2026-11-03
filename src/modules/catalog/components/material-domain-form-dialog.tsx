@@ -84,7 +84,6 @@ export function MaterialDomainFormDialog({
             <FormField
               control={form.control}
               name="name"
-              rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>اسم المجال</FormLabel>

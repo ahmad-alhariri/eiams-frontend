@@ -232,7 +232,6 @@ export default function CountPlanningFormPage() {
           <Controller
             control={methods.control}
             name="warehouseId"
-            rules={{ required: true }}
             render={({ field }) => (
               <div className="grid gap-2">
                 <label htmlFor="count-warehouse" className="text-sm font-medium text-foreground">

@@ -137,7 +137,6 @@ export function MaterialCategoryFormDialog({
             <FormField
               control={form.control}
               name="name"
-              rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>اسم التصنيف</FormLabel>
@@ -157,7 +156,6 @@ export function MaterialCategoryFormDialog({
               <FormField
                 control={form.control}
                 name="code"
-                rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>رمز التصنيف</FormLabel>
@@ -178,7 +176,6 @@ export function MaterialCategoryFormDialog({
             <FormField
               control={form.control}
               name="materialDomainId"
-              rules={{ required: true }}
               render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>مجال التصنيف</FormLabel>
