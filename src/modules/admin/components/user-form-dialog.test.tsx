@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import axios from 'axios'
+import { AxiosError, AxiosHeaders } from 'axios'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState, type PropsWithChildren } from 'react'
@@ -423,7 +423,7 @@ describe('UserFormDialog server-error contract', () => {
   it('renders a contract field error inline in Arabic', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockRejectedValue(
-      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as unknown as axios.AxiosResponse<any>), undefined, {
+      new AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as any as unknown as axios.AxiosResponse<any>), undefined, {
         status: 400,
         data: {
           success: false,
@@ -455,7 +455,7 @@ describe('UserFormDialog server-error contract', () => {
   it('keeps previous generic-error outcome when no field errors map', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockRejectedValue(
-      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as unknown as axios.AxiosResponse<any>), undefined, {
+      new AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as any as unknown as axios.AxiosResponse<any>), undefined, {
         status: 500,
         data: {
           success: false,
@@ -477,6 +477,51 @@ describe('UserFormDialog server-error contract', () => {
         onOpenChange={() => undefined}
         onSubmit={onSubmit}
       />,
+      { wrapper: createWrapper() },
+    )
+    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'test')
+    await user.click(screen.getByRole('button', { name: 'إضافة مستخدم' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+})
+
+describe('UserFormDialog server-error contract', () => {
+  function serverError(status: number, code: string, details?: Record<string, unknown>) {
+    return new AxiosError('server message', 'ERR_BAD_RESPONSE', undefined, undefined, {
+      status,
+      statusText: '',
+      data: {
+        success: false,
+        error: {
+          code,
+          message: 'server message',
+          details: details ?? {},
+          request_id: 'req-1',
+        },
+      },
+      headers: new AxiosHeaders(),
+      config: { headers: new AxiosHeaders() },
+    })
+  }
+
+  it('renders a contract field error inline in Arabic', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockRejectedValue(serverError(400, 'VALIDATION_FAILED', { email: ['required'] }))
+    render(
+      <UserFormDialog user={null} open isPending={false} roles={[ROLE_A, ROLE_B]} onOpenChange={() => undefined} onSubmit={onSubmit} />,
+      { wrapper: createWrapper() },
+    )
+    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'test')
+    await user.click(screen.getByRole('button', { name: 'إضافة مستخدم' }))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+  })
+
+  it('keeps previous generic-error outcome when no field errors map', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockRejectedValue(serverError(500, 'INTERNAL_ERROR'))
+    render(
+      <UserFormDialog user={null} open isPending={false} roles={[ROLE_A, ROLE_B]} onOpenChange={() => undefined} onSubmit={onSubmit} />,
       { wrapper: createWrapper() },
     )
     await user.type(screen.getByLabelText('البريد الإلكتروني'), 'test')

@@ -1,32 +1,32 @@
-import axios from 'axios'
+import { AxiosError, AxiosHeaders } from 'axios'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { MaterialDomainFormDialog } from './material-domain-form-dialog'
 
-function fieldErrorAxiosError(fieldPath: string) {
-  return new axios.AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as unknown as axios.AxiosResponse<any>), undefined, {
-    status: 400,
-    statusText: 'Bad Request',
-    headers: undefined,
-    config: { url: '/', headers: {} } as any,
+function serverError(status: number, code: string, details?: Record<string, unknown>) {
+  return new AxiosError('server message', 'ERR_BAD_RESPONSE', undefined, undefined, {
+    status,
+    statusText: '',
     data: {
       success: false,
       error: {
-        code: 'VALIDATION_FAILED',
-        message: 'bad',
-        details: { [fieldPath]: ['required'] },
-        request_id: 't1',
+        code,
+        message: 'server message',
+        details: details ?? {},
+        request_id: 'req-1',
       },
     },
-  } as unknown as axios.AxiosResponse<any>)
+    headers: new AxiosHeaders(),
+    config: { headers: new AxiosHeaders() },
+  })
 }
 
 describe('MaterialDomainFormDialog server-error contract', () => {
   it('renders a contract field error inline in Arabic', async () => {
     const user = userEvent.setup()
-    const onSubmit = vi.fn().mockRejectedValue(fieldErrorAxiosError('name'))
+    const onSubmit = vi.fn().mockRejectedValue(serverError(400, 'VALIDATION_FAILED', { name: ['required'] }))
     render(
       <MaterialDomainFormDialog
         open
@@ -41,26 +41,11 @@ describe('MaterialDomainFormDialog server-error contract', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('اسم المجال')).toHaveAttribute('aria-invalid', 'true'),
     )
-    // The mapped field error produces an Arabic message on the input.
-    expect(screen.getByLabelText('اسم المجال')).toBeInTheDocument()
   })
 
   it('keeps previous generic-error outcome when no field errors map', async () => {
     const user = userEvent.setup()
-    const onSubmit = vi.fn().mockRejectedValue(
-      new axios.AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as unknown as axios.AxiosResponse<any>), undefined, {
-        status: 500,
-        data: {
-          success: false,
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'bad',
-            details: {},
-            request_id: 't2',
-          },
-        },
-      } as unknown as axios.AxiosResponse<any>),
-    )
+    const onSubmit = vi.fn().mockRejectedValue(serverError(500, 'INTERNAL_ERROR'))
     render(
       <MaterialDomainFormDialog
         open
@@ -73,7 +58,6 @@ describe('MaterialDomainFormDialog server-error contract', () => {
     await user.type(screen.getByLabelText('اسم المجال'), 'x')
     await user.click(screen.getByRole('button', { name: /حفظ/i }))
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
-    // No crash, dialog stays open — previous silent outcome preserved.
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })
