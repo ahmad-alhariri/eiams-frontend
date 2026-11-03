@@ -85,7 +85,7 @@ export function useUnitsOfMeasureQuery(
       'unitsOfMeasure',
       query,
     ),
-    queryFn: () => catalogService.listUnitsOfMeasure(query),
+    queryFn: ({ signal }) => catalogService.listUnitsOfMeasure(query, { signal }),
     enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -100,7 +100,7 @@ export function useUnitOfMeasureQuery(unitId: string | undefined) {
       'unitsOfMeasure',
       unitId,
     ),
-    queryFn: () => catalogService.getUnitOfMeasure(unitId ?? ''),
+    queryFn: ({ signal }) => catalogService.getUnitOfMeasure(unitId ?? '', { signal }),
     enabled: scope !== undefined && unitId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -119,7 +119,7 @@ export function useMaterialDomainsQuery(
       'materialDomains',
       query,
     ),
-    queryFn: () => catalogService.listMaterialDomains(query),
+    queryFn: ({ signal }) => catalogService.listMaterialDomains(query, { signal }),
     enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -134,7 +134,7 @@ export function useMaterialDomainQuery(materialDomainId: string | undefined) {
       'materialDomains',
       materialDomainId,
     ),
-    queryFn: () => catalogService.getMaterialDomain(materialDomainId ?? ''),
+    queryFn: ({ signal }) => catalogService.getMaterialDomain(materialDomainId ?? '', { signal }),
     enabled: scope !== undefined && materialDomainId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -153,7 +153,7 @@ export function useMaterialCategoriesQuery(
       'materialCategories',
       query,
     ),
-    queryFn: () => catalogService.listMaterialCategories(query),
+    queryFn: ({ signal }) => catalogService.listMaterialCategories(query, { signal }),
     enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -168,7 +168,8 @@ export function useMaterialCategoryQuery(materialCategoryId: string | undefined)
       'materialCategories',
       materialCategoryId,
     ),
-    queryFn: () => catalogService.getMaterialCategory(materialCategoryId ?? ''),
+    queryFn: ({ signal }) =>
+      catalogService.getMaterialCategory(materialCategoryId ?? '', { signal }),
     enabled: scope !== undefined && materialCategoryId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -187,7 +188,7 @@ export function useMaterialFamiliesQuery(
       'materialFamilies',
       query,
     ),
-    queryFn: () => catalogService.listMaterialFamilies(query),
+    queryFn: ({ signal }) => catalogService.listMaterialFamilies(query, { signal }),
     enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -202,7 +203,7 @@ export function useMaterialFamilyQuery(materialFamilyId: string | undefined) {
       'materialFamilies',
       materialFamilyId,
     ),
-    queryFn: () => catalogService.getMaterialFamily(materialFamilyId ?? ''),
+    queryFn: ({ signal }) => catalogService.getMaterialFamily(materialFamilyId ?? '', { signal }),
     enabled: scope !== undefined && materialFamilyId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -221,7 +222,7 @@ export function useMaterialsQuery(
       'materials',
       query,
     ),
-    queryFn: () => catalogService.listMaterials(query),
+    queryFn: ({ signal }) => catalogService.listMaterials(query, { signal }),
     enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -236,7 +237,7 @@ export function useMaterialQuery(materialId: string | undefined) {
       'materials',
       materialId,
     ),
-    queryFn: () => catalogService.getMaterial(materialId ?? ''),
+    queryFn: ({ signal }) => catalogService.getMaterial(materialId ?? '', { signal }),
     enabled: scope !== undefined && materialId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -258,7 +259,8 @@ export function useMaterialUnitConversionsQuery(
       'unitConversions',
       query,
     ),
-    queryFn: () => catalogService.listMaterialUnitConversions(materialId ?? '', query),
+    queryFn: ({ signal }) =>
+      catalogService.listMaterialUnitConversions(materialId ?? '', query, { signal }),
     enabled:
       (options.enabled !== undefined ? options.enabled : scope !== undefined) &&
       materialId !== undefined,

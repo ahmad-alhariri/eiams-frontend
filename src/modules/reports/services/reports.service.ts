@@ -1,5 +1,6 @@
 import type { ApiPage } from '@/shared/api/api-contracts'
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import { apiTransport } from '@/shared/api/transport'
 
@@ -56,18 +57,23 @@ export interface ReportsService {
    */
   getInventoryReport: (
     query: Readonly<ListInventoryReportQuery>,
+    context?: RequestContext,
   ) => Promise<ApiPage<InventoryReportRow>>
   /**
    * Asset & custody report — per-warehouse asset COUNTS by current status; the
    * client never infers lifecycle from other records.
    */
-  getAssetReport: (query: Readonly<ListAssetReportQuery>) => Promise<ApiPage<AssetsReportRow>>
+  getAssetReport: (
+    query: Readonly<ListAssetReportQuery>,
+    context?: RequestContext,
+  ) => Promise<ApiPage<AssetsReportRow>>
   /**
    * Count & adjustment report — per-warehouse counts and adjustment counters.
    * No client variance calculation.
    */
   getCountAdjustmentReport: (
     query: Readonly<ListCountAdjustmentReportQuery>,
+    context?: RequestContext,
   ) => Promise<ApiPage<CountAdjustmentsReportRow>>
   /**
    * Operational documents report — per-warehouse document counters grouped by
@@ -75,12 +81,16 @@ export interface ReportsService {
    */
   getOperationalDocumentsReport: (
     query: Readonly<ListOperationalDocumentsReportQuery>,
+    context?: RequestContext,
   ) => Promise<ApiPage<DocumentsReportRow>>
   /**
    * Dashboard report — flat counters + the server timestamp. Singleton
    * response; the server owns every aggregation.
    */
-  getDashboardReport: (query: Readonly<ListDashboardReportQuery>) => Promise<DashboardReport>
+  getDashboardReport: (
+    query: Readonly<ListDashboardReportQuery>,
+    context?: RequestContext,
+  ) => Promise<DashboardReport>
 }
 
 /**
@@ -99,39 +109,43 @@ export interface ReportsService {
  */
 export function createReportsService(transport: ApiTransport): ReportsService {
   return {
-    async getInventoryReport(query) {
+    async getInventoryReport(query, context) {
       return transport.requestPage<InventoryReportRow>({
         path: REPORTS_INVENTORY_PATH,
         method: 'GET',
         query: withWirePagination(query),
+        ...withSignal(context),
       })
     },
 
-    async getAssetReport(query) {
+    async getAssetReport(query, context) {
       return transport.requestPage<AssetsReportRow>({
         path: REPORTS_ASSETS_PATH,
         method: 'GET',
         query: withWirePagination(query),
+        ...withSignal(context),
       })
     },
 
-    async getCountAdjustmentReport(query) {
+    async getCountAdjustmentReport(query, context) {
       return transport.requestPage<CountAdjustmentsReportRow>({
         path: REPORTS_COUNT_ADJUSTMENT_PATH,
         method: 'GET',
         query: withWirePagination(query),
+        ...withSignal(context),
       })
     },
 
-    async getOperationalDocumentsReport(query) {
+    async getOperationalDocumentsReport(query, context) {
       return transport.requestPage<DocumentsReportRow>({
         path: REPORTS_DOCUMENTS_PATH,
         method: 'GET',
         query: withWirePagination(query),
+        ...withSignal(context),
       })
     },
 
-    async getDashboardReport(query) {
+    async getDashboardReport(query, context) {
       return transport.request<DashboardReport>({
         path: REPORTS_DASHBOARD_PATH,
         method: 'GET',
@@ -139,6 +153,7 @@ export function createReportsService(transport: ApiTransport): ReportsService {
         // (`Web.Api/Controllers/Reports/GetDashboardReportController.cs:23`),
         // so this call carries no pagination and no invented filters.
         query: query.warehouseId === undefined ? {} : { warehouseId: query.warehouseId },
+        ...withSignal(context),
       })
     },
   }

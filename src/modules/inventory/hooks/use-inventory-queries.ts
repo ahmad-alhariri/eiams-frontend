@@ -40,7 +40,7 @@ export function useInventoryBalancesQuery(query: ListInventoryBalancesQuery = EM
       scope === undefined
         ? queryKeys.unscoped(INVENTORY_RESOURCE, 'balances', query)
         : inventoryQueryKeys.balances(scope, query),
-    queryFn: () => inventoryService.listBalances(query),
+    queryFn: ({ signal }) => inventoryService.listBalances(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -53,7 +53,7 @@ export function useInventoryBalanceQuery(balanceId: string | undefined) {
       scope === undefined || balanceId === undefined
         ? queryKeys.unscoped(INVENTORY_RESOURCE, 'balances', balanceId)
         : inventoryQueryKeys.balance(scope, balanceId),
-    queryFn: () => inventoryService.getBalance(balanceId ?? ''),
+    queryFn: ({ signal }) => inventoryService.getBalance(balanceId ?? '', { signal }),
     enabled: scope !== undefined && balanceId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -67,7 +67,7 @@ export function useStockMovementsQuery(query: ListStockMovementsQuery = EMPTY_QU
       scope === undefined
         ? queryKeys.unscoped(INVENTORY_RESOURCE, 'movements', query)
         : inventoryQueryKeys.movements(scope, query),
-    queryFn: () => inventoryService.listMovements(query),
+    queryFn: ({ signal }) => inventoryService.listMovements(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -80,7 +80,7 @@ export function useStockMovementQuery(movementId: string | undefined) {
       scope === undefined || movementId === undefined
         ? queryKeys.unscoped(INVENTORY_RESOURCE, 'movements', movementId)
         : inventoryQueryKeys.movement(scope, movementId),
-    queryFn: () => inventoryService.getMovement(movementId ?? ''),
+    queryFn: ({ signal }) => inventoryService.getMovement(movementId ?? '', { signal }),
     enabled: scope !== undefined && movementId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })

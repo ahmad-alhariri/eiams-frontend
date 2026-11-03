@@ -62,7 +62,7 @@ export function useOrganizationsQuery(
       scope === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'organizations', query)
         : organizationQueryKeys.organizations(scope, query),
-    queryFn: () => organizationService.listOrganizations(query),
+    queryFn: ({ signal }) => organizationService.listOrganizations(query, { signal }),
     enabled: scope !== undefined && (options.enabled ?? true),
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -75,7 +75,7 @@ export function useOrganizationQuery(organizationId: string | undefined) {
       scope === undefined || organizationId === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'organizations', organizationId)
         : organizationQueryKeys.organization(scope, organizationId),
-    queryFn: () => organizationService.getOrganization(organizationId ?? ''),
+    queryFn: ({ signal }) => organizationService.getOrganization(organizationId ?? '', { signal }),
     enabled: scope !== undefined && organizationId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -92,7 +92,7 @@ export function useSitesQuery(
       scope === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'sites', query)
         : organizationQueryKeys.sites(scope, query),
-    queryFn: () => organizationService.listSites(query),
+    queryFn: ({ signal }) => organizationService.listSites(query, { signal }),
     enabled: scope !== undefined && (options.enabled ?? true),
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -105,7 +105,7 @@ export function useSiteQuery(siteId: string | undefined) {
       scope === undefined || siteId === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'sites', siteId)
         : organizationQueryKeys.site(scope, siteId),
-    queryFn: () => organizationService.getSite(siteId ?? ''),
+    queryFn: ({ signal }) => organizationService.getSite(siteId ?? '', { signal }),
     enabled: scope !== undefined && siteId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -122,7 +122,7 @@ export function useOrganizationalUnitsQuery(
       scope === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'organizational-units', query)
         : organizationQueryKeys.organizationalUnits(scope, query),
-    queryFn: () => organizationService.listOrganizationalUnits(query),
+    queryFn: ({ signal }) => organizationService.listOrganizationalUnits(query, { signal }),
     enabled: scope !== undefined && (options.enabled ?? true),
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -135,7 +135,7 @@ export function useOrganizationalUnitQuery(orgUnitId: string | undefined) {
       scope === undefined || orgUnitId === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'organizational-units', orgUnitId)
         : organizationQueryKeys.organizationalUnit(scope, orgUnitId),
-    queryFn: () => organizationService.getOrganizationalUnit(orgUnitId ?? ''),
+    queryFn: ({ signal }) => organizationService.getOrganizationalUnit(orgUnitId ?? '', { signal }),
     enabled: scope !== undefined && orgUnitId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -149,7 +149,7 @@ export function useEmployeesQuery(query: ListEmployeesQuery = EMPTY_QUERY) {
       scope === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'employees', query)
         : organizationQueryKeys.employees(scope, query),
-    queryFn: () => organizationService.listEmployees(query),
+    queryFn: ({ signal }) => organizationService.listEmployees(query, { signal }),
     enabled: scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -162,7 +162,7 @@ export function useEmployeeQuery(employeeId: string | undefined) {
       scope === undefined || employeeId === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'employees', employeeId)
         : organizationQueryKeys.employee(scope, employeeId),
-    queryFn: () => organizationService.getEmployee(employeeId ?? ''),
+    queryFn: ({ signal }) => organizationService.getEmployee(employeeId ?? '', { signal }),
     enabled: scope !== undefined && employeeId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -183,7 +183,7 @@ export function useExternalPartiesQuery(
       scope === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'external-parties', query)
         : organizationQueryKeys.externalParties(scope, query),
-    queryFn: () => organizationService.listExternalParties(query),
+    queryFn: ({ signal }) => organizationService.listExternalParties(query, { signal }),
     enabled: scope !== undefined && (options.enabled ?? true),
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -196,7 +196,8 @@ export function useExternalPartyQuery(externalPartyId: string | undefined) {
       scope === undefined || externalPartyId === undefined
         ? queryKeys.unscoped(ORGANIZATION_RESOURCE, 'external-parties', externalPartyId)
         : organizationQueryKeys.externalParty(scope, externalPartyId),
-    queryFn: () => organizationService.getExternalParty(externalPartyId ?? ''),
+    queryFn: ({ signal }) =>
+      organizationService.getExternalParty(externalPartyId ?? '', { signal }),
     enabled: scope !== undefined && externalPartyId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })

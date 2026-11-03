@@ -58,7 +58,7 @@ export function useInventoryReportQuery(query: ListInventoryReportQuery = EMPTY_
       scope === undefined
         ? queryKeys.unscoped(REPORTS_RESOURCE, 'inventory', query)
         : reportsQueryKeys.inventory(scope, query),
-    queryFn: () => reportsService.getInventoryReport(query),
+    queryFn: ({ signal }) => reportsService.getInventoryReport(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -73,7 +73,7 @@ export function useAssetReportQuery(query: ListAssetReportQuery = EMPTY_QUERY) {
       scope === undefined
         ? queryKeys.unscoped(REPORTS_RESOURCE, 'assets', query)
         : reportsQueryKeys.assets(scope, query),
-    queryFn: () => reportsService.getAssetReport(query),
+    queryFn: ({ signal }) => reportsService.getAssetReport(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -88,7 +88,7 @@ export function useCountAdjustmentReportQuery(query: ListCountAdjustmentReportQu
       scope === undefined
         ? queryKeys.unscoped(REPORTS_RESOURCE, 'countAdjustment', query)
         : reportsQueryKeys.countAdjustment(scope, query),
-    queryFn: () => reportsService.getCountAdjustmentReport(query),
+    queryFn: ({ signal }) => reportsService.getCountAdjustmentReport(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -105,7 +105,7 @@ export function useOperationalDocumentsReportQuery(
       scope === undefined
         ? queryKeys.unscoped(REPORTS_RESOURCE, 'documents', query)
         : reportsQueryKeys.documents(scope, query),
-    queryFn: () => reportsService.getOperationalDocumentsReport(query),
+    queryFn: ({ signal }) => reportsService.getOperationalDocumentsReport(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -123,7 +123,7 @@ export function useDashboardReportQuery(query: ListDashboardReportQuery = EMPTY_
       scope === undefined
         ? queryKeys.unscoped(REPORTS_RESOURCE, 'dashboard', query)
         : reportsQueryKeys.dashboard(scope, query),
-    queryFn: () => reportsService.getDashboardReport(query),
+    queryFn: ({ signal }) => reportsService.getDashboardReport(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })

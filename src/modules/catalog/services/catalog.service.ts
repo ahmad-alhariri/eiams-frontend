@@ -1,4 +1,5 @@
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import type {
@@ -159,14 +160,20 @@ function materialUnitConversionsQuery(query: ListMaterialUnitConversionsQuery): 
  * command because no catalog unit-conversion controller serves one.
  */
 export interface CatalogService {
-  listUnitsOfMeasure: (query: ListUnitsOfMeasureQuery) => Promise<UnitOfMeasurePage>
-  getUnitOfMeasure: (unitId: string) => Promise<UnitOfMeasure>
+  listUnitsOfMeasure: (
+    query: ListUnitsOfMeasureQuery,
+    context?: RequestContext,
+  ) => Promise<UnitOfMeasurePage>
+  getUnitOfMeasure: (unitId: string, context?: RequestContext) => Promise<UnitOfMeasure>
   createUnitOfMeasure: (request: CreateUnitOfMeasureRequest) => Promise<ResourceIdResponse>
   updateUnitOfMeasure: (unitId: string, request: UpdateUnitOfMeasureRequest) => Promise<void>
   setUnitOfMeasureStatus: (unitId: string, request: SetUnitOfMeasureStatusRequest) => Promise<void>
 
-  listMaterialDomains: (query: ListMaterialDomainsQuery) => Promise<MaterialDomainPage>
-  getMaterialDomain: (materialDomainId: string) => Promise<MaterialDomain>
+  listMaterialDomains: (
+    query: ListMaterialDomainsQuery,
+    context?: RequestContext,
+  ) => Promise<MaterialDomainPage>
+  getMaterialDomain: (materialDomainId: string, context?: RequestContext) => Promise<MaterialDomain>
   createMaterialDomain: (request: CreateMaterialDomainRequest) => Promise<ResourceIdResponse>
   updateMaterialDomain: (
     materialDomainId: string,
@@ -177,8 +184,14 @@ export interface CatalogService {
     request: SetMaterialDomainStatusRequest,
   ) => Promise<void>
 
-  listMaterialCategories: (query: ListMaterialCategoriesQuery) => Promise<MaterialCategoryPage>
-  getMaterialCategory: (materialCategoryId: string) => Promise<MaterialCategory>
+  listMaterialCategories: (
+    query: ListMaterialCategoriesQuery,
+    context?: RequestContext,
+  ) => Promise<MaterialCategoryPage>
+  getMaterialCategory: (
+    materialCategoryId: string,
+    context?: RequestContext,
+  ) => Promise<MaterialCategory>
   createMaterialCategory: (request: CreateMaterialCategoryRequest) => Promise<ResourceIdResponse>
   updateMaterialCategory: (
     materialCategoryId: string,
@@ -193,8 +206,11 @@ export interface CatalogService {
     request: SetMaterialCategoryStatusRequest,
   ) => Promise<void>
 
-  listMaterialFamilies: (query: ListMaterialFamiliesQuery) => Promise<MaterialFamilyPage>
-  getMaterialFamily: (materialFamilyId: string) => Promise<MaterialFamily>
+  listMaterialFamilies: (
+    query: ListMaterialFamiliesQuery,
+    context?: RequestContext,
+  ) => Promise<MaterialFamilyPage>
+  getMaterialFamily: (materialFamilyId: string, context?: RequestContext) => Promise<MaterialFamily>
   createMaterialFamily: (request: CreateMaterialFamilyRequest) => Promise<ResourceIdResponse>
   updateMaterialFamily: (
     materialFamilyId: string,
@@ -205,8 +221,8 @@ export interface CatalogService {
     request: SetMaterialFamilyStatusRequest,
   ) => Promise<void>
 
-  listMaterials: (query: ListMaterialsQuery) => Promise<MaterialPage>
-  getMaterial: (materialId: string) => Promise<Material>
+  listMaterials: (query: ListMaterialsQuery, context?: RequestContext) => Promise<MaterialPage>
+  getMaterial: (materialId: string, context?: RequestContext) => Promise<Material>
   createMaterial: (request: CreateMaterialRequest) => Promise<ResourceIdResponse>
   updateMaterial: (materialId: string, request: UpdateMaterialRequest) => Promise<void>
   setMaterialStatus: (materialId: string, request: SetMaterialStatusRequest) => Promise<void>
@@ -214,10 +230,12 @@ export interface CatalogService {
   listMaterialUnitConversions: (
     materialId: string,
     query: ListMaterialUnitConversionsQuery,
+    context?: RequestContext,
   ) => Promise<MaterialUnitConversionPage>
   getMaterialUnitConversion: (
     materialId: string,
     materialUnitConversionId: string,
+    context?: RequestContext,
   ) => Promise<MaterialUnitConversion>
   createMaterialUnitConversion: (
     materialId: string,
@@ -236,18 +254,20 @@ export interface CatalogService {
 
 export function createCatalogService(transport: ApiTransport): CatalogService {
   return {
-    async listUnitsOfMeasure(query) {
+    async listUnitsOfMeasure(query, context) {
       return await transport.requestPage<UnitOfMeasure>({
         path: UNITS_OF_MEASURE_PATH,
         method: 'GET',
         query: unitsOfMeasureQuery(query),
+        ...withSignal(context),
       })
     },
 
-    async getUnitOfMeasure(unitId) {
+    async getUnitOfMeasure(unitId, context) {
       const response = await transport.request<UnitOfMeasure>({
         path: pathWithId(UNIT_OF_MEASURE_PATH, '{unitId}', unitId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
@@ -276,18 +296,20 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
       })
     },
 
-    async listMaterialDomains(query) {
+    async listMaterialDomains(query, context) {
       return await transport.requestPage<MaterialDomain>({
         path: MATERIAL_DOMAINS_PATH,
         method: 'GET',
         query: materialDomainsQuery(query),
+        ...withSignal(context),
       })
     },
 
-    async getMaterialDomain(materialDomainId) {
+    async getMaterialDomain(materialDomainId, context) {
       const response = await transport.request<MaterialDomain>({
         path: pathWithId(MATERIAL_DOMAIN_PATH, '{materialDomainId}', materialDomainId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
@@ -316,18 +338,20 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
       })
     },
 
-    async listMaterialCategories(query) {
+    async listMaterialCategories(query, context) {
       return await transport.requestPage<MaterialCategory>({
         path: MATERIAL_CATEGORIES_PATH,
         method: 'GET',
         query: materialCategoriesQuery(query),
+        ...withSignal(context),
       })
     },
 
-    async getMaterialCategory(materialCategoryId) {
+    async getMaterialCategory(materialCategoryId, context) {
       const response = await transport.request<MaterialCategory>({
         path: pathWithId(MATERIAL_CATEGORY_PATH, '{materialCategoryId}', materialCategoryId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
@@ -364,18 +388,20 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
       })
     },
 
-    async listMaterialFamilies(query) {
+    async listMaterialFamilies(query, context) {
       return await transport.requestPage<MaterialFamily>({
         path: MATERIAL_FAMILIES_PATH,
         method: 'GET',
         query: materialFamiliesQuery(query),
+        ...withSignal(context),
       })
     },
 
-    async getMaterialFamily(materialFamilyId) {
+    async getMaterialFamily(materialFamilyId, context) {
       const response = await transport.request<MaterialFamily>({
         path: pathWithId(MATERIAL_FAMILY_PATH, '{materialFamilyId}', materialFamilyId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
@@ -404,18 +430,20 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
       })
     },
 
-    async listMaterials(query) {
+    async listMaterials(query, context) {
       return await transport.requestPage<Material>({
         path: MATERIALS_PATH,
         method: 'GET',
         query: materialsQuery(query),
+        ...withSignal(context),
       })
     },
 
-    async getMaterial(materialId) {
+    async getMaterial(materialId, context) {
       const response = await transport.request<Material>({
         path: pathWithId(MATERIAL_PATH, '{materialId}', materialId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
@@ -444,15 +472,16 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
       })
     },
 
-    async listMaterialUnitConversions(materialId, query) {
+    async listMaterialUnitConversions(materialId, query, context) {
       return await transport.requestPage<MaterialUnitConversion>({
         path: pathWithId(MATERIAL_UNIT_CONVERSIONS_PATH, '{materialId}', materialId),
         method: 'GET',
         query: materialUnitConversionsQuery(query),
+        ...withSignal(context),
       })
     },
 
-    async getMaterialUnitConversion(materialId, materialUnitConversionId) {
+    async getMaterialUnitConversion(materialId, materialUnitConversionId, context) {
       const response = await transport.request<MaterialUnitConversion>({
         path: pathWithId(
           pathWithId(MATERIAL_UNIT_CONVERSION_PATH, '{materialId}', materialId),
@@ -460,6 +489,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
           materialUnitConversionId,
         ),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },

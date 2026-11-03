@@ -34,7 +34,7 @@ export function useAuditLogsQuery(query: ListAuditLogsQuery = EMPTY_QUERY) {
       scope === undefined
         ? queryKeys.unscoped(AUDIT_RESOURCE, 'logs', query)
         : auditQueryKeys.logs(scope, query),
-    queryFn: () => auditService.listAuditLogs(query),
+    queryFn: ({ signal }) => auditService.listAuditLogs(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -48,7 +48,7 @@ export function useAuditLogQuery(auditLogId: string | undefined) {
       scope === undefined || auditLogId === undefined
         ? queryKeys.unscoped(AUDIT_RESOURCE, 'logs', auditLogId)
         : auditQueryKeys.log(scope, auditLogId),
-    queryFn: () => auditService.getAuditLog(auditLogId ?? ''),
+    queryFn: ({ signal }) => auditService.getAuditLog(auditLogId ?? '', { signal }),
     enabled: scope !== undefined && auditLogId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })

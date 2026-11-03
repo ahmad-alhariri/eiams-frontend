@@ -40,7 +40,7 @@ export function useCustodiesQuery(query: ListCustodiesQuery) {
       scope.activeScopeCacheKey === undefined
         ? queryKeys.unscoped(CUSTODY_RESOURCE, 'custodies', query)
         : custodyQueryKeys.custodies(scope.activeScopeCacheKey, query),
-    queryFn: () => custodyService.listCustodies(query),
+    queryFn: ({ signal }) => custodyService.listCustodies(query, { signal }),
     enabled: scope.activeScopeCacheKey !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
     placeholderData: keepPreviousDataInSameScope(scope.activeScopeCacheKey),
@@ -64,7 +64,7 @@ export function usePendingCustodiesQuery(warehouseId: string, page: number, page
       scope.activeScopeCacheKey === undefined
         ? queryKeys.unscoped(CUSTODY_RESOURCE, 'custodies', 'pending', query)
         : custodyQueryKeys.pending(scope.activeScopeCacheKey, query),
-    queryFn: () => custodyService.listPendingCustodies(query),
+    queryFn: ({ signal }) => custodyService.listPendingCustodies(query, { signal }),
     enabled: scope.activeScopeCacheKey !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
     placeholderData: keepPreviousDataInSameScope(scope.activeScopeCacheKey),

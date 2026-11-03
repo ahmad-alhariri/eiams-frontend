@@ -41,7 +41,7 @@ export function useAssetsQuery(query: ListAssetsQuery) {
       scope === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'assets', query)
         : assetQueryKeys.assets(scope, query),
-    queryFn: () => assetService.listAssets(query),
+    queryFn: ({ signal }) => assetService.listAssets(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -54,7 +54,7 @@ export function useAssetQuery(assetId: string | undefined) {
       scope === undefined || assetId === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'assets', assetId)
         : assetQueryKeys.asset(scope, assetId),
-    queryFn: () => assetService.getAsset(assetId ?? ''),
+    queryFn: ({ signal }) => assetService.getAsset(assetId ?? '', { signal }),
     enabled: scope !== undefined && assetId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -68,7 +68,7 @@ export function useAssetCurrentStatusQuery(assetId: string | undefined) {
       scope === undefined || assetId === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'current-status', assetId)
         : assetQueryKeys.currentStatus(scope, assetId),
-    queryFn: () => assetService.getAssetCurrentStatus(assetId ?? ''),
+    queryFn: ({ signal }) => assetService.getAssetCurrentStatus(assetId ?? '', { signal }),
     enabled: scope !== undefined && assetId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -82,7 +82,7 @@ export function useAssetCustodyTimelineQuery(assetId: string | undefined) {
       scope === undefined || assetId === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'custody', assetId)
         : assetQueryKeys.custody(scope, assetId),
-    queryFn: () => assetService.getAssetCustodyTimeline(assetId ?? ''),
+    queryFn: ({ signal }) => assetService.getAssetCustodyTimeline(assetId ?? '', { signal }),
     enabled: scope !== undefined && assetId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -99,7 +99,7 @@ export function useAssetMovementsQuery(
       scope === undefined || assetId === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'movements', assetId, query)
         : assetQueryKeys.movements(scope, assetId, query),
-    queryFn: () => assetService.listAssetMovements(assetId ?? '', query),
+    queryFn: ({ signal }) => assetService.listAssetMovements(assetId ?? '', query, { signal }),
     enabled: scope !== undefined && assetId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })

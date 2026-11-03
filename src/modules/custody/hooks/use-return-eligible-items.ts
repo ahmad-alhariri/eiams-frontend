@@ -44,7 +44,10 @@ export function useReturnEligibleItems(
       scope === undefined || originalIssueDocumentId === undefined
         ? queryKeys.unscoped(RETURN_RESOURCE, 'eligible-items')
         : queryKeys.scoped(scope, RETURN_RESOURCE, 'eligible-items', originalIssueDocumentId),
-    queryFn: () => returnService.listEligibleItems(originalIssueDocumentId ?? ''),
+    queryFn: ({ signal }) =>
+      returnService.listEligibleItems(originalIssueDocumentId ?? '', undefined, undefined, {
+        signal,
+      }),
     enabled,
     staleTime: OPERATIONAL_STALE_TIME,
   })

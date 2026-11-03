@@ -40,7 +40,7 @@ export function usePermissionsQuery() {
       scope === undefined
         ? queryKeys.unscoped(ADMIN_RESOURCE, 'permissions')
         : adminQueryKeys.permissions(scope),
-    queryFn: adminService.listPermissions,
+    queryFn: ({ signal }) => adminService.listPermissions({ signal }),
     enabled: scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -53,7 +53,7 @@ export function useRolesQuery(enabled = true) {
       scope === undefined
         ? queryKeys.unscoped(ADMIN_RESOURCE, 'roles')
         : adminQueryKeys.roles(scope),
-    queryFn: adminService.listRoles,
+    queryFn: ({ signal }) => adminService.listRoles({ signal }),
     enabled: scope !== undefined && enabled,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -66,7 +66,7 @@ export function useRoleQuery(roleId: string | undefined) {
       scope === undefined || roleId === undefined
         ? queryKeys.unscoped(ADMIN_RESOURCE, 'roles', roleId)
         : adminQueryKeys.role(scope, roleId),
-    queryFn: () => adminService.getRole(roleId ?? ''),
+    queryFn: ({ signal }) => adminService.getRole(roleId ?? '', { signal }),
     enabled: scope !== undefined && roleId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -80,7 +80,7 @@ export function useUsersQuery(query: ListUsersQuery = EMPTY_QUERY) {
       scope === undefined
         ? queryKeys.unscoped(ADMIN_RESOURCE, 'users', query)
         : adminQueryKeys.users(scope, query),
-    queryFn: () => adminService.listUsers(query),
+    queryFn: ({ signal }) => adminService.listUsers(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -93,7 +93,7 @@ export function useUserQuery(userId: string | undefined) {
       scope === undefined || userId === undefined
         ? queryKeys.unscoped(ADMIN_RESOURCE, 'users', userId)
         : adminQueryKeys.user(scope, userId),
-    queryFn: () => adminService.getUser(userId ?? ''),
+    queryFn: ({ signal }) => adminService.getUser(userId ?? '', { signal }),
     enabled: scope !== undefined && userId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -113,7 +113,7 @@ export function useUserRoleScopeQuery(userId: string | undefined) {
       scope === undefined || userId === undefined
         ? queryKeys.unscoped(ADMIN_RESOURCE, 'users', userId, 'role-scope')
         : adminQueryKeys.userRoleScope(scope, userId),
-    queryFn: () => adminService.getUserRoleScope(userId ?? ''),
+    queryFn: ({ signal }) => adminService.getUserRoleScope(userId ?? '', { signal }),
     enabled: scope !== undefined && userId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })

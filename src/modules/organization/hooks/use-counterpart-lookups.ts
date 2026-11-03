@@ -56,8 +56,10 @@ export function useCounterpartSearchQuery(query: SearchCounterpartsQuery | undef
       scope === undefined || query === undefined
         ? queryKeys.unscoped(COUNTERPART_RESOURCE, 'search', query)
         : counterpartLookupQueryKeys.search(scope, query),
-    queryFn: () =>
-      counterpartLookupService.searchCounterparts(query ?? { operation: 'Receiving', search: '' }),
+    queryFn: ({ signal }) =>
+      counterpartLookupService.searchCounterparts(query ?? { operation: 'Receiving', search: '' }, {
+        signal,
+      }),
     enabled: scope !== undefined && query !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -71,8 +73,10 @@ export function useHistoricalCounterpartQuery(reference: CounterpartReference | 
       scope === undefined || reference === undefined
         ? queryKeys.unscoped(COUNTERPART_RESOURCE, 'resolve', reference)
         : counterpartLookupQueryKeys.resolve(scope, reference),
-    queryFn: () =>
-      counterpartLookupService.resolveCounterpart(reference ?? { type: 'Employee', id: '' }),
+    queryFn: ({ signal }) =>
+      counterpartLookupService.resolveCounterpart(reference ?? { type: 'Employee', id: '' }, {
+        signal,
+      }),
     enabled: scope !== undefined && reference !== undefined && reference.id !== '',
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -101,7 +105,7 @@ export function useActiveCounterpartOptions(options: CounterpartSearchOptions) {
       const query = createWriteSearchQuery(search, options.operation, options.type)
       const items = await queryClient.fetchQuery({
         queryKey: counterpartLookupQueryKeys.search(scope, query),
-        queryFn: () => counterpartLookupService.searchCounterparts(query),
+        queryFn: ({ signal }) => counterpartLookupService.searchCounterparts(query, { signal }),
         staleTime: MASTER_DATA_STALE_TIME,
       })
       return items.filter((cp) => cp.status === 'Active')

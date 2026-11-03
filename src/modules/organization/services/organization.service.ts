@@ -1,4 +1,5 @@
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import type {
@@ -140,21 +141,30 @@ function organizationsQuery(query: ListOrganizationsQuery): WireQuery {
  * the server never sent.
  */
 export interface OrganizationService {
-  listOrganizations: (query: ListOrganizationsQuery) => Promise<OrganizationPage>
-  getOrganization: (organizationId: string) => Promise<Organization>
+  listOrganizations: (
+    query: ListOrganizationsQuery,
+    context?: RequestContext,
+  ) => Promise<OrganizationPage>
+  getOrganization: (organizationId: string, context?: RequestContext) => Promise<Organization>
   createOrganization: (request: CreateOrganizationRequest) => Promise<ResourceIdResponse>
   updateOrganization: (organizationId: string, request: UpdateOrganizationRequest) => Promise<void>
   setOrganizationStatus: (
     organizationId: string,
     request: SetOrganizationStatusRequest,
   ) => Promise<void>
-  listSites: (query: ListSitesQuery) => Promise<SitePage>
-  getSite: (siteId: string) => Promise<Site>
+  listSites: (query: ListSitesQuery, context?: RequestContext) => Promise<SitePage>
+  getSite: (siteId: string, context?: RequestContext) => Promise<Site>
   createSite: (request: SiteCreateRequest) => Promise<ResourceIdResponse>
   updateSite: (siteId: string, request: SiteUpdateRequest) => Promise<void>
   setSiteStatus: (siteId: string, request: SetSiteStatusRequest) => Promise<void>
-  listOrganizationalUnits: (query: ListOrganizationalUnitsQuery) => Promise<OrganizationalUnitPage>
-  getOrganizationalUnit: (orgUnitId: string) => Promise<OrganizationalUnit>
+  listOrganizationalUnits: (
+    query: ListOrganizationalUnitsQuery,
+    context?: RequestContext,
+  ) => Promise<OrganizationalUnitPage>
+  getOrganizationalUnit: (
+    orgUnitId: string,
+    context?: RequestContext,
+  ) => Promise<OrganizationalUnit>
   createOrganizationalUnit: (
     request: OrganizationalUnitCreateRequest,
   ) => Promise<ResourceIdResponse>
@@ -166,13 +176,16 @@ export interface OrganizationService {
     orgUnitId: string,
     request: SetOrganizationalUnitStatusRequest,
   ) => Promise<void>
-  listEmployees: (query: ListEmployeesQuery) => Promise<EmployeePage>
-  getEmployee: (employeeId: string) => Promise<Employee>
+  listEmployees: (query: ListEmployeesQuery, context?: RequestContext) => Promise<EmployeePage>
+  getEmployee: (employeeId: string, context?: RequestContext) => Promise<Employee>
   createEmployee: (request: EmployeeCreateRequest) => Promise<ResourceIdResponse>
   updateEmployee: (employeeId: string, request: EmployeeUpdateRequest) => Promise<void>
   setEmployeeStatus: (employeeId: string, request: SetEmployeeStatusRequest) => Promise<void>
-  listExternalParties: (query: ListExternalPartiesQuery) => Promise<ExternalPartyPage>
-  getExternalParty: (externalPartyId: string) => Promise<ExternalParty>
+  listExternalParties: (
+    query: ListExternalPartiesQuery,
+    context?: RequestContext,
+  ) => Promise<ExternalPartyPage>
+  getExternalParty: (externalPartyId: string, context?: RequestContext) => Promise<ExternalParty>
   createExternalParty: (request: CreateExternalPartyRequest) => Promise<ResourceIdResponse>
   updateExternalParty: (
     externalPartyId: string,
@@ -186,18 +199,20 @@ export interface OrganizationService {
 
 export function createOrganizationService(transport: ApiTransport): OrganizationService {
   return {
-    async listOrganizations(query) {
+    async listOrganizations(query, context) {
       return await transport.requestPage<Organization>({
         path: ORGANIZATIONS_PATH,
         method: 'GET',
         query: organizationsQuery(query),
+        ...withSignal(context),
       })
     },
 
-    async getOrganization(organizationId) {
+    async getOrganization(organizationId, context) {
       const response = await transport.request<Organization>({
         path: pathWithId(ORGANIZATION_PATH, '{organizationId}', organizationId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
@@ -226,18 +241,20 @@ export function createOrganizationService(transport: ApiTransport): Organization
       })
     },
 
-    async listSites(query) {
+    async listSites(query, context) {
       return await transport.requestPage<Site>({
         path: SITES_PATH,
         method: 'GET',
         query: sitesQuery(query),
+        ...withSignal(context),
       })
     },
 
-    async getSite(siteId) {
+    async getSite(siteId, context) {
       const response = await transport.request<Site>({
         path: pathWithId(SITE_PATH, '{siteId}', siteId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
@@ -266,18 +283,20 @@ export function createOrganizationService(transport: ApiTransport): Organization
       })
     },
 
-    async listOrganizationalUnits(query) {
+    async listOrganizationalUnits(query, context) {
       return await transport.requestPage<OrganizationalUnit>({
         path: ORGANIZATIONAL_UNITS_PATH,
         method: 'GET',
         query: organizationalUnitsQuery(query),
+        ...withSignal(context),
       })
     },
 
-    async getOrganizationalUnit(orgUnitId) {
+    async getOrganizationalUnit(orgUnitId, context) {
       const response = await transport.request<OrganizationalUnit>({
         path: pathWithId(ORGANIZATIONAL_UNIT_PATH, '{orgUnitId}', orgUnitId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
@@ -306,18 +325,20 @@ export function createOrganizationService(transport: ApiTransport): Organization
       })
     },
 
-    async listEmployees(query) {
+    async listEmployees(query, context) {
       return await transport.requestPage<Employee>({
         path: EMPLOYEES_PATH,
         method: 'GET',
         query: employeesQuery(query),
+        ...withSignal(context),
       })
     },
 
-    async getEmployee(employeeId) {
+    async getEmployee(employeeId, context) {
       const response = await transport.request<Employee>({
         path: pathWithId(EMPLOYEE_PATH, '{employeeId}', employeeId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
@@ -346,18 +367,20 @@ export function createOrganizationService(transport: ApiTransport): Organization
       })
     },
 
-    async listExternalParties(query) {
+    async listExternalParties(query, context) {
       return await transport.requestPage<ExternalParty>({
         path: EXTERNAL_PARTIES_PATH,
         method: 'GET',
         query: externalPartiesQuery(query),
+        ...withSignal(context),
       })
     },
 
-    async getExternalParty(externalPartyId) {
+    async getExternalParty(externalPartyId, context) {
       const response = await transport.request<ExternalParty>({
         path: pathWithId(EXTERNAL_PARTY_PATH, '{externalPartyId}', externalPartyId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },

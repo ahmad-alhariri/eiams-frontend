@@ -63,7 +63,7 @@ export function useReceivingSuppliersLoader(): ReceivingSuppliersLoaderResult {
       }
       const suppliers = await queryClient.fetchQuery({
         queryKey: receivingQueryKeys.suppliers(activeScopeCacheKey, trimmed),
-        queryFn: () => receivingService.searchReceivingSuppliers(trimmed),
+        queryFn: ({ signal }) => receivingService.searchReceivingSuppliers(trimmed, { signal }),
         staleTime: OPERATIONAL_STALE_TIME,
       })
       return suppliers.map((supplier) => ({ value: supplier.name, label: supplier.name }))

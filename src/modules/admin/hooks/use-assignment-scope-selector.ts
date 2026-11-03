@@ -131,7 +131,7 @@ export function useAssignmentScopeSelector(
         }
         const page = await queryClient.fetchQuery({
           queryKey: organizationQueryKeys.sites(scope, query),
-          queryFn: () => organizationService.listSites(query),
+          queryFn: ({ signal }) => organizationService.listSites(query, { signal }),
           staleTime: MASTER_DATA_STALE_TIME,
         })
         // CONFINED KNOWN DIVERGENCE: `organizationService.listSites` is typed against
@@ -150,7 +150,7 @@ export function useAssignmentScopeSelector(
       }
       const page = await queryClient.fetchQuery({
         queryKey: warehouseQueryKeys.warehouses(scope, query),
-        queryFn: () => warehouseService.listWarehouses(query),
+        queryFn: ({ signal }) => warehouseService.listWarehouses(query, { signal }),
         staleTime: MASTER_DATA_STALE_TIME,
       })
       // Same confined divergence as the Site read above.
@@ -190,11 +190,11 @@ export function useAssignmentScopeLabel(
         : scopeType === 'Site'
           ? organizationQueryKeys.site(scope, scopeId)
           : warehouseQueryKeys.warehouse(scope, scopeId),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const record =
         scopeType === 'Site'
-          ? await organizationService.getSite(scopeId ?? '')
-          : await warehouseService.getWarehouse(scopeId ?? '')
+          ? await organizationService.getSite(scopeId ?? '', { signal })
+          : await warehouseService.getWarehouse(scopeId ?? '', { signal })
       // Read through the same narrowing as the list reads: the single-resource
       // projection serves `name`, not the generated `nameAr`. Returning
       // `record.nameAr` made this query resolve to `undefined`, which React Query
