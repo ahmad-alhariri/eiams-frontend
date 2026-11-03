@@ -35,8 +35,8 @@ import {
 const SCANNED = applicationSourceFiles().filter(
   (file) => !relativeToRepo(file).startsWith('src/app/gallery/'),
 )
-// Committed count of this scan's own file set; re-pin when application files are added or removed.
-const EXPECTED_SCANNED_FILES = 392 // committed count
+// Committed count of this scan's own file set (applicationSourceFiles minus src/app/gallery); must be re-pinned when application files are added or removed.
+const EXPECTED_SCANNED_FILES = 394 // committed count — re-derived from `git ls-files` after staged deletions
 
 const BUTTON_FILE = 'src/shared/ui/button.tsx'
 
