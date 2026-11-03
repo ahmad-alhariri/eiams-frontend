@@ -168,8 +168,11 @@ export function useEmployeeQuery(employeeId: string | undefined) {
   })
 }
 
-export function externalPartiesFetchFn(query: ListExternalPartiesQuery) {
-  return organizationService.listExternalParties(query)
+export function externalPartiesFetchFn(
+  query: ListExternalPartiesQuery,
+  context?: import('@/shared/api/api-transport').RequestContext,
+) {
+  return organizationService.listExternalParties(query, context)
 }
 
 export function useExternalPartiesQuery(

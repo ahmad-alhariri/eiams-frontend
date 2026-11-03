@@ -54,7 +54,7 @@ export function ExternalPartySelect({
       const query = { ...LOOKUP_PAGE, ...(search === '' ? {} : { search }) }
       const page = await queryClient.fetchQuery({
         queryKey: organizationQueryKeys.externalParties(scope, query),
-        queryFn: () => externalPartiesFetchFn(query),
+        queryFn: ({ signal }) => externalPartiesFetchFn(query, { signal }),
         staleTime: MASTER_DATA_STALE_TIME,
       })
 
