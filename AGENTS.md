@@ -10,6 +10,8 @@
 > through the shared `ApiTransport`. Preserve useful frontend conventions that
 > do not conflict with the parent governance and approved target state.
 
+> **Doc-ownership rule (verified):** The system repo `docs/` (`C:\EIAMS-SYSTEM\docs`) is the CANONICAL text for product requirements, the route/permission/scope matrix, the business domain model, and the single-role/single-scope decision. `eiams-frontend/docs/` holds the FRONTEND's own decision records. Where a decision exists in both, the frontend copy carries the same Decision ID (e.g., D-RBAC-01, D-SRS-01) but has drifted — the four pairs (PRD.md, route-permission-scope-matrix.md, business-domain-model-v1.md, single-role-single-scope-assignment-decision.md) are different lengths and not byte-identical to the system originals; ADRs 0004–0006 remain byte-identical, which is fine. Copying text between repos is exactly what let the two drift apart; the frontend record cites by Decision ID rather than embedding the full system text.
+
 **Enterprise Inventory & Asset Management System**
 الهيئة العامة للرقابة والتفتيش — Syrian General Authority for Oversight and Inspection
 
@@ -90,7 +92,7 @@ src/
 └── main.tsx
 ```
 
-### Domain Modules (12 total)
+### Domain Modules (16 total)
 
 | Module             | Responsibility                                         |
 | ------------------ | ------------------------------------------------------ |
@@ -99,13 +101,16 @@ src/
 | `catalog/`         | Material domains, categories, families, materials, UOM |
 | `warehouse/`       | Warehouses, capabilities, material settings            |
 | `inventory/`       | Balance viewer, stock movement ledger                  |
+| `inventory-count/` | Count sessions, lines, variance                        |
 | `receiving/`       | Receiving documents (Spine + ReceivingInfo petal)      |
 | `issue/`           | Issue documents (Spine + IssueTo petal)                |
 | `transfer/`        | Transfer documents (Spine + TransferInfo petal)        |
+| `opening/`         | Opening balance / initial balance documents            |
+| `adjustment/`      | Adjustment documents                                   |
 | `asset/`           | Asset registry, movement history                       |
 | `custody/`         | Custody assignment, transfer, return, history          |
-| `inventory-count/` | Count sessions, lines, variance                        |
-| `adjustment/`      | Adjustment documents                                   |
+| `audit/`           | Audit logs, ledger verification                        |
+| `admin/`           | Administration, system settings                        |
 | `reports/`         | Dashboards, KPIs, printable reports                    |
 
 ### Shared Layer Components
@@ -114,7 +119,7 @@ src/
 - **layout/** — AppLayout, Sidebar (RTL, right side), Header
 - **feedback/** — LoadingSpinner, ErrorBoundary, EmptyState
 - **hooks/** — usePermission (RBAC gate), useDebounce, usePagination, useConfirm
-- **services/** — api.client.ts (Axios instance with JWT interceptor), query.client.ts (TanStack Query config)
+- **services/** — `src/shared/services/api.client.ts` (single Axios instance + 401-refresh / non-JSON gateway interceptors); `src/shared/services/query.client.ts` (TanStack Query config); transport composition at `src/shared/api/transport.ts` (`apiTransport = createAxiosTransport(apiClient)`); interface `ApiTransport` + `RequestContext`/`withSignal` in `src/shared/api/api-transport.ts`; only implementation `createAxiosTransport` in `src/shared/api/axios-transport.ts`.
 
 ---
 

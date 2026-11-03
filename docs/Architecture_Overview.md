@@ -123,12 +123,9 @@ The layers above are source boundaries too, and they are enforced in the tree:
   schemas, services and types.
 - `src/shared` owns the document spine, the UI kit, the API transport and the
   infrastructure every feature uses.
-- `src/shared` never imports a feature module. Where a shared component needs a
-  feature runtime (an option loader, a capability validator), the feature binds
-  it at the page seam and the shared component receives it as a prop with an
-  explicit unbound fallback.
+- `src/shared` must never import a feature module at RUNTIME. Type-only shared→module imports are sanctioned infrastructure (`src/shared/services/api.client.ts`, `session-adapter.ts`, `dev-session.ts` each import `AuthTokenResponse` from `@/modules/auth/types/session.types`; `src/shared/documents/active-scope.ts` is the sanctioned single-point shim into auth). The eight shared document-editor / detail-page runtime edges (`asset-line-editor.tsx:5,9`; `quantity-line-editor.tsx:9-12,16`; `document-detail-page.tsx:7`) are an OPEN, separately-tracked item (`eiams-frontend-zhg2`) being fixed by another session — they are not solved and must not be read as feature-free.
 - A wire contract the shared spine genuinely needs lives in `src/shared/types`
-  (`warehouse.wire-types.ts`, `scope.types.ts`), not in a global type registry.
+  (`catalog.wire-types.ts`, `warehouse.wire-types.ts`, `wire-primitives.ts`, `scope.types.ts`), not in a global type registry.
 
 The audit that produced this arrangement, including the findings that were
 withdrawn after verification, is in

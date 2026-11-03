@@ -1,4 +1,6 @@
-﻿# EIAMS Frontend Architecture Readiness Review
+﻿> **HISTORICAL / SUPERSEDED — DO NOT USE AS CURRENT REFERENCE.** This document describes the provisional OpenAPI snapshot (deleted; no longer exists) that was superseded by handwritten per-module wire contracts (ADR-0001 / D-INT-02). It is retained as a historical record only and must not guide current architecture decisions.
+
+# EIAMS Frontend Architecture Readiness Review
 
 **Status:** Approved — architecture and provisional contract are ready to
 unblock the implementation epics, with three tracked increments below.

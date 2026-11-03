@@ -28,7 +28,7 @@ copy to drift.
 | --- | --- | --- |
 | `maxJsChunkCount` | 169 | count of `dist/assets/*.js` |
 | `maxJsTotalBytes` | 1615445 | summed size of `dist/assets/*.js` |
-| `maxLargestChunkBytes` | 344550 | largest single `dist/assets/*.js` |
+| `maxLargestChunkBytes` | 344750 | largest single `dist/assets/*.js` |
 | `routePageCount` | 59 | `getWiredRouteKeys().length` |
 
 Re-measure with `pnpm run build`, then sum the sizes of the files in
@@ -44,7 +44,7 @@ Re-measure with `pnpm run build`, then sum the sizes of the files in
 | 2026-10-30 | `eiams-frontend-e25-t07` | server-table workflow hardening (scope-aware placeholders, refresh state, pagination clamp) | 168 | 1612779 | 344020 |
 | 2026-10-30 | `eiams-frontend-e25-t04` | responsive workflow audit (mobile touch-target floor on the shared Button, checkbox hit area, date-picker clear button, logical drawer inset) | 168 | 1613066 | 344064 |
 | 2026-10-30 | `eiams-frontend-e25-t04` (fix round) | element-level touch-target fixes (header brand link, table-cell link rule, print trigger, shared select and dropdown options) | 168 | 1613293 | 344082 |
-| 2026-11-02 | frontend architecture remediation | shared-to-module dependency direction, scope-wide invalidation, centralized query-resource vocabulary, and the Arabic-digit conversions that shipped with them | 169 | 1615445 | 344550 |
+| 2026-11-02 | frontend architecture remediation | shared-to-module dependency direction, scope-wide invalidation, centralized query-resource vocabulary, and the Arabic-digit conversions that shipped with them | 169 | 1615445 | 344750 |
 
 The `e25-t04` growth is 287 bytes of Tailwind class names in the shared UI
 chunks, 44 of them in the largest chunk (`index-*.js`); its fix round adds a

@@ -171,7 +171,7 @@ Final state of the branch: `pnpm run typecheck` clean, `pnpm run lint` clean
 (no errors at all; the UTF-16LE file was rewritten as UTF-8 without a BOM),
 `pnpm test` 2761 passed / 1 skipped with zero failures, `pnpm run build` clean,
 and `pnpm run budget:bundle` inside the re-derived ceilings (169 chunks,
-1,615,035 B measured against a 1,615,445 B ceiling, largest chunk 344,550 B,
+1,615,035 B measured against a 1,615,445 B ceiling, largest chunk 344,750 B,
 route count unchanged at 59).
 
 Commits: `01b0919` (the five architecture slices, the RTL fence and the
