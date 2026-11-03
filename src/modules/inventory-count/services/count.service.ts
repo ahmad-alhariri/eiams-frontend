@@ -1,4 +1,5 @@
-﻿import type { ApiTransport } from '@/shared/api/api-transport'
+﻿import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 
 import type {
@@ -38,11 +39,18 @@ const COUNT_ADJUSTMENT_PATH = '/inventory-counts/{countId}/adjustment'
 const FREEZE_STATUS_PATH = '/warehouses/{warehouseId}/inventory-freeze-status'
 
 export interface CountService {
-  listCounts: (query: ListCountsQuery) => Promise<CountPage<InventoryCountListItem>>
-  getCount: (countId: string) => Promise<InventoryCount>
+  listCounts: (
+    query: ListCountsQuery,
+    context?: RequestContext,
+  ) => Promise<CountPage<InventoryCountListItem>>
+  getCount: (countId: string, context?: RequestContext) => Promise<InventoryCount>
   planCount: (request: PlanCountRequest, idempotencyKey: string) => Promise<ResourceId>
   startCount: (countId: string, expectedRowVersion: number) => Promise<void>
-  listLines: (countId: string, query: ListCountLinesQuery) => Promise<CountPage<InventoryCountLine>>
+  listLines: (
+    countId: string,
+    query: ListCountLinesQuery,
+    context?: RequestContext,
+  ) => Promise<CountPage<InventoryCountLine>>
   updateLines: (
     countId: string,
     request: UpdateCountLinesRequest,
@@ -68,7 +76,7 @@ export interface CountService {
   setCountStatus: (countId: string, request: UpdateCountStatusRequest) => Promise<void>
   setFreezePolicy: (countId: string, request: UpdateFreezePolicyRequest) => Promise<void>
   createAdjustment: (countId: string, idempotencyKey: string) => Promise<ResourceId>
-  getFreezeStatus: (warehouseId: string) => Promise<InventoryFreezeStatus>
+  getFreezeStatus: (warehouseId: string, context?: RequestContext) => Promise<InventoryFreezeStatus>
 }
 
 /** Fills both path parameters of a per-line route, URI-encoded. */
@@ -89,18 +97,20 @@ function linePath(template: string, countId: string, lineId: string): string {
  */
 export function createCountService(transport: ApiTransport): CountService {
   return {
-    async listCounts(query) {
+    async listCounts(query, context) {
       return transport.requestPage<InventoryCountListItem>({
         path: COUNTS_PATH,
         method: 'GET',
         query: query as Record<string, string | number | boolean | undefined>,
+        ...withSignal(context),
       })
     },
 
-    async getCount(countId) {
+    async getCount(countId, context) {
       return transport.request<InventoryCount>({
         path: pathWithId(COUNT_PATH, '{countId}', countId),
         method: 'GET',
+        ...withSignal(context),
       })
     },
 
@@ -122,11 +132,12 @@ export function createCountService(transport: ApiTransport): CountService {
       })
     },
 
-    async listLines(countId, query) {
+    async listLines(countId, query, context) {
       return transport.requestPage<InventoryCountLine>({
         path: pathWithId(COUNT_LINES_PATH, '{countId}', countId),
         method: 'GET',
         query: query as Record<string, string | number | boolean | undefined>,
+        ...withSignal(context),
       })
     },
 
@@ -223,10 +234,11 @@ export function createCountService(transport: ApiTransport): CountService {
       })
     },
 
-    async getFreezeStatus(warehouseId) {
+    async getFreezeStatus(warehouseId, context) {
       return transport.request<InventoryFreezeStatus>({
         path: pathWithId(FREEZE_STATUS_PATH, '{warehouseId}', warehouseId),
         method: 'GET',
+        ...withSignal(context),
       })
     },
   }

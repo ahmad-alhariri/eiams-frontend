@@ -19,6 +19,7 @@ import type {
   UpdateFreezePolicyRequest,
 } from '@/modules/inventory-count/types/inventory-count.types'
 import { countService } from '@/modules/inventory-count/services/count.service'
+import type { RequestContext } from '@/shared/api/api-transport'
 import { createIdempotencyKey, type IdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 import {
@@ -56,17 +57,28 @@ export {
  * count-linked adjustment must never be seeded from a partial page. Pages are
  * ONE-based on the wire (`page`, `pageSize`).
  */
-async function listAllCountLines(countId: string): Promise<readonly InventoryCountLine[]> {
-  const firstPage = await countService.listLines(countId, {
-    page: 1,
-    pageSize: ALL_COUNT_LINES_PAGE_SIZE,
-  })
+async function listAllCountLines(
+  countId: string,
+  context?: RequestContext,
+): Promise<readonly InventoryCountLine[]> {
+  const firstPage = await countService.listLines(
+    countId,
+    {
+      page: 1,
+      pageSize: ALL_COUNT_LINES_PAGE_SIZE,
+    },
+    context,
+  )
   const remainingPages = await Promise.all(
     Array.from({ length: Math.max(0, (firstPage.totalPages ?? 1) - 1) }, (_, index) =>
-      countService.listLines(countId, {
-        page: index + 2,
-        pageSize: ALL_COUNT_LINES_PAGE_SIZE,
-      }),
+      countService.listLines(
+        countId,
+        {
+          page: index + 2,
+          pageSize: ALL_COUNT_LINES_PAGE_SIZE,
+        },
+        context,
+      ),
     ),
   )
 
@@ -108,7 +120,7 @@ export function useInventoryCountsQuery(query: ListCountsQuery) {
       scope.activeScopeCacheKey === undefined
         ? queryKeys.unscoped(COUNT_RESOURCE, 'counts', query)
         : countQueryKeys.counts(scope.activeScopeCacheKey, query),
-    queryFn: () => countService.listCounts(query),
+    queryFn: ({ signal }) => countService.listCounts(query, { signal }),
     enabled: scope.activeScopeCacheKey !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -122,7 +134,7 @@ export function useInventoryCountQuery(countId: string | undefined | null) {
       scope === undefined || countId == null
         ? queryKeys.unscoped(COUNT_RESOURCE, 'count', countId)
         : countQueryKeys.count(scope, countId),
-    queryFn: () => countService.getCount(countId ?? ''),
+    queryFn: ({ signal }) => countService.getCount(countId ?? '', { signal }),
     enabled: scope !== undefined && countId != null && countId !== '',
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -140,7 +152,7 @@ export function useCountLinesQuery(
       scope === undefined || countId == null
         ? queryKeys.unscoped(COUNT_RESOURCE, 'lines', countId, query)
         : countQueryKeys.lines(scope, countId, query),
-    queryFn: () => countService.listLines(countId ?? '', query),
+    queryFn: ({ signal }) => countService.listLines(countId ?? '', query, { signal }),
     enabled: scope !== undefined && countId != null && countId !== '',
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -160,7 +172,7 @@ export function useAllCountLinesQuery(countId: string | undefined | null) {
       scope === undefined || countId == null
         ? queryKeys.unscoped(COUNT_RESOURCE, 'lines', countId, 'all')
         : countQueryKeys.allLines(scope, countId),
-    queryFn: () => listAllCountLines(countId ?? ''),
+    queryFn: ({ signal }) => listAllCountLines(countId ?? '', { signal }),
     enabled: scope !== undefined && countId != null && countId !== '',
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -182,7 +194,7 @@ export function useWarehouseFreezeStatusQuery(
       scope.activeScopeCacheKey === undefined || warehouseId === undefined
         ? queryKeys.unscoped(COUNT_RESOURCE, 'freeze-status', warehouseId)
         : countQueryKeys.freezeStatus(scope.activeScopeCacheKey, warehouseId),
-    queryFn: () => countService.getFreezeStatus(warehouseId ?? ''),
+    queryFn: ({ signal }) => countService.getFreezeStatus(warehouseId ?? '', { signal }),
     enabled:
       (options.enabled !== undefined ? options.enabled : scope.activeScopeCacheKey !== undefined) &&
       warehouseId !== undefined &&

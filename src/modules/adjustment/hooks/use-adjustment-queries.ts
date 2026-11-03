@@ -107,7 +107,7 @@ export function useAdjustmentsListQuery(query: ListAdjustmentsQuery) {
       scope.activeScopeCacheKey === undefined
         ? queryKeys.unscoped(ADJUSTMENT_RESOURCE, 'adjustments', query)
         : adjustmentQueryKeys.adjustments(scope.activeScopeCacheKey, query),
-    queryFn: () => adjustmentService.listAdjustments(query),
+    queryFn: ({ signal }) => adjustmentService.listAdjustments(query, { signal }),
     enabled: scope.activeScopeCacheKey !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -121,7 +121,7 @@ export function useAdjustmentDetailQuery(adjustmentId: string | undefined | null
       scope === undefined || adjustmentId == null
         ? queryKeys.unscoped(ADJUSTMENT_RESOURCE, 'adjustment', adjustmentId)
         : adjustmentQueryKeys.adjustment(scope, adjustmentId),
-    queryFn: () => adjustmentService.getAdjustment(adjustmentId ?? ''),
+    queryFn: ({ signal }) => adjustmentService.getAdjustment(adjustmentId ?? '', { signal }),
     enabled: scope !== undefined && adjustmentId != null && adjustmentId !== '',
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -142,7 +142,7 @@ export function useDisposalEligibleAssetsQuery(
       scope === undefined
         ? queryKeys.unscoped(ADJUSTMENT_RESOURCE, 'disposal-eligible-assets', query)
         : adjustmentQueryKeys.disposalEligibleAssets(scope, query),
-    queryFn: () => adjustmentService.listDisposalEligibleAssets(query),
+    queryFn: ({ signal }) => adjustmentService.listDisposalEligibleAssets(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
