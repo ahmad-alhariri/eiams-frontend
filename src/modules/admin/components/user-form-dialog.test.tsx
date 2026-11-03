@@ -473,7 +473,10 @@ describe('UserFormDialog server-error contract', () => {
     const email = screen.getByLabelText('البريد الإلكتروني')
     await waitFor(() => expect(email).toHaveAttribute('aria-invalid', 'true'))
     const messageId = email.getAttribute('aria-describedby') ?? ''
-    expect(document.getElementById(messageId)?.textContent).toMatch(/[\u0600-\u06FF]/)
+    expect(document.getElementById(messageId)?.textContent).toBe(
+      'تعذر تنفيذ الطلب. راجع البيانات المدخلة.',
+    )
+    expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
   it('keeps previous generic-error outcome when no field errors map', async () => {
