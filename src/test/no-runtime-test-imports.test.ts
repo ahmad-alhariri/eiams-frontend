@@ -172,13 +172,8 @@ import {
 // that had their own `modules/audit/types/audit-range.ts` now ride in
 // `modules/audit/types/audit.types.ts` (-1). None of them reaches into
 // `@/test/**`, so the no-offenders assertion below stays green.
-// +1 since 406: `config/bundle-budget.ts` (the committed bundle budget) is a new
-// application file. It reads no test support, so the no-offenders assertion below stays green.
-// +2 since 407: `shared/layout/route-focus-announcer.tsx` (the route focus
-// announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
-// new application files. They read no test support, so the no-offenders
-// assertion below stays green.
-const SCANNED_FILE_COUNT = 413 // +2: shared wire primitives + catalog wire types
+// Committed count of this scan's own file set; re-pin when application files are added or removed.
+const SCANNED_FILE_COUNT = 413 // committed count
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

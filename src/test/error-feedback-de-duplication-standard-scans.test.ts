@@ -41,12 +41,8 @@ describe('error-feedback-de-duplication-standard-scans', () => {
         !f.startsWith('src/shared/ui/toast-manager'),
     )
 
-  // Pin count so a broken/narrowed glob cannot silently pass.
-  // +2 since 369: `shared/layout/route-focus-announcer.tsx` and
-  // `shared/layout/route-keys.ts` are new application files. Neither raises a
-  // toast, so the no-offenders assertions below stay green.
-  // +5 (P0-1): shared warehouse wire-types/active-scope, the transfer/return
-  const EXPECTED_SCANNED_FILES = 413 // +2: shared wire primitives + catalog wire types
+  // Committed count of this scan's own file set; re-pin when application files are added or removed.
+  const EXPECTED_SCANNED_FILES = 375 // committed count
   assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
 
   // Fence 1 — only api-error.ts may build the toast.error({ title, ...(detailAr === null ? {} : { description }) }) shape

@@ -28,13 +28,8 @@ import {
  */
 const SCANNED = applicationSourceFiles()
 
-/** The pinned production file count. A narrowed glob must fail loudly. */
-// +2 since 407: `shared/layout/route-focus-announcer.tsx` (the route focus
-// announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
-// new application files. They read no test support, so the no-offenders
-// assertion below stays green.
-// +5 (P0-1): shared warehouse wire-types/active-scope and the document list seams.
-const EXPECTED_SCANNED_FILES = 413 // +2: shared wire primitives + catalog wire types
+// Committed count of this scan's own file set; re-pin when application files are added or removed.
+const EXPECTED_SCANNED_FILES = 413 // committed count
 
 /** An INFINITE (looping) animation. The one-shot enter/exit transitions use
  * a different mechanism (motion-reduce:data-open:animate-none), so they are

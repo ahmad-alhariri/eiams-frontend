@@ -35,8 +35,8 @@ import {
 const SCANNED = applicationSourceFiles().filter(
   (file) => !relativeToRepo(file).startsWith('src/app/gallery/'),
 )
-// +5 (P0-1): shared warehouse wire-types/active-scope and the document list seams.
-const EXPECTED_SCANNED_FILES = 413 // +2: shared wire primitives + catalog wire types
+// Committed count of this scan's own file set; re-pin when application files are added or removed.
+const EXPECTED_SCANNED_FILES = 392 // committed count
 
 const BUTTON_FILE = 'src/shared/ui/button.tsx'
 

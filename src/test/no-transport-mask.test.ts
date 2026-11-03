@@ -158,14 +158,8 @@ describe('no transport masks (eiams-frontend-9uuf)', () => {
     // `modules/audit/types/audit.types.ts` (-1). None of them introduces any of
     // the three banned shapes, so every "no offenders" assertion below stays
     // green.
-    // +1 since 406: `config/bundle-budget.ts` (the committed bundle budget) is a new
-    // application file. It introduces none of the three banned shapes.
-    // +2 since 407: `shared/layout/route-focus-announcer.tsx` (the route focus
-    // announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
-    // new application files. They read no test support, so the no-offenders
-    // assertion below stays green.
-    // +5 (P0-1): shared warehouse wire-types/active-scope and the document list seams.
-    assertScannedFiles(PRODUCTION_FILES, 413) // +2: shared wire primitives + catalog wire types
+    // Committed count of this scan's own file set; re-pin when application files are added or removed.
+    assertScannedFiles(PRODUCTION_FILES, 413) // committed count
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

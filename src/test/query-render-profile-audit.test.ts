@@ -24,8 +24,8 @@ import {
  * offending site, so a paginated query a cheap grep misses surfaces itself.
  */
 const SCANNED = applicationSourceFiles()
-// +5 (P0-1): shared warehouse wire-types/active-scope and the document list seams.
-const EXPECTED_SCANNED_FILES = 413 // +2: shared wire primitives + catalog wire types
+// Committed count of this scan's own file set; re-pin when application files are added or removed.
+const EXPECTED_SCANNED_FILES = 413 // committed count
 
 const NAMED_STALE_TIME = /staleTime\s*:\s*(OPERATIONAL_STALE_TIME|MASTER_DATA_STALE_TIME)\b/u
 const SESSION_STALE_TIME = /staleTime\s*:\s*Number\.POSITIVE_INFINITY\b/u

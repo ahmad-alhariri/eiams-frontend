@@ -21,7 +21,8 @@ import {
 const SCANNED = applicationSourceFiles().filter(
   (file) => !relativeToRepo(file).startsWith('src/app/gallery/'),
 )
-const EXPECTED_SCANNED_FILES = 413 // +2: shared wire primitives + catalog wire types
+// Committed count of this scan's own file set; re-pin when application files are added or removed.
+const EXPECTED_SCANNED_FILES = 392 // committed count
 
 /** Attribute names whose value a user reads on screen. */
 const USER_VISIBLE_ATTRIBUTES = [
