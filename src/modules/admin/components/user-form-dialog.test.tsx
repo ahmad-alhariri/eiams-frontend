@@ -420,73 +420,11 @@ describe('UserFormDialog', () => {
 })
 
 describe('UserFormDialog server-error contract', () => {
-  it('renders a contract field error inline in Arabic', async () => {
-    const user = userEvent.setup()
-    const onSubmit = vi.fn().mockRejectedValue(
-      new AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as any as unknown as axios.AxiosResponse<any>), undefined, {
-        status: 400,
-        data: {
-          success: false,
-          error: {
-            code: 'VALIDATION_FAILED',
-            message: 'bad',
-            details: { email: ['required'] },
-            request_id: 't1',
-          },
-        },
-      } as unknown as axios.AxiosResponse<any>),
-    )
-    render(
-      <UserFormDialog
-        user={null}
-        open
-        isPending={false}
-        roles={[ROLE_A, ROLE_B]}
-        onOpenChange={() => undefined}
-        onSubmit={onSubmit}
-      />,
-      { wrapper: createWrapper() },
-    )
-    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'test')
-    await user.click(screen.getByRole('button', { name: 'إضافة مستخدم' }))
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
-  })
-
-  it('keeps previous generic-error outcome when no field errors map', async () => {
-    const user = userEvent.setup()
-    const onSubmit = vi.fn().mockRejectedValue(
-      new AxiosError('bad', 'ERR_BAD_REQUEST', ({ url: '/', headers: {} } as any as any as unknown as axios.AxiosResponse<any>), undefined, {
-        status: 500,
-        data: {
-          success: false,
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'bad',
-            details: {},
-            request_id: 't2',
-          },
-        },
-      } as unknown as axios.AxiosResponse<any>),
-    )
-    render(
-      <UserFormDialog
-        user={null}
-        open
-        isPending={false}
-        roles={[ROLE_A, ROLE_B]}
-        onOpenChange={() => undefined}
-        onSubmit={onSubmit}
-      />,
-      { wrapper: createWrapper() },
-    )
-    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'test')
-    await user.click(screen.getByRole('button', { name: 'إضافة مستخدم' }))
-    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-  })
-})
-
-describe('UserFormDialog server-error contract', () => {
+  /**
+   * Builds the error the transport actually rejects with. `normalizeApiError` gates on
+   * `axios.isAxiosError`, so a plain object with a `response` property is classified as
+   * 'unexpected' and would make every assertion here pass or fail for the wrong reason.
+   */
   function serverError(status: number, code: string, details?: Record<string, unknown>) {
     return new AxiosError('server message', 'ERR_BAD_RESPONSE', undefined, undefined, {
       status,
@@ -507,26 +445,62 @@ describe('UserFormDialog server-error contract', () => {
 
   it('renders a contract field error inline in Arabic', async () => {
     const user = userEvent.setup()
-    const onSubmit = vi.fn().mockRejectedValue(serverError(400, 'VALIDATION_FAILED', { email: ['required'] }))
+    const onSubmit = vi
+      .fn()
+      .mockRejectedValue(serverError(400, 'REQUEST_VALIDATION_FAILED', { email: ['required'] }))
     render(
-      <UserFormDialog user={null} open isPending={false} roles={[ROLE_A, ROLE_B]} onOpenChange={() => undefined} onSubmit={onSubmit} />,
+      <UserFormDialog
+        user={null}
+        open
+        isPending={false}
+        roles={[ROLE_A, ROLE_B]}
+        onOpenChange={() => undefined}
+        onSubmit={onSubmit}
+      />,
       { wrapper: createWrapper() },
     )
-    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'test')
+    // Every client-side rule must pass first, otherwise the assertion could be
+    // satisfied by the form's own validation instead of the server error.
+    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'sara@eiams.local')
+    await user.type(screen.getByLabelText('اسم الدخول'), 'sara.ali')
+    await user.type(screen.getByLabelText('الاسم الأول'), 'سارة')
+    await user.type(screen.getByLabelText('اسم العائلة'), 'علي')
+    await user.type(screen.getByLabelText('كلمة المرور الأولية'), 'Password123!')
+    await user.click(screen.getByRole('combobox', { name: 'الدور' }))
+    await user.click(await screen.findByRole('option', { name: ROLE_A.nameAr }))
     await user.click(screen.getByRole('button', { name: 'إضافة مستخدم' }))
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+
+    const email = screen.getByLabelText('البريد الإلكتروني')
+    await waitFor(() => expect(email).toHaveAttribute('aria-invalid', 'true'))
+    const messageId = email.getAttribute('aria-describedby') ?? ''
+    expect(document.getElementById(messageId)?.textContent).toMatch(/[\u0600-\u06FF]/)
   })
 
   it('keeps previous generic-error outcome when no field errors map', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockRejectedValue(serverError(500, 'INTERNAL_ERROR'))
     render(
-      <UserFormDialog user={null} open isPending={false} roles={[ROLE_A, ROLE_B]} onOpenChange={() => undefined} onSubmit={onSubmit} />,
+      <UserFormDialog
+        user={null}
+        open
+        isPending={false}
+        roles={[ROLE_A, ROLE_B]}
+        onOpenChange={() => undefined}
+        onSubmit={onSubmit}
+      />,
       { wrapper: createWrapper() },
     )
-    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'test')
+    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'sara@eiams.local')
+    await user.type(screen.getByLabelText('اسم الدخول'), 'sara.ali')
+    await user.type(screen.getByLabelText('الاسم الأول'), 'سارة')
+    await user.type(screen.getByLabelText('اسم العائلة'), 'علي')
+    await user.type(screen.getByLabelText('كلمة المرور الأولية'), 'Password123!')
+    await user.click(screen.getByRole('combobox', { name: 'الدور' }))
+    await user.click(await screen.findByRole('option', { name: ROLE_A.nameAr }))
     await user.click(screen.getByRole('button', { name: 'إضافة مستخدم' }))
+
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
     expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByLabelText('البريد الإلكتروني')).not.toHaveAttribute('aria-invalid')
   })
 })
