@@ -152,28 +152,8 @@ import {
  * transport, invalidating the detail branch on success). Neither reaches into
  * `@/test/**`, so the no-offenders assertion below stays green.
  */
-// +3 application files: inventory-count/hooks/use-count-names.ts, inventory-count/components/count-name-fields.tsx, adjustment/hooks/use-count-variance-seeds.ts
-// +3 application files for the live asset/custody wire contract: the two
-// module status badges (`asset/components/asset-status-badge.tsx`,
-// `custody/components/custody-status-badge.tsx`) and the custody status label
-// registry (`custody/custody-status-labels.ts`). None of them reaches into
-// `@/test/**`, so the no-offenders assertion below stays green.
-// +2 application files since 404: `modules/catalog/constants/material-kind-policy.ts`
-// (another workstream's policy module) and `shared/documents/components/serial-capture-field.tsx`
-// (bulk asset serial capture; it renders shared primitives). Neither reaches into
-// `@/test/**`, so the no-offenders assertion below stays green.
-// -1 since 406: the generated OpenAPI artifact has been deleted, and it was
-// counted as an application file. It never reached into `@/test/**`, so the
-// no-offenders assertion below stays green.
-// Re-measured at 406 on this branch: the number did not move, but the file set
-// did. The reports module swapped `components/dashboard-charts.tsx` for the pure
-// `dashboard-kpis.model.ts` (net 0) and the organization module added
-// `components/organization-page-shell.tsx` (+1), while the audit range types
-// that had their own `modules/audit/types/audit-range.ts` now ride in
-// `modules/audit/types/audit.types.ts` (-1). None of them reaches into
-// `@/test/**`, so the no-offenders assertion below stays green.
-// Committed count of this scan's own file set (applicationSourceFiles filter); must be re-pinned when application files are added or removed.
-const SCANNED_FILE_COUNT = 416
+// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
+const SCANNED_FILE_COUNT = 413
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

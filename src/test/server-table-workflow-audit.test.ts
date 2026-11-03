@@ -26,8 +26,8 @@ import {
 const SCANNED = applicationSourceFiles().filter(
   (file) => !relativeToRepo(file).startsWith('src/app/gallery/'),
 )
-// Committed count of this scan's own file set (applicationSourceFiles minus src/app/gallery); must be re-pinned when application files are added or removed.
-const EXPECTED_SCANNED_FILES = 395
+// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
+const EXPECTED_SCANNED_FILES = 392
 
 const RAW_KEEP_PREVIOUS = /^keepPreviousData\b/u
 

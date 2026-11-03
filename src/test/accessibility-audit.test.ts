@@ -28,8 +28,8 @@ import {
  */
 const SCANNED = applicationSourceFiles()
 
-// Committed count of this scan's own file set (applicationSourceFiles filter); must be re-pinned when application files are added or removed.
-const EXPECTED_SCANNED_FILES = 416
+// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
+const EXPECTED_SCANNED_FILES = 413
 
 /** An INFINITE (looping) animation. The one-shot enter/exit transitions use
  * a different mechanism (motion-reduce:data-open:animate-none), so they are

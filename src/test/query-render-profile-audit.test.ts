@@ -24,8 +24,8 @@ import {
  * offending site, so a paginated query a cheap grep misses surfaces itself.
  */
 const SCANNED = applicationSourceFiles()
-// Committed count of this scan's own file set (applicationSourceFiles filter); must be re-pinned when application files are added or removed.
-const EXPECTED_SCANNED_FILES = 416
+// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
+const EXPECTED_SCANNED_FILES = 413
 
 const NAMED_STALE_TIME = /staleTime\s*:\s*(OPERATIONAL_STALE_TIME|MASTER_DATA_STALE_TIME)\b/u
 const SESSION_STALE_TIME = /staleTime\s*:\s*Number\.POSITIVE_INFINITY\b/u

@@ -41,8 +41,8 @@ describe('error-feedback-de-duplication-standard-scans', () => {
         !f.startsWith('src/shared/ui/toast-manager'),
     )
 
-  // Committed count of this scan's own file set (modules/shared only, no .test.*, no toast-manager); must be re-pinned when application files are added or removed.
-  const EXPECTED_SCANNED_FILES = 377
+  // Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
+  const EXPECTED_SCANNED_FILES = 375
   assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
 
   // Fence 1 — only api-error.ts may build the toast.error({ title, ...(detailAr === null ? {} : { description }) }) shape
