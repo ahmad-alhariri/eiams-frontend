@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   allowMarkersIn,
   assertAllowlistIsSmall,
-  assertScannedFiles,
+  assertScannedFilesMatchGit,
+  gitModuleHookFiles,
   moduleHookFiles,
   readSource,
   relativeToRepo,
@@ -26,7 +27,7 @@ import {
  * Three anti-vacuity devices, because a source scan that finds nothing is
  * indistinguishable from a source scan that is broken:
  *
- *  1. an exact file-count assertion per scan (`assertScannedFiles`) — a narrowed
+ *  1. an exact file-set assertion per scan (`assertScannedFilesMatchGit`) — a narrowed
  *     or broken glob otherwise turns every `toEqual([])` into a silent pass;
  *  2. a negative-control fixture per scan, proving the detector fires on a
  *     known-bad snippet at the moment the suite runs, independent of the
@@ -36,6 +37,7 @@ import {
  */
 
 const HOOK_FILES = moduleHookFiles()
+const GIT_HOOK_FILES = gitModuleHookFiles()
 
 /**
  * Exact counts: if one of these moves, the scan set changed and must be
@@ -66,9 +68,6 @@ const HOOK_FILES = moduleHookFiles()
  * `useInvalidateDocumentDetail` hook, so scan 1 (hand-derived key prefix)
  * stays green.
  */
-// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
-const EXPECTED_HOOK_FILES = 47
-
 // ---------------------------------------------------------------------------
 // Scan 1 — query keys must come from a factory
 // ---------------------------------------------------------------------------
@@ -234,7 +233,11 @@ function unsafeIdempotencyMintOffenders(files: readonly string[]): string[] {
 
 describe('feature service composition standard (source scans)', () => {
   it('scans the expected hook set, so a narrowed glob cannot pass silently', () => {
-    assertScannedFiles(HOOK_FILES, EXPECTED_HOOK_FILES)
+    assertScannedFilesMatchGit(
+      HOOK_FILES,
+      GIT_HOOK_FILES,
+      'feature service composition standard (source scans)',
+    )
   })
 
   describe('query keys are built by a factory', () => {

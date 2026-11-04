@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   applicationSourceFiles,
-  assertScannedFiles,
+  assertScannedFilesMatchGit,
+  gitApplicationSourceFiles,
   readSource,
   relativeToRepo,
 } from './support/source-scan'
@@ -26,8 +27,9 @@ import {
 const SCANNED = applicationSourceFiles().filter(
   (file) => !relativeToRepo(file).startsWith('src/app/gallery/'),
 )
-// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
-const EXPECTED_SCANNED_FILES = 390
+const GIT_SCANNED = gitApplicationSourceFiles().filter(
+  (file) => !file.startsWith('src/app/gallery/'),
+)
 
 const RAW_KEEP_PREVIOUS = /^keepPreviousData\b/u
 
@@ -179,7 +181,11 @@ function scanRule(detector: (repoPath: string, source: string) => string[]): str
 
 describe('server table workflow audit (eiams-frontend-e25-t07)', () => {
   it('scans the pinned set of production files', () => {
-    assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
+    assertScannedFilesMatchGit(
+      SCANNED,
+      GIT_SCANNED,
+      'server table workflow audit (eiams-frontend-e25-t07)',
+    )
   })
 
   it('never keeps the previous scope rows as the new scope', () => {

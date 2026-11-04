@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 
@@ -90,6 +91,115 @@ export function featureServiceFiles(): string[] {
     return path.includes('/src/shared/') && /\/[^/]+(-service|-transport)\.ts$/u.test(path)
   }
   return applicationSourceFiles().filter((file) => isModuleService(file) || isSharedTransport(file))
+}
+
+// ---------------------------------------------------------------------------
+// Committed-tree twin — the git half of the anti-drift guard.
+// ---------------------------------------------------------------------------
+
+/**
+ * Memoised `git ls-files` result for this test run, shared by every scan rather
+ * than spawning one subprocess per assertion.
+ */
+export function gitTrackedSourceFiles(): readonly string[] {
+  const cache = globalThis as { __eiamFrontendGitSourceFiles?: readonly string[] }
+  const cached = cache.__eiamFrontendGitSourceFiles
+  if (cached !== undefined) {
+    return cached
+  }
+  const files = gitCommittedSourceFiles()
+  cache.__eiamFrontendGitSourceFiles = files
+  return files
+}
+
+function gitCommittedSourceFiles(): readonly string[] {
+  try {
+    const output = execFileSync('git', ['ls-files', '-z'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024 * 10,
+    })
+    return output
+      .split('\u0000')
+      .filter((path) => path.length > 0)
+      .filter((path) => path.startsWith('src/'))
+      .filter((path) => /\.tsx?$/u.test(path))
+      .map((path) => path.split('\\').join('/'))
+  } catch (error) {
+    throw new Error(
+      `git ls-files failed for the committed scan set ` +
+        `(${error instanceof Error ? error.message : String(error)}). The committed-tree ` +
+        `file set could not be read, so the scan cannot be verified and this guard fails loudly ` +
+        `instead of skipping or defaulting to an empty set.`,
+      { cause: error },
+    )
+  }
+}
+
+/**
+ * Git-side twin of the application-source predicate, written against the
+ * repo-relative forward-slashed paths `git ls-files` emits. Independent of the
+ * filesystem builder's filter — same rule, second statement of it side by side.
+ */
+function isGitApplicationSource(file: string): boolean {
+  if (!file.startsWith('src/')) {
+    return false
+  }
+  if (/\.test\.(ts|tsx)$/u.test(file)) {
+    return false
+  }
+  if (/(^|\/)test\//u.test(file)) {
+    return false
+  }
+  if (/(^|\/)contract-smoke\//u.test(file)) {
+    return false
+  }
+  return true
+}
+
+/** Git-side twin of the module-hook predicate. */
+function isGitModuleHookFile(file: string): boolean {
+  return file.startsWith('src/modules/') && file.includes('/hooks/') && file.endsWith('.ts')
+}
+
+/** Git-side twin of the shared-documents hook predicate. */
+function isGitSharedDocumentHookFile(file: string): boolean {
+  return file.startsWith('src/shared/documents/') && /\/use-[^/]+\.ts$/u.test(file)
+}
+
+/** Git-side twin of the module-service predicate. */
+function isGitModuleServiceFile(file: string): boolean {
+  return (
+    file.startsWith('src/modules/') && file.includes('/services/') && file.endsWith('.service.ts')
+  )
+}
+
+/** Git-side twin of the shared -service / -transport predicate. */
+function isGitSharedTransportFile(file: string): boolean {
+  return file.startsWith('src/shared/') && /\/[^/]+(-service|-transport)\.ts$/u.test(file)
+}
+
+/** Git-side counterpart of the filesystem's `applicationSourceFiles()`. */
+export function gitApplicationSourceFiles(): readonly string[] {
+  return gitTrackedSourceFiles().filter(isGitApplicationSource)
+}
+
+/** Git-side counterpart of the filesystem's `moduleHookFiles()`. */
+export function gitModuleHookFiles(): readonly string[] {
+  return gitTrackedSourceFiles().filter(
+    (file) =>
+      isGitApplicationSource(file) &&
+      (isGitModuleHookFile(file) || isGitSharedDocumentHookFile(file)),
+  )
+}
+
+/** Git-side counterpart of the filesystem's `featureServiceFiles()`. */
+export function gitFeatureServiceFiles(): readonly string[] {
+  return gitTrackedSourceFiles().filter(
+    (file) =>
+      isGitApplicationSource(file) &&
+      (isGitModuleServiceFile(file) || isGitSharedTransportFile(file)),
+  )
 }
 
 /**
@@ -257,6 +367,50 @@ export function assertScannedFiles(files: readonly string[], expected: number): 
         `so this fails loudly instead. Found: ${files.map(relativeToRepo).join(', ')}`,
     )
   }
+}
+
+/**
+ * The committed-tree half of the anti-drift guard: compare the filesystem scan
+ * set against the independently git-derived set for the same scan, and fail
+ * loudly on any difference.
+ *
+ * The two halves of the guard must agree, and the disagreement — not a number —
+ * is the signal. A narrowed filesystem glob leaves the two sets different, which
+ * fails here instead of quietly turning every "no offenders" assertion into a
+ * silent pass; a narrowed git-side rule fails in exactly the same way. The
+ * reported counts are both absolute, and the differing files are named, so a
+ * drift is readable at a glance instead of buried in a list of every scanned
+ * file.
+ */
+export function assertScannedFilesMatchGit(
+  scanned: readonly string[],
+  committed: readonly string[],
+  scanLabel: string,
+): void {
+  const scannedSet = new Set<string>(scanned.map((file) => relativeToRepo(file)))
+  const committedSet = new Set<string>(committed)
+  const onlyScanned: string[] = []
+  const onlyCommitted: string[] = []
+  for (const file of scannedSet) {
+    if (!committedSet.has(file)) {
+      onlyScanned.push(file)
+    }
+  }
+  for (const file of committedSet) {
+    if (!scannedSet.has(file)) {
+      onlyCommitted.push(file)
+    }
+  }
+  if (onlyScanned.length === 0 && onlyCommitted.length === 0) {
+    return
+  }
+  throw new Error(
+    `Scan set drifted for ${scanLabel}: filesystem scanned ${scannedSet.size} files, ` +
+      `git committed tree has ${committedSet.size} files. A narrowed glob turns every ` +
+      `"no offenders" assertion into a silent pass, so this fails loudly instead. ` +
+      `Only on the filesystem: ${onlyScanned.sort().join(', ') || 'none'}. ` +
+      `Only in the committed tree: ${onlyCommitted.sort().join(', ') || 'none'}.`,
+  )
 }
 
 /** Keeps the exception set from growing without review. */

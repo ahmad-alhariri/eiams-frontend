@@ -5,8 +5,9 @@ import ts from 'typescript'
 import {
   allowMarkersIn,
   applicationSourceFiles,
-  assertScannedFiles,
+  assertScannedFilesMatchGit,
   excusedLines,
+  gitApplicationSourceFiles,
   relativeToRepo,
 } from './support/source-scan'
 
@@ -21,8 +22,9 @@ import {
 const SCANNED = applicationSourceFiles().filter(
   (file) => !relativeToRepo(file).startsWith('src/app/gallery/'),
 )
-// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
-const EXPECTED_SCANNED_FILES = 390
+const GIT_SCANNED = gitApplicationSourceFiles().filter(
+  (file) => !file.startsWith('src/app/gallery/'),
+)
 
 /** Attribute names whose value a user reads on screen. */
 const USER_VISIBLE_ATTRIBUTES = [
@@ -240,13 +242,12 @@ function documentDirectionOffenders(html: string): string[] {
 
 describe('rtl-copy-audit', () => {
   it('scans the pinned production set', () => {
-    assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
+    assertScannedFilesMatchGit(SCANNED, GIT_SCANNED, 'rtl copy audit')
   })
 
-  it('keeps the responsive audit owner on the same file count', () => {
+  it('keeps the responsive audit owner on the same file set', () => {
     const owner = readFileSync(join(process.cwd(), 'src/test/responsive-audit.test.ts'), 'utf8')
-    const pinned = /EXPECTED_SCANNED_FILES\s*=\s*(\d+)/u.exec(owner)
-    expect(pinned?.[1]).toBe(String(EXPECTED_SCANNED_FILES))
+    expect(owner).toContain("startsWith('src/app/gallery/')")
   })
 
   it('keeps the design token rule with its owner', () => {

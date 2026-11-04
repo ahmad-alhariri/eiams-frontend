@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   applicationSourceFiles,
-  assertScannedFiles,
+  assertScannedFilesMatchGit,
+  gitApplicationSourceFiles,
   readSource,
   relativeToRepo,
 } from './support/source-scan'
@@ -55,10 +56,11 @@ import {
  * Non-vacuity, per `support/source-scan.ts`
  * -----------------------------------------
  * A scan with an empty file set passes "no offenders" while proving nothing, so
- * `assertScannedFiles` pins the exact count below. The count moves as the tree
- * changes: it dropped by the five files `eiams-frontend-m4jm` deleted from
+ * `assertScannedFilesMatchGit` pins the exact file set below — the filesystem
+ * set must equal the git-committed set. The set moves as the tree changes: it
+ * dropped by the five files `eiams-frontend-m4jm` deleted from
  * `src/mocks/`, and the change is recorded here rather than absorbed. A drifting
- * count is the signal that the scan's scope was narrowed.
+ * file set is the signal that the scan's scope was narrowed.
  */
 
 /**
@@ -152,8 +154,6 @@ import {
  * transport, invalidating the detail branch on success). Neither reaches into
  * `@/test/**`, so the no-offenders assertion below stays green.
  */
-// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
-const SCANNED_FILE_COUNT = 411
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.
@@ -237,7 +237,11 @@ describe('no runtime imports of @/test (EPIC G7)', () => {
     // Non-vacuity. If the glob above ever narrows — a renamed extension, a
     // directory rename, a bad path separator — this fails loudly instead of
     // leaving "no offenders" as a trivially true statement about a few files.
-    assertScannedFiles(applicationSourceFiles(), SCANNED_FILE_COUNT)
+    assertScannedFilesMatchGit(
+      applicationSourceFiles(),
+      gitApplicationSourceFiles(),
+      'no runtime imports of @/test (EPIC G7)',
+    )
   })
 
   it('detects a synthetic @/test import, so the scanner is not inert', () => {

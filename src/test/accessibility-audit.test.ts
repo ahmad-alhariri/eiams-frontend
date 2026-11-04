@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   applicationSourceFiles,
-  assertScannedFiles,
+  assertScannedFilesMatchGit,
+  gitApplicationSourceFiles,
   readSource,
   relativeToRepo,
 } from './support/source-scan'
@@ -27,9 +28,7 @@ import {
  *     decidable and is not asserted here; it needs a rendered audit.
  */
 const SCANNED = applicationSourceFiles()
-
-// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
-const EXPECTED_SCANNED_FILES = 411
+const GIT_SCANNED = gitApplicationSourceFiles()
 
 /** An INFINITE (looping) animation. The one-shot enter/exit transitions use
  * a different mechanism (motion-reduce:data-open:animate-none), so they are
@@ -116,7 +115,7 @@ function scanRule(detector: (source: string) => string[]): string[] {
 
 describe('accessibility audit (eiams-frontend-e25-t01)', () => {
   it('scans the pinned set of production files', () => {
-    assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
+    assertScannedFilesMatchGit(SCANNED, GIT_SCANNED, 'accessibility audit (eiams-frontend-e25-t01)')
   })
 
   it('keeps the focus order natural', () => {

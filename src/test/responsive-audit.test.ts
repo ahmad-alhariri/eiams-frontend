@@ -4,7 +4,8 @@ import {
   allowMarkersIn,
   applicationSourceFiles,
   assertAllowlistIsSmall,
-  assertScannedFiles,
+  assertScannedFilesMatchGit,
+  gitApplicationSourceFiles,
   readSource,
   relativeToRepo,
 } from './support/source-scan'
@@ -35,8 +36,9 @@ import {
 const SCANNED = applicationSourceFiles().filter(
   (file) => !relativeToRepo(file).startsWith('src/app/gallery/'),
 )
-// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
-const EXPECTED_SCANNED_FILES = 390
+const GIT_SCANNED = gitApplicationSourceFiles().filter(
+  (file) => !file.startsWith('src/app/gallery/'),
+)
 
 const BUTTON_FILE = 'src/shared/ui/button.tsx'
 
@@ -483,7 +485,11 @@ function scanRule(detector: (repoPath: string, source: string) => string[]): str
 
 describe('responsive workflow audit (eiams-frontend-e25-t04)', () => {
   it('scans the pinned set of production files', () => {
-    assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
+    assertScannedFilesMatchGit(
+      SCANNED,
+      GIT_SCANNED,
+      'responsive workflow audit (eiams-frontend-e25-t04)',
+    )
   })
 
   it('keeps fixed pixel widths out of the layout', () => {

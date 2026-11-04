@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   applicationSourceFiles,
-  assertScannedFiles,
+  assertScannedFilesMatchGit,
+  gitApplicationSourceFiles,
   relativeToRepo,
   readSource,
   sourceFilesIn,
@@ -85,8 +86,14 @@ function offenders(pattern: RegExp, files: readonly string[]): string[] {
 describe('no transport masks (eiams-frontend-9uuf)', () => {
   it('scans a pinned set of production and test source files', () => {
     // Pinned, not `> 0`: a narrowed glob leaves a few files rather than none,
-    // and every "no offenders" assertion below would then pass silently.
-    assertScannedFiles(PRODUCTION_FILES, 411) // Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
+    // and every "no offenders" assertion below would then pass silently. The
+    // filesystem set is compared against the independently git-derived set, so
+    // a narrowed glob fails here instead of passing vacuously.
+    assertScannedFilesMatchGit(
+      PRODUCTION_FILES,
+      gitApplicationSourceFiles(),
+      'no transport masks (eiams-frontend-9uuf)',
+    )
     expect(TEST_FILES.length).toBeGreaterThan(PRODUCTION_FILES.length)
     expect(TEST_FILES).not.toContain(expect.stringContaining(GUARD_SELF_PATH))
     expect(TEST_FILES.map(relativeToRepo)).not.toContain(GUARD_SELF_PATH)

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   applicationSourceFiles,
-  assertScannedFiles,
+  assertScannedFilesMatchGit,
+  gitApplicationSourceFiles,
   silentSecondaryReadOffenders,
   silentSecondaryReadOffendersIn,
 } from './support/source-scan'
@@ -24,7 +25,7 @@ import {
  *
  * Non-vacuity evidence, per `support/source-scan.ts`:
  *
- *  1. an EXACT file-count assertion (`assertScannedFiles`) — a narrowed or
+ *  1. an EXACT file-set assertion (`assertScannedFilesMatchGit`) — a narrowed or
  *     broken glob leaves a handful of files rather than none, and `> 0` would
  *     wave that through while every "no offenders" assertion below passes
  *     silently;
@@ -34,20 +35,13 @@ import {
  *     instead of printing a blob of source.
  */
 
-/**
- * The exact production-file count this scan covers.
- *
- * The same set the repository already pins in `no-transport-mask.test.ts` and
- * `no-runtime-test-imports.test.ts`: every non-test file under `src`. Moving
- * this number means the file set moved and every finding below must be
- * re-examined, so it fails loudly instead of drifting.
- */
-// Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
-const EXPECTED_SCANNED_FILES = 411
-
 describe('a failed secondary read stays distinguishable (source scan)', () => {
   it('scans the expected production file set, so a narrowed glob cannot pass silently', () => {
-    assertScannedFiles(applicationSourceFiles(), EXPECTED_SCANNED_FILES)
+    assertScannedFilesMatchGit(
+      applicationSourceFiles(),
+      gitApplicationSourceFiles(),
+      'silent secondary read scan',
+    )
   })
 
   describe('negative control', () => {
