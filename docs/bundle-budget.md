@@ -2,14 +2,14 @@
 
 **Status:** Enforced in CI
 **Bead:** `eiams-frontend-e25-t06`
-**Derived:** 2026-10-28, re-derived 2026-10-30 (×4) and 2026-11-02, then 2026-11-03 (×3)
+**Derived:** 2026-10-28, re-derived 2026-10-30 (×4) and 2026-11-02, then 2026-11-03 (×3), then 2026-11-04 (×1)
 **Mechanism:** `scripts/check-bundle-budget.mjs` plus `src/test/lazy-route-budget.test.ts`
 
 ## What these numbers are, and what they are not
 
 No product document states a bundle size target. The numbers below are
 **regression ceilings**: they were derived from a production build (2026-10-28,
-re-derived 2026-10-30, 2026-11-02 and 2026-11-03) so that a change which quietly
+re-derived 2026-10-30, 2026-11-02, 2026-11-03 and 2026-11-04) so that a change which quietly
 inflates the shipped bundle, or quietly replaces a lazily imported route page with
 a static import, **fails the build** instead of reaching users. They are not
 performance targets and they are not a claim that the current bundle is the right
@@ -28,8 +28,8 @@ copy to drift.
 | Ceiling | Value | Measured from |
 | --- | --- | --- |
 | `maxJsChunkCount` | 170 | count of `dist/assets/*.js` |
-| `maxJsTotalBytes` | 1616877 | summed size of `dist/assets/*.js` |
-| `maxLargestChunkBytes` | 344829 | largest single `dist/assets/*.js` |
+| `maxJsTotalBytes` | 1617516 | summed size of `dist/assets/*.js` |
+| `maxLargestChunkBytes` | 345191 | largest single `dist/assets/*.js` |
 | `routePageCount` | 59 | `getWiredRouteKeys().length` |
 
 Re-measure with `pnpm run build`, then sum the sizes of the files in
@@ -51,6 +51,7 @@ Re-measure with `pnpm run build`, then sum the sizes of the files in
 | 2026-11-03 | EIAMS-FE-B3 | pure type-level consolidation (`Uuid`, `RecordStatus`, `NamedReference`, `RecordStatusOrdinal`, `statusCommandValue`, `MaterialDomain`, `ResourceIdResponse`, `CapabilityOperation`) | 170 | 1615676 | 344829 |
 | 2026-11-03 | EIAMS-FE-B5A1 | cancellable adjustment / inventory-count reads; `api-transport` becomes its own chunk | 171 | 1615502 | 344965 |
 | 2026-11-03 | Batch 5a part 2 | RequestContext/withSignal plumbing on the remaining read paths | 170 | 1616877 | 344829 |
+| 2026-11-04 | EIAMS-FE-BUNDLE (Batch 6b) | shared shell error-boundary component (`shell-error-boundary.tsx`, +51 lines) and explicit permission props on six shared editors | 170 | 1617516 | 345191 |
 
 The `e25-t04` growth is 287 bytes of Tailwind class names in the shared UI
 chunks, 44 of them in the largest chunk (`index-*.js`); its fix round adds a
@@ -65,11 +66,13 @@ removed 410 bytes of duplicated submit and error-mapping code (measured total
 1,615,035 bytes), so the ceiling deliberately kept that headroom rather than
 being lowered.
 
-The committed ceilings are now 170 chunks / 1,616,877 bytes / 344,829 bytes
-largest chunk. The growth since 2026-11-02 is the shared `RequestContext` /
-`withSignal` seam and the pure type-level wire-primitive consolidation; it is
-shared-chunk extraction, not duplicated code, and no route or module was added.
-The route page count is unchanged at 59 throughout.
+The committed ceilings are now 170 chunks / 1,617,516 bytes / 345,191 bytes
+largest chunk (re-derived 2026-11-04 for EIAMS-FE-BUNDLE / Batch 6b). The growth
+of +639 bytes total and +362 bytes on the largest chunk is the intended
+shared `shell-error-boundary` component and the explicit permission props on
+the six shared editors; no module, chunk or route was added, and the chunk
+count is unchanged at its ceiling of 170. The route page count is unchanged at
+59 throughout.
 
 ## The lazy-route invariant
 
