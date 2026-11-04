@@ -42,7 +42,7 @@ describe('error-feedback-de-duplication-standard-scans', () => {
     )
 
   // Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
-  const EXPECTED_SCANNED_FILES = 375
+  const EXPECTED_SCANNED_FILES = 373
   assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
 
   // Fence 1 — only api-error.ts may build the toast.error({ title, ...(detailAr === null ? {} : { description }) }) shape

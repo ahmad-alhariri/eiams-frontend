@@ -153,7 +153,7 @@ import {
  * `@/test/**`, so the no-offenders assertion below stays green.
  */
 // Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
-const SCANNED_FILE_COUNT = 413
+const SCANNED_FILE_COUNT = 411
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.

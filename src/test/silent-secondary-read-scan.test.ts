@@ -43,7 +43,7 @@ import {
  * re-examined, so it fails loudly instead of drifting.
  */
 // Committed count of this scan's own file set, derived with `git ls-files` and this scan's own filter; re-pin whenever an application file is added or removed.
-const EXPECTED_SCANNED_FILES = 413
+const EXPECTED_SCANNED_FILES = 411
 
 describe('a failed secondary read stays distinguishable (source scan)', () => {
   it('scans the expected production file set, so a narrowed glob cannot pass silently', () => {
