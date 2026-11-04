@@ -44,6 +44,18 @@ export interface InitializeWarehouseZeroStockDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   /**
+   * The `document.create` decision, resolved by the parent.
+   *
+   * The zero-stock mutation is gated by `document.create` at Warehouse scope
+   * (D-RBAC-02), so the parent resolves that permission and passes the
+   * result down: the gate is EXPLICIT here instead of being implied by the
+   * mount site. Without it the dialog opens nothing and submits nothing.
+   *
+   * The WAREHOUSE SCOPE check stays inside this component — it reads the
+   * active scope, not a permission.
+   */
+  canInitialize: boolean
+  /**
    * Called after a successful initialization so the parent can
    * re-navigate or refresh other surfaces (e.g. the warehouse
    * detail page is already doing this via query invalidation, but
@@ -57,6 +69,7 @@ export function InitializeWarehouseZeroStockDialog({
   warehouseName,
   open,
   onOpenChange,
+  canInitialize,
   onInitialized,
 }: InitializeWarehouseZeroStockDialogProps): React.ReactElement {
   const { activeScope } = useActiveScopeContext()
@@ -69,8 +82,8 @@ export function InitializeWarehouseZeroStockDialog({
   // next attempt; this avoids the `setState`-in-effect lint without
   // losing the per-open reset.
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {open ? (
+    <Dialog open={open && canInitialize} onOpenChange={onOpenChange}>
+      {open && canInitialize ? (
         <ZeroStockDialogBody
           warehouseId={warehouseId}
           warehouseName={warehouseName}
@@ -112,6 +125,7 @@ function ZeroStockDialogBody({
 
   const handleSubmit = async (): Promise<void> => {
     if (!isDateValid) return
+    if (!isWarehouseScope) return
     await submitFeedback(async () => {
       await mutate({ warehouseId, request: { asOfDate } })
       onOpenChange(false)

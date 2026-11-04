@@ -34,6 +34,33 @@ function QueryWrapper({ children }: PropsWithChildren) {
 }
 
 describe('InitializeWarehouseZeroStockDialog', () => {
+  it('opens nothing and POSTs nothing when the parent denies document.create', async () => {
+    let posted = false
+    server.use(
+      http.post(`${API_BASE_URL}/warehouses/${WAREHOUSE_ID}/initialization`, () => {
+        posted = true
+        return apiJson({ id: WAREHOUSE_ID }, { status: 201 })
+      }),
+    )
+
+    // The gate is EXPLICIT: the parent resolves `document.create` and passes it
+    // down. Without it the dialog must not open and must not write.
+    render(
+      <InitializeWarehouseZeroStockDialog
+        warehouseId={WAREHOUSE_ID}
+        warehouseName="المستودع المركزي"
+        open
+        onOpenChange={() => {}}
+        canInitialize={false}
+      />,
+      { wrapper: QueryWrapper },
+    )
+
+    expect(screen.queryByText('تهيئة المستودع برصيد صفري')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('warehouse-zero-stock-confirm')).not.toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
+
   it('renders the Arabic title, as-of-date input, and confirm/cancel buttons', () => {
     render(
       <InitializeWarehouseZeroStockDialog
@@ -41,6 +68,7 @@ describe('InitializeWarehouseZeroStockDialog', () => {
         warehouseName="المستودع المركزي"
         open
         onOpenChange={() => {}}
+        canInitialize
       />,
       { wrapper: QueryWrapper },
     )
@@ -71,6 +99,7 @@ describe('InitializeWarehouseZeroStockDialog', () => {
         warehouseName="المستودع المركزي"
         open
         onOpenChange={onOpenChange}
+        canInitialize
       />,
       { wrapper: QueryWrapper },
     )
@@ -118,6 +147,7 @@ describe('InitializeWarehouseZeroStockDialog', () => {
         warehouseName="المستودع المركزي"
         open
         onOpenChange={() => {}}
+        canInitialize
       />,
       { wrapper: QueryWrapper },
     )

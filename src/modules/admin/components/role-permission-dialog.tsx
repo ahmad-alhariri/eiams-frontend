@@ -37,6 +37,15 @@ export interface RolePermissionDialogProps {
   role: RoleProjection | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  /**
+   * The `admin.role.manage` decision, resolved by the parent.
+   *
+   * The dialog owns no session read: the parent (`RolesCatalogPage`) resolves
+   * the permission through `usePermission()` and passes the result down, so
+   * the gate is EXPLICIT here instead of being implied by the mount site.
+   * Without it the dialog renders nothing and replaces nothing.
+   */
+  canManage: boolean
 }
 
 /**
@@ -45,7 +54,12 @@ export interface RolePermissionDialogProps {
  * list of one role definition through the contract PUT, preserving the role's
  * code, name, status, and row version verbatim.
  */
-export function RolePermissionDialog({ role, open, onOpenChange }: RolePermissionDialogProps) {
+export function RolePermissionDialog({
+  role,
+  open,
+  onOpenChange,
+  canManage,
+}: RolePermissionDialogProps) {
   const permissionsQuery = usePermissionsQuery()
   const replaceMutation = useReplaceRolePermissionsMutation()
   const submitFeedback = useSubmitFeedback()
@@ -61,6 +75,7 @@ export function RolePermissionDialog({ role, open, onOpenChange }: RolePermissio
 
   const submit = async (values: RolePermissionsFormValues) => {
     if (role === null) return
+    if (!canManage) return
     form.clearErrors()
     try {
       await submitFeedback(async () => {
@@ -98,6 +113,13 @@ export function RolePermissionDialog({ role, open, onOpenChange }: RolePermissio
   const rows = role === null ? [] : toPermissionMatrixRows(permissionsQuery.data ?? [], role)
   const catalogUnavailable = permissionsQuery.isPending || permissionsQuery.isError
   const isEmptyCatalog = !catalogUnavailable && rows.length === 0
+
+  // The gate is EXPLICIT: without `admin.role.manage` the dialog renders
+  // nothing, so the matrix is never reachable. The parent already hides the
+  // trigger, so this is the same visible result for every role.
+  if (!canManage) {
+    return null
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

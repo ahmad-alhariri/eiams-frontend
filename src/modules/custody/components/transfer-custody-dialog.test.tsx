@@ -134,7 +134,7 @@ function renderDialog() {
   const client = createQueryClient()
   return render(
     <QueryClientProvider client={client}>
-      <TransferCustodyDialog custody={custody} />
+      <TransferCustodyDialog custody={custody} canTransfer />
     </QueryClientProvider>,
   )
 }
@@ -148,6 +148,28 @@ async function openDialogAndSelectEmployee(user: ReturnType<typeof userEvent.set
 }
 
 describe('TransferCustodyDialog', () => {
+  it('offers no trigger and posts nothing when the parent denies custody.assign', async () => {
+    let posted = false
+    server.use(
+      http.post(`${API_BASE_URL}/custodies/${custody.custodyId}/transfer`, () => {
+        posted = true
+        return apiJson({ id: fixtureUuid(61) }, { status: 201 })
+      }),
+    )
+
+    // The gate is EXPLICIT: the parent resolves `custody.assign` and passes it
+    // down. Without it the trigger is not rendered and nothing is written.
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <TransferCustodyDialog custody={custody} canTransfer={false} />
+      </QueryClientProvider>,
+    )
+
+    expect(screen.queryByRole('button', { name: 'مبادلة المسؤولية' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
+
   it('offers every holder kind the live counterpart lookup serves for a transfer', async () => {
     const user = userEvent.setup()
     renderDialog()

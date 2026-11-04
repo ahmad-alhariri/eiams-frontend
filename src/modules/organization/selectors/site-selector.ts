@@ -14,6 +14,9 @@ export type SiteLoader = EntityLoader<Site>
  * Site selector adapter: label = Arabic name, hint = code (carried in the
  * payload), and inactive sites are disabled. Typed against the full `Site`
  * contract entity — no dedicated SiteReference type exists.
+ *
+ * KEPT: a documented entity selector adapter (docs/component-guidelines.md,
+ * "Entity selector adapters"). The loader is injected by the parent.
  */
 const siteAdapter: EntitySelectorAdapter<Site> = createEntitySelectorAdapter<Site>({
   toOption: (site) => ({

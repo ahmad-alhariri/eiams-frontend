@@ -15,6 +15,10 @@ export type NamedReferenceLoader = EntityLoader<NamedReference>
  * used wherever a document references an entity by name (warehouse, site, org unit,
  * material, ...). Label = displayName; the contract only returns active references
  * so all options are enabled.
+ *
+ * KEPT: this is the selector adapter for the shared `NamedReference` wire shape
+ * (`src/shared/types/wire-primitives.ts`), the sibling of the employee, org-unit,
+ * site, warehouse and material adapters. The loader is injected by the parent.
  */
 const namedReferenceAdapter: EntitySelectorAdapter<NamedReference> =
   createEntitySelectorAdapter<NamedReference>({

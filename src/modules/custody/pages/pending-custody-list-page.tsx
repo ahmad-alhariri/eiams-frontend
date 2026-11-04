@@ -97,7 +97,11 @@ export default function PendingCustodyListPage() {
       </ContentCard>
 
       {assigningRow !== null ? (
-        <AssignCustodyDialog custody={assigningRow} onClose={() => setAssigningRow(null)} />
+        <AssignCustodyDialog
+          custody={assigningRow}
+          onClose={() => setAssigningRow(null)}
+          canAssign={has('custody.assign')}
+        />
       ) : null}
     </div>
   )

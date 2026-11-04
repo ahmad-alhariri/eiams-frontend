@@ -135,7 +135,7 @@ export default function CustodyDetailPage() {
               title="مبادلة مسؤولية العهدة"
               description="تحويل هذه العهدة إلى حائز آخر داخل النطاق؛ يُغلق السطر الحالي ويُفتح سطر جديد للحائز الجديد."
             >
-              <TransferCustodyDialog custody={row} />
+              <TransferCustodyDialog custody={row} canTransfer={canTransfer} />
             </ContentCard>
           ) : null}
         </>

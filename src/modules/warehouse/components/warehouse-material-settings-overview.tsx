@@ -161,6 +161,7 @@ export function WarehouseMaterialSettingsOverview({
         setting={editorSetting}
         open={isEditorOpen}
         onOpenChange={closeEditor}
+        canManage={canManage}
       />
     </div>
   )

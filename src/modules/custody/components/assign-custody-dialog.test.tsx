@@ -83,7 +83,7 @@ function renderDialog() {
   const client = createQueryClient()
   return render(
     <QueryClientProvider client={client}>
-      <AssignCustodyDialog custody={custody} onClose={() => {}} />
+      <AssignCustodyDialog custody={custody} onClose={() => {}} canAssign />
     </QueryClientProvider>,
   )
 }
@@ -96,6 +96,28 @@ async function selectEmployee(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('AssignCustodyDialog (e19-t03)', () => {
+  it('renders nothing and posts nothing when the parent denies custody.assign', async () => {
+    let posted = false
+    server.use(
+      http.post(`${API_BASE_URL}/assets/${ASSET_ID}/custody-assignment`, () => {
+        posted = true
+        return apiJson({ id: fixtureUuid(60) }, { status: 201 })
+      }),
+    )
+
+    // The gate is EXPLICIT: the parent resolves `custody.assign` and passes it
+    // down. Without it the dialog must not render and must not write.
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <AssignCustodyDialog custody={custody} onClose={() => {}} canAssign={false} />
+      </QueryClientProvider>,
+    )
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'تأكيد التكليف' })).not.toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
+
   it('validates the schema: assignment without an employee surfaces the Arabic message', async () => {
     renderDialog()
     // Submit with no employee selected — zodResolver must block and show the message.

@@ -50,7 +50,7 @@ function createWrapper() {
 }
 
 async function openEditor() {
-  render(<WarehouseCapabilitiesEditor warehouseId={WAREHOUSE_ID} />, {
+  render(<WarehouseCapabilitiesEditor warehouseId={WAREHOUSE_ID} canManage />, {
     wrapper: createWrapper(),
   })
   fireEvent.click(await screen.findByRole('button', { name: 'إدارة القدرات' }))
@@ -270,6 +270,29 @@ describe('WarehouseCapabilitiesEditor — lvtk.3 acceptance', () => {
     // Exactly ONE success toast (the mutation's), never a duplicate.
     await screen.findByText('تم إبطال القدرة.')
     expect(toastRoots()).toHaveLength(1)
+  })
+
+  it('renders no trigger and writes nothing when the parent denies warehouse.manage', async () => {
+    let grantCalled = false
+    serveCapabilities()
+    serveDomains(IT_DOMAIN)
+    server.use(
+      http.post(`${API_BASE_URL}/warehouse-capabilities`, () => {
+        grantCalled = true
+        return okJson({ id: fixtureUuid(99) }, { status: 201 })
+      }),
+    )
+
+    // The gate is EXPLICIT: the parent resolves `warehouse.manage` and passes
+    // it down. Without it the editor must offer no control at all, and no
+    // write may reach the wire even if the dialog were opened programmatically.
+    render(<WarehouseCapabilitiesEditor warehouseId={WAREHOUSE_ID} canManage={false} />, {
+      wrapper: createWrapper(),
+    })
+
+    expect(screen.queryByRole('button', { name: 'إدارة القدرات' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(grantCalled).toBe(false)
   })
 
   it('renders a revoked (Inactive) capability as inactive and offers reactivation, not a dead row', async () => {

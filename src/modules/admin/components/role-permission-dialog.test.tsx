@@ -47,7 +47,12 @@ function DialogHost({ role }: { role: RoleProjection }) {
       <button type="button" onClick={() => setOpen(true)}>
         {`تعديل صلاحيات ${role.nameAr}`}
       </button>
-      <RolePermissionDialog role={open ? role : null} open={open} onOpenChange={setOpen} />
+      <RolePermissionDialog
+        role={open ? role : null}
+        open={open}
+        onOpenChange={setOpen}
+        canManage
+      />
     </div>
   )
 }
@@ -57,6 +62,27 @@ afterEach(() => {
 })
 
 describe('RolePermissionDialog', () => {
+  it('renders no matrix and replaces nothing when the parent denies admin.role.manage', async () => {
+    let replaced = false
+    server.use(
+      http.put(`${API_BASE_URL}/roles/${ROLE_ID}/permissions`, () => {
+        replaced = true
+        return okJson({}, { status: 204 })
+      }),
+    )
+    const role = createRoleProjection({ id: ROLE_ID, permissionCodes: ['admin.role.view'] })
+
+    // The gate is EXPLICIT: the parent resolves `admin.role.manage` and passes
+    // it down. Without it the matrix is not reachable and nothing is written.
+    render(<RolePermissionDialog role={role} open onOpenChange={vi.fn()} canManage={false} />, {
+      wrapper: createWrapper(),
+    })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'حفظ الصلاحيات' })).not.toBeInTheDocument()
+    expect(replaced).toBe(false)
+  })
+
   it('opens prefilled with the assigned codes and replaces the complete contract role on save', async () => {
     const user = userEvent.setup()
     const role = createRoleProjection({

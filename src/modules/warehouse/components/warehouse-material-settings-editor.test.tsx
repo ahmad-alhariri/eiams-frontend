@@ -130,6 +130,7 @@ function renderEditor(props: {
       setting={props.setting}
       open
       onOpenChange={onOpenChange}
+      canManage
     />,
     { wrapper: createWrapper() },
   )
@@ -148,6 +149,29 @@ afterEach(() => {
 })
 
 describe('WarehouseMaterialSettingsEditor', () => {
+  it('opens no dialog and POSTs nothing when the parent denies warehouse.manage', async () => {
+    const createCapture: CreateCapture = { bodies: [], requestCount: 0 }
+    server.use(materialsHandler(), createHandler(createCapture))
+
+    // The gate is EXPLICIT: the parent resolves `warehouse.manage` and passes
+    // it down. Without it the editor must offer no form and no write.
+    render(
+      <WarehouseMaterialSettingsEditor
+        warehouseId={WAREHOUSE_ID}
+        settings={[]}
+        setting={null}
+        open
+        onOpenChange={vi.fn()}
+        canManage={false}
+      />,
+      { wrapper: createWrapper() },
+    )
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'حفظ الإعداد' })).not.toBeInTheDocument()
+    expect(createCapture.requestCount).toBe(0)
+  })
+
   it('creates a setting: searches materials, fills thresholds, confirms, and POSTs', async () => {
     const createCapture: CreateCapture = { bodies: [], requestCount: 0 }
     server.use(materialsHandler(), createHandler(createCapture))

@@ -72,6 +72,16 @@ import { ErrorState } from '@/shared/feedback/error-state'
 
 export interface WarehouseCapabilitiesEditorProps {
   warehouseId: string
+  /**
+   * The `warehouse.manage` decision, resolved by the parent.
+   *
+   * The editor itself never reads the session: the parent
+   * (`WarehouseCapabilitiesOverview`) owns the `usePermission()` call and
+   * passes the resolved state down, so the gate is EXPLICIT here instead of
+   * being implied by where the editor happens to be mounted. Without it the
+   * editor renders no trigger and performs no write.
+   */
+  canManage: boolean
 }
 
 function pendingOpKey(capabilityId: string, operation: CapabilityOperation): string {
@@ -91,7 +101,10 @@ const EMPTY_CAPABILITIES: readonly WarehouseCapability[] = []
  * normalized Arabic, so a rejected grant/already-revoked surfaces the approved
  * copy rather than the generic per-status fallback.
  */
-export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabilitiesEditorProps) {
+export function WarehouseCapabilitiesEditor({
+  warehouseId,
+  canManage,
+}: WarehouseCapabilitiesEditorProps) {
   const [open, setOpen] = useState(false)
   const { confirm, element: confirmElement } = useConfirm()
 
@@ -149,6 +162,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
   }
 
   const grant = async (materialDomainId: string) => {
+    if (!canManage) return
     try {
       await grantMutation.mutateAsync({ warehouseId, materialDomainId })
     } catch (error: unknown) {
@@ -159,6 +173,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
   }
 
   const reactivate = async (capability: WarehouseCapability) => {
+    if (!canManage) return
     // A revoked (Inactive) capability is reactivated by re-granting the same
     // domain: the handler is idempotent on the unique (warehouseId,
     // materialDomainId) key and flips the existing row back to Active.
@@ -173,6 +188,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
   }
 
   const revoke = async (capability: WarehouseCapability) => {
+    if (!canManage) return
     const result = await confirm({
       title: 'تأكيد إبطال القدرة',
       message: `سيتم إبطال قدرة "${capability.materialDomainName}" لهذا المستودع. يمكن تنشيطها لاحقًا بنفس المجال.`,
@@ -192,6 +208,7 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
     operation: CapabilityOperation,
     committedGranted: boolean,
   ) => {
+    if (!canManage) return
     const key = pendingOpKey(capability.id, operation)
     if (committedGranted) {
       setPendingRemoves((prev) => new Set(prev).add(key))
@@ -230,6 +247,14 @@ export function WarehouseCapabilitiesEditor({ warehouseId }: WarehouseCapabiliti
         })
       }
     }
+  }
+
+  // The trigger IS the gate: without `warehouse.manage` the editor renders
+  // nothing at all, so a user who may only read the matrix never sees a
+  // control that would be refused. The parent resolves the permission and
+  // passes it down; the server re-evaluates every write regardless.
+  if (!canManage) {
+    return null
   }
 
   return (

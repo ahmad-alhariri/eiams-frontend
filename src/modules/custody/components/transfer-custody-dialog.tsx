@@ -32,6 +32,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 export interface TransferCustodyDialogProps {
   /** The LIVE custody row being transferred (`GET /custodies`). */
   custody: Custody
+  /**
+   * The `custody.assign` decision, resolved by the parent.
+   *
+   * The dialog owns no session read: the parent (`CustodyDetailPage`) resolves
+   * the permission through `usePermission()` and passes the result down, so
+   * the gate is EXPLICIT here instead of being implied by the mount site.
+   * Without it the trigger is not rendered and nothing is transferred.
+   */
+  canTransfer: boolean
 }
 
 /**
@@ -81,7 +90,7 @@ function custodyKindForHolder(holderType: CounterpartType): CustodyKind {
  * live `POST /custodies/{custodyId}/transfer`. Composed on the custody detail
  * page.
  */
-export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
+export function TransferCustodyDialog({ custody, canTransfer }: TransferCustodyDialogProps) {
   const [open, setOpen] = useState(false)
   const [holderType, setHolderType] = useState<CounterpartType>('Employee')
   const transferMutation = useTransferCustodyMutation()
@@ -101,6 +110,7 @@ export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
   }, [open])
 
   const submit = methods.handleSubmit((values) => {
+    if (!canTransfer) return
     // Live wire for `POST /custodies/{custodyId}/transfer`:
     //   { subjectType, newHolderType, newHolderId, newCustodyKind, expectedRowVersion, note? }
     const request: TransferCustodyRequest = {
@@ -122,14 +132,19 @@ export function TransferCustodyDialog({ custody }: TransferCustodyDialogProps) {
 
   return (
     <Dialog
-      open={open}
+      open={open && canTransfer}
       onOpenChange={(next) => {
         // A reopened dialog starts from the default holder kind.
         if (next) setHolderType('Employee')
         setOpen(next)
       }}
     >
-      <DialogTrigger render={<Button type="button">مبادلة المسؤولية</Button>} />
+      {/* The gate is EXPLICIT: without `custody.assign` there is no trigger,
+          so the transfer form is never reachable. The parent already omits the
+          whole card, so this is the same visible result for every role. */}
+      {canTransfer ? (
+        <DialogTrigger render={<Button type="button">مبادلة المسؤولية</Button>} />
+      ) : null}
       <DialogContent dir="rtl">
         <DialogHeader>
           <DialogTitle>مبادلة مسؤولية العهدة</DialogTitle>

@@ -14,6 +14,9 @@ export type OrgUnitLoader = EntityLoader<OrganizationalUnit>
  * Org unit selector adapter: label = Arabic name, hint = code (carried in the
  * payload), and inactive org units are disabled. Typed against the full
  * `OrganizationalUnit` contract entity — no dedicated OrgUnitReference type exists.
+ *
+ * KEPT: a documented entity selector adapter (docs/component-guidelines.md,
+ * "Entity selector adapters"). The loader is injected by the parent.
  */
 const orgUnitAdapter: EntitySelectorAdapter<OrganizationalUnit> =
   createEntitySelectorAdapter<OrganizationalUnit>({

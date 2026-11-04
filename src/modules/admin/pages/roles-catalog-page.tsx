@@ -165,6 +165,7 @@ function RolesCatalogPage() {
         role={dialogRole}
         open={dialogRole !== null}
         onOpenChange={closeMatrix}
+        canManage={canManage}
       />
     </div>
   )

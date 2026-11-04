@@ -105,6 +105,16 @@ export interface WarehouseMaterialSettingsEditorProps {
   setting: WarehouseMaterialSetting | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  /**
+   * The `warehouse.manage` decision, resolved by the parent.
+   *
+   * The editor owns no session read: the parent
+   * (`WarehouseMaterialSettingsOverview`) resolves `warehouse.manage` through
+   * `usePermission()` and passes the result down, so the gate is EXPLICIT here
+   * instead of being implied by the mount site. Without it the editor submits
+   * nothing.
+   */
+  canManage: boolean
 }
 
 export function WarehouseMaterialSettingsEditor({
@@ -113,6 +123,7 @@ export function WarehouseMaterialSettingsEditor({
   setting,
   open,
   onOpenChange,
+  canManage,
 }: WarehouseMaterialSettingsEditorProps) {
   const { confirm, element: confirmElement } = useConfirm()
   const createMutation = useCreateWarehouseMaterialSettingMutation()
@@ -172,6 +183,7 @@ export function WarehouseMaterialSettingsEditor({
   }, [form, open, setting])
 
   const submit = async (values: WarehouseMaterialSettingFormValues) => {
+    if (!canManage) return
     form.clearErrors()
     const result = await confirm({
       title: 'تأكيد حفظ إعداد المادة',
@@ -222,7 +234,11 @@ export function WarehouseMaterialSettingsEditor({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      {/* The gate is EXPLICIT: without `warehouse.manage` the editor renders no
+          dialog at all and its submit path is refused. The parent already
+          hides the trigger, so this is the same visible result — a user who
+          may not manage never reaches a form. */}
+      <Dialog open={open && canManage} onOpenChange={onOpenChange}>
         <DialogContent size="lg" dir="rtl">
           <DialogHeader>
             <DialogTitle>

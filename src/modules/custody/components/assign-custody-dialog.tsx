@@ -30,6 +30,15 @@ export interface AssignCustodyDialogProps {
    */
   custody: PendingCustody | null
   onClose: () => void
+  /**
+   * The `custody.assign` decision, resolved by the parent.
+   *
+   * The dialog owns no session read: the parent (`PendingCustodyListPage`)
+   * resolves the permission through `usePermission()` and passes the result
+   * down, so the gate is EXPLICIT here instead of being implied by the mount
+   * site. Without it the dialog opens nothing and assigns nothing.
+   */
+  canAssign: boolean
 }
 
 /**
@@ -38,7 +47,7 @@ export interface AssignCustodyDialogProps {
  * Server semantics close the operational custody row and open a Personal one
  * linked to the original issue document.
  */
-export function AssignCustodyDialog({ custody, onClose }: AssignCustodyDialogProps) {
+export function AssignCustodyDialog({ custody, onClose, canAssign }: AssignCustodyDialogProps) {
   const assignMutation = useAssignCustodyMutation()
   const open = custody !== null
 
@@ -59,6 +68,7 @@ export function AssignCustodyDialog({ custody, onClose }: AssignCustodyDialogPro
 
   const submit = methods.handleSubmit((values) => {
     if (custody === null) return
+    if (!canAssign) return
     // Live wire for `POST /assets/{assetId}/custody-assignment`:
     //   { employeeId, expectedCustodyRowVersion, note? }
     // `note` is omitted when the operator leaves the reason blank. The asset
@@ -79,6 +89,13 @@ export function AssignCustodyDialog({ custody, onClose }: AssignCustodyDialogPro
       { onSuccess: onClose },
     )
   })
+
+  // The gate is EXPLICIT: without `custody.assign` the dialog opens nothing.
+  // The parent already hides the "تكليف موظف" button, so this is the same
+  // visible result for every role.
+  if (!canAssign) {
+    return null
+  }
 
   return (
     <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
