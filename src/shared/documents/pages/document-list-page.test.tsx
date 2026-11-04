@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
@@ -16,6 +16,7 @@ import { okPageJson } from '@/test/msw/envelope'
 import { wireDocumentSummary } from '@/test/msw/document-wire-fixtures'
 import { server } from '@/test/msw/server'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import type { SessionResponse } from '@/modules/auth/types/session.types'
 
 const activeScope = vi.hoisted(() => ({
@@ -28,9 +29,17 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 import DocumentListPage from './document-list-page'
 
-const API_BASE_URL = '/api/v1'
+/**
+ * The one test that exercises the warehouse filter's LIVE options binds the
+ * production loader exactly as the module pages do, since the shared page no
+ * longer imports the module hook itself (injected binding).
+ */
+function WarehouseBoundDocumentListPage() {
+  const warehouseSelector = useScopedWarehouseSelector()
+  return <DocumentListPage warehouseSelector={warehouseSelector} />
+}
 
-const DOCUMENT_ROUTES = ['/documents/receiving', '/documents/opening', '/documents/return'] as const
+const API_BASE_URL = '/api/v1'
 
 function sessionWith(permissionCodes: readonly string[]): SessionResponse {
   return {
@@ -47,16 +56,14 @@ function createWrapper(initialPath: string, permissionCodes: readonly string[] =
   })
   client.setQueryData(authSessionQueryKey, sessionWith(permissionCodes))
 
-  return function QueryWrapper() {
+  // Test Library renders `ui` as the wrapper's children; forward them so the
+  // warehouse-bound variant renders inside the router context it needs.
+  return function QueryWrapper({ children }: { children?: React.ReactNode }) {
     return (
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[initialPath]}>
+          {children}
           <Routes>
-            {DOCUMENT_ROUTES.map((path) => (
-              <Route key={path} path={path} element={<DocumentListPage />} />
-            ))}
-            <Route path="/documents/issue" element={<DocumentListPage />} />
-            <Route path="/documents/transfer" element={<DocumentListPage />} />
             <Route
               path="/documents/receiving/new"
               element={<span role="status">نموذج استلام جديد</span>}
@@ -134,10 +141,15 @@ describe('DocumentListPage', () => {
         receivedQueries.push(new URL(request.url).searchParams.toString())
         return okPageJson([createWarehouseDocument({ documentStatus: 'Submitted' })])
       }),
-      http.get(`${API_BASE_URL}/warehouses`, () => okPageJson([warehouse])),
+      http.get(`${API_BASE_URL}/warehouses`, ({ request }) => {
+        receivedQueries.push(new URL(request.url).searchParams.toString())
+        return okPageJson([warehouse])
+      }),
     )
 
-    render(<DocumentListPage />, { wrapper: createWrapper('/documents/receiving') })
+    render(<WarehouseBoundDocumentListPage />, {
+      wrapper: createWrapper('/documents/receiving'),
+    })
     await screen.findByText('EIAMS-DOC-2024-0001')
 
     await user.click(screen.getByRole('combobox', { name: 'تصفية حسب حالة السند' }))

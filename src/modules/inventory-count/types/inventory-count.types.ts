@@ -176,8 +176,8 @@ export interface CountPage<T> {
   readonly items: readonly T[]
   readonly page: number
   readonly pageSize: number
-  readonly totalItems: number
-  readonly totalPages: number
+  readonly totalItems: number | null
+  readonly totalPages: number | null
   readonly hasPreviousPage: boolean
   readonly hasNextPage: boolean
 }

@@ -1,4 +1,4 @@
-import type { Material } from '@/modules/catalog/types/catalog.types'
+import type { Material } from '@/shared/types/catalog.wire-types'
 
 import {
   createEntitySelectorAdapter,

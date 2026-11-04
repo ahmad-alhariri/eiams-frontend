@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { useFormContext, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useActiveScopeContext } from '@/shared/documents/active-scope'
 import {
   FormControl,
   FormField,
@@ -15,7 +15,7 @@ import type { OptionLoader } from '@/shared/selectors/selector-adapter'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { Badge } from '@/shared/ui/badge'
 import { Input } from '@/shared/ui/input'
-import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
+import type { Warehouse } from '@/shared/types/warehouse.wire-types'
 import type {
   AdjustmentDraftDetails,
   CompleteDraftLine,
@@ -26,6 +26,7 @@ import type {
   ReturnDraftDetails,
   TransferDraftDetails,
 } from '@/shared/documents/types/document-wire.types'
+import { toArabicDigits } from '@/shared/utils/arabic-numbers'
 
 // The section is a component file by contract; the schema, labels, and draft
 // mapper it ships are deliberately co-located so domain modules import one unit.
@@ -117,7 +118,29 @@ export interface DocumentHeaderSectionProps {
   /** Renders information text rows instead of inputs and registers nothing. */
   readOnly?: boolean
   initialValues?: DocumentHeaderInitialValues
+  /**
+   * The scope-aware warehouse binding the document pages inject from
+   * `modules/warehouse` (`useScopedWarehouseSelector()`). The shared section
+   * performs no HTTP itself; when the binding is omitted (bare/test mounts,
+   * the gallery) the fallback keeps the section rendering identically: scope
+   * readiness still derives from the active session scope, while the loader
+   * resolves to an empty list because no module service is bound.
+   */
+  warehouseSelector?: DocumentWarehouseSelectorBinding
 }
+
+/**
+ * The binding `DocumentHeaderSection` consumes, structurally compatible with
+ * `useScopedWarehouseSelector()`'s full result (which also carries `options`).
+ */
+export interface DocumentWarehouseSelectorBinding {
+  loadOptions: OptionLoader<Warehouse>
+  /** False until the session has a selected active scope; the control disables. */
+  scopeReady: boolean
+}
+
+/** Fallback loader for bare mounts: no warehouse service is bound in shared. */
+const UNBOUND_WAREHOUSE_OPTIONS: OptionLoader<Warehouse> = async () => []
 
 const HEADER_VALUE_NAMES = [
   'header.warehouseId',
@@ -225,7 +248,7 @@ function MetaRow({
           <dt className="sr-only">النسخة</dt>
           <dd>
             <Badge variant="outline" data-slot="row-version-badge">
-              الإصدار: {initialValues.rowVersion}
+              الإصدار: {toArabicDigits(initialValues.rowVersion)}
             </Badge>
           </dd>
         </div>
@@ -288,9 +311,10 @@ function SpineInfoValues({
  * {@link buildCompleteDraftRequest} and hand the paper pair to the follow-up
  * reference write.
  *
- * The section performs no data fetching (beyond the scope-aware warehouse
- * selector), no mutations, and no navigation; the page owns loading,
- * submission, references, and the petal editors. In `readOnly` mode the
+ * The section performs no data fetching: the page injects the scope-aware
+ * warehouse selector, so this shared file owns no HTTP and no mutation; the
+ * page owns loading, submission, references, and the petal editors. In
+ * `readOnly` mode the
  * section renders plain text rows and registers no fields, so the page must
  * validate any read-only submission path itself.
  */
@@ -300,9 +324,17 @@ export function DocumentHeaderSection({
   disabled = false,
   readOnly = false,
   initialValues = {},
+  warehouseSelector,
 }: DocumentHeaderSectionProps) {
   const form = useFormContext<DocumentHeaderContainer>()
-  const selector = useScopedWarehouseSelector()
+  const { activeScopeCacheKey } = useActiveScopeContext()
+  // The pages own the warehouse binding (production loader + scope); the
+  // shared section only reads scope readiness for bare mounts it renders
+  // itself (gallery, isolated tests).
+  const selector = warehouseSelector ?? {
+    loadOptions: UNBOUND_WAREHOUSE_OPTIONS,
+    scopeReady: activeScopeCacheKey !== undefined,
+  }
   const headerValues = useWatch({
     control: form.control,
     name: HEADER_VALUE_NAMES,
@@ -328,7 +360,6 @@ export function DocumentHeaderSection({
           <FormField
             control={form.control}
             name="header.warehouseId"
-            rules={{ required: true }}
             render={({ field }) => (
               <FormItem>
                 <FormLabel>المستودع</FormLabel>
@@ -346,7 +377,6 @@ export function DocumentHeaderSection({
           <FormField
             control={form.control}
             name="header.paperDocumentNumber"
-            rules={{ required: true }}
             render={({ field }) => (
               <FormItem>
                 <FormLabel>رقم المستند الورقي</FormLabel>
@@ -366,7 +396,6 @@ export function DocumentHeaderSection({
           <FormField
             control={form.control}
             name="header.paperDocumentYear"
-            rules={{ required: true }}
             render={({ field }) => (
               <FormItem>
                 <FormLabel>السنة الورقية</FormLabel>

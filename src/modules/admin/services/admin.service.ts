@@ -1,6 +1,7 @@
 ﻿import { readTransportError } from '@/shared/api/envelope'
 import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 import type { ListUsersQuery } from '@/modules/admin/types/admin.types'
 import type {
@@ -81,9 +82,9 @@ const ASSIGNMENT_NOT_FOUND_CODE = 'USER_ROLE_SCOPES_ASSIGNMENT_NOT_FOUND'
 const FULL_PAGE_QUERY = { page: 1, pageSize: 100 } as const
 
 export interface AdminService {
-  listPermissions: () => Promise<readonly PermissionCatalogEntry[]>
-  listRoles: () => Promise<readonly RoleProjection[]>
-  getRole: (roleId: string) => Promise<RoleProjection>
+  listPermissions: (context?: RequestContext) => Promise<readonly PermissionCatalogEntry[]>
+  listRoles: (context?: RequestContext) => Promise<readonly RoleProjection[]>
+  getRole: (roleId: string, context?: RequestContext) => Promise<RoleProjection>
   createRole: (request: CreateRoleRequest) => Promise<RoleProjection>
   /** Metadata only; permission membership is `replaceRolePermissions`. */
   updateRoleMetadata: (
@@ -95,8 +96,8 @@ export interface AdminService {
     roleId: string,
     request: ReplaceRolePermissionsRequest,
   ) => Promise<RoleProjection>
-  listUsers: (query: ListUsersQuery) => Promise<UserDirectoryPage>
-  getUser: (userId: string) => Promise<UserDetailProjection>
+  listUsers: (query: ListUsersQuery, context?: RequestContext) => Promise<UserDirectoryPage>
+  getUser: (userId: string, context?: RequestContext) => Promise<UserDetailProjection>
   createUser: (request: CreateUserRequest) => Promise<CreatedUser>
   /** Answers an empty body, so it resolves to void and the caller re-reads. */
   updateUser: (userId: string, request: UpdateUserRequest) => Promise<void>
@@ -111,7 +112,10 @@ export interface AdminService {
    * still propagates, INCLUDING a 404 for an unknown user: matching the status
    * alone would render a real failure as an empty assignment.
    */
-  getUserRoleScope: (userId: string) => Promise<UserRoleScopeProjection | null>
+  getUserRoleScope: (
+    userId: string,
+    context?: RequestContext,
+  ) => Promise<UserRoleScopeProjection | null>
   /**
    * Atomic replacement of the sole assignment; returns the stored projection
    * including its new `rowVersion`. The response IS the assignment, so the client
@@ -130,26 +134,29 @@ export interface AdminService {
  */
 export function createAdminService(transport: ApiTransport): AdminService {
   return {
-    async listPermissions() {
+    async listPermissions(context) {
       const page = await transport.requestPage<PermissionCatalogEntry>({
         path: PERMISSIONS_PATH,
         method: 'GET',
         query: FULL_PAGE_QUERY,
+        ...withSignal(context),
       })
       return page.items
     },
-    async listRoles() {
+    async listRoles(context) {
       const page = await transport.requestPage<RoleProjection>({
         path: ROLES_PATH,
         method: 'GET',
         query: FULL_PAGE_QUERY,
+        ...withSignal(context),
       })
       return page.items
     },
-    async getRole(roleId) {
+    async getRole(roleId, context) {
       return await transport.request<RoleProjection>({
         path: pathWithId(ROLE_PATH, '{roleId}', roleId),
         method: 'GET',
+        ...withSignal(context),
       })
     },
     async createRole(request) {
@@ -175,7 +182,7 @@ export function createAdminService(transport: ApiTransport): AdminService {
         body: request,
       })
     },
-    async listUsers(query) {
+    async listUsers(query, context) {
       const page = await transport.requestPage<UserDirectoryRow>({
         path: USERS_PATH,
         method: 'GET',
@@ -200,6 +207,7 @@ export function createAdminService(transport: ApiTransport): AdminService {
           ...(query.status === undefined ? {} : { status: query.status }),
           ...(query.hasRoleScope === undefined ? {} : { hasRoleScope: query.hasRoleScope }),
         },
+        ...withSignal(context),
       })
       return {
         items: page.items,
@@ -207,19 +215,20 @@ export function createAdminService(transport: ApiTransport): AdminService {
           pageIndex: page.page - 1,
           page: page.page,
           pageSize: page.pageSize,
-          itemCount: page.totalItems,
-          totalItems: page.totalItems,
-          totalCount: page.totalItems,
-          totalPages: page.totalPages,
+          itemCount: page.items?.length ?? 0,
+          totalItems: page.totalItems ?? null,
+          totalCount: page.totalItems ?? null,
+          totalPages: page.totalPages ?? null,
           hasNextPage: page.hasNextPage,
           hasPreviousPage: page.hasPreviousPage,
         },
       }
     },
-    async getUser(userId) {
+    async getUser(userId, context) {
       return await transport.request<UserDetailProjection>({
         path: pathWithId(USER_PATH, '{userId}', userId),
         method: 'GET',
+        ...withSignal(context),
       })
     },
     async createUser(request) {
@@ -247,11 +256,12 @@ export function createAdminService(transport: ApiTransport): AdminService {
         body: request,
       })
     },
-    async getUserRoleScope(userId) {
+    async getUserRoleScope(userId, context) {
       try {
         return await transport.request<UserRoleScopeProjection>({
           path: pathWithId(USER_ROLE_SCOPE_PATH, '{userId}', userId),
           method: 'GET',
+          ...withSignal(context),
         })
       } catch (error: unknown) {
         // A user with no assignment yet is a legitimate state, not a failure:

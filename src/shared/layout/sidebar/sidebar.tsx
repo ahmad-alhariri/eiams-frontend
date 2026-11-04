@@ -210,7 +210,7 @@ function Sidebar({ hasPermission: hasPermissionOverride }: SidebarProps) {
           // Below md the aside becomes an off-canvas drawer from the right,
           // hidden unless the store opens it. At md–lg it stays in flow as the
           // auto-collapsed icon rail; from lg it is the static column.
-          'max-md:fixed max-md:top-16 max-md:right-0 max-md:bottom-0 max-md:z-40 max-md:h-auto',
+          'max-md:fixed max-md:top-16 max-md:start-0 max-md:bottom-0 max-md:z-40 max-md:h-auto',
           drawerOpen ? 'max-md:block' : 'max-md:hidden',
         )}
       >

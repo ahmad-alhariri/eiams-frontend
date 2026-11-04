@@ -1,12 +1,17 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { assetService } from '@/modules/asset/services/asset.service'
 import type { ListAssetMovementsQuery, ListAssetsQuery } from '@/modules/asset/types/asset.types'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import {
+  keepPreviousDataInSameScope,
+  queryKeys,
+  RESOURCES,
+  type ScopeCacheKey,
+} from '@/shared/services/query-keys'
 
-export const ASSET_RESOURCE = 'asset'
+export const ASSET_RESOURCE = RESOURCES.asset
 
 export const assetQueryKeys = {
   /** Namespace root — the target for cross-module invalidation (e.g. custody). */
@@ -31,12 +36,12 @@ function useActiveScopeCacheKey() {
 export function useAssetsQuery(query: ListAssetsQuery) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'assets', query)
         : assetQueryKeys.assets(scope, query),
-    queryFn: () => assetService.listAssets(query),
+    queryFn: ({ signal }) => assetService.listAssets(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -49,7 +54,7 @@ export function useAssetQuery(assetId: string | undefined) {
       scope === undefined || assetId === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'assets', assetId)
         : assetQueryKeys.asset(scope, assetId),
-    queryFn: () => assetService.getAsset(assetId ?? ''),
+    queryFn: ({ signal }) => assetService.getAsset(assetId ?? '', { signal }),
     enabled: scope !== undefined && assetId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -63,7 +68,7 @@ export function useAssetCurrentStatusQuery(assetId: string | undefined) {
       scope === undefined || assetId === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'current-status', assetId)
         : assetQueryKeys.currentStatus(scope, assetId),
-    queryFn: () => assetService.getAssetCurrentStatus(assetId ?? ''),
+    queryFn: ({ signal }) => assetService.getAssetCurrentStatus(assetId ?? '', { signal }),
     enabled: scope !== undefined && assetId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -77,7 +82,7 @@ export function useAssetCustodyTimelineQuery(assetId: string | undefined) {
       scope === undefined || assetId === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'custody', assetId)
         : assetQueryKeys.custody(scope, assetId),
-    queryFn: () => assetService.getAssetCustodyTimeline(assetId ?? ''),
+    queryFn: ({ signal }) => assetService.getAssetCustodyTimeline(assetId ?? '', { signal }),
     enabled: scope !== undefined && assetId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -89,12 +94,12 @@ export function useAssetMovementsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined || assetId === undefined
         ? queryKeys.unscoped(ASSET_RESOURCE, 'movements', assetId, query)
         : assetQueryKeys.movements(scope, assetId, query),
-    queryFn: () => assetService.listAssetMovements(assetId ?? '', query),
+    queryFn: ({ signal }) => assetService.listAssetMovements(assetId ?? '', query, { signal }),
     enabled: scope !== undefined && assetId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { organizationService } from '@/modules/organization/services/organization.service'
-import { queryKeys } from '@/shared/services/query-keys'
+import { queryKeys, RESOURCES } from '@/shared/services/query-keys'
 import {
   statusCommandValue,
   type RecordStatus,
@@ -40,7 +40,7 @@ function useInvalidateSites() {
     }
 
     await queryClient.invalidateQueries({
-      queryKey: queryKeys.scoped(activeScopeCacheKey, 'organization', 'sites'),
+      queryKey: queryKeys.scoped(activeScopeCacheKey, RESOURCES.organization, 'sites'),
       exact: false,
     })
   }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+﻿import { useCallback, useMemo, useState } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { Link } from 'react-router'
 
@@ -12,7 +12,7 @@ import {
 } from '@/modules/adjustment/types/adjustment.types'
 import { useAdjustmentsListQuery } from '@/modules/adjustment/hooks/use-adjustment-queries'
 import { useRoutePermission } from '@/modules/auth/hooks/use-permission'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
@@ -239,6 +239,7 @@ export default function AdjustmentsListPage() {
           columns={columns}
           data={[...(adjustmentsQuery.data?.items ?? [])]}
           isLoading={adjustmentsQuery.isLoading}
+          isFetching={adjustmentsQuery.isFetching}
           isError={adjustmentsQuery.isError}
           onRetry={() => void adjustmentsQuery.refetch()}
           errorTitle="تعذّر تحميل سندات التسوية"
@@ -251,8 +252,8 @@ export default function AdjustmentsListPage() {
           }
           page={pagination.page}
           pageSize={pagination.pageSize}
-          totalCount={adjustmentsQuery.data?.totalItems}
-          totalPages={Math.max(adjustmentsQuery.data?.totalPages ?? 1, 1)}
+          totalCount={adjustmentsQuery.data?.totalItems ?? null}
+          totalPages={adjustmentsQuery.data?.totalPages ?? null}
           onPageChange={pagination.setPage}
           onPageSizeChange={pagination.setPageSize}
         />

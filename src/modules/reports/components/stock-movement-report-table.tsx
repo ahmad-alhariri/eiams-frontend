@@ -1,9 +1,9 @@
-import { createColumnHelper } from '@tanstack/react-table'
+﻿import { createColumnHelper } from '@tanstack/react-table'
 import { Link } from 'react-router'
 import { useCallback, useMemo, useState } from 'react'
 
 import { ROUTE_PATHS } from '@/config/routes'
-import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
+import { useScopedMaterialSelector } from '@/shared/scopes/use-scoped-material-selector'
 import { stockMovementTypeLabelAr } from '@/modules/inventory/components/stock-movement-labels'
 import { useStockMovementsQuery } from '@/modules/inventory/hooks/use-inventory-queries'
 import type { MovementType } from '@/modules/inventory/types/inventory.api-types'
@@ -11,7 +11,7 @@ import type {
   ListStockMovementsQuery,
   StockMovement,
 } from '@/modules/inventory/types/inventory.types'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
@@ -20,7 +20,7 @@ import { DataTableServer } from '@/shared/ui/data-table-server'
 import { DatePicker } from '@/shared/ui/date-picker'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import { ExportButton } from '@/shared/ui/export-button'
+import { ExportButton } from '@/modules/reports/components/export-button'
 import { PrintButton } from '@/shared/ui/print-button'
 import { pageRows } from '@/shared/utils/table-data'
 import { formatDateTime, formatNumber, formatUuid } from '@/shared/utils/format'
@@ -286,6 +286,7 @@ function StockMovementReportTableImpl() {
           columns={columns}
           data={pageRows(page, movementsQuery.isError)}
           isLoading={movementsQuery.isLoading}
+          isFetching={movementsQuery.isFetching}
           isError={movementsQuery.isError}
           onRetry={() => void movementsQuery.refetch()}
           errorTitle="تعذّر تحميل تقرير حركات المخزون"

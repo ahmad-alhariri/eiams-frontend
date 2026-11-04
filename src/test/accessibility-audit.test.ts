@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   applicationSourceFiles,
-  assertScannedFiles,
+  assertScannedFilesMatchGit,
+  gitApplicationSourceFiles,
   readSource,
   relativeToRepo,
 } from './support/source-scan'
@@ -27,13 +28,7 @@ import {
  *     decidable and is not asserted here; it needs a rendered audit.
  */
 const SCANNED = applicationSourceFiles()
-
-/** The pinned production file count. A narrowed glob must fail loudly. */
-// +2 since 407: `shared/layout/route-focus-announcer.tsx` (the route focus
-// announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
-// new application files. They read no test support, so the no-offenders
-// assertion below stays green.
-const EXPECTED_SCANNED_FILES = 409
+const GIT_SCANNED = gitApplicationSourceFiles()
 
 /** An INFINITE (looping) animation. The one-shot enter/exit transitions use
  * a different mechanism (motion-reduce:data-open:animate-none), so they are
@@ -120,7 +115,7 @@ function scanRule(detector: (source: string) => string[]): string[] {
 
 describe('accessibility audit (eiams-frontend-e25-t01)', () => {
   it('scans the pinned set of production files', () => {
-    assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
+    assertScannedFilesMatchGit(SCANNED, GIT_SCANNED, 'accessibility audit (eiams-frontend-e25-t01)')
   })
 
   it('keeps the focus order natural', () => {

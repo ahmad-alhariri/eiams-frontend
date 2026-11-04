@@ -186,17 +186,17 @@ describe('QuantityLineEditor', () => {
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
-    expect(screen.getByText('البند 1')).toBeInTheDocument()
+    expect(screen.getByText('البند ١')).toBeInTheDocument()
     expect(
       screen.queryByText('لم تُضف بنود بعد. أضف مادة وكمية لكل بند ليُتاح حفظ المسودة.'),
     ).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'إضافة بند' }))
-    expect(screen.getByText('البند 2')).toBeInTheDocument()
+    expect(screen.getByText('البند ٢')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'حذف البند 2' }))
-    expect(screen.queryByText('البند 2')).not.toBeInTheDocument()
-    expect(screen.getByText('البند 1')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'حذف البند ٢' }))
+    expect(screen.queryByText('البند ٢')).not.toBeInTheDocument()
+    expect(screen.getByText('البند ١')).toBeInTheDocument()
   })
 
   it('renders the per-type optional fields from the feature preset', async () => {
@@ -213,12 +213,12 @@ describe('QuantityLineEditor', () => {
     expect(screen.getByText('تاريخ الانتهاء (اختياري)')).toBeInTheDocument()
     // D2: the expiry date uses the shared Arabic RTL picker, not a native
     // `<input type="date">` that renders English month/day/year segments.
-    expect(screen.getByRole('button', { name: 'تاريخ انتهاء البند 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'تاريخ انتهاء البند ١' })).toBeInTheDocument()
     expect(document.querySelector('input[type="date"]')).toBeNull()
     expect(screen.queryByText('نوع الافتتاحية')).not.toBeInTheDocument()
 
     const selected = new Date()
-    await user.click(screen.getByRole('button', { name: 'تاريخ انتهاء البند 1' }))
+    await user.click(screen.getByRole('button', { name: 'تاريخ انتهاء البند ١' }))
     await user.click(screen.getByRole('button', { name: formatArabicDate(selected) }))
     await waitFor(() =>
       expect(linesValue()[0]?.expiryDate).toBe(dayjs(selected).format('YYYY-MM-DD')),
@@ -236,7 +236,7 @@ describe('QuantityLineEditor', () => {
     expect(screen.getByText('نوع الافتتاحية')).toBeInTheDocument()
     expect(screen.queryByLabelText('سعر الوحدة (اختياري)')).not.toBeInTheDocument()
 
-    const trigger = screen.getByLabelText('نوع الافتتاحية للبند 1')
+    const trigger = screen.getByLabelText('نوع الافتتاحية للبند ١')
     await user.click(trigger)
     await user.click(await screen.findByRole('option', { name: 'افتتاحية أولية' }))
 
@@ -322,8 +322,8 @@ describe('QuantityLineEditor', () => {
 
     // The selector stays disabled until the conversions read lands, so the
     // click below must wait for the options to be known.
-    await waitFor(() => expect(screen.getByLabelText('وحدة البند 1')).toBeEnabled())
-    await user.click(screen.getByLabelText('وحدة البند 1'))
+    await waitFor(() => expect(screen.getByLabelText('وحدة البند ١')).toBeEnabled())
+    await user.click(screen.getByLabelText('وحدة البند ١'))
     const rollOption = await screen.findByRole('option', { name: /لفة/ })
     await user.click(rollOption)
 
@@ -335,7 +335,7 @@ describe('QuantityLineEditor', () => {
     })
     // The trigger itself must show the chosen unit's Arabic label, not the raw
     // conversion id: `getByText` alone would also match the popup option.
-    const unitTrigger = screen.getByLabelText('وحدة البند 1')
+    const unitTrigger = screen.getByLabelText('وحدة البند ١')
     expect(unitTrigger).toHaveTextContent('لفة')
     expect(unitTrigger).toHaveTextContent('× 10')
     expect(unitTrigger).not.toHaveTextContent(CARTON_CONVERSION.id)
@@ -449,7 +449,7 @@ describe('QuantityLineEditor', () => {
 
     expect(screen.getByRole('button', { name: 'إضافة بند' })).toBeDisabled()
     expect(screen.getByLabelText('الكمية')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'حذف البند 1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'حذف البند ١' })).toBeDisabled()
     expect(screen.getByPlaceholderText('ابحث عن مادة...')).toBeDisabled()
   })
 
@@ -472,7 +472,7 @@ describe('QuantityLineEditor', () => {
 
       await waitFor(() => expect(screen.getByText(UNIT_CONVERSIONS_LOADING_AR)).toBeInTheDocument())
       // A pending read must not offer the base unit as if it were the only one.
-      expect(screen.getByLabelText('وحدة البند 1')).toBeDisabled()
+      expect(screen.getByLabelText('وحدة البند ١')).toBeDisabled()
       // A pending read is not a failure: no error copy.
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     })
@@ -496,7 +496,7 @@ describe('QuantityLineEditor', () => {
         expect(screen.getByRole('alert')).toHaveTextContent(UNIT_CONVERSIONS_FAILED_AR),
       )
       // No unit may be picked from a list that was never read.
-      expect(screen.getByLabelText('وحدة البند 1')).toBeDisabled()
+      expect(screen.getByLabelText('وحدة البند ١')).toBeDisabled()
       expect(screen.queryByText(UNIT_CONVERSIONS_LOADING_AR)).not.toBeInTheDocument()
     })
 
@@ -512,13 +512,13 @@ describe('QuantityLineEditor', () => {
       await waitFor(() => expect(screen.getByText(UNIT_CONVERSIONS_LOADING_AR)).toBeInTheDocument())
       release()
 
-      await waitFor(() => expect(screen.getByLabelText('وحدة البند 1')).toBeEnabled())
+      await waitFor(() => expect(screen.getByLabelText('وحدة البند ١')).toBeEnabled())
       // The material simply has no alternative units — that is an answer, not
       // a failure, so it gets no error copy.
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
       expect(screen.queryByText(UNIT_CONVERSIONS_LOADING_AR)).not.toBeInTheDocument()
 
-      await user.click(screen.getByLabelText('وحدة البند 1'))
+      await user.click(screen.getByLabelText('وحدة البند ١'))
       expect(await screen.findByRole('option', { name: 'متر' })).toBeInTheDocument()
       expect(screen.queryByRole('option', { name: /لفة/ })).not.toBeInTheDocument()
     })
@@ -535,11 +535,11 @@ describe('QuantityLineEditor', () => {
       await waitFor(() => expect(screen.getByText(UNIT_CONVERSIONS_LOADING_AR)).toBeInTheDocument())
       release()
 
-      await waitFor(() => expect(screen.getByLabelText('وحدة البند 1')).toBeEnabled())
+      await waitFor(() => expect(screen.getByLabelText('وحدة البند ١')).toBeEnabled())
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
       expect(screen.queryByText(UNIT_CONVERSIONS_LOADING_AR)).not.toBeInTheDocument()
 
-      await user.click(screen.getByLabelText('وحدة البند 1'))
+      await user.click(screen.getByLabelText('وحدة البند ١'))
       expect(await screen.findByRole('option', { name: /لفة/ })).toBeInTheDocument()
     })
   })

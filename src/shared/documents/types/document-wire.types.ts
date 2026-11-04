@@ -24,7 +24,8 @@
  * and `Web.Api.Infrastructure.{ResourceIdResponse,EmptyResponse}`.
  */
 
-export type Uuid = string
+import type { Uuid } from '@/shared/types/wire-primitives'
+export type { Uuid } from '@/shared/types/wire-primitives'
 
 export type DocumentType = 'Receiving' | 'Issue' | 'Transfer' | 'Adjustment' | 'Opening' | 'Return'
 
@@ -36,10 +37,7 @@ export type PartyType = 'Employee' | 'OrganizationalUnit' | 'Site' | 'External'
 
 export type OpeningType = 'Initial' | 'Correction'
 
-/** `Web.Api.Infrastructure.ResourceIdResponse` */
-export interface ResourceIdResponse {
-  readonly id: Uuid
-}
+export type { ResourceIdResponse } from '@/shared/api/api-contracts'
 
 /**
  * `Web.Api.Infrastructure.EmptyResponse`. The backend returns an empty object

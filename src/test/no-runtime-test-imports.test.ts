@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   applicationSourceFiles,
-  assertScannedFiles,
+  assertScannedFilesMatchGit,
+  gitApplicationSourceFiles,
   readSource,
   relativeToRepo,
 } from './support/source-scan'
@@ -55,10 +56,11 @@ import {
  * Non-vacuity, per `support/source-scan.ts`
  * -----------------------------------------
  * A scan with an empty file set passes "no offenders" while proving nothing, so
- * `assertScannedFiles` pins the exact count below. The count moves as the tree
- * changes: it dropped by the five files `eiams-frontend-m4jm` deleted from
+ * `assertScannedFilesMatchGit` pins the exact file set below — the filesystem
+ * set must equal the git-committed set. The set moves as the tree changes: it
+ * dropped by the five files `eiams-frontend-m4jm` deleted from
  * `src/mocks/`, and the change is recorded here rather than absorbed. A drifting
- * count is the signal that the scan's scope was narrowed.
+ * file set is the signal that the scan's scope was narrowed.
  */
 
 /**
@@ -152,33 +154,6 @@ import {
  * transport, invalidating the detail branch on success). Neither reaches into
  * `@/test/**`, so the no-offenders assertion below stays green.
  */
-// +3 application files: inventory-count/hooks/use-count-names.ts, inventory-count/components/count-name-fields.tsx, adjustment/hooks/use-count-variance-seeds.ts
-// +3 application files for the live asset/custody wire contract: the two
-// module status badges (`asset/components/asset-status-badge.tsx`,
-// `custody/components/custody-status-badge.tsx`) and the custody status label
-// registry (`custody/custody-status-labels.ts`). None of them reaches into
-// `@/test/**`, so the no-offenders assertion below stays green.
-// +2 application files since 404: `modules/catalog/constants/material-kind-policy.ts`
-// (another workstream's policy module) and `shared/documents/components/serial-capture-field.tsx`
-// (bulk asset serial capture; it renders shared primitives). Neither reaches into
-// `@/test/**`, so the no-offenders assertion below stays green.
-// -1 since 406: the generated OpenAPI artifact has been deleted, and it was
-// counted as an application file. It never reached into `@/test/**`, so the
-// no-offenders assertion below stays green.
-// Re-measured at 406 on this branch: the number did not move, but the file set
-// did. The reports module swapped `components/dashboard-charts.tsx` for the pure
-// `dashboard-kpis.model.ts` (net 0) and the organization module added
-// `components/organization-page-shell.tsx` (+1), while the audit range types
-// that had their own `modules/audit/types/audit-range.ts` now ride in
-// `modules/audit/types/audit.types.ts` (-1). None of them reaches into
-// `@/test/**`, so the no-offenders assertion below stays green.
-// +1 since 406: `config/bundle-budget.ts` (the committed bundle budget) is a new
-// application file. It reads no test support, so the no-offenders assertion below stays green.
-// +2 since 407: `shared/layout/route-focus-announcer.tsx` (the route focus
-// announcer) and `shared/layout/route-keys.ts` (the route key resolver) are
-// new application files. They read no test support, so the no-offenders
-// assertion below stays green.
-const SCANNED_FILE_COUNT = 409
 
 /**
  * Any quoted `@/test...` specifier in an import/export position.
@@ -262,7 +237,11 @@ describe('no runtime imports of @/test (EPIC G7)', () => {
     // Non-vacuity. If the glob above ever narrows — a renamed extension, a
     // directory rename, a bad path separator — this fails loudly instead of
     // leaving "no offenders" as a trivially true statement about a few files.
-    assertScannedFiles(applicationSourceFiles(), SCANNED_FILE_COUNT)
+    assertScannedFilesMatchGit(
+      applicationSourceFiles(),
+      gitApplicationSourceFiles(),
+      'no runtime imports of @/test (EPIC G7)',
+    )
   })
 
   it('detects a synthetic @/test import, so the scanner is not inert', () => {

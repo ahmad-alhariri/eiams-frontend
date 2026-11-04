@@ -410,6 +410,7 @@ function MaterialsListPage() {
             materialsQuery.isError,
           )}
           isLoading={materialsQuery.isLoading}
+          isFetching={materialsQuery.isFetching}
           isError={materialsQuery.isError}
           onRetry={() => void materialsQuery.refetch()}
           errorTitle="تعذّر تحميل الأصناف"

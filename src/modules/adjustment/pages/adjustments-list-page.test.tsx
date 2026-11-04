@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiJson, okPageJson } from '@/test/msw/envelope'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -25,7 +25,7 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
 }))
 
-vi.mock('@/modules/warehouse/hooks/use-scoped-warehouse-selector', () => ({
+vi.mock('@/shared/scopes/use-scoped-warehouse-selector', () => ({
   useScopedWarehouseSelector: () => ({
     scopeReady: true,
     loadOptions: vi.fn().mockResolvedValue([]),

@@ -1,4 +1,5 @@
-﻿import type { ApiTransport } from '@/shared/api/api-transport'
+﻿import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 
 import type {
@@ -58,8 +59,11 @@ function toDisposalEligibleParams(query: Readonly<ListDisposalEligibleAssetsQuer
 }
 
 export interface AdjustmentService {
-  listAdjustments: (query: Readonly<ListAdjustmentsQuery>) => Promise<ApiPage<AdjustmentListItem>>
-  getAdjustment: (adjustmentId: string) => Promise<AdjustmentDetail>
+  listAdjustments: (
+    query: Readonly<ListAdjustmentsQuery>,
+    context?: RequestContext,
+  ) => Promise<ApiPage<AdjustmentListItem>>
+  getAdjustment: (adjustmentId: string, context?: RequestContext) => Promise<AdjustmentDetail>
   createAdjustment: (request: Readonly<AdjustmentDraftRequest>) => Promise<AdjustmentDetail>
   updateAdjustment: (
     adjustmentId: string,
@@ -87,6 +91,7 @@ export interface AdjustmentService {
   ) => Promise<ResourceIdResponse>
   listDisposalEligibleAssets: (
     query: Readonly<ListDisposalEligibleAssetsQuery>,
+    context?: RequestContext,
   ) => Promise<ApiPage<DisposalEligibleAsset>>
   /**
    * Creates the disposal DRAFT through the LIVE disposal endpoint
@@ -113,18 +118,20 @@ export interface AdjustmentService {
  */
 export function createAdjustmentService(transport: ApiTransport): AdjustmentService {
   return {
-    async listAdjustments(query) {
+    async listAdjustments(query, context) {
       return transport.requestPage<AdjustmentListItem>({
         path: ADJUSTMENTS_PATH,
         method: 'GET',
         query: toListParams(query),
+        ...withSignal(context),
       })
     },
 
-    async getAdjustment(adjustmentId) {
+    async getAdjustment(adjustmentId, context) {
       return transport.request<AdjustmentDetail>({
         path: pathWithId(ADJUSTMENT_PATH, '{adjustmentId}', adjustmentId),
         method: 'GET',
+        ...withSignal(context),
       })
     },
 
@@ -174,11 +181,12 @@ export function createAdjustmentService(transport: ApiTransport): AdjustmentServ
       })
     },
 
-    async listDisposalEligibleAssets(query) {
+    async listDisposalEligibleAssets(query, context) {
       return transport.requestPage<DisposalEligibleAsset>({
         path: DISPOSAL_ELIGIBLE_ASSETS_PATH,
         method: 'GET',
         query: toDisposalEligibleParams(query),
+        ...withSignal(context),
       })
     },
 

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+﻿import { useCallback, useMemo, useState } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { Link } from 'react-router'
 
@@ -7,7 +7,7 @@ import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { usePendingCustodiesQuery } from '@/modules/custody/hooks/use-custody-queries'
 import { AssignCustodyDialog } from '@/modules/custody/components/assign-custody-dialog'
 import type { PendingCustody } from '@/modules/custody/types/custody.types'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
@@ -97,7 +97,11 @@ export default function PendingCustodyListPage() {
       </ContentCard>
 
       {assigningRow !== null ? (
-        <AssignCustodyDialog custody={assigningRow} onClose={() => setAssigningRow(null)} />
+        <AssignCustodyDialog
+          custody={assigningRow}
+          onClose={() => setAssigningRow(null)}
+          canAssign={has('custody.assign')}
+        />
       ) : null}
     </div>
   )
@@ -174,6 +178,7 @@ function PendingCustodyTable({
       columns={columns}
       data={pageRows(custodiesQuery.data, custodiesQuery.isError)}
       isLoading={custodiesQuery.isLoading}
+      isFetching={custodiesQuery.isFetching}
       isError={custodiesQuery.isError}
       onRetry={() => void custodiesQuery.refetch()}
       errorTitle="تعذّر تحميل قائمة الانتظار"

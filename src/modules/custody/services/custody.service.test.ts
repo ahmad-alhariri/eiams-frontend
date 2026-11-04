@@ -20,6 +20,7 @@ type SentConfig = {
   params?: Record<string, unknown>
   data?: unknown
   headers?: Record<string, string>
+  signal?: AbortSignal
 }
 
 function sentConfig(call = 0): SentConfig {
@@ -203,5 +204,15 @@ describe('custody.service', () => {
     await service.transferCustody('id/with slash', transferRequest)
 
     expect(sentConfig().url).toBe('/custodies/id%2Fwith%20slash/transfer')
+  })
+
+  it('carries the caller abort signal on a read, so a superseded read can cancel', async () => {
+    mockedRequest.mockResolvedValue(envelope({}))
+    const service = createCustodyService(testTransport)
+    const controller = new AbortController()
+
+    await service.listCustodies({ page: 1 }, { signal: controller.signal })
+
+    expect(sentConfig().signal).toBe(controller.signal)
   })
 })

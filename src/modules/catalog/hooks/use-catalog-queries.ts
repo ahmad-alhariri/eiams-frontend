@@ -1,6 +1,6 @@
 import { catalogService } from '@/modules/catalog/services/catalog.service'
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import type {
   ListMaterialCategoriesQuery,
@@ -11,9 +11,14 @@ import type {
   ListUnitsOfMeasureQuery,
 } from '@/modules/catalog/types/catalog.api-types'
 import { MASTER_DATA_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import {
+  keepPreviousDataInSameScope,
+  queryKeys,
+  RESOURCES,
+  type ScopeCacheKey,
+} from '@/shared/services/query-keys'
 
-const CATALOG_RESOURCE = 'catalog'
+const CATALOG_RESOURCE = RESOURCES.catalog
 
 /**
  * The catalog module's cache namespace.
@@ -73,14 +78,14 @@ export function useUnitsOfMeasureQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,
       'unitsOfMeasure',
       query,
     ),
-    queryFn: () => catalogService.listUnitsOfMeasure(query),
+    queryFn: ({ signal }) => catalogService.listUnitsOfMeasure(query, { signal }),
     enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -95,7 +100,7 @@ export function useUnitOfMeasureQuery(unitId: string | undefined) {
       'unitsOfMeasure',
       unitId,
     ),
-    queryFn: () => catalogService.getUnitOfMeasure(unitId ?? ''),
+    queryFn: ({ signal }) => catalogService.getUnitOfMeasure(unitId ?? '', { signal }),
     enabled: scope !== undefined && unitId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -107,14 +112,14 @@ export function useMaterialDomainsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,
       'materialDomains',
       query,
     ),
-    queryFn: () => catalogService.listMaterialDomains(query),
+    queryFn: ({ signal }) => catalogService.listMaterialDomains(query, { signal }),
     enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -129,7 +134,7 @@ export function useMaterialDomainQuery(materialDomainId: string | undefined) {
       'materialDomains',
       materialDomainId,
     ),
-    queryFn: () => catalogService.getMaterialDomain(materialDomainId ?? ''),
+    queryFn: ({ signal }) => catalogService.getMaterialDomain(materialDomainId ?? '', { signal }),
     enabled: scope !== undefined && materialDomainId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -141,14 +146,14 @@ export function useMaterialCategoriesQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,
       'materialCategories',
       query,
     ),
-    queryFn: () => catalogService.listMaterialCategories(query),
+    queryFn: ({ signal }) => catalogService.listMaterialCategories(query, { signal }),
     enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -163,7 +168,8 @@ export function useMaterialCategoryQuery(materialCategoryId: string | undefined)
       'materialCategories',
       materialCategoryId,
     ),
-    queryFn: () => catalogService.getMaterialCategory(materialCategoryId ?? ''),
+    queryFn: ({ signal }) =>
+      catalogService.getMaterialCategory(materialCategoryId ?? '', { signal }),
     enabled: scope !== undefined && materialCategoryId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -175,14 +181,14 @@ export function useMaterialFamiliesQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,
       'materialFamilies',
       query,
     ),
-    queryFn: () => catalogService.listMaterialFamilies(query),
+    queryFn: ({ signal }) => catalogService.listMaterialFamilies(query, { signal }),
     enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -197,7 +203,7 @@ export function useMaterialFamilyQuery(materialFamilyId: string | undefined) {
       'materialFamilies',
       materialFamilyId,
     ),
-    queryFn: () => catalogService.getMaterialFamily(materialFamilyId ?? ''),
+    queryFn: ({ signal }) => catalogService.getMaterialFamily(materialFamilyId ?? '', { signal }),
     enabled: scope !== undefined && materialFamilyId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -209,14 +215,14 @@ export function useMaterialsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,
       'materials',
       query,
     ),
-    queryFn: () => catalogService.listMaterials(query),
+    queryFn: ({ signal }) => catalogService.listMaterials(query, { signal }),
     enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -231,7 +237,7 @@ export function useMaterialQuery(materialId: string | undefined) {
       'materials',
       materialId,
     ),
-    queryFn: () => catalogService.getMaterial(materialId ?? ''),
+    queryFn: ({ signal }) => catalogService.getMaterial(materialId ?? '', { signal }),
     enabled: scope !== undefined && materialId !== undefined,
     staleTime: MASTER_DATA_STALE_TIME,
   })
@@ -244,7 +250,7 @@ export function useMaterialUnitConversionsQuery(
 ) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey: queryKeys.scoped(
       scope ?? { kind: 'enterprise' },
       CATALOG_RESOURCE,
@@ -253,7 +259,8 @@ export function useMaterialUnitConversionsQuery(
       'unitConversions',
       query,
     ),
-    queryFn: () => catalogService.listMaterialUnitConversions(materialId ?? '', query),
+    queryFn: ({ signal }) =>
+      catalogService.listMaterialUnitConversions(materialId ?? '', query, { signal }),
     enabled:
       (options.enabled !== undefined ? options.enabled : scope !== undefined) &&
       materialId !== undefined,

@@ -1,4 +1,4 @@
-import { zodResolver } from '@hookform/resolvers/zod'
+﻿import { zodResolver } from '@hookform/resolvers/zod'
 import { useMemo } from 'react'
 import type { Resolver } from 'react-hook-form'
 import { Controller, FormProvider, useForm, useWatch } from 'react-hook-form'
@@ -8,8 +8,8 @@ import { z } from 'zod'
 import { ActiveCountWarning } from '@/modules/inventory-count/components/active-count-warning'
 import { CountMaterialName } from '@/modules/inventory-count/components/count-name-fields'
 import { useMaterialDomainsQuery } from '@/modules/catalog/hooks/use-catalog-queries'
-import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedMaterialSelector } from '@/shared/scopes/use-scoped-material-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { usePlanCountMutation } from '@/modules/inventory-count/hooks/use-count-queries'
@@ -27,6 +27,7 @@ import { Button } from '@/shared/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { Textarea } from '@/shared/ui/textarea'
 import { IconX } from '@tabler/icons-react'
+import { toArabicDigits } from '@/shared/utils/arabic-numbers'
 
 const COUNT_TYPES = Object.keys(INVENTORY_COUNT_TYPE_LABELS_AR) as readonly CountType[]
 const SCOPE_TYPES = Object.keys(INVENTORY_COUNT_SCOPE_LABELS_AR) as readonly CountScopeType[]
@@ -90,7 +91,7 @@ const countPlanningFormSchema = z
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['materialIds'],
-          message: `يجب ألا تتجاوز المواد المحددة ${MAX_SELECTED_MATERIALS} مادة.`,
+          message: `يجب ألا تتجاوز المواد المحددة ${toArabicDigits(MAX_SELECTED_MATERIALS)} مادة.`,
         })
       }
     }
@@ -112,7 +113,7 @@ function scopeHintAr(scopeType: CountScopeType | undefined): string | undefined 
     case 'MaterialDomain':
       return 'اختر مجال المواد الذي تُجرد موادّه.'
     case 'SelectedMaterials':
-      return `اختر ما يصل إلى ${MAX_SELECTED_MATERIALS} مادة ضمن نطاقك.`
+      return `اختر ما يصل إلى ${toArabicDigits(MAX_SELECTED_MATERIALS)} مادة ضمن نطاقك.`
     default:
       return undefined
   }
@@ -136,7 +137,7 @@ function SelectedMaterialChip({
         aria-label={`إزالة المادة ${materialId}`}
         disabled={disabled}
         onClick={onRemove}
-        className="text-muted-foreground transition-colors hover:text-destructive"
+        className="text-muted-foreground transition-colors hover:text-destructive focus-visible:text-destructive focus-visible:ring-2 focus-visible:ring-ring"
       >
         <IconX size={14} aria-hidden />
       </button>
@@ -231,7 +232,6 @@ export default function CountPlanningFormPage() {
           <Controller
             control={methods.control}
             name="warehouseId"
-            rules={{ required: true }}
             render={({ field }) => (
               <div className="grid gap-2">
                 <label htmlFor="count-warehouse" className="text-sm font-medium text-foreground">
@@ -373,7 +373,8 @@ export default function CountPlanningFormPage() {
           {scopeType === 'SelectedMaterials' ? (
             <div className="grid gap-2">
               <label className="text-sm font-medium text-foreground">
-                المواد المحددة ({materialIds?.length ?? 0}/{MAX_SELECTED_MATERIALS})
+                المواد المحددة ({toArabicDigits(materialIds?.length ?? 0)}/
+                {toArabicDigits(MAX_SELECTED_MATERIALS)})
               </label>
               <AsyncSelect
                 value={null}

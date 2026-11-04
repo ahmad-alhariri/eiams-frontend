@@ -131,6 +131,7 @@ function RecentAuditSection() {
         columns={columns}
         data={pageRows(page, auditQuery.isError)}
         isLoading={auditQuery.isLoading}
+        isFetching={auditQuery.isFetching}
         isError={auditQuery.isError}
         onRetry={() => void auditQuery.refetch()}
         errorTitle="تعذّر تحميل نشاط التدقيق"
@@ -213,6 +214,7 @@ function OperationalAlertsSection() {
         columns={columns}
         data={pageRows(page, balancesQuery.isError)}
         isLoading={balancesQuery.isLoading}
+        isFetching={balancesQuery.isFetching}
         isError={balancesQuery.isError}
         onRetry={() => void balancesQuery.refetch()}
         errorTitle="تعذّر تحميل تنبيهات المخزون"

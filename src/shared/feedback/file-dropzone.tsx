@@ -177,7 +177,7 @@ function FileDropzone({
                   type="button"
                   aria-label="إزالة الملف"
                   onClick={() => onFilesChange?.(files.filter((f) => f !== file))}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-stone transition-colors outline-none hover:bg-ivory hover:text-charcoal focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-stone transition-colors outline-none hover:bg-ivory hover:text-charcoal focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:size-8"
                 >
                   <IconX className="size-4" aria-hidden />
                 </button>

@@ -1,5 +1,6 @@
 ﻿import type { ApiPage } from '@/shared/api/api-contracts'
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import { apiTransport } from '@/shared/api/transport'
 
@@ -56,8 +57,11 @@ function withWirePagination<TQuery extends { readonly page?: number; readonly pa
  * for either call.
  */
 export interface CustodyService {
-  listCustodies: (query: ListCustodiesQuery) => Promise<ApiPage<Custody>>
-  listPendingCustodies: (query: ListPendingCustodiesQuery) => Promise<ApiPage<PendingCustody>>
+  listCustodies: (query: ListCustodiesQuery, context?: RequestContext) => Promise<ApiPage<Custody>>
+  listPendingCustodies: (
+    query: ListPendingCustodiesQuery,
+    context?: RequestContext,
+  ) => Promise<ApiPage<PendingCustody>>
   assignCustody: (
     assetId: string,
     request: AssignAssetCustodyRequest,
@@ -67,18 +71,20 @@ export interface CustodyService {
 
 export function createCustodyService(transport: ApiTransport): CustodyService {
   return {
-    async listCustodies(query) {
+    async listCustodies(query, context) {
       return transport.requestPage<Custody>({
         path: CUSTODIES_PATH,
         method: 'GET',
         query: withWirePagination(query),
+        ...withSignal(context),
       })
     },
-    async listPendingCustodies(query) {
+    async listPendingCustodies(query, context) {
       return transport.requestPage<PendingCustody>({
         path: CUSTODIES_PENDING_PATH,
         method: 'GET',
         query: withWirePagination(query),
+        ...withSignal(context),
       })
     },
     async assignCustody(assetId, request) {

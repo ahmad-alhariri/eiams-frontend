@@ -30,6 +30,7 @@ type SentConfig = {
   params?: Record<string, unknown>
   data?: unknown
   headers?: Record<string, string>
+  signal?: AbortSignal
 }
 
 function sentConfig(call = 0): SentConfig {
@@ -214,5 +215,15 @@ describe('createAdjustmentService (e21-t01)', () => {
       method: 'GET',
       params: { page: 1, pageSize: 25, search: 'AST-', warehouseId: 'wh-9' },
     })
+  })
+
+  it('carries the caller abort signal on a read, so a superseded read can cancel', async () => {
+    mockedRequest.mockReturnValue(pagedEnvelope([]))
+    const service = createAdjustmentService(testTransport)
+    const controller = new AbortController()
+
+    await service.listAdjustments({}, { signal: controller.signal })
+
+    expect(sentConfig().signal).toBe(controller.signal)
   })
 })

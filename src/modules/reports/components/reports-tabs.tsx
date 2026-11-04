@@ -100,7 +100,7 @@ export function ReportsTabs<K extends string>({
               onClick={() => onTabChange(tab.key)}
               onKeyDown={(event) => handleKeyDown(event, index)}
               className={cn(
-                'rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                'min-h-10 rounded-md px-4 py-2 text-sm font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                 isActive
                   ? 'bg-primary text-primary-foreground'

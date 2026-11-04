@@ -13,9 +13,8 @@ import {
   type WarehouseFormValues,
 } from '@/modules/warehouse/schemas/warehouse.schemas'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { ErrorState } from '@/shared/feedback/error-state'
-import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -108,15 +107,8 @@ export function WarehouseFormDialog({
     !organizationalUnitsUnavailable &&
     (!isCreate || (siteId !== '' && code.trim() !== ''))
 
-  const submit = async (values: WarehouseFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, { schemaKeys: [...SERVER_ERROR_KEYS] })
-    }
-  }
+  const submit = (values: WarehouseFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, SERVER_ERROR_KEYS)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -281,6 +273,7 @@ export function WarehouseFormDialog({
                       value={field.value}
                       disabled={isPending}
                       onValueChange={field.onChange}
+                      // standard-allow: latin-attribute-example — the warehouse name example belongs to an English-language field
                       placeholder="مثال: Storage"
                     />
                   </FormControl>

@@ -82,7 +82,7 @@ describe('DocumentHeaderSection', () => {
     expect(screen.getByText('إيصال استلام')).toBeInTheDocument()
     expect(screen.getByText('أنشأها')).toBeInTheDocument()
     expect(screen.getByText('مريم حمادة')).toBeInTheDocument()
-    expect(screen.getByText('الإصدار: 3')).toBeInTheDocument()
+    expect(screen.getByText('الإصدار: ٣')).toBeInTheDocument()
   })
 
   it('disables the warehouse control until the active scope is ready', () => {

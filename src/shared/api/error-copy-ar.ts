@@ -1,6 +1,37 @@
 /**
  * Arabic user-facing copy for backend error codes.
  *
+ * KEY SPACE: UPPER_SNAKE_CASE wire codes (e.g. `AUTHENTICATION_REQUIRED`),
+ * produced by `normalizeWireErrorCode` (`shared/api/envelope.ts:97`) from the
+ * nested `error.code` of the backend envelope. That normalizer STRIPS every
+ * non-alphanumeric character and upper-cases the rest, so a code is always
+ * `A_Z_0_9` here — a dot-key can never reach this table.
+ *
+ * PRECEDENCE (the whole contract, in one place). This table is the PRIMARY
+ * producer of user-facing Arabic text, and the OTHER producer is
+ * `src/shared/services/api-error.ts`. That module resolves text in exactly this
+ * order, and stops at the first hit:
+ *
+ *   1. THIS TABLE, by code — `arabicCopyForCode(code)`.
+ *   2. `AUTH_FEEDBACK`, by the same code — NEVER REACHED (see below).
+ *   3. `STATUS_FEEDBACK`, by HTTP status number.
+ *   4. `UNEXPECTED_FEEDBACK` — the last resort.
+ *
+ * Step 2 is dead code, and that is deliberate, not an oversight: `AUTH_FEEDBACK`
+ * is keyed on dot-case (`auth.invalid_credentials`), while the code handed to
+ * the fallback has already been normalized to `AUTH_INVALID_CREDENTIALS` by
+ * `normalizeWireErrorCode`. The two key spaces can therefore never meet, so
+ * exactly ONE of steps 1/3/4 can ever supply the text for a given error. The
+ * consequence — that an unmapped auth code falls through to the generic
+ * per-status wording — is a CONTENT gap, tracked as bead
+ * `eiams-frontend-z1hs`; fixing it means adding table entries, never
+ * re-keying `AUTH_FEEDBACK`.
+ *
+ * Because step 1 always wins, the visible Arabic for a mapped code is decided
+ * HERE and nowhere else. For the codes that also have a `STATUS_FEEDBACK`
+ * entry the two texts are identical by construction except for 409 (see
+ * `api-error.ts` for the full map).
+ *
  * WHY THIS FILE EXISTS. D-AUTH-01 and D-OAS-01 assumed the server supplies
  * Arabic (`ProblemDetails.titleAr` / `detailAr`). The real API does not: it
  * returns an English `message` alongside a machine code. Since the product is
@@ -716,7 +747,12 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
   },
 }
 
-const ALL: Readonly<Record<string, ArabicErrorCopy>> = { ...REQUEST, ...AUTH, ...DOMAIN }
+const EXPORT: Readonly<Record<string, ArabicErrorCopy>> = {
+  EXPORT_TIMEOUT: { titleAr: 'انتهى وقت تصدير التقرير.', detailAr: null },
+  EXPORT_NO_FILE: { titleAr: 'لم يتم إرجاع ملف من عنوان التحميل.', detailAr: null },
+}
+
+const ALL: Readonly<Record<string, ArabicErrorCopy>> = { ...REQUEST, ...AUTH, ...DOMAIN, ...EXPORT }
 
 /** Arabic copy for a normalized wire code, or null when the code is unmapped. */
 export function arabicCopyForCode(code: string | null): ArabicErrorCopy | null {

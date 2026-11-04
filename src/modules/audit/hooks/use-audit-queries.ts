@@ -1,12 +1,17 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { auditService } from '@/modules/audit/services/audit.service'
 import type { ListAuditLogsQuery } from '@/modules/audit/types/audit.types'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import {
+  keepPreviousDataInSameScope,
+  queryKeys,
+  RESOURCES,
+  type ScopeCacheKey,
+} from '@/shared/services/query-keys'
 
-export const AUDIT_RESOURCE = 'audit'
+export const AUDIT_RESOURCE = RESOURCES.audit
 const EMPTY_QUERY = {} as const
 
 export const auditQueryKeys = {
@@ -24,12 +29,12 @@ function useActiveScopeCacheKey() {
 export function useAuditLogsQuery(query: ListAuditLogsQuery = EMPTY_QUERY) {
   const scope = useActiveScopeCacheKey()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined
         ? queryKeys.unscoped(AUDIT_RESOURCE, 'logs', query)
         : auditQueryKeys.logs(scope, query),
-    queryFn: () => auditService.listAuditLogs(query),
+    queryFn: ({ signal }) => auditService.listAuditLogs(query, { signal }),
     enabled: scope !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -43,7 +48,7 @@ export function useAuditLogQuery(auditLogId: string | undefined) {
       scope === undefined || auditLogId === undefined
         ? queryKeys.unscoped(AUDIT_RESOURCE, 'logs', auditLogId)
         : auditQueryKeys.log(scope, auditLogId),
-    queryFn: () => auditService.getAuditLog(auditLogId ?? ''),
+    queryFn: ({ signal }) => auditService.getAuditLog(auditLogId ?? '', { signal }),
     enabled: scope !== undefined && auditLogId !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })

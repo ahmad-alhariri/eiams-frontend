@@ -8,8 +8,7 @@ import {
 } from '@/modules/catalog/schemas/material-domain.schemas'
 import type { MaterialDomain } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -62,17 +61,8 @@ export function MaterialDomainFormDialog({
     })
   }, [domain, form, open])
 
-  const submit = async (values: MaterialDomainFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['code', 'name'],
-      })
-    }
-  }
+  const submit = (values: MaterialDomainFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, ['code', 'name'])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -94,7 +84,6 @@ export function MaterialDomainFormDialog({
             <FormField
               control={form.control}
               name="name"
-              rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>اسم المجال</FormLabel>

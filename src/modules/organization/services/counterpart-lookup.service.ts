@@ -1,4 +1,5 @@
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 
 import type {
@@ -30,24 +31,31 @@ export interface CounterpartLookupService {
   /** `GET /counterparts` — `operation` REQUIRED, `type` validator-restricted. */
   searchCounterparts: (
     query: Omit<SearchCounterpartsQuery, 'page' | 'pageSize'> & { pageSize?: number },
+    context?: RequestContext,
   ) => Promise<readonly CounterpartResolution[]>
   /** `GET /counterparts/{type}/{counterpartId}` */
-  resolveCounterpart: (reference: CounterpartReference | string) => Promise<CounterpartResolution>
+  resolveCounterpart: (
+    reference: CounterpartReference | string,
+    context?: RequestContext,
+  ) => Promise<CounterpartResolution>
 }
 
 export function createCounterpartLookupService(transport: ApiTransport): CounterpartLookupService {
   return {
-    async searchCounterparts({
-      search,
-      operation,
-      type,
-      pageSize,
-    }: {
-      search?: string
-      operation: CounterpartOperation
-      type?: CounterpartType
-      pageSize?: number
-    }) {
+    async searchCounterparts(
+      {
+        search,
+        operation,
+        type,
+        pageSize,
+      }: {
+        search?: string
+        operation: CounterpartOperation
+        type?: CounterpartType
+        pageSize?: number
+      },
+      context,
+    ) {
       // The backend handler accepts the `page` parameter through its
       // `PaginationQueryParameters` binding; we send `page: 1` (one-based per
       // D-INT-02) and rely on the server-side `SearchActiveAsync` to filter
@@ -68,11 +76,12 @@ export function createCounterpartLookupService(transport: ApiTransport): Counter
           page: 1,
           pageSize: pageSize ?? 10,
         },
+        ...withSignal(context),
       })
       return result.items
     },
 
-    async resolveCounterpart(reference) {
+    async resolveCounterpart(reference, context) {
       // `reference` may be a bare string (a previous call site) or the
       // structured `{type, id}` form. The bare-string form was the legacy
       // `ExternalParty` lookup which we no longer support — callers should
@@ -85,6 +94,7 @@ export function createCounterpartLookupService(transport: ApiTransport): Counter
       const response = await transport.request<CounterpartResolution>({
         path: `${COUNTERPARTS_PATH}/${encodeURIComponent(reference.type)}/${encodeURIComponent(reference.id)}`,
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },

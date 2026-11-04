@@ -328,6 +328,7 @@ function EmployeesListPage() {
           columns={columns}
           data={pageRows(page, employeesQuery.isError)}
           isLoading={employeesQuery.isLoading}
+          isFetching={employeesQuery.isFetching}
           isError={employeesQuery.isError}
           onRetry={() => void employeesQuery.refetch()}
           errorTitle="تعذّر تحميل الموظفين"

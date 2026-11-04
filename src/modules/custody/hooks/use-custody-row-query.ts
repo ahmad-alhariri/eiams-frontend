@@ -35,22 +35,25 @@ export function useCustodyRowQuery(custodyId: string | undefined) {
       custodyId === undefined || scope.activeScopeCacheKey === undefined
         ? queryKeys.unscoped(CUSTODY_RESOURCE, 'row', custodyId)
         : custodyQueryKeys.row(scope.activeScopeCacheKey, custodyId),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       // The wire values are built by the shared pagination helper inside the
       // service (`page` is ONE-based, `pageSize` is clamped to the backend's
       // maximum); this only walks the pages.
       let pageNumber = 1
       for (;;) {
-        const page = await custodyService.listCustodies({
-          page: pageNumber,
-          pageSize: MAX_WIRE_PAGE_SIZE,
-          subjectType: 'Asset',
-        })
+        const page = await custodyService.listCustodies(
+          {
+            page: pageNumber,
+            pageSize: MAX_WIRE_PAGE_SIZE,
+            subjectType: 'Asset',
+          },
+          { signal },
+        )
         const found = page.items.find((item): item is Custody => item.custodyId === custodyId)
         if (found !== undefined) {
           return found
         }
-        if (pageNumber >= page.totalPages) {
+        if (page.totalPages !== null && pageNumber >= page.totalPages) {
           return null
         }
         pageNumber += 1

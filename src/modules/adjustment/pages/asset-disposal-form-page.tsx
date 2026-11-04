@@ -1,4 +1,4 @@
-import { zodResolver } from '@hookform/resolvers/zod'
+﻿import { zodResolver } from '@hookform/resolvers/zod'
 import { useCallback, useState, type FormEvent } from 'react'
 import {
   FormProvider,
@@ -16,7 +16,7 @@ import {
   useCreateDisposalMutation,
 } from '@/modules/adjustment/hooks/use-adjustment-queries'
 import { useRoutePermission } from '@/modules/auth/hooks/use-permission'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { ROUTE_PATHS } from '@/config/routes'
 import { documentHeaderSchema } from '@/shared/documents/document-header-form'
 import { ContentCard } from '@/shared/layout/content-card'
@@ -295,7 +295,7 @@ function AssetDisposalFormInner({
         </ContentCard>
 
         <p className="rounded-md bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          أثر السند يحدّده الخادم وحده: ‎-1‎ للأصل الموجود في المخزون، و‎0‎ للأصل المصروف أو المحتفظ
+          أثر السند يحدّده الخادم وحده: ‎-١‎ للأصل الموجود في المخزون، و‎٠‎ للأصل المصروف أو المحتفظ
           به في العهدة. لا يرسل النموذج أي كمية، ولا يمكن إعداد أكثر من أصل في السند نفسه، والترحيل
           نهائي.
         </p>

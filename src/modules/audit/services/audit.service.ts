@@ -1,5 +1,6 @@
 ﻿import type { ApiPage } from '@/shared/api/api-contracts'
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import { apiTransport } from '@/shared/api/transport'
 import { pathWithId } from '@/shared/services/api-path'
@@ -75,26 +76,31 @@ function sanitizeAuditDetail(auditLog: AuditLogDetail): AuditLogDetail {
 }
 
 export interface AuditService {
-  listAuditLogs: (query: ListAuditLogsQuery) => Promise<ApiPage<AuditLogHeader>>
-  getAuditLog: (auditLogId: string) => Promise<AuditLogDetail>
+  listAuditLogs: (
+    query: ListAuditLogsQuery,
+    context?: RequestContext,
+  ) => Promise<ApiPage<AuditLogHeader>>
+  getAuditLog: (auditLogId: string, context?: RequestContext) => Promise<AuditLogDetail>
 }
 
 /** Contract-only reads for the append-only, server-owned audit ledger. */
 export function createAuditService(transport: ApiTransport): AuditService {
   return {
-    async listAuditLogs(query) {
+    async listAuditLogs(query, context) {
       // The list projection is headers-only by contract: `AuditLogListItemResponse`
       // carries no field values, so there is nothing to redact on this read.
       return transport.requestPage<AuditLogHeader>({
         path: AUDIT_LOGS_PATH,
         method: 'GET',
         query: withWirePagination(query),
+        ...withSignal(context),
       })
     },
-    async getAuditLog(auditLogId) {
+    async getAuditLog(auditLogId, context) {
       const response = await transport.request<AuditLogDetail>({
         path: pathWithId(AUDIT_LOG_PATH, '{auditLogId}', auditLogId),
         method: 'GET',
+        ...withSignal(context),
       })
       return sanitizeAuditDetail(response)
     },

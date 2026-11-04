@@ -1,4 +1,4 @@
-import { zodResolver } from '@hookform/resolvers/zod'
+﻿import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
 import { FormProvider, useForm, type Resolver, type SubmitHandler } from 'react-hook-form'
 import { z } from 'zod'
@@ -14,7 +14,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { Button } from '@/shared/ui/button'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 
 /* eslint-disable react-refresh/only-export-components -- dev-only gallery demo

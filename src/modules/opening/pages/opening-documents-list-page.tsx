@@ -1,4 +1,5 @@
-import { OPENING_DOCUMENT_LIST_ENTRY } from '@/shared/documents/document-route-entries'
+﻿import { OPENING_DOCUMENT_LIST_ENTRY } from '@/shared/documents/document-route-entries'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import DocumentListPage from '@/shared/documents/pages/document-list-page'
 
 /**
@@ -10,5 +11,8 @@ import DocumentListPage from '@/shared/documents/pages/document-list-page'
  * it deliberately does not duplicate a nonexistent opening-specific endpoint.
  */
 export default function OpeningDocumentsListPage() {
-  return <DocumentListPage entry={OPENING_DOCUMENT_LIST_ENTRY} />
+  const warehouseSelector = useScopedWarehouseSelector()
+  return (
+    <DocumentListPage entry={OPENING_DOCUMENT_LIST_ENTRY} warehouseSelector={warehouseSelector} />
+  )
 }

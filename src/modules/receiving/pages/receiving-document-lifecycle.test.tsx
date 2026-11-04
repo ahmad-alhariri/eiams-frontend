@@ -297,7 +297,7 @@ describe('receiving lifecycle and policy gates (e13-t07)', () => {
     await screen.findByText('تمت مراجعة السند')
     expect(store[0]).toMatchObject({ documentStatus: 'Draft', rowVersion: 4 })
     await waitFor(() => expect(screen.getAllByText('مسودة').length).toBeGreaterThanOrEqual(1))
-    await waitFor(() => expect(screen.getAllByText('الإصدار: 4').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByText('الإصدار: ٤').length).toBeGreaterThan(0))
     expect(
       screen.queryByText('عرض للقراءة فقط — المستند مرفوض — استخدم «مراجعة» لإعادة فتح التعديل'),
     ).not.toBeInTheDocument()

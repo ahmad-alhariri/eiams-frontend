@@ -27,7 +27,7 @@ export function useCountVarianceSeeds(materialIds: readonly string[]) {
         'materials',
         materialId,
       ),
-      queryFn: () => catalogService.getMaterial(materialId),
+      queryFn: ({ signal }) => catalogService.getMaterial(materialId, { signal }),
       enabled: activeScopeCacheKey !== undefined,
     })),
   })

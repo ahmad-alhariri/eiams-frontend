@@ -8,8 +8,7 @@ import {
 } from '@/modules/catalog/schemas/unit-of-measure.schemas'
 import type { UnitOfMeasure } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -62,17 +61,8 @@ export function UnitOfMeasureFormDialog({
     })
   }, [form, open, unit])
 
-  const submit = async (values: UnitOfMeasureFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['name', 'symbol', 'unitType'],
-      })
-    }
-  }
+  const submit = (values: UnitOfMeasureFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, ['name', 'symbol', 'unitType'])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -95,7 +85,6 @@ export function UnitOfMeasureFormDialog({
               <FormField
                 control={form.control}
                 name="name"
-                rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>اسم الوحدة</FormLabel>
@@ -109,7 +98,6 @@ export function UnitOfMeasureFormDialog({
               <FormField
                 control={form.control}
                 name="symbol"
-                rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>رمز الوحدة</FormLabel>
@@ -124,12 +112,17 @@ export function UnitOfMeasureFormDialog({
             <FormField
               control={form.control}
               name="unitType"
-              rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>نوع الوحدة</FormLabel>
                   <FormControl>
-                    <Input {...field} dir="ltr" disabled={isPending} placeholder="Quantity" />
+                    <Input
+                      {...field}
+                      dir="ltr"
+                      disabled={isPending}
+                      // standard-allow: latin-attribute-example — the unit type is the server's own wire value
+                      placeholder="Quantity"
+                    />
                   </FormControl>
                   <p className="text-sm text-muted-foreground">
                     نص حر يحدده النظام، مثل الكمية أو الوزن أو الطول.

@@ -1,4 +1,5 @@
-import { RECEIVING_DOCUMENT_LIST_ENTRY } from '@/shared/documents/document-route-entries'
+﻿import { RECEIVING_DOCUMENT_LIST_ENTRY } from '@/shared/documents/document-route-entries'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import DocumentListPage from '@/shared/documents/pages/document-list-page'
 
 /**
@@ -9,5 +10,8 @@ import DocumentListPage from '@/shared/documents/pages/document-list-page'
  * shared page keeps the table, filters, pagination, and error/empty states.
  */
 export default function ReceivingDocumentsListPage() {
-  return <DocumentListPage entry={RECEIVING_DOCUMENT_LIST_ENTRY} />
+  const warehouseSelector = useScopedWarehouseSelector()
+  return (
+    <DocumentListPage entry={RECEIVING_DOCUMENT_LIST_ENTRY} warehouseSelector={warehouseSelector} />
+  )
 }

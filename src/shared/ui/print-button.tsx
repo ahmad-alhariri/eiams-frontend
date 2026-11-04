@@ -14,6 +14,7 @@
 import { IconPrinter } from '@tabler/icons-react'
 
 import { Button } from '@/shared/ui/button'
+import { cn } from '@/shared/utils/class-names'
 
 interface PrintButtonProps {
   /** aria-label override; defaults to Arabic default */
@@ -55,7 +56,11 @@ export function PrintButton({
       title={DASHBOARD_EXCLUDED_NOTICE}
       disabled={disabled || isLoading}
       onClick={() => window.print()}
-      className={className}
+      // The `icon` size is 36px (ui-design.md 5.1). The print trigger is a
+      // PRIMARY control, so it reaches the 40px mobile floor through
+      // min-height/min-width — which beat the size's width/height whatever the
+      // cascade order is — and keeps 36px from the `sm` breakpoint up.
+      className={cn('min-h-10 min-w-10 sm:min-h-9 sm:min-w-9', className)}
     >
       {isLoading ? (
         /* Spinner — use Loader2 to match the Button's loading spinner */

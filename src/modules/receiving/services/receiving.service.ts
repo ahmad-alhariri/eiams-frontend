@@ -1,4 +1,5 @@
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 
 const RECEIVING_SUPPLIERS_PATH = '/receiving-infos/suppliers'
@@ -18,7 +19,10 @@ export interface ReceivingService {
    * Supplier suggestions for the receiving petal. `search` is the route's query
    * parameter; the caller owns debouncing and the minimum query length.
    */
-  searchReceivingSuppliers: (search: string) => Promise<readonly SupplierSuggestion[]>
+  searchReceivingSuppliers: (
+    search: string,
+    context?: RequestContext,
+  ) => Promise<readonly SupplierSuggestion[]>
 }
 
 /**
@@ -28,11 +32,12 @@ export interface ReceivingService {
  */
 export function createReceivingService(transport: ApiTransport): ReceivingService {
   return {
-    async searchReceivingSuppliers(search) {
+    async searchReceivingSuppliers(search, context) {
       const response = await transport.request<readonly SupplierSuggestion[]>({
         path: RECEIVING_SUPPLIERS_PATH,
         method: 'GET',
         query: { search },
+        ...withSignal(context),
       })
       return response
     },

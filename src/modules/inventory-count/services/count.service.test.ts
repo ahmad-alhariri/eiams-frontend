@@ -20,6 +20,7 @@ type SentConfig = {
   params?: Record<string, unknown>
   data?: unknown
   headers?: Record<string, string>
+  signal?: AbortSignal
 }
 
 function sentConfig(call = 0): SentConfig {
@@ -342,5 +343,15 @@ describe('createCountService (IC-FE-1 live wire)', () => {
       method: 'GET',
     })
     expect(status.isPostingBlocked).toBe(true)
+  })
+
+  it('carries the caller abort signal on a read, so a superseded read can cancel', async () => {
+    mockedRequest.mockReturnValue(pagedEnvelope([]))
+    const service = createCountService(testTransport)
+    const controller = new AbortController()
+
+    await service.listCounts({}, { signal: controller.signal })
+
+    expect(sentConfig().signal).toBe(controller.signal)
   })
 })

@@ -9,6 +9,46 @@ import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/se
 /** The sole cached server projection of the signed-in EIAMS session. */
 export const authSessionQueryKey = ['auth', 'session'] as const
 
+/**
+ * The device-level "this browser has signed in" hint.
+ *
+ * The refresh cookie is HttpOnly (`Web.Api/Infrastructure/AuthCookies.cs`), so
+ * no browser API can say whether one exists. Without a hint the only way to
+ * find out is to call `/auth/refresh`, and for a first-time visitor that
+ * answers 400 USERS_INVALID_REFRESH_TOKEN — which the browser logs as a console
+ * error and the backend logs as a CORS policy failure. The hint never proves a
+ * session: a restore still needs a successful refresh. It is also required, so
+ * a browser whose local storage was cleared while its cookie survives has to
+ * sign in again. It is written on login and on a successful restore, and
+ * dropped whenever the local session is cleared.
+ */
+const SESSION_HINT_STORAGE_KEY = 'eiams.auth.has-session'
+
+export function hasRememberedSession(): boolean {
+  try {
+    return window.localStorage.getItem(SESSION_HINT_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function rememberSession(): void {
+  try {
+    window.localStorage.setItem(SESSION_HINT_STORAGE_KEY, '1')
+  } catch {
+    // Storage can be unavailable (private mode). The hint is only an
+    // optimisation: without it the next load asks the server once.
+  }
+}
+
+function forgetSession(): void {
+  try {
+    window.localStorage.removeItem(SESSION_HINT_STORAGE_KEY)
+  } catch {
+    // See rememberSession: there is nothing to recover when storage is off.
+  }
+}
+
 function isProtectedQuery(queryKey: QueryKey): boolean {
   const namespace = queryKey[0]
   return namespace === 'auth' || namespace === SCOPED_PREFIX || namespace === UNSCOPED_PREFIX
@@ -39,7 +79,8 @@ export interface AuthSessionLifecycleDependencies {
 }
 
 export interface AuthSessionLifecycle {
-  hydrate: () => Promise<SessionResponse>
+  /** Resolves with the restored session, or `null` when this browser has none. */
+  hydrate: () => Promise<SessionResponse | null>
   installLogin: (response: AuthTokenResponse) => void
   logout: () => Promise<void>
 }
@@ -66,6 +107,9 @@ export function createAuthSessionLifecycle({
       try {
         await clearProtectedAuthCache(queryClient)
       } finally {
+        // Any clear means the browser no longer has a session to restore, so a
+        // later load must not ask `/auth/refresh` for one.
+        forgetSession()
         sessionStore.getState().clearSession()
       }
     })()
@@ -92,15 +136,21 @@ export function createAuthSessionLifecycle({
     async hydrate() {
       try {
         const session = await sessionAdapter.refreshSession()
+        rememberSession()
         queryClient.setQueryData(authSessionQueryKey, session)
         sessionStore.getState().markAuthenticated()
         return session
-      } catch (error: unknown) {
+      } catch {
+        // A failed refresh is "no session", not an error. Nothing reads the
+        // rejection, and an errored bootstrap query is exactly what the
+        // browser logs and refetches on remount; the lifecycle store's status
+        // is the outcome. The hint is dropped by `clearLocalSession`.
         await clearLocalSession()
-        throw error
+        return null
       }
     },
     installLogin(response) {
+      rememberSession()
       sessionStore.getState().installLogin(response)
       queryClient.setQueryData(authSessionQueryKey, response.session)
     },

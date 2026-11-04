@@ -7,7 +7,8 @@
  *   LineId, MovementType (string), QuantityDelta (decimal), PostedAtUtc, PostedBy
  */
 
-export type Uuid = string
+import type { Uuid } from '@/shared/types/wire-primitives'
+export type { Uuid } from '@/shared/types/wire-primitives'
 
 export type MovementType =
   'Issue' | 'Opening' | 'Receipt' | 'TransferIn' | 'TransferOut' | 'AdjustmentIn' | 'AdjustmentOut'
@@ -52,9 +53,9 @@ export interface PageMeta {
   readonly pageIndex: number
   readonly pageSize: number
   readonly itemCount: number
-  readonly totalItems: number
-  readonly totalCount: number
-  readonly totalPages: number
+  readonly totalItems: number | null
+  readonly totalCount: number | null
+  readonly totalPages: number | null
   readonly hasNextPage: boolean
   readonly hasPreviousPage: boolean
 }

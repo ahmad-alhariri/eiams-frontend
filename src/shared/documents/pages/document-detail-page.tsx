@@ -4,6 +4,7 @@ import { Link, matchPath, useLocation, useParams } from 'react-router'
 import { FormProvider, useForm } from 'react-hook-form'
 
 import { ROUTE_METADATA, ROUTE_PATHS, type RouteKey } from '@/config/routes'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
 import { normalizeApiError } from '@/shared/services/api-error'
 import {
@@ -63,7 +64,8 @@ import type {
   WarehouseDocumentDetails,
 } from '@/shared/documents/types/document-wire.types'
 import { cn } from '@/shared/utils/class-names'
-import { formatDate, formatDateTime, formatNumber, toArabicDigits } from '@/shared/utils/format'
+import { formatDate, formatDateTime } from '@/shared/utils/format'
+import { formatNumber, toArabicDigits } from '@/shared/utils/arabic-numbers'
 
 /**
  * Mutation props the attachment panel needs, surfaced as an OPTIONAL page
@@ -283,8 +285,11 @@ function DocumentLinesTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
-      <table data-slot="document-lines-table" className="w-full min-w-130 text-sm">
+    <div className="min-w-0 overflow-x-auto rounded-lg border border-border">
+      <table
+        data-slot="document-lines-table"
+        className="w-full min-w-130 text-sm max-sm:[&_a]:inline-flex max-sm:[&_a]:items-center max-sm:[&_a]:min-h-10"
+      >
         <thead>
           <tr className="border-b border-border bg-muted/40 text-start text-muted-foreground">
             <th scope="col" className="px-3 py-2 text-start font-medium">
@@ -640,7 +645,7 @@ export function DocumentDetailBody({
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge entity="document" status={document.documentStatus} />
           <Badge variant="outline" data-slot="document-meta-row-version">
-            الإصدار: {document.rowVersion}
+            الإصدار: {toArabicDigits(document.rowVersion)}
           </Badge>
         </div>
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
@@ -834,6 +839,10 @@ function DocumentDetailPage({
   // gate into the per-action decision the lifecycle bar consumes.
   const policyGate = useDocumentPolicyGate(documentId ?? null, {
     enabled: routeEntry !== undefined && documentId !== undefined,
+    // The capability binding stays in the module (same seam as the warehouse
+    // selector the header takes): the shared gate receives it instead of
+    // importing modules/warehouse itself.
+    capabilityValidation: useWarehouseCapabilityValidation,
   })
   // Conflict-recovery coordinator (e12-t13): same keys + same enabled flag →
   // deduped with the queries above. Owns only the recovery UI state and the

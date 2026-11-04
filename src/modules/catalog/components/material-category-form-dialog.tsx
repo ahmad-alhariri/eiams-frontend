@@ -9,8 +9,7 @@ import {
 } from '@/modules/catalog/schemas/material-category.schemas'
 import type { MaterialCategory, MaterialDomain } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -111,17 +110,13 @@ export function MaterialCategoryFormDialog({
     })
   }, [category, form, open])
 
-  const submit = async (values: MaterialCategoryFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['code', 'materialDomainId', 'name', 'parentCategoryId'],
-      })
-    }
-  }
+  const submit = (values: MaterialCategoryFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, [
+      'code',
+      'materialDomainId',
+      'name',
+      'parentCategoryId',
+    ])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,7 +137,6 @@ export function MaterialCategoryFormDialog({
             <FormField
               control={form.control}
               name="name"
-              rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>اسم التصنيف</FormLabel>
@@ -162,7 +156,6 @@ export function MaterialCategoryFormDialog({
               <FormField
                 control={form.control}
                 name="code"
-                rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>رمز التصنيف</FormLabel>
@@ -183,7 +176,6 @@ export function MaterialCategoryFormDialog({
             <FormField
               control={form.control}
               name="materialDomainId"
-              rules={{ required: true }}
               render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>مجال التصنيف</FormLabel>

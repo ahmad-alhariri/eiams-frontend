@@ -1,4 +1,4 @@
-import { createColumnHelper } from '@tanstack/react-table'
+﻿import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
 import { useOperationalDocumentsReportQuery } from '@/modules/reports/hooks/use-reports-queries'
@@ -6,7 +6,7 @@ import type {
   DocumentsReportRow,
   ListOperationalDocumentsReportQuery,
 } from '@/modules/reports/types/reports.types'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { StatusBadge } from '@/shared/feedback/status-badge'
 import { ContentCard } from '@/shared/layout/content-card'
@@ -15,7 +15,7 @@ import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { DatePicker } from '@/shared/ui/date-picker'
 import { AsyncSelect } from '@/shared/ui/async-select'
-import { ExportButton } from '@/shared/ui/export-button'
+import { ExportButton } from '@/modules/reports/components/export-button'
 import { PrintButton } from '@/shared/ui/print-button'
 import { pageRows } from '@/shared/utils/table-data'
 import { formatDateTime, formatNumber } from '@/shared/utils/format'
@@ -220,6 +220,7 @@ function OperationalDocumentsReportTableImpl() {
           columns={columns}
           data={pageRows(page, reportQuery.isError)}
           isLoading={reportQuery.isLoading}
+          isFetching={reportQuery.isFetching}
           isError={reportQuery.isError}
           onRetry={() => void reportQuery.refetch()}
           errorTitle="تعذّر تحميل تقرير المستندات التشغيلية"

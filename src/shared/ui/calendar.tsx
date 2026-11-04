@@ -205,7 +205,11 @@ function Calendar({ className, ...props }: CalendarProps) {
         aria-live="polite"
         className="flex items-center justify-between px-1 pb-2"
       >
-        <div id={captionId} className="text-base font-semibold text-foreground">
+        <div
+          id={captionId}
+          className="text-base font-semibold text-foreground"
+          // standard-allow: raw-number-interpolation — the Gregorian month caption belongs to the shared date surface, whose own formatter (formatArabicDate in src/shared/ui/calendar-utils.ts) renders the same year in Latin digits; converting the calendar alone would make it disagree with the date picker that opens it
+        >
           {arMonthName(month)} {month.getFullYear()}
         </div>
         <div className="flex items-center gap-1">
@@ -281,6 +285,8 @@ function Calendar({ className, ...props }: CalendarProps) {
                         'bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground',
                     )}
                   >
+                    // standard-allow: raw-number-interpolation — the day cell is a Gregorian date
+                    cell on the same shared date surface as the caption above
                     {date.getDate()}
                   </button>
                 </div>

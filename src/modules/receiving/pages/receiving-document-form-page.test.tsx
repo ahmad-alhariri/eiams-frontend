@@ -255,7 +255,7 @@ describe('ReceivingDocumentFormPage', () => {
     const user = userEvent.setup()
     render(<ReceivingDocumentFormPage />, { wrapper: createWrapper() })
 
-    await user.click(screen.getByRole('button', { name: 'حذف البند 1' }))
+    await user.click(screen.getByRole('button', { name: 'حذف البند ١' }))
     await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))
 
     expect(await screen.findByText('أضف بنداً واحداً على الأقل.')).toBeInTheDocument()
@@ -326,7 +326,7 @@ describe('ReceivingDocumentFormPage', () => {
     const user = userEvent.setup()
     render(<ReceivingDocumentFormPage />, { wrapper: createWrapper() })
 
-    await user.click(screen.getByRole('button', { name: 'حذف البند 1' }))
+    await user.click(screen.getByRole('button', { name: 'حذف البند ١' }))
     await fillHeaderAndPetal(user)
     await fillAssetLine(user)
     await user.click(screen.getByRole('button', { name: 'حفظ المسودة' }))

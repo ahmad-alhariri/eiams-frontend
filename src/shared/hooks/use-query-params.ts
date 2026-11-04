@@ -28,6 +28,10 @@ function serialize(value: QueryParamValue) {
  * search text). List pages own their filter state in the URL so deep links
  * and the browser back button keep working; this hook is the only place that
  * reads or writes the query string for that purpose.
+ *
+ * KEPT: a documented shared hook (AGENTS.md, "hooks/") delivered under the
+ * closed bead eiams-frontend-e04-t05, next to useDebounce, useServerPagination,
+ * useConfirm and useSubmitFeedback.
  */
 export function useQueryParams(): QueryParamHelpers {
   const [searchParams, setSearchParams] = useSearchParams()

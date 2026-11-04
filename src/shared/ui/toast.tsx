@@ -67,7 +67,7 @@ function ToastClose({ className, ...props }: ToastPrimitive.Close.Props) {
       aria-label="إغلاق الإشعار"
       data-slot="toast-close"
       className={cn(
-        'inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors select-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors select-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 sm:size-7',
         className,
       )}
     >

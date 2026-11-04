@@ -1,14 +1,14 @@
 import { useCallback, useMemo } from 'react'
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { returnService } from '@/modules/custody/services/return.service'
 import type { ReturnEligibleItem } from '@/modules/custody/types/return.types'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys } from '@/shared/services/query-keys'
+import { keepPreviousDataInSameScope, queryKeys, RESOURCES } from '@/shared/services/query-keys'
 
-export const RETURN_RESOURCE = 'return'
+export const RETURN_RESOURCE = RESOURCES.custodyReturn
 
 export interface UseReturnEligibleItemsResult {
   /** All returnable allocations of the selected original Issue. */
@@ -39,12 +39,15 @@ export function useReturnEligibleItems(
   const enabled = scope !== undefined && originalIssueDocumentId !== undefined
 
   const query = useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined || originalIssueDocumentId === undefined
         ? queryKeys.unscoped(RETURN_RESOURCE, 'eligible-items')
         : queryKeys.scoped(scope, RETURN_RESOURCE, 'eligible-items', originalIssueDocumentId),
-    queryFn: () => returnService.listEligibleItems(originalIssueDocumentId ?? ''),
+    queryFn: ({ signal }) =>
+      returnService.listEligibleItems(originalIssueDocumentId ?? '', undefined, undefined, {
+        signal,
+      }),
     enabled,
     staleTime: OPERATIONAL_STALE_TIME,
   })

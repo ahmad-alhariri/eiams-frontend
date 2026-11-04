@@ -51,7 +51,12 @@ export function WarehouseCapabilitiesOverview({ warehouseId }: { warehouseId: st
   // capabilities" warehouse will fail loudly here rather than silently
   // dropping rows.
   const canManage = has('warehouse.manage')
-  const editor = canManage ? <WarehouseCapabilitiesEditor warehouseId={warehouseId} /> : null
+  // The permission is passed down EXPLICITLY: the editor owns no session read
+  // of its own, so its gate is the prop the parent resolved, not the place the
+  // editor happens to be mounted.
+  const editor = canManage ? (
+    <WarehouseCapabilitiesEditor warehouseId={warehouseId} canManage={canManage} />
+  ) : null
 
   if (capabilities.length === 0) {
     return (
@@ -73,7 +78,7 @@ export function WarehouseCapabilitiesOverview({ warehouseId }: { warehouseId: st
       description="المجالات والعمليات المسموح بها لهذا المستودع. تُطبَّق القدرة عند ترحيل المستندات."
       action={editor}
     >
-      <div className="overflow-x-auto">
+      <div className="min-w-0 overflow-x-auto">
         <table className="w-full min-w-[34rem] text-start">
           <caption className="sr-only">المجالات والعمليات المسموح بها للمستودع</caption>
           <thead className="border-b border-border text-sm text-muted-foreground">

@@ -1,5 +1,6 @@
 ﻿import type { ApiPage } from '@/shared/api/api-contracts'
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import { apiTransport } from '@/shared/api/transport'
 
@@ -40,23 +41,30 @@ function withWirePagination<TQuery extends { readonly page?: number; readonly pa
 }
 
 export interface AssetService {
-  listAssets: (query: ListAssetsQuery) => Promise<ApiPage<Asset>>
-  getAsset: (assetId: string) => Promise<AssetDetails>
+  listAssets: (query: ListAssetsQuery, context?: RequestContext) => Promise<ApiPage<Asset>>
+  getAsset: (assetId: string, context?: RequestContext) => Promise<AssetDetails>
   /**
    * The DERIVED status projection (`v_asset_current_status`) of one asset:
    * where the asset stands right now, who holds it, and its last movement.
    */
-  getAssetCurrentStatus: (assetId: string) => Promise<AssetCurrentStatusInfo>
+  getAssetCurrentStatus: (
+    assetId: string,
+    context?: RequestContext,
+  ) => Promise<AssetCurrentStatusInfo>
   /**
    * Full custody timeline for one asset (active + historical rows), served by
    * `GET /api/v1/assets/{assetId}/custody-timeline` as a paged envelope; the
    * first page is requested at the server's maximum page size so the ledger
    * shows the whole history of one asset in one read.
    */
-  getAssetCustodyTimeline: (assetId: string) => Promise<readonly AssetCustodyTimelineRow[]>
+  getAssetCustodyTimeline: (
+    assetId: string,
+    context?: RequestContext,
+  ) => Promise<readonly AssetCustodyTimelineRow[]>
   listAssetMovements: (
     assetId: string,
     query: ListAssetMovementsQuery,
+    context?: RequestContext,
   ) => Promise<ApiPage<AssetMovement>>
 }
 
@@ -70,37 +78,42 @@ export interface AssetService {
  */
 export function createAssetService(transport: ApiTransport): AssetService {
   return {
-    async listAssets(query) {
+    async listAssets(query, context) {
       return transport.requestPage<Asset>({
         path: ASSETS_PATH,
         method: 'GET',
         query: withWirePagination(query),
+        ...withSignal(context),
       })
     },
-    async getAsset(assetId) {
+    async getAsset(assetId, context) {
       return transport.request<AssetDetails>({
         path: pathWithId(ASSET_PATH, '{assetId}', assetId),
         method: 'GET',
+        ...withSignal(context),
       })
     },
-    async getAssetCurrentStatus(assetId) {
+    async getAssetCurrentStatus(assetId, context) {
       return transport.request<AssetCurrentStatusInfo>({
         path: pathWithId(ASSET_CURRENT_STATUS_PATH, '{assetId}', assetId),
         method: 'GET',
+        ...withSignal(context),
       })
     },
-    async getAssetCustodyTimeline(assetId) {
+    async getAssetCustodyTimeline(assetId, context) {
       return transport.request<readonly AssetCustodyTimelineRow[]>({
         path: pathWithId(ASSET_CUSTODY_TIMELINE_PATH, '{assetId}', assetId),
         method: 'GET',
         query: { page: 1, pageSize: 100 },
+        ...withSignal(context),
       })
     },
-    async listAssetMovements(assetId, query) {
+    async listAssetMovements(assetId, query, context) {
       return transport.requestPage<AssetMovement>({
         path: pathWithId(ASSET_MOVEMENTS_PATH, '{assetId}', assetId),
         method: 'GET',
         query: withWirePagination(query),
+        ...withSignal(context),
       })
     },
   }

@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
@@ -62,10 +62,10 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: { kind: 'enterprise' } }),
 }))
 vi.mock('@/shared/ui/toast-manager', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
-vi.mock('@/modules/warehouse/hooks/use-scoped-warehouse-selector', () => ({
+vi.mock('@/shared/scopes/use-scoped-warehouse-selector', () => ({
   useScopedWarehouseSelector: () => ({ scopeReady: true, loadOptions: async () => [] }),
 }))
-vi.mock('@/modules/catalog/hooks/use-scoped-material-selector', () => ({
+vi.mock('@/shared/scopes/use-scoped-material-selector', () => ({
   useScopedMaterialSelector: () => ({ scopeReady: true, loadOptions: async () => [] }),
 }))
 

@@ -1,5 +1,6 @@
 import type { ApiPage } from '@/shared/api/api-contracts'
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { apiTransport } from '@/shared/api/transport'
 import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import type { ReturnEligibleItem } from '@/modules/custody/types/return.types'
@@ -22,12 +23,13 @@ export interface ReturnService {
     originalIssueDocumentId: string,
     page?: number,
     pageSize?: number,
+    context?: RequestContext,
   ) => Promise<ApiPage<ReturnEligibleItem>>
 }
 
 export function createReturnService(transport: ApiTransport): ReturnService {
   return {
-    async listEligibleItems(originalIssueDocumentId, page = 1, pageSize = 100) {
+    async listEligibleItems(originalIssueDocumentId, page = 1, pageSize = 100, context) {
       return transport.requestPage<ReturnEligibleItem>({
         path: RETURN_ELIGIBLE_ITEMS_PATH,
         method: 'GET',
@@ -35,6 +37,7 @@ export function createReturnService(transport: ApiTransport): ReturnService {
           originalIssueDocumentId,
           ...toWireOneBasedPaginationParams({ page, pageSize }),
         },
+        ...withSignal(context),
       })
     },
   }

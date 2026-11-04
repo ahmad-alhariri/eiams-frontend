@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { organizationService } from '@/modules/organization/services/organization.service'
-import { queryKeys } from '@/shared/services/query-keys'
+import { queryKeys, RESOURCES } from '@/shared/services/query-keys'
 import {
   statusCommandValue,
   type CreateOrganizationRequest,
@@ -41,7 +41,7 @@ function useInvalidateOrganizations() {
 
     await queryClient.invalidateQueries({
       // No trailing query segment: list and detail keys must both match.
-      queryKey: queryKeys.scoped(activeScopeCacheKey, 'organization', 'organizations'),
+      queryKey: queryKeys.scoped(activeScopeCacheKey, RESOURCES.organization, 'organizations'),
       exact: false,
     })
   }

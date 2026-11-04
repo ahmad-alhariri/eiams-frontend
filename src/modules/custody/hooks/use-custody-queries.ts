@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { assetQueryKeys } from '@/modules/asset/hooks/use-asset-queries'
@@ -9,10 +9,15 @@ import type {
   TransferCustodyRequest,
 } from '@/modules/custody/types/custody.types'
 import { custodyService } from '@/modules/custody/services/custody.service'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import {
+  keepPreviousDataInSameScope,
+  queryKeys,
+  RESOURCES,
+  type ScopeCacheKey,
+} from '@/shared/services/query-keys'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
 
-export const CUSTODY_RESOURCE = 'custody'
+export const CUSTODY_RESOURCE = RESOURCES.custody
 
 export const custodyQueryKeys = {
   custodies: (scope: ScopeCacheKey, query: ListCustodiesQuery) =>
@@ -35,10 +40,10 @@ export function useCustodiesQuery(query: ListCustodiesQuery) {
       scope.activeScopeCacheKey === undefined
         ? queryKeys.unscoped(CUSTODY_RESOURCE, 'custodies', query)
         : custodyQueryKeys.custodies(scope.activeScopeCacheKey, query),
-    queryFn: () => custodyService.listCustodies(query),
+    queryFn: ({ signal }) => custodyService.listCustodies(query, { signal }),
     enabled: scope.activeScopeCacheKey !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope.activeScopeCacheKey),
   })
 }
 
@@ -59,10 +64,10 @@ export function usePendingCustodiesQuery(warehouseId: string, page: number, page
       scope.activeScopeCacheKey === undefined
         ? queryKeys.unscoped(CUSTODY_RESOURCE, 'custodies', 'pending', query)
         : custodyQueryKeys.pending(scope.activeScopeCacheKey, query),
-    queryFn: () => custodyService.listPendingCustodies(query),
+    queryFn: ({ signal }) => custodyService.listPendingCustodies(query, { signal }),
     enabled: scope.activeScopeCacheKey !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope.activeScopeCacheKey),
   })
 }
 

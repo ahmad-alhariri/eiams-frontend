@@ -4,6 +4,7 @@ import type { ApiRequest } from './api-transport'
 import { propagateRequestId } from './request-id'
 import { normalizePagination } from './pagination'
 import { unwrapData } from './envelope'
+import type { ApiTransport } from './api-transport'
 
 /**
  * Projects an `ApiRequest` onto an Axios config.
@@ -41,7 +42,7 @@ function isNoContentBody(value: unknown): boolean {
   return value === null || value === undefined || value === ''
 }
 
-export function createAxiosTransport(client: AxiosInstance) {
+export function createAxiosTransport(client: AxiosInstance): ApiTransport {
   return {
     /**
      * Returns the PAYLOAD, not the envelope.
@@ -80,9 +81,7 @@ export function createAxiosTransport(client: AxiosInstance) {
           : (response.data as ApiSuccessResponse<ReadonlyArray<TItem>>).pagination,
       )
       return {
-        items: isNoContentBody(response.data)
-          ? []
-          : ((unwrapData(response.data) as ReadonlyArray<TItem>) ?? []),
+        items: isNoContentBody(response.data) ? [] : (unwrapData(response.data) ?? []),
         page: pagination.page,
         pageSize: pagination.pageSize,
         totalItems: pagination.totalItems,
@@ -95,6 +94,14 @@ export function createAxiosTransport(client: AxiosInstance) {
     async requestEmpty<TBody>(request: Readonly<ApiRequest<TBody>>): Promise<void> {
       await client.request<void>(toAxiosConfig(request))
       propagateRequestId()
+    },
+
+    async requestBlob(request: Readonly<ApiRequest>): Promise<Blob> {
+      const cfg = toAxiosConfig(request) as AxiosRequestConfig
+      cfg.responseType = 'blob'
+      const response = await client.request(cfg)
+      propagateRequestId()
+      return response.data as Blob
     },
   }
 }

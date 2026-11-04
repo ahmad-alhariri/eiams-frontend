@@ -1,4 +1,15 @@
-﻿# EIAMS Frontend Architecture Readiness Review
+﻿> **HISTORICAL / SUPERSEDED — DO NOT USE AS CURRENT REFERENCE.** This document describes the provisional OpenAPI snapshot (`contracts/openapi/eiams-v1.openapi.json`, deleted; the file no longer exists) that was superseded by handwritten per-module wire contracts (ADR-0001 / D-INT-02). It is retained as a historical record only and must not guide current architecture decisions.
+>
+> **Authoritative current documents instead of this one:**
+>
+> - `docs/adr/0001-handwritten-contracts-for-direct-backend-integration.md` — ADR-0001, the handwritten-contract decision.
+> - `docs/d-int-01-integration-policy.md` — D-INT-01, the integration policy.
+> - `docs/direct-backend-integration-plan.md` — D-INT-02, the migration plan and the wire-shape authorities.
+> - `docs/Architecture_Overview.md` §3.2 — the current frontend source boundaries and where each shared wire shape lives.
+> - `docs/feature-service-composition-standard.md` — the enforced service/transport/query-key contract.
+> - `src/config/bundle-budget.json` — the current committed bundle ceilings.
+
+# EIAMS Frontend Architecture Readiness Review
 
 **Status:** Approved — architecture and provisional contract are ready to
 unblock the implementation epics, with three tracked increments below.

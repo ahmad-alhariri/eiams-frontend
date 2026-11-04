@@ -264,6 +264,7 @@ function UsersListPage() {
           columns={columns}
           data={pageRows(page, usersQuery.isError)}
           isLoading={usersQuery.isLoading}
+          isFetching={usersQuery.isFetching}
           isError={usersQuery.isError}
           onRetry={() => void usersQuery.refetch()}
           errorTitle="تعذّر تحميل المستخدمين"
@@ -272,8 +273,8 @@ function UsersListPage() {
           emptyDescription="لم يتم العثور على مستخدمين يطابقون معايير البحث الحالية."
           page={currentPage}
           pageSize={pageSize}
-          totalCount={page?.meta.totalItems}
-          totalPages={Math.max(page?.meta.totalPages ?? 1, 1)}
+          totalCount={page?.meta.totalItems ?? null}
+          totalPages={page?.meta.totalPages ?? null}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           searchQuery={search}

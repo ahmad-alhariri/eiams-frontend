@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router'
 
 import { AppLayout } from '@/shared/layout/app-layout'
 import { RouteSuspense } from '@/shared/layout/route-suspense'
+import { ShellErrorBoundary } from '@/shared/layout/shell-error-boundary'
 import { UiSandboxMarker } from '@/shared/layout/ui-sandbox-marker'
 import {
   AnonymousRoute,
@@ -58,7 +59,16 @@ const PROTECTED_ROUTE_OBJECTS = getWiredRouteKeys().flatMap((key) => {
   return [
     {
       ...route,
-      element: <RouteAccessGuard route={key}>{route.element}</RouteAccessGuard>,
+      // The guard renders inside `AppLayout`'s `<main>` (the branch element
+      // owns the frame, this child element fills its `<Outlet>`), so this
+      // boundary sits INSIDE the shell: a failure in the guard leaves the
+      // nav, the sidebar and the frame intact and shows the Arabic error
+      // state in the page area.
+      element: (
+        <ShellErrorBoundary>
+          <RouteAccessGuard route={key}>{route.element}</RouteAccessGuard>
+        </ShellErrorBoundary>
+      ),
     },
   ]
 })
@@ -75,42 +85,42 @@ const appRouter = createBrowserRouter([
   {
     ...LOGIN_ROUTE,
     element: (
-      <>
+      <ShellErrorBoundary>
         <AuthSessionExpiredBridge />
         <UiSandboxMarker>
           <AnonymousRoute>
             <RouteSuspense>{LOGIN_ROUTE.element}</RouteSuspense>
           </AnonymousRoute>
         </UiSandboxMarker>
-      </>
+      </ShellErrorBoundary>
     ),
   },
   {
     element: (
-      <>
+      <ShellErrorBoundary>
         <AuthSessionExpiredBridge />
         <AppLayout />
-      </>
+      </ShellErrorBoundary>
     ),
     children: DEV_GALLERY_ROUTE,
   },
   {
     element: (
-      <>
+      <ShellErrorBoundary>
         <AuthSessionExpiredBridge />
         <RequireActiveScope>
           <AppLayout userMenu={<SessionUserMenu />} />
         </RequireActiveScope>
-      </>
+      </ShellErrorBoundary>
     ),
     children: PROTECTED_ROUTE_OBJECTS,
   },
   {
     element: (
-      <>
+      <ShellErrorBoundary>
         <AuthSessionExpiredBridge />
         <AppLayout />
-      </>
+      </ShellErrorBoundary>
     ),
     children: NOT_FOUND_ROUTE,
   },

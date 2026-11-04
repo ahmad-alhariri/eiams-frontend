@@ -1,4 +1,4 @@
-import { zodResolver } from '@hookform/resolvers/zod'
+﻿import { zodResolver } from '@hookform/resolvers/zod'
 import { useMemo, type FormEvent } from 'react'
 import type { DeepPartial, Resolver } from 'react-hook-form'
 import { FormProvider, useForm, useWatch } from 'react-hook-form'
@@ -19,6 +19,7 @@ import {
   DocumentHeaderSection,
   documentHeaderSchema,
 } from '@/shared/documents/document-header-form'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import {
   createEmptyQuantityLine,
   linesHaveUniqueMaterials,
@@ -92,6 +93,7 @@ export default function TransferDocumentFormPage() {
     mode: 'onChange',
   })
   const isSubmitting = form.formState.isSubmitting
+  const warehouseSelector = useScopedWarehouseSelector()
   const submitErrorMessage =
     createMutation.error === null ? null : documentDraftMutationError(createMutation.error)
   const headerWarehouseId = useWatch({ control: form.control, name: 'header.warehouseId' })
@@ -179,6 +181,7 @@ export default function TransferDocumentFormPage() {
         >
           <DocumentHeaderSection
             documentType="Transfer"
+            warehouseSelector={warehouseSelector}
             petalSlot={
               <TransferDestinationSection
                 sourceWarehouseId={headerWarehouseId === '' ? undefined : headerWarehouseId}

@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useForm } from 'react-hook-form'
-import { describe, expect, it } from 'vitest'
+import { AxiosError } from 'axios'
+import { describe, expect, it, vi } from 'vitest'
 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
+import { setFormServerErrors, submitWithServerErrors } from '@/shared/forms/server-errors'
 import type { FieldError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
@@ -98,5 +99,111 @@ describe('setFormServerErrors', () => {
     await user.type(screen.getByRole('textbox', { name: 'الاسم الكامل' }), 'أحمد علي')
 
     expect(screen.getByText('البريد الإلكتروني مسجل مسبقاً')).toBeInTheDocument()
+  })
+})
+
+/** A rejected write in the REAL backend envelope: `error.details` holds the model-binding map. */
+function rejectedWrite(field: string): AxiosError<unknown> {
+  return new AxiosError(
+    'Request failed with status code 400',
+    'ERR_BAD_RESPONSE',
+    undefined,
+    undefined,
+    {
+      data: {
+        success: false as const,
+        error: {
+          code: 'REQUEST_VALIDATION_FAILED',
+          message: 'One or more request values are invalid.',
+          details: { [`body.${field}`]: ['The field is required.'] },
+          request_id: '0f9a3c2e-0000-4000-8000-000000000001',
+        },
+      },
+      status: 400,
+      statusText: '',
+      headers: {},
+      config: { headers: {} as never },
+    },
+  )
+}
+
+describe('submitWithServerErrors', () => {
+  it('runs the submit and leaves no field error when it succeeds', async () => {
+    const { result } = renderHook(() =>
+      useForm<DemoValues>({ defaultValues: { fullName: '', email: '' } }),
+    )
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+
+    await submitWithServerErrors(result.current, result.current.getValues(), onSubmit)
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(result.current.getFieldState('email').error).toBeUndefined()
+  })
+
+  it('maps a rejected write onto the field the dialog owns', async () => {
+    const { result } = renderHook(() =>
+      useForm<DemoValues>({ defaultValues: { fullName: '', email: '' } }),
+    )
+
+    await submitWithServerErrors(
+      result.current,
+      result.current.getValues(),
+      async () => {
+        throw rejectedWrite('email')
+      },
+      ['email'],
+    )
+
+    await waitFor(() => {
+      expect(result.current.getFieldState('email').error?.message).toBeTruthy()
+    })
+    // The wire message is English; only the approved Arabic copy may reach the field.
+    expect(result.current.getFieldState('email').error?.message).not.toContain('required')
+  })
+
+  it('skips a field the dialog does not own', async () => {
+    const { result } = renderHook(() =>
+      useForm<DemoValues>({ defaultValues: { fullName: '', email: '' } }),
+    )
+
+    await submitWithServerErrors(
+      result.current,
+      result.current.getValues(),
+      async () => {
+        throw rejectedWrite('fullName')
+      },
+      ['email'],
+    )
+
+    expect(result.current.getFieldState('fullName').error).toBeUndefined()
+    // The same payload IS mapped when the dialog owns the field, so the
+    // allow-list is what suppressed it - not an empty payload.
+    await submitWithServerErrors(
+      result.current,
+      result.current.getValues(),
+      async () => {
+        throw rejectedWrite('fullName')
+      },
+      ['fullName'],
+    )
+    await waitFor(() => {
+      expect(result.current.getFieldState('fullName').error?.message).toBeTruthy()
+    })
+  })
+
+  it('clears the errors of the previous attempt before the submit', async () => {
+    const { result } = renderHook(() =>
+      useForm<DemoValues>({ defaultValues: { fullName: '', email: '' } }),
+    )
+    result.current.setError('email', { message: 'stale' })
+    await waitFor(() => {
+      expect(result.current.getFieldState('email').error?.message).toBe('stale')
+    })
+
+    await submitWithServerErrors(result.current, result.current.getValues(), async () => {})
+
+    await waitFor(() => {
+      expect(result.current.getFieldState('email').error).toBeUndefined()
+    })
   })
 })

@@ -15,8 +15,7 @@ import {
 } from '@/modules/organization/schemas/organizational-unit.schemas'
 import type { OrganizationalUnit } from '@/modules/organization/types/organization.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -107,15 +106,8 @@ export function OrganizationalUnitFormDialog({
     form.reset(toOrganizationalUnitFormValues(organizationalUnit))
   }, [organizationalUnit, form, open])
 
-  const submit = async (values: OrganizationalUnitFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error as Parameters<typeof normalizeApiError>[0])
-      setFormServerErrors(form, apiError.fieldErrors, { schemaKeys: [...SERVER_ERROR_KEYS] })
-    }
-  }
+  const submit = (values: OrganizationalUnitFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, SERVER_ERROR_KEYS)
 
   const parentOptionsList = useMemo(
     () => parentOptions(organizationalUnit, units, siteId ?? ''),
@@ -209,6 +201,7 @@ export function OrganizationalUnitFormDialog({
                       <Input
                         {...field}
                         disabled={isPending || referencesUnavailable}
+                        // standard-allow: latin-attribute-example — the unit name example belongs to an English-language field
                         placeholder="مثال: Department"
                       />
                     </FormControl>

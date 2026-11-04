@@ -4,7 +4,15 @@
 @import '@fontsource-variable/inter';
 @import '@fontsource-variable/noto-sans-arabic';
 
-@custom-variant dark (&:is(.dark *));
+/*
+ * Tailwind v4 auto-detects every source file in the repository, so the class
+ * names written in documentation and in test fixtures were being compiled
+ * into the production CSS as DEAD RULES (e.g. `.ml-2`, `.w-[420px]`). These
+ * two exclusions keep the shipped stylesheet to the classes the application
+ * actually renders. The paths are relative to this file.
+ */
+@source not '../docs';
+@source not '../src/test';
 
 @theme {
   --color-forest: #002623;
@@ -53,7 +61,6 @@
   --shadow-toast: 0 4px 24px oklch(0% 0 0 / 15%);
 
   --animate-shimmer: shimmer 1.5s linear infinite;
-  --animate-pulse-dot: pulse-dot 2s infinite;
 
   @keyframes shimmer {
     0% {
@@ -61,18 +68,6 @@
     }
     100% {
       background-position: 1000px 0;
-    }
-  }
-
-  @keyframes pulse-dot {
-    0%,
-    100% {
-      opacity: 1;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 0.5;
-      transform: scale(0.8);
     }
   }
 }
@@ -170,43 +165,8 @@
   --radius-4xl: 24px;
 }
 
-.dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
-  --chart-1: oklch(0.845 0.143 164.978);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.596 0.145 163.225);
-  --chart-4: oklch(0.508 0.118 165.612);
-  --chart-5: oklch(0.432 0.095 166.913);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.552 0.016 285.938);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .animate-shimmer,
-  .animate-pulse-dot {
+  .animate-shimmer {
     animation: none;
   }
 }

@@ -1,8 +1,8 @@
-import { IconPlus, IconTrash } from '@tabler/icons-react'
+﻿import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
 
-import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
+import { useScopedMaterialSelector } from '@/shared/scopes/use-scoped-material-selector'
 import {
   useWarehouseCapabilityValidation,
   type CapabilityValidation,
@@ -33,8 +33,9 @@ import type { OptionLoader } from '@/shared/selectors/selector-adapter'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
-import type { CapabilityOperation } from '@/modules/warehouse/types/warehouse.types'
-import type { Material } from '@/modules/catalog/types/catalog.types'
+import type { CapabilityOperation } from '@/shared/types/warehouse.wire-types'
+import type { Material } from '@/shared/types/catalog.wire-types'
+import { formatNumber, toArabicDigits } from '@/shared/utils/arabic-numbers'
 
 // The editor is a component file by contract; its schema and draft mapper live
 // in ../schemas/document-lines.schemas.ts (e12-t05).
@@ -176,7 +177,9 @@ function AssetUnitCard({
       disabled={disabled}
       className="grid gap-3 rounded-lg border border-dashed border-border p-3"
     >
-      <legend className="px-1 text-sm font-medium text-foreground">الوحدة {unitIndex + 1}</legend>
+      <legend className="px-1 text-sm font-medium text-foreground">
+        الوحدة {toArabicDigits(unitIndex + 1)}
+      </legend>
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField
           control={control}
@@ -266,7 +269,7 @@ function AssetUnitCard({
         variant="ghost"
         size="icon-sm"
         className="justify-self-start text-destructive hover:text-destructive"
-        aria-label={`حذف الوحدة ${unitIndex + 1} من البند ${lineIndex + 1}`}
+        aria-label={`حذف الوحدة ${toArabicDigits(unitIndex + 1)} من البند ${toArabicDigits(lineIndex + 1)}`}
         disabled={disabled}
         onClick={onRemove}
       >
@@ -405,7 +408,9 @@ function AssetLineRow({
       disabled={disabled}
       className="grid gap-3 rounded-md border border-border p-4"
     >
-      <legend className="px-1 text-sm font-medium text-foreground">بند الأصول {index + 1}</legend>
+      <legend className="px-1 text-sm font-medium text-foreground">
+        بند الأصول {toArabicDigits(index + 1)}
+      </legend>
       <FormField
         control={control}
         name={`${linePath}.materialId`}
@@ -431,7 +436,7 @@ function AssetLineRow({
       >
         <span className="text-muted-foreground">الكمية (تُحتسب بعدد وحدات الأصل)</span>
         <span data-slot="asset-line-quantity-value" className="font-medium text-foreground">
-          {quantity}{' '}
+          {formatNumber(quantity)}{' '}
           {line.baseUnitNameAr !== undefined && line.baseUnitNameAr !== ''
             ? line.baseUnitNameAr
             : 'وحدة'}
@@ -463,7 +468,7 @@ function AssetLineRow({
         <Button
           type="button"
           variant="outline"
-          aria-label={`إضافة وحدة/أصل إلى البند ${index + 1}`}
+          aria-label={`إضافة وحدة/أصل إلى البند ${toArabicDigits(index + 1)}`}
           disabled={disabled}
           onClick={addUnit}
         >
@@ -474,7 +479,7 @@ function AssetLineRow({
           type="button"
           variant="ghost"
           className="text-destructive hover:text-destructive"
-          aria-label={`حذف البند ${index + 1}`}
+          aria-label={`حذف البند ${toArabicDigits(index + 1)}`}
           disabled={disabled}
           onClick={onRemove}
         >

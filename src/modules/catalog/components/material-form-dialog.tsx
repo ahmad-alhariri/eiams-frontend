@@ -18,8 +18,7 @@ import {
 import type { Material, MaterialFamily, UnitOfMeasure } from '@/modules/catalog/types/catalog.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
 import { useConfirm } from '@/shared/hooks/use-confirm'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { Button } from '@/shared/ui/button'
 import { Checkbox } from '@/shared/ui/checkbox'
 import {
@@ -173,27 +172,18 @@ export function MaterialFormDialog({
     [confirmClassificationChange, form],
   )
 
-  const submit = async (values: MaterialFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: [
-          'code',
-          'nameAr',
-          'nameEn',
-          'familyId',
-          'baseUnitId',
-          'materialKind',
-          'trackingType',
-          'hasExpiry',
-          'attributes',
-        ],
-      })
-    }
-  }
+  const submit = (values: MaterialFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, [
+      'code',
+      'nameAr',
+      'nameEn',
+      'familyId',
+      'baseUnitId',
+      'materialKind',
+      'trackingType',
+      'hasExpiry',
+      'attributes',
+    ])
 
   return (
     <>
@@ -216,7 +206,6 @@ export function MaterialFormDialog({
               <FormField
                 control={form.control}
                 name="nameAr"
-                rules={{ required: true }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>اسم المادة</FormLabel>
@@ -245,6 +234,7 @@ export function MaterialFormDialog({
                           dir="ltr"
                           disabled={isPending}
                           maxLength={255}
+                          // standard-allow: latin-attribute-example — the English material name belongs to an English-language field
                           placeholder="Desktop Computer"
                           onChange={(event) => field.onChange(event.currentTarget.value || null)}
                         />
@@ -256,7 +246,6 @@ export function MaterialFormDialog({
                 <FormField
                   control={form.control}
                   name="code"
-                  rules={{ required: true }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>رمز المادة</FormLabel>
@@ -283,7 +272,6 @@ export function MaterialFormDialog({
                 <FormField
                   control={form.control}
                   name="familyId"
-                  rules={{ required: true }}
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>عائلة المادة</FormLabel>
@@ -320,7 +308,6 @@ export function MaterialFormDialog({
                 <FormField
                   control={form.control}
                   name="baseUnitId"
-                  rules={{ required: true }}
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>وحدة القياس الأساسية</FormLabel>
@@ -359,7 +346,6 @@ export function MaterialFormDialog({
                 <FormField
                   control={form.control}
                   name="materialKind"
-                  rules={{ required: true }}
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>نوع المادة</FormLabel>
@@ -394,7 +380,6 @@ export function MaterialFormDialog({
                 <FormField
                   control={form.control}
                   name="trackingType"
-                  rules={{ required: true }}
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>طريقة التتبع</FormLabel>

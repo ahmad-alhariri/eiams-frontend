@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import {
@@ -19,11 +19,17 @@ import type {
   UpdateFreezePolicyRequest,
 } from '@/modules/inventory-count/types/inventory-count.types'
 import { countService } from '@/modules/inventory-count/services/count.service'
+import type { RequestContext } from '@/shared/api/api-transport'
 import { createIdempotencyKey, type IdempotencyKey } from '@/shared/services/mutation-safety'
 import { OPERATIONAL_STALE_TIME } from '@/shared/services/query.client'
-import { queryKeys, type ScopeCacheKey } from '@/shared/services/query-keys'
+import {
+  keepPreviousDataInSameScope,
+  queryKeys,
+  RESOURCES,
+  type ScopeCacheKey,
+} from '@/shared/services/query-keys'
 
-export const COUNT_RESOURCE = 'inventory-counts'
+export const COUNT_RESOURCE = RESOURCES.count
 // The server caps a page at PaginationDefaults.MaximumPageSize (100); asking for
 // more answers 400 and the variance review never loads.
 const ALL_COUNT_LINES_PAGE_SIZE = 100
@@ -51,17 +57,28 @@ export {
  * count-linked adjustment must never be seeded from a partial page. Pages are
  * ONE-based on the wire (`page`, `pageSize`).
  */
-async function listAllCountLines(countId: string): Promise<readonly InventoryCountLine[]> {
-  const firstPage = await countService.listLines(countId, {
-    page: 1,
-    pageSize: ALL_COUNT_LINES_PAGE_SIZE,
-  })
+async function listAllCountLines(
+  countId: string,
+  context?: RequestContext,
+): Promise<readonly InventoryCountLine[]> {
+  const firstPage = await countService.listLines(
+    countId,
+    {
+      page: 1,
+      pageSize: ALL_COUNT_LINES_PAGE_SIZE,
+    },
+    context,
+  )
   const remainingPages = await Promise.all(
-    Array.from({ length: Math.max(0, firstPage.totalPages - 1) }, (_, index) =>
-      countService.listLines(countId, {
-        page: index + 2,
-        pageSize: ALL_COUNT_LINES_PAGE_SIZE,
-      }),
+    Array.from({ length: Math.max(0, (firstPage.totalPages ?? 1) - 1) }, (_, index) =>
+      countService.listLines(
+        countId,
+        {
+          page: index + 2,
+          pageSize: ALL_COUNT_LINES_PAGE_SIZE,
+        },
+        context,
+      ),
     ),
   )
 
@@ -98,12 +115,12 @@ function useCountInvalidation() {
 export function useInventoryCountsQuery(query: ListCountsQuery) {
   const scope = useActiveScopeContext()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope.activeScopeCacheKey),
     queryKey:
       scope.activeScopeCacheKey === undefined
-        ? ['inventory-counts', 'unscoped', query]
+        ? queryKeys.unscoped(COUNT_RESOURCE, 'counts', query)
         : countQueryKeys.counts(scope.activeScopeCacheKey, query),
-    queryFn: () => countService.listCounts(query),
+    queryFn: ({ signal }) => countService.listCounts(query, { signal }),
     enabled: scope.activeScopeCacheKey !== undefined,
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -115,9 +132,9 @@ export function useInventoryCountQuery(countId: string | undefined | null) {
   return useQuery({
     queryKey:
       scope === undefined || countId == null
-        ? ['inventory-counts', 'count', 'unscoped', countId]
+        ? queryKeys.unscoped(COUNT_RESOURCE, 'count', countId)
         : countQueryKeys.count(scope, countId),
-    queryFn: () => countService.getCount(countId ?? ''),
+    queryFn: ({ signal }) => countService.getCount(countId ?? '', { signal }),
     enabled: scope !== undefined && countId != null && countId !== '',
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -130,12 +147,12 @@ export function useCountLinesQuery(
 ) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined || countId == null
-        ? ['inventory-counts', 'lines', 'unscoped', countId, query]
+        ? queryKeys.unscoped(COUNT_RESOURCE, 'lines', countId, query)
         : countQueryKeys.lines(scope, countId, query),
-    queryFn: () => countService.listLines(countId ?? '', query),
+    queryFn: ({ signal }) => countService.listLines(countId ?? '', query, { signal }),
     enabled: scope !== undefined && countId != null && countId !== '',
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -150,12 +167,12 @@ export function useCountLinesQuery(
 export function useAllCountLinesQuery(countId: string | undefined | null) {
   const { activeScopeCacheKey: scope } = useActiveScopeContext()
   return useQuery({
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataInSameScope(scope),
     queryKey:
       scope === undefined || countId == null
-        ? ['inventory-counts', 'lines', 'all', 'unscoped', countId]
+        ? queryKeys.unscoped(COUNT_RESOURCE, 'lines', countId, 'all')
         : countQueryKeys.allLines(scope, countId),
-    queryFn: () => listAllCountLines(countId ?? ''),
+    queryFn: ({ signal }) => listAllCountLines(countId ?? '', { signal }),
     enabled: scope !== undefined && countId != null && countId !== '',
     staleTime: OPERATIONAL_STALE_TIME,
   })
@@ -175,9 +192,9 @@ export function useWarehouseFreezeStatusQuery(
   return useQuery({
     queryKey:
       scope.activeScopeCacheKey === undefined || warehouseId === undefined
-        ? ['inventory-counts', 'freeze-status', 'unscoped', warehouseId]
+        ? queryKeys.unscoped(COUNT_RESOURCE, 'freeze-status', warehouseId)
         : countQueryKeys.freezeStatus(scope.activeScopeCacheKey, warehouseId),
-    queryFn: () => countService.getFreezeStatus(warehouseId ?? ''),
+    queryFn: ({ signal }) => countService.getFreezeStatus(warehouseId ?? '', { signal }),
     enabled:
       (options.enabled !== undefined ? options.enabled : scope.activeScopeCacheKey !== undefined) &&
       warehouseId !== undefined &&

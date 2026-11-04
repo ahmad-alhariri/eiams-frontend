@@ -228,7 +228,7 @@ describe('CountQuantityWorkspace (e20-t06, hbfu)', () => {
     renderWorkspace()
 
     expect(await screen.findByText('حاسوب مكتبي')).toBeInTheDocument()
-    expect(screen.getByText('25')).toBeInTheDocument()
+    expect(screen.getByText('٢٥')).toBeInTheDocument()
 
     await user.type(screen.getByLabelText('الكمية الفعلية لـ حاسوب مكتبي'), '23')
 

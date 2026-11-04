@@ -1,9 +1,8 @@
-import { useMutation, type UseMutationResult } from '@tanstack/react-query'
+import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { documentService } from '@/shared/documents/document-transport'
 import { policyAdvisoryMessageAr } from '@/shared/documents/document-policy-gates'
-import { useInvalidateDocumentDetail } from '@/shared/documents/use-document-queries'
 import type {
   DocumentPolicyAdvisory,
   PostDocumentResponse,
@@ -15,6 +14,7 @@ import {
   withIdempotencyKey,
   type IdempotencyKey,
 } from '@/shared/services/mutation-safety'
+import { invalidateScopedQueries } from '@/shared/services/query-keys'
 import { toast } from '@/shared/ui/toast-manager'
 
 export const DOCUMENT_CONFLICT_GUIDANCE_AR = 'المستند عدّله مستخدم آخر. أعد تحميل البيانات'
@@ -161,15 +161,15 @@ function toLifecycleActionApi(
 /**
  * One mutation per lifecycle action kind. On success the server is
  * authoritative: no timeline event is appended and no cached document is
- * patched — the scoped detail branch (detail + history + policy) is invalidated
- * and refetched, which is the only state that can be trusted after a transition
- * (D-LIFE-01). Every failure is surfaced as an Arabic toast. Without an active
+ * patched — the whole active scope's caches are invalidated and refetched
+ * (D-LIFE-01), because a transition changes state far beyond this one
+ * document. Every failure is surfaced as an Arabic toast. Without an active
  * scope the invalidation is guarded away (the detail queries are disabled
  * anyway); without a documentId the mutation fails fast.
  */
 function useDocumentLifecycleAction(kind: LifecycleActionKind, documentId: string | null) {
   const { activeScopeCacheKey } = useActiveScopeContext()
-  const invalidateDetail = useInvalidateDocumentDetail()
+  const queryClient = useQueryClient()
 
   return useMutation<LifecycleActionResult, Error, LifecycleActionVariables>({
     mutationFn: (variables) => {
@@ -189,12 +189,10 @@ function useDocumentLifecycleAction(kind: LifecycleActionKind, documentId: strin
       if (documentId === null || activeScopeCacheKey === undefined) {
         return
       }
-      // One invalidation, not two: `useInvalidateDocumentDetail` already covers
-      // the whole `document(scope, id)` prefix, which is the detail, history AND
-      // policy keys. Issuing it a second time makes every one of those three
-      // refetch twice per action, which is three redundant round-trips on a
-      // slow government link and nothing gained.
-      void invalidateDetail(documentId)
+      // One scoped call covers the document detail/history/policy AND the
+      // lists: posting changes balances, stock movements, assets and document
+      // lists, not just this document.
+      void invalidateScopedQueries(queryClient, activeScopeCacheKey)
     },
     onError: (error) => {
       reportApiError(error, { conflictGuidanceAr: DOCUMENT_CONFLICT_GUIDANCE_AR })

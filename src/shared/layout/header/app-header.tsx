@@ -1,9 +1,10 @@
-﻿import type { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { IconBell, IconMenu2 } from '@tabler/icons-react'
 
 import { cn } from '@/shared/utils/class-names'
 import { useUiStore } from '@/shared/store/ui.store'
 import { ROUTE_PATHS } from '@/config/routes'
+import { toArabicDigits } from '@/shared/utils/arabic-numbers'
 
 export interface HeaderUser {
   displayName: string
@@ -55,7 +56,7 @@ function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHe
       <button
         type="button"
         aria-label="فتح قائمة التنقل"
-        className="flex size-9 items-center justify-center rounded-md hover:bg-forest-light focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+        className="flex size-10 items-center justify-center rounded-md hover:bg-forest-light focus-visible:ring-2 focus-visible:ring-ring sm:size-9 lg:hidden"
         onClick={() => setDrawerOpen(true)}
       >
         <IconMenu2 size={20} aria-hidden />
@@ -63,7 +64,7 @@ function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHe
       <button
         type="button"
         aria-label={collapsed ? 'توسيع القائمة الجانبية' : 'طي القائمة الجانبية'}
-        className="hidden size-9 items-center justify-center rounded-md hover:bg-forest-light focus-visible:ring-2 focus-visible:ring-ring lg:flex"
+        className="hidden size-10 items-center justify-center rounded-md hover:bg-forest-light focus-visible:ring-2 focus-visible:ring-ring sm:size-9 lg:flex"
         onClick={toggleCollapsed}
       >
         <IconMenu2
@@ -75,7 +76,7 @@ function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHe
 
       <a
         href={ROUTE_PATHS.dashboard}
-        className="flex items-center gap-2 rounded-md text-lg font-bold focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-h-10 items-center gap-2 rounded-md text-lg font-bold focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="الرئيسية"
       >
         <span className="flex size-8 items-center justify-center rounded-md bg-golden-wheat text-sm font-black text-forest">
@@ -95,15 +96,15 @@ function AppHeader({ breadcrumb, userMenu, notificationsCount = 0, user }: AppHe
         <button
           type="button"
           aria-label="الإشعارات"
-          className="relative flex size-9 items-center justify-center rounded-md hover:bg-forest-light focus-visible:ring-2 focus-visible:ring-ring"
+          className="relative flex size-10 items-center justify-center rounded-md hover:bg-forest-light focus-visible:ring-2 focus-visible:ring-ring sm:size-9"
         >
           <IconBell size={20} aria-hidden />
           {notificationsCount > 0 ? (
             <span
-              aria-label={`${notificationsCount} إشعارات غير مقروءة`}
+              aria-label={`${toArabicDigits(notificationsCount)} إشعارات غير مقروءة`}
               className="absolute top-1 end-1 flex size-4 items-center justify-center rounded-full bg-damask text-[10px] leading-none text-white"
             >
-              {notificationsCount}
+              {toArabicDigits(notificationsCount)}
             </span>
           ) : null}
         </button>

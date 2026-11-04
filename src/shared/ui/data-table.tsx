@@ -57,7 +57,15 @@ type DataTableProps<T extends RowData = RowData> = {
   columns: ColumnDef<typeof dataTableFeatures, T, unknown>[]
   /** Server page rows; `undefined` renders the loading skeleton. */
   data: T[] | null | undefined
+  /** First load only: no rows exist yet, so the skeleton is the honest state. */
   isLoading?: boolean
+  /**
+   * Any request for this table is in flight, including a page change or a
+   * background refetch. Rows already on screen stay visible and the table
+   * announces "جارٍ تحديث البيانات..." instead of blanking or pretending the
+   * rows are final.
+   */
+  isFetching?: boolean
   isError?: boolean
   /** Default 'حدث خطأ'. */
   errorTitle?: string
@@ -96,6 +104,7 @@ function DataTable<T extends RowData = RowData>({
   columns,
   data,
   isLoading = false,
+  isFetching = false,
   isError = false,
   errorTitle = 'حدث خطأ',
   errorMessage = 'تعذر تحميل البيانات. حاول مرة أخرى.',
@@ -123,9 +132,13 @@ function DataTable<T extends RowData = RowData>({
   const headerGroups = table.getHeaderGroups()
   const headerRows = table.getRowModel().rows
   const cardClassName = cn(
-    'overflow-hidden rounded-xl border border-border bg-popover shadow-card',
+    'max-w-full overflow-hidden rounded-xl border border-border bg-popover shadow-card',
     className,
   )
+  // A refresh only has something to show over if rows are already rendered;
+  // the first load and the empty/error states own their own presentation.
+  const showRefreshing =
+    isFetching && !isLoading && data !== null && data !== undefined && data.length > 0
 
   if (isLoading || data === undefined) {
     return (
@@ -179,9 +192,33 @@ function DataTable<T extends RowData = RowData>({
   }
 
   return (
-    <div data-slot="data-table" className={cardClassName}>
-      <div className="w-full min-w-0 overflow-x-auto">
-        <table className="w-full min-w-full caption-bottom text-sm">
+    <div data-slot="data-table" className={cardClassName} aria-busy={isFetching ? true : undefined}>
+      {/*
+        The status region stays MOUNTED while the table is on screen: a live
+        region that appears together with its text is usually not announced,
+        because the screen reader was not watching it yet. Only the text and
+        the banner's own styling come and go.
+      */}
+      <p
+        role="status"
+        className={cn(
+          showRefreshing &&
+            'border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground',
+        )}
+      >
+        {showRefreshing ? 'جارٍ تحديث البيانات...' : ''}
+      </p>
+      <div className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
+        {/*
+          A table-cell link is an INLINE box: 20px tall, below the 40px mobile
+          touch floor and below WCAG 2.5.8's 24x24. On a phone the link
+          becomes a 40px-tall flex box. The rule targets the LINK only, so the
+          cell's non-link content keeps its own height.
+        */}
+        <table className="w-full min-w-full caption-bottom text-sm max-sm:[&_a]:inline-flex max-sm:[&_a]:items-center max-sm:[&_a]:min-h-10">
+          <caption className="sr-only">
+            جدول بيانات قابل للفرز والبحث مع إمكانية اختيار الصفوف.
+          </caption>
           <thead className="sticky top-0 z-10 bg-primary">
             {headerGroups.map((headerGroup, groupIndex) => (
               <tr key={headerGroup.id}>
@@ -218,7 +255,7 @@ function DataTable<T extends RowData = RowData>({
                         <button
                           type="button"
                           onClick={() => handleSortChange(header.column.id)}
-                          className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-inherit outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-ring"
+                          className="inline-flex min-h-10 items-center gap-1 rounded px-1 py-0.5 text-inherit outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-ring sm:min-h-0"
                         >
                           <span className="whitespace-nowrap">
                             <table.FlexRender header={header} />
@@ -249,6 +286,19 @@ function DataTable<T extends RowData = RowData>({
                 <tr
                   key={row.id}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onRowClick(row.original)
+                          }
+                        }
+                      : undefined
+                  }
+                  role={onRowClick ? 'button' : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  aria-label={onRowClick ? 'فتح تفاصيل الصف' : undefined}
                   className={cn(
                     'border-b border-row-divider transition-colors duration-150 hover:bg-ivory',
                     onRowClick && 'cursor-pointer',

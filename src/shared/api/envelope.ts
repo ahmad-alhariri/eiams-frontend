@@ -32,62 +32,9 @@
  * 4. `details` is `{}` when there is nothing to report, never absent.
  */
 import axios from 'axios'
+import type { ApiResponse, ApiSuccessResponse, ApiError, ApiErrorResponse } from './api-contracts'
 
-/** Correlation id and server timestamp, present on EVERY response. */
-export interface ApiResponseMeta {
-  request_id: string
-  timestamp: string
-}
-
-/** Wire pagination, verbatim. `Range(1, …)` on the backend makes 1 the minimum. */
-export interface ApiPaginationResponse {
-  page: number
-  page_size: number
-  total_items: number | null
-  total_pages: number | null
-  has_previous_page: boolean
-  has_next_page: boolean
-  total_count: number | null
-}
-
-export interface ApiSuccessResponse<T> {
-  success: true
-  data: T
-  pagination: ApiPaginationResponse | null
-  meta: ApiResponseMeta
-}
-
-/**
- * Field-level validation detail.
- *
- * Three shapes reach this field and all must be tolerated:
- * `ApiProblemDetails` emits `Record<fieldPath, string[]>`; `CustomResults` emits
- * `{ errors: [...] }` for a `ValidationError`; a domain error with no detail is
- * an empty object.
- */
-export type ApiErrorDetails = Record<string, unknown>
-
-export interface ApiError {
-  /** UPPER_SNAKE_CASE, normalized server-side by `ApiResults.NormalizeErrorCode`. */
-  code: string
-  /** English. Never shown to a user — the UI is Arabic-first. */
-  message: string
-  details: ApiErrorDetails
-  request_id: string
-}
-
-export interface ApiErrorResponse {
-  success: false
-  error: ApiError
-}
-
-/** Created-resource response, e.g. `POST /warehouses`. */
-export interface ResourceIdResponse {
-  id: string
-}
-
-export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse
-
+/** Runtime readers only — wire-shape types live in ./api-contracts (ADR-0001). */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -111,57 +58,7 @@ function nonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 }
 
-/**
- * A paged list in the shape the UI consumes: one-based, totals resolved.
- * The single translation from wire paging to table paging.
- */
-/**
- * A paged success payload, in the exact shape the API sends.
- *
- * Verified against the live API: `pagination` is a TOP-LEVEL object and its
- * members are snake_case, and the rows sit under `data`. There is no `items`
- * key and no camelCase anywhere. The previous version of this type declared
- * `items` / `pageSize` / `totalCount` / `hasNextPage`, which matches nothing the
- * API produces and was referenced by nothing except itself — so it would have
- * silently mis-typed every paged service return in Stage D.
- */
-export interface ApiPage<T> extends ApiPaginationResponse {
-  readonly data: readonly T[]
-}
-
-/**
- * The page shape the UI works in.
- *
- * The wire is snake_case with the rows under `data`; the UI wants camelCase with
- * the rows under `items`. Converting once, here, is what keeps the service
- * boundary honest without a 113-site ripple through every list page, every table
- * and every test: `pageRows` keeps reading `page.items` and nothing above a
- * service has to know the backend uses snake_case.
- *
- * `totalCount` prefers `total_count` and falls back to `total_items`, because the
- * backend sends both today with the same value; if one is ever dropped or renamed,
- * a table must not fall back to showing "0 results".
- */
-export interface UiPage<T> {
-  readonly items: readonly T[]
-  readonly page: number
-  readonly pageSize: number
-  readonly totalCount: number
-  readonly totalPages: number
-  readonly hasNextPage: boolean
-}
-
-export function toUiPage<T>(page: ApiPage<T>): UiPage<T> {
-  return {
-    items: page.data,
-    page: page.page,
-    pageSize: page.page_size,
-    totalCount: page.total_count ?? page.total_items ?? page.data.length,
-    totalPages: page.total_pages ?? 1,
-    hasNextPage: page.has_next_page,
-  }
-}
-
+/** Runtime: only page-unwrap helper remains; the UI-normalized ApiPage lives in ./api-contracts. */
 function unwrapEnvelope<T>(value: ApiResponse<T>): ApiSuccessResponse<T> {
   if (isApiErrorResponse(value)) {
     throw new Error(`Unwrap expected a success envelope but received "${value.error.code}".`)

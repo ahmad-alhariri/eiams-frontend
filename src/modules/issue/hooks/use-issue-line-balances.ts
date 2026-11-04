@@ -92,7 +92,7 @@ export function useIssueLineBalances(
             }
             return {
               queryKey: inventoryQueryKeys.balances(activeScopeCacheKey, listQuery),
-              queryFn: () => inventoryService.listBalances(listQuery),
+              queryFn: ({ signal }) => inventoryService.listBalances(listQuery, { signal }),
               enabled: true,
               staleTime: OPERATIONAL_STALE_TIME,
             }

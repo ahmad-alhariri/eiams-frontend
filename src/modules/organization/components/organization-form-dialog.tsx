@@ -9,8 +9,7 @@ import {
 } from '@/modules/organization/schemas/organization.schemas'
 import type { Organization } from '@/modules/organization/types/organization.types'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -69,15 +68,8 @@ export function OrganizationFormDialog({
   // incompatible-library path.
   const [name, code] = useWatch({ control: form.control, name: ['name', 'code'] })
 
-  const submit = async (values: OrganizationFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, { schemaKeys: [...SERVER_ERROR_KEYS] })
-    }
-  }
+  const submit = (values: OrganizationFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, [...SERVER_ERROR_KEYS])
 
   const isSubmittable = name.trim().length >= 2 && (!isCreate || code.trim() !== '')
 

@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { AxiosError, AxiosHeaders } from 'axios'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState, type PropsWithChildren } from 'react'
@@ -415,5 +416,94 @@ describe('UserFormDialog', () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ roleId: ROLE_B.id, scopeType: 'Warehouse', scopeId: WAREHOUSE_ID }),
     )
+  })
+})
+
+describe('UserFormDialog server-error contract', () => {
+  /**
+   * Builds the error the transport actually rejects with. `normalizeApiError` gates on
+   * `axios.isAxiosError`, so a plain object with a `response` property is classified as
+   * 'unexpected' and would make every assertion here pass or fail for the wrong reason.
+   */
+  function serverError(status: number, code: string, details?: Record<string, unknown>) {
+    return new AxiosError('server message', 'ERR_BAD_RESPONSE', undefined, undefined, {
+      status,
+      statusText: '',
+      data: {
+        success: false,
+        error: {
+          code,
+          message: 'server message',
+          details: details ?? {},
+          request_id: 'req-1',
+        },
+      },
+      headers: new AxiosHeaders(),
+      config: { headers: new AxiosHeaders() },
+    })
+  }
+
+  it('renders a contract field error inline in Arabic', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi
+      .fn()
+      .mockRejectedValue(serverError(400, 'REQUEST_VALIDATION_FAILED', { email: ['required'] }))
+    render(
+      <UserFormDialog
+        user={null}
+        open
+        isPending={false}
+        roles={[ROLE_A, ROLE_B]}
+        onOpenChange={() => undefined}
+        onSubmit={onSubmit}
+      />,
+      { wrapper: createWrapper() },
+    )
+    // Every client-side rule must pass first, otherwise the assertion could be
+    // satisfied by the form's own validation instead of the server error.
+    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'sara@eiams.local')
+    await user.type(screen.getByLabelText('اسم الدخول'), 'sara.ali')
+    await user.type(screen.getByLabelText('الاسم الأول'), 'سارة')
+    await user.type(screen.getByLabelText('اسم العائلة'), 'علي')
+    await user.type(screen.getByLabelText('كلمة المرور الأولية'), 'Password123!')
+    await user.click(screen.getByRole('combobox', { name: 'الدور' }))
+    await user.click(await screen.findByRole('option', { name: ROLE_A.nameAr }))
+    await user.click(screen.getByRole('button', { name: 'إضافة مستخدم' }))
+
+    const email = screen.getByLabelText('البريد الإلكتروني')
+    await waitFor(() => expect(email).toHaveAttribute('aria-invalid', 'true'))
+    const messageId = email.getAttribute('aria-describedby') ?? ''
+    expect(document.getElementById(messageId)?.textContent).toBe(
+      'تعذر تنفيذ الطلب. راجع البيانات المدخلة.',
+    )
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps previous generic-error outcome when no field errors map', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockRejectedValue(serverError(500, 'INTERNAL_ERROR'))
+    render(
+      <UserFormDialog
+        user={null}
+        open
+        isPending={false}
+        roles={[ROLE_A, ROLE_B]}
+        onOpenChange={() => undefined}
+        onSubmit={onSubmit}
+      />,
+      { wrapper: createWrapper() },
+    )
+    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'sara@eiams.local')
+    await user.type(screen.getByLabelText('اسم الدخول'), 'sara.ali')
+    await user.type(screen.getByLabelText('الاسم الأول'), 'سارة')
+    await user.type(screen.getByLabelText('اسم العائلة'), 'علي')
+    await user.type(screen.getByLabelText('كلمة المرور الأولية'), 'Password123!')
+    await user.click(screen.getByRole('combobox', { name: 'الدور' }))
+    await user.click(await screen.findByRole('option', { name: ROLE_A.nameAr }))
+    await user.click(screen.getByRole('button', { name: 'إضافة مستخدم' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByLabelText('البريد الإلكتروني')).not.toHaveAttribute('aria-invalid')
   })
 })

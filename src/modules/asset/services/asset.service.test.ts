@@ -19,6 +19,7 @@ type SentConfig = {
   url?: string
   method?: string
   params?: Record<string, unknown>
+  signal?: AbortSignal
 }
 
 function sentConfig(call = 0): SentConfig {
@@ -134,5 +135,15 @@ describe('createAssetService (transport seam)', () => {
       method: 'GET',
       params: { page: 1, pageSize: 100 },
     })
+  })
+
+  it('carries the caller abort signal on a read, so a superseded read can cancel', async () => {
+    mockedRequest.mockResolvedValue(envelope([]))
+    const service = createAssetService(testTransport)
+    const controller = new AbortController()
+
+    await service.listAssets({ page: 1 }, { signal: controller.signal })
+
+    expect(sentConfig().signal).toBe(controller.signal)
   })
 })

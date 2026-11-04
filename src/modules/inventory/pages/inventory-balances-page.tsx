@@ -1,13 +1,13 @@
-import { createColumnHelper } from '@tanstack/react-table'
+﻿import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
-import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
+import { useScopedMaterialSelector } from '@/shared/scopes/use-scoped-material-selector'
 import { InventoryLowStockBadge } from '@/modules/inventory/components/inventory-low-stock-badge'
 import { useInventoryBalancesQuery } from '@/modules/inventory/hooks/use-inventory-queries'
 import type { ListInventoryBalancesQuery } from '@/modules/inventory/types/inventory.types'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
@@ -262,6 +262,7 @@ function InventoryBalancesPage() {
           columns={columns}
           data={pageRows(page, balancesQuery.isError)}
           isLoading={balancesQuery.isLoading}
+          isFetching={balancesQuery.isFetching}
           isError={balancesQuery.isError}
           onRetry={() => void balancesQuery.refetch()}
           errorTitle="تعذّر تحميل أرصدة المخزون"

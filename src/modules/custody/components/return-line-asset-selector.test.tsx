@@ -194,19 +194,19 @@ describe('ReturnLineAssetSelector (FIX-R2 / o098.5)', () => {
 
     // A line that has not matched its full quantity yet shows the Arabic count guard.
     expect(
-      screen.getByText('المحدد 0 من 2 — يجب أن يساوي عدد الأصول المحددة الكمية.'),
+      screen.getByText('المحدد ٠ من ٢ — يجب أن يساوي عدد الأصول المحددة الكمية.'),
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('checkbox', { name: 'AST-2026-0001 — حاسوب محمول' }))
     await waitFor(() => expect(linesValue()[0]?.assetIds).toEqual([ASSET_A_ID]))
     expect(
-      screen.getByText('المحدد 1 من 2 — يجب أن يساوي عدد الأصول المحددة الكمية.'),
+      screen.getByText('المحدد ١ من ٢ — يجب أن يساوي عدد الأصول المحددة الكمية.'),
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('checkbox', { name: 'AST-2026-0002 — حاسوب محمول' }))
     await waitFor(() => expect(linesValue()[0]?.assetIds).toEqual([ASSET_A_ID, ASSET_B_ID]))
     expect(
-      screen.getByText('الأصول المستردة للبند: 2 من 2 (يجب أن يساوي المحدد الكمية)'),
+      screen.getByText('الأصول المستردة للبند: ٢ من ٢ (يجب أن يساوي المحدد الكمية)'),
     ).toBeInTheDocument()
   })
 
@@ -339,6 +339,6 @@ describe('ReturnLineAssetSelector (FIX-R2 / o098.5)', () => {
         />
       </Host>,
     )
-    expect(screen.getByRole('alert')).toHaveTextContent('يجب أن تكون كمية الوحدة التسلسلية 1.')
+    expect(screen.getByRole('alert')).toHaveTextContent('يجب أن تكون كمية الوحدة التسلسلية ١.')
   })
 })

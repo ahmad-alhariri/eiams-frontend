@@ -14,6 +14,7 @@ type SentConfig = {
   url?: string
   method?: string
   params?: Record<string, unknown>
+  signal?: AbortSignal
 }
 
 function sentConfig(call = 0): SentConfig {
@@ -95,5 +96,15 @@ describe('return.service (FIX-R2 / D-INT-02 handwritten contract)', () => {
       page: 1,
       pageSize: 1,
     })
+  })
+
+  it('carries the caller abort signal on a read, so a superseded read can cancel', async () => {
+    mockedRequest.mockResolvedValue(pagedEnvelope([]))
+    const service = createReturnService(testTransport)
+    const controller = new AbortController()
+
+    await service.listEligibleItems(ISSUE_DOC_ID, 1, 100, { signal: controller.signal })
+
+    expect(sentConfig().signal).toBe(controller.signal)
   })
 })

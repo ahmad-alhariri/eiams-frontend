@@ -289,6 +289,7 @@ function ExternalPartiesPage() {
           columns={columns}
           data={pageRows(partiesQuery.data, partiesQuery.isError)}
           isLoading={partiesQuery.isLoading}
+          isFetching={partiesQuery.isFetching}
           isError={partiesQuery.isError}
           onRetry={() => void partiesQuery.refetch()}
           emptyTitle="لا توجد جهات خارجية"

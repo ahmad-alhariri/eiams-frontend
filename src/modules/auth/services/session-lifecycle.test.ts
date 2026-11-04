@@ -1,11 +1,13 @@
 import { createAxiosTransport } from '@/shared/api/axios-transport'
 import { apiJson, okJson } from '@/test/msw/envelope'
 import { HttpResponse, http } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   authSessionQueryKey,
   createAuthSessionLifecycle,
+  hasRememberedSession,
+  rememberSession,
 } from '@/modules/auth/services/session-lifecycle'
 import { createAuthService } from '@/modules/auth/services/auth.service'
 import { createAuthSessionStore } from '@/modules/auth/store/auth-session.store'
@@ -15,6 +17,7 @@ import { queryKeys } from '@/shared/services/query-keys'
 import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
 import { createSessionRole, createSessionScope, createSessionUser } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import { stubLocalStorage } from '@/test/support/memory-storage'
 
 const API_BASE_URL = '/api/v1'
 
@@ -48,10 +51,18 @@ function setupLifecycle() {
   return { bundle, lifecycle, queryClient, sessionStore }
 }
 
+beforeEach(() => {
+  // The "signed in before" hint is a browser-context fact, so no case may start
+  // with the previous case's.
+  stubLocalStorage()
+})
+
 afterEach(() => {
   for (const bundle of bundles.splice(0)) {
     bundle.dispose()
   }
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('auth session lifecycle', () => {
@@ -122,7 +133,10 @@ describe('auth session lifecycle', () => {
     ).toBeUndefined()
 
     server.use(http.post(`${API_BASE_URL}/auth/refresh`, () => HttpResponse.error()))
-    await expect(lifecycle.hydrate()).rejects.toBeTruthy()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    await expect(lifecycle.hydrate()).resolves.toBeNull()
+    expect(consoleError).not.toHaveBeenCalled()
     expect(sessionStore.getState().status).toBe('unauthenticated')
     expect(queryClient.getQueryData(authSessionQueryKey)).toBeUndefined()
   })
@@ -161,5 +175,44 @@ describe('auth session lifecycle', () => {
     // unscoped (placeholder, never populated) is evicted with protected cache; public survives
     expect(queryClient.getQueryData(queryKeys.unscoped('catalog'))).toBeUndefined()
     expect(sessionStore.getState().status).toBe('unauthenticated')
+  })
+
+  it('remembers the browser was signed in after a restore and forgets it on logout', async () => {
+    const { lifecycle } = setupLifecycle()
+
+    server.use(
+      http.post(`${API_BASE_URL}/auth/refresh`, () => okJson(tokenResponse)),
+      http.post(`${API_BASE_URL}/auth/logout`, () => okJson({})),
+    )
+
+    await lifecycle.hydrate()
+    expect(hasRememberedSession()).toBe(true)
+
+    await lifecycle.logout()
+    expect(hasRememberedSession()).toBe(false)
+  })
+
+  it('treats an invalid refresh as "no session", resolving without noise', async () => {
+    const { lifecycle, queryClient, sessionStore } = setupLifecycle()
+    rememberSession()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    server.use(
+      http.post(`${API_BASE_URL}/auth/refresh`, () =>
+        apiJson({ code: 'USERS_INVALID_REFRESH_TOKEN' }, { status: 400 }),
+      ),
+    )
+
+    // A rejected bootstrap promise is what the browser logs and what an errored
+    // query refetches on remount, so the failure has to RESOLVE as "no session".
+    await expect(lifecycle.hydrate()).resolves.toBeNull()
+    expect(consoleError).not.toHaveBeenCalled()
+    expect(sessionStore.getState().status).toBe('unauthenticated')
+    // Removed, not left in an error state: there is no query to refetch.
+    expect(queryClient.getQueryState(authSessionQueryKey)).toBeUndefined()
+    expect(queryClient.getQueryData(authSessionQueryKey)).toBeUndefined()
+    // Dropping the hint is what makes the next page load skip the request
+    // instead of repeating a 400 the browser logs as an error.
+    expect(hasRememberedSession()).toBe(false)
   })
 })

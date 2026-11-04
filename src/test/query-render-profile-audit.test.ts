@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   applicationSourceFiles,
-  assertScannedFiles,
+  assertScannedFilesMatchGit,
+  gitApplicationSourceFiles,
   readSource,
   relativeToRepo,
 } from './support/source-scan'
@@ -24,7 +25,7 @@ import {
  * offending site, so a paginated query a cheap grep misses surfaces itself.
  */
 const SCANNED = applicationSourceFiles()
-const EXPECTED_SCANNED_FILES = 409
+const GIT_SCANNED = gitApplicationSourceFiles()
 
 const NAMED_STALE_TIME = /staleTime\s*:\s*(OPERATIONAL_STALE_TIME|MASTER_DATA_STALE_TIME)\b/u
 const SESSION_STALE_TIME = /staleTime\s*:\s*Number\.POSITIVE_INFINITY\b/u
@@ -132,7 +133,11 @@ function scanRule(detector: (source: string) => string[]): string[] {
 
 describe('query and render profile audit (eiams-frontend-e25-t05)', () => {
   it('scans the pinned set of production files', () => {
-    assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
+    assertScannedFilesMatchGit(
+      SCANNED,
+      GIT_SCANNED,
+      'query and render profile audit (eiams-frontend-e25-t05)',
+    )
   })
 
   it('never uses an arbitrary staleTime number', () => {

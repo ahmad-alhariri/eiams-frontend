@@ -160,6 +160,7 @@ export default function InventoryCountListPage() {
           columns={columns}
           data={[...(countsQuery.data?.items ?? [])]}
           isLoading={countsQuery.isLoading}
+          isFetching={countsQuery.isFetching}
           isError={countsQuery.isError}
           onRetry={() => void countsQuery.refetch()}
           errorTitle="تعذّر تحميل جلسات الجرد"

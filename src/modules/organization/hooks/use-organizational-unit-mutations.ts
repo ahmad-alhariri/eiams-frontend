@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { organizationService } from '@/modules/organization/services/organization.service'
-import { queryKeys } from '@/shared/services/query-keys'
+import { queryKeys, RESOURCES } from '@/shared/services/query-keys'
 import {
   statusCommandValue,
   type OrganizationalUnitCreateRequest,
@@ -41,7 +41,11 @@ function useInvalidateOrganizationalUnits() {
     }
 
     await queryClient.invalidateQueries({
-      queryKey: queryKeys.scoped(activeScopeCacheKey, 'organization', 'organizational-units'),
+      queryKey: queryKeys.scoped(
+        activeScopeCacheKey,
+        RESOURCES.organization,
+        'organizational-units',
+      ),
       exact: false,
     })
   }

@@ -7,8 +7,7 @@ import {
   type ExternalPartyFormValues,
 } from '@/modules/organization/schemas/external-party.schemas'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/forms/form'
-import { setFormServerErrors } from '@/shared/forms/server-errors'
-import { normalizeApiError } from '@/shared/services/api-error'
+import { submitWithServerErrors } from '@/shared/forms/server-errors'
 import { Button } from '@/shared/ui/button'
 import {
   Dialog,
@@ -54,17 +53,8 @@ export function ExternalPartyFormDialog({
     })
   }, [form, open, party])
 
-  const submit = async (values: ExternalPartyFormValues) => {
-    form.clearErrors()
-    try {
-      await onSubmit(values)
-    } catch (error: unknown) {
-      const apiError = normalizeApiError(error)
-      setFormServerErrors(form, apiError.fieldErrors, {
-        schemaKeys: ['nameAr', 'code', 'contactInfo', 'notes'],
-      })
-    }
-  }
+  const submit = (values: ExternalPartyFormValues) =>
+    submitWithServerErrors(form, values, onSubmit, ['nameAr', 'code', 'contactInfo', 'notes'])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -85,7 +75,6 @@ export function ExternalPartyFormDialog({
             <FormField
               control={form.control}
               name="nameAr"
-              rules={{ required: true }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>اسم الجهة</FormLabel>

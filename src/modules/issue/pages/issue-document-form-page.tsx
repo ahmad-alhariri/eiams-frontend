@@ -1,4 +1,4 @@
-import { zodResolver } from '@hookform/resolvers/zod'
+﻿import { zodResolver } from '@hookform/resolvers/zod'
 import { useMemo, type FormEvent } from 'react'
 import type { DeepPartial, Resolver } from 'react-hook-form'
 import { FormProvider, useForm, useWatch } from 'react-hook-form'
@@ -21,6 +21,7 @@ import {
   DocumentHeaderSection,
   documentHeaderSchema,
 } from '@/shared/documents/document-header-form'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import {
   createEmptyQuantityLine,
   linesHaveUniqueMaterials,
@@ -101,6 +102,7 @@ export default function IssueDocumentFormPage() {
     mode: 'onChange',
   })
   const isSubmitting = form.formState.isSubmitting
+  const warehouseSelector = useScopedWarehouseSelector()
   const submitErrorMessage =
     createMutation.error === null ? null : documentDraftMutationError(createMutation.error)
   const headerWarehouseId = useWatch({ control: form.control, name: 'header.warehouseId' })
@@ -200,6 +202,7 @@ export default function IssueDocumentFormPage() {
         <form data-slot="issue-document-form" onSubmit={onSubmit} noValidate className="grid gap-5">
           <DocumentHeaderSection
             documentType="Issue"
+            warehouseSelector={warehouseSelector}
             petalSlot={
               <div className="grid gap-3">
                 <IssueRecipientSection disabled={isSubmitting} />

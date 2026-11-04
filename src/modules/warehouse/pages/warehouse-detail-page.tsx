@@ -198,6 +198,7 @@ function WarehouseDetailPage() {
         warehouseName={warehouse.name}
         open={isZeroStockDialogOpen}
         onOpenChange={setIsZeroStockDialogOpen}
+        canInitialize={canCreateDocument}
       />
     </div>
   )

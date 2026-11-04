@@ -1,4 +1,4 @@
-import { createColumnHelper } from '@tanstack/react-table'
+﻿import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
 import { useInventoryReportQuery } from '@/modules/reports/hooks/use-reports-queries'
@@ -6,14 +6,14 @@ import type {
   InventoryReportRow,
   ListInventoryReportQuery,
 } from '@/modules/reports/types/reports.types'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
 import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { AsyncSelect } from '@/shared/ui/async-select'
-import { ExportButton } from '@/shared/ui/export-button'
+import { ExportButton } from '@/modules/reports/components/export-button'
 import { PrintButton } from '@/shared/ui/print-button'
 import { formatDateTime, formatNumber } from '@/shared/utils/format'
 import { pageRows } from '@/shared/utils/table-data'
@@ -154,6 +154,7 @@ function InventoryBalanceReportTableImpl() {
           columns={columns}
           data={pageRows(page, reportQuery.isError)}
           isLoading={reportQuery.isLoading}
+          isFetching={reportQuery.isFetching}
           isError={reportQuery.isError}
           onRetry={() => void reportQuery.refetch()}
           errorTitle="تعذّر تحميل تقرير أرصدة المخزون"

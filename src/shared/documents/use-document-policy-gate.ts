@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from 'react'
 
-import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import {
   capabilityOperationForDocumentType,
   evaluateActionDecision,
@@ -17,6 +16,7 @@ import {
   useDocumentPolicyQuery,
 } from '@/shared/documents/use-document-queries'
 import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
+import type { CapabilityOperation } from '@/shared/types/warehouse.wire-types'
 import type {
   DocumentPolicy,
   WarehouseDocumentDetails,
@@ -25,9 +25,43 @@ import type {
 const EMPTY_PREFLIGHT_LINES: readonly PreflightLineShape[] = []
 const EMPTY_CAPABILITY_EVALUATIONS: readonly CapabilityEvaluation[] = []
 
+/** One (domainId, operation) capability verdict, shaped like `CapabilityEvaluation`. */
+export type CapabilityValidationVerdict =
+  { status: 'supported' } | { status: 'blocked'; messageAr: string } | { status: 'unknown' }
+
+/**
+ * The capability validator the document gate asks `validates(domainId,
+ * operation)` of. Structurally compatible with
+ * `modules/warehouse`'s `UseWarehouseCapabilityValidationReturn`, whose hook
+ * is passed straight in by the document pages (`capabilityValidation:
+ * useWarehouseCapabilityValidation`) — the production binding stays in the
+ * module, exactly like the scoped warehouse selector the pages inject.
+ */
+export interface CapabilityValidatorBinding {
+  validates: (
+    domainId: string | undefined,
+    operation: CapabilityOperation,
+  ) => CapabilityValidationVerdict
+}
+
+/** Unbound default: always `unknown` — a neutral note that never blocks. */
+const UNBOUND_CAPABILITY_VALIDATOR: CapabilityValidatorBinding = {
+  validates: () => ({ status: 'unknown' }),
+}
+
 export interface DocumentPolicyGateOptions {
   enabled?: boolean
   lines?: readonly PreflightLineShape[]
+  /**
+   * Factory binding the gate to the session's capability validator. The
+   * factory is invoked once per render with the document's warehouseId, so a
+   * caller that passes one must pass it on EVERY render (hooks contract);
+   * production callers pass the module hook itself. When omitted (bare/test
+   * mounts, the read-only detail page whose loaded lines never carry a
+   * domain), the binding is unbound and every capability evaluation is
+   * `unknown` — identical to a capability query that never runs.
+   */
+  capabilityValidation?: (warehouseId: string | undefined) => CapabilityValidatorBinding
 }
 
 export interface DocumentPolicyGateResult {
@@ -70,10 +104,12 @@ export function useDocumentPolicyGate(
       ),
     [effectiveLines],
   )
-  const capabilityValidation = useWarehouseCapabilityValidation(
-    capabilityParticipates ? document?.warehouseId : undefined,
-  )
-  const { validates } = capabilityValidation
+  const warehouseIdForCapabilities = capabilityParticipates ? document?.warehouseId : undefined
+  const capabilityValidator =
+    options.capabilityValidation === undefined
+      ? UNBOUND_CAPABILITY_VALIDATOR
+      : options.capabilityValidation(warehouseIdForCapabilities)
+  const { validates } = capabilityValidator
 
   const capabilityEvaluations = useMemo<readonly CapabilityEvaluation[]>(() => {
     if (!capabilityParticipates || document === undefined) {

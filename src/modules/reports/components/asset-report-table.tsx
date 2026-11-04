@@ -1,4 +1,4 @@
-import { createColumnHelper } from '@tanstack/react-table'
+﻿import { createColumnHelper } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 
 import { AssetStatusBadge } from '@/modules/asset/components/asset-status-badge'
@@ -6,7 +6,7 @@ import { ASSET_STATUSES, ASSET_STATUS_LABELS_AR } from '@/modules/asset/asset-st
 import type { AssetCurrentStatus } from '@/modules/asset/types/asset.types'
 import { useAssetReportQuery } from '@/modules/reports/hooks/use-reports-queries'
 import type { AssetsReportRow, ListAssetReportQuery } from '@/modules/reports/types/reports.types'
-import { useScopedWarehouseSelector } from '@/modules/warehouse/hooks/use-scoped-warehouse-selector'
+import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
 import { useServerPagination } from '@/shared/hooks/use-server-pagination'
 import { ContentCard } from '@/shared/layout/content-card'
 import { PageHeader } from '@/shared/layout/page-header'
@@ -14,7 +14,7 @@ import { dataTableFeatures } from '@/shared/ui/data-table'
 import { DataTableServer } from '@/shared/ui/data-table-server'
 import { AsyncSelect } from '@/shared/ui/async-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import { ExportButton } from '@/shared/ui/export-button'
+import { ExportButton } from '@/modules/reports/components/export-button'
 import { PrintButton } from '@/shared/ui/print-button'
 import { formatNumber } from '@/shared/utils/format'
 import { pageRows } from '@/shared/utils/table-data'
@@ -179,6 +179,7 @@ function AssetReportTableImpl() {
           columns={columns}
           data={pageRows(page, reportQuery.isError)}
           isLoading={reportQuery.isLoading}
+          isFetching={reportQuery.isFetching}
           isError={reportQuery.isError}
           onRetry={() => void reportQuery.refetch()}
           errorTitle="تعذّر تحميل تقرير الأصول"

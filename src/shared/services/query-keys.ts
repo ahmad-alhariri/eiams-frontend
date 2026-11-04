@@ -20,10 +20,67 @@ export const queryKeys = {
     [SCOPED_PREFIX, ...scopeParts(scope), resource, ...parts] as const,
 }
 
+/**
+ * The single vocabulary of cache "resources" shared by scoped and unscoped
+ * keys. Module-local `*_RESOURCE` constants must derive from this table so a
+ * cross-module invalidation (e.g. adjustment) reaches the exact strings its
+ * target modules key their caches under, without importing from those modules.
+ */
+export const RESOURCES = {
+  /** Kept verbatim from each module's former local constant. */
+  adjustment: 'adjustments',
+  admin: 'admin',
+  asset: 'asset',
+  audit: 'audit',
+  catalog: 'catalog',
+  count: 'inventory-counts',
+  custody: 'custody',
+  custodyReturn: 'return',
+  counterpart: 'counterparts',
+  document: 'document',
+  inventory: 'inventory',
+  organization: 'organization',
+  receiving: 'receiving',
+  reports: 'reports',
+  warehouse: 'warehouse',
+} as const
+
 function matchesScope(queryKey: QueryKey, scope: ScopeCacheKey) {
   const [prefix, kind, id] = queryKey
   const [scopeKind, scopeId] = scopeParts(scope)
   return prefix === SCOPED_PREFIX && kind === scopeKind && id === scopeId
+}
+
+/**
+ * `placeholderData` that keeps the previous page's rows ONLY while the active
+ * scope is unchanged.
+ *
+ * `keepPreviousData` keeps the previous rows for ANY query-key change. When the
+ * user switched site or warehouse, the new scope's key asked the server for its
+ * rows but the table kept rendering the OLD scope's rows underneath the new
+ * scope's heading — one site's inventory shown as another site's. A scoped key
+ * starts with `['scoped', kind, id, ...]`, so comparing those segments is enough
+ * to refuse the cross-scope placeholder and show the skeleton instead.
+ *
+ * The returned function stays GENERIC on the row type (like TanStack's own
+ * `keepPreviousData`): a `placeholderData` callback whose parameters are typed
+ * eagerly would fix the query's data type before `queryFn` is inferred.
+ */
+export function keepPreviousDataInSameScope(
+  scope: ScopeCacheKey | undefined,
+): <TData>(
+  previousData: TData | undefined,
+  previousQuery: { readonly queryKey: QueryKey } | undefined,
+) => TData | undefined {
+  return <TData>(
+    previousData: TData | undefined,
+    previousQuery: { readonly queryKey: QueryKey } | undefined,
+  ): TData | undefined =>
+    scope !== undefined &&
+    previousQuery !== undefined &&
+    matchesScope(previousQuery.queryKey, scope)
+      ? previousData
+      : undefined
 }
 
 /** Invalidates all cached server data belonging to one active scope. */

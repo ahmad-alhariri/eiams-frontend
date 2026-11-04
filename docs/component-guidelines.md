@@ -30,12 +30,12 @@ Base UI primitive → shared composed component → feature component → page
 | Need | Reuse |
 | --- | --- |
 | Actions | `Button` and its variants/sizes |
-| Inputs | `Input`, `Textarea`, `Select`, `Checkbox`, `RadioGroup`, `DatePicker` |
+| Inputs | `Input`, `Textarea`, `Select`, `Checkbox`, `DatePicker` |
 | Overlays | `Dialog`, `AlertDialog`, `ConfirmDialog`, `Popover`, `Toast` |
 | Surfaces | `Card`, `Badge`, `Skeleton` |
 | Asynchronous content | `FullPageSpinner`, `TableSkeleton`, `EmptyState`, `ErrorBoundary` |
 | Styling composition | `cn()` from `src/shared/utils/class-names.ts` |
-| Contract typing | generated API types and generated service surface |
+| Contract typing | Handwritten per-module wire types (D-INT-02 / ADR-0001); shared wire shapes in `src/shared/api/api-contracts.ts`, shared primitives in `src/shared/types/wire-primitives.ts`. The generated OpenAPI artifact is deleted and must not return |
 
 Delivered shared composed components (all with unit tests + `/dev/gallery` demos):
 
@@ -49,12 +49,15 @@ Delivered shared composed components (all with unit tests + `/dev/gallery` demos
 | `FileDropzone` | `src/shared/feedback/file-dropzone.tsx` | `DROPZONE_ACCEPT`, `DROPZONE_MAX_SIZE_BYTES` (5 MB); mirrors upload contract |
 | `DataTable` | `src/shared/ui/data-table.tsx` | TanStack Table v9 (`dataTableFeatures`), sorting/selection, states, sticky header |
 | `DataTableServer` + `ServerPaginationControls` | `src/shared/ui/data-table-server.tsx`, `data-table-server-controls.tsx` | Server pagination, page size, debounced search, Arabic range text |
-| Entity selector adapters | `src/shared/selectors/` | Scope-READY adapters (warehouse/employee/org-unit/site/material); loaders injected by parents |
+| Entity selector adapters | `src/shared/selectors/adapters/` (warehouse, material); `src/modules/organization/selectors/` (employee, org-unit, site) | Scope-READY adapters; loaders injected by parents. The shared scope-bound bindings live in `src/shared/scopes/` |
 | `AttachmentPanel` | `src/shared/documents/attachment-panel.tsx` | Parent-owned uploads; gate row strictly from `DocumentPolicy.signedOriginalSatisfied` (D-ATT-01) |
 | `DocumentTimeline` | `src/shared/documents/document-timeline.tsx` | Renders server lifecycle events only (D-LIFE-01) |
 | `LifecycleActionBar` | `src/shared/documents/lifecycle-action-bar.tsx` | Policy-driven actions (Hidden/Disabled/Enabled), confirm + reason, busy mutex |
 
-Remaining planned (not yet shared): common UI hooks such as `usePermission`.
+Remaining planned (not yet shared): common UI hooks beyond the ones already in
+`src/shared/hooks/`. `usePermission` is not planned for `shared` — it belongs to
+the auth module (`src/modules/auth/hooks/use-permission.ts`), because it reads
+the session's permission codes.
 
 ## 3. Component responsibilities
 
@@ -140,12 +143,13 @@ to make accessible; use an accessible alternative design.
 
 ## 7. Forms and validation
 
-All feature forms use React Hook Form plus Zod. The schema mirrors the OpenAPI
-request DTO; it must not invent unsupported fields or enum values.
+All feature forms use React Hook Form plus Zod. The schema mirrors the module's
+handwritten wire contract (the OpenAPI artifact is deleted); it must not invent
+unsupported fields or enum values.
 
-When the shared RHF/Zod field bridge is available, use it for label, control,
-description, and inline Arabic message behavior. Until then, do not create a
-second competing form abstraction in a feature: complete the shared task first.
+The shared RHF/Zod field bridge (`src/shared/forms/form.tsx`) is the one form
+abstraction: use it for label, control, description, and inline Arabic message
+behavior. Do not create a second competing form abstraction in a feature.
 
 Forms must support:
 
@@ -154,6 +158,12 @@ Forms must support:
 - keyboard operation and focus on actionable invalid fields;
 - contract-level concurrency/version fields where required;
 - lifecycle-state read-only behavior for non-Draft documents.
+A form whose write can be rejected shares one path: `submitWithServerErrors(form,
+values, onSubmit, fieldKeys)` in `src/shared/forms/server-errors.ts` clears the
+previous attempt's errors, awaits the mutation, and maps the rejected write onto
+the owning fields with Arabic copy. The dialog keeps its own list of owned field
+keys, because a dialog that renders a field as a note has no form field to carry
+the error. Do not copy the submit-and-map block into a new dialog.
 
 ## 8. Data tables
 
@@ -206,7 +216,9 @@ clear and safe affordance for the canonical workflow.
 
 - Components do not call `fetch`, create Axios instances, or encode endpoint
   URLs.
-- Feature hooks/services call the generated API layer and manage invalidation.
+- Feature hooks/services call the shared `ApiTransport` seam (interface in
+  `src/shared/api/api-transport.ts`, production composition in
+  `src/shared/api/transport.ts`) and manage invalidation.
 - TanStack Query owns server state; Zustand is only for UI state that cannot be
   derived from route, query, or form state.
 - Keep loading/error/empty behavior near the query boundary, not duplicated in

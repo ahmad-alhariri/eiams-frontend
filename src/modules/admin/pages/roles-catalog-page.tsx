@@ -66,7 +66,7 @@ function RolesCatalogPage() {
           cell: (info) => (
             <Link
               to={generatePath(ROUTE_PATHS.adminRoleDetail, { roleId: info.row.original.id })}
-              className="font-semibold text-foreground underline-offset-4 hover:text-primary hover:underline"
+              className="font-semibold text-foreground underline-offset-4 hover:text-primary hover:underline focus-visible:text-primary focus-visible:underline"
             >
               {info.getValue()}
             </Link>
@@ -165,6 +165,7 @@ function RolesCatalogPage() {
         role={dialogRole}
         open={dialogRole !== null}
         onOpenChange={closeMatrix}
+        canManage={canManage}
       />
     </div>
   )

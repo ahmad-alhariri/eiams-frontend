@@ -11,6 +11,8 @@ import { wireDocumentDetails } from '@/test/msw/document-wire-fixtures'
 import { createPaperReferenceHandler } from '@/test/msw/warehouse-document-handlers'
 import { server } from '@/test/msw/server'
 import { createQueryClient } from '@/shared/services/query.client'
+import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
+import { createSessionUser, createSessionRole, createSessionScope } from '@/test/msw/factories'
 
 import { DraftPaperReferenceEditor } from './draft-paper-reference-editor'
 
@@ -30,6 +32,12 @@ function renderEditor(
   onConflict: () => void = () => undefined,
 ) {
   const client = createQueryClient()
+  client.setQueryData(authSessionQueryKey, {
+    user: createSessionUser({ firstName: 'أمين' }),
+    role: createSessionRole(),
+    activeScope: createSessionScope(),
+    permissionCodes: ['document.view', 'document.update'],
+  })
   function Wrapper({ children }: PropsWithChildren) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>
   }

@@ -1,4 +1,4 @@
-import { IconPlus, IconTrash } from '@tabler/icons-react'
+﻿import { IconPlus, IconTrash } from '@tabler/icons-react'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
@@ -9,7 +9,7 @@ import {
 } from '@/modules/catalog/hooks/use-catalog-queries'
 import { MATERIAL_KIND_LABELS } from '@/modules/catalog/constants/catalog-labels'
 import { isMaterialKind, policyDescription } from '@/modules/catalog/constants/material-kind-policy'
-import { useScopedMaterialSelector } from '@/modules/catalog/hooks/use-scoped-material-selector'
+import { useScopedMaterialSelector } from '@/shared/scopes/use-scoped-material-selector'
 import {
   useWarehouseCapabilityValidation,
   type CapabilityValidation,
@@ -40,9 +40,10 @@ import { DatePicker } from '@/shared/ui/date-picker'
 import { cn } from '@/shared/utils/class-names'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
-import type { CapabilityOperation } from '@/modules/warehouse/types/warehouse.types'
+import type { CapabilityOperation } from '@/shared/types/warehouse.wire-types'
 import type { DocumentType } from '@/shared/documents/types/document-wire.types'
-import type { Material, MaterialUnitConversion } from '@/modules/catalog/types/catalog.types'
+import type { Material, MaterialUnitConversion } from '@/shared/types/catalog.wire-types'
+import { toArabicDigits } from '@/shared/utils/arabic-numbers'
 
 // The editor is a component file by contract; its schema and draft mapper live
 // in ../schemas/document-lines.schemas.ts (e12-t04).
@@ -225,7 +226,7 @@ function UnitSelector({
     <div className="flex min-w-0 flex-col gap-2">
       <span className="text-sm font-medium text-foreground">{label}</span>
       <Select value={value} onValueChange={onValueChange} disabled={isLoading || isError}>
-        <SelectTrigger aria-label={`وحدة البند ${index + 1}`}>
+        <SelectTrigger aria-label={`وحدة البند ${toArabicDigits(index + 1)}`}>
           <SelectValue>{value === BASE_UNIT_VALUE ? baseUnitNameAr : undefined}</SelectValue>
         </SelectTrigger>
         <SelectContent>
@@ -308,7 +309,9 @@ function QuantityLineRow({
       disabled={disabled}
       className="grid gap-3 rounded-md border border-border p-4"
     >
-      <legend className="px-1 text-sm font-medium text-foreground">البند {index + 1}</legend>
+      <legend className="px-1 text-sm font-medium text-foreground">
+        البند {toArabicDigits(index + 1)}
+      </legend>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <FormField
           control={control}
@@ -480,7 +483,7 @@ function QuantityLineRow({
                 <FormLabel>تاريخ الانتهاء (اختياري)</FormLabel>
                 <FormControl>
                   <DatePicker
-                    ariaLabel={`تاريخ انتهاء البند ${index + 1}`}
+                    ariaLabel={`تاريخ انتهاء البند ${toArabicDigits(index + 1)}`}
                     {...(expiryField.value ? { value: dayjs(expiryField.value).toDate() } : {})}
                     onChange={(date) =>
                       expiryField.onChange(
@@ -502,7 +505,7 @@ function QuantityLineRow({
               <FormItem>
                 <FormLabel>نوع الافتتاحية</FormLabel>
                 <Select value={openingField.value ?? ''} onValueChange={openingField.onChange}>
-                  <SelectTrigger aria-label={`نوع الافتتاحية للبند ${index + 1}`}>
+                  <SelectTrigger aria-label={`نوع الافتتاحية للبند ${toArabicDigits(index + 1)}`}>
                     <SelectValue placeholder="اختر النوع">
                       {openingField.value === undefined
                         ? 'اختر النوع'
@@ -549,7 +552,7 @@ function QuantityLineRow({
         type="button"
         variant="ghost"
         className="justify-self-start text-destructive hover:text-destructive"
-        aria-label={`حذف البند ${index + 1}`}
+        aria-label={`حذف البند ${toArabicDigits(index + 1)}`}
         disabled={disabled}
         onClick={onRemove}
       >

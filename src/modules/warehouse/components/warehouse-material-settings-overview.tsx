@@ -130,6 +130,7 @@ export function WarehouseMaterialSettingsOverview({
           columns={columns}
           data={pageRows(settingsQuery.data, settingsQuery.isError)}
           isLoading={settingsQuery.isLoading}
+          isFetching={settingsQuery.isFetching}
           isError={settingsQuery.isError}
           onRetry={() => void settingsQuery.refetch()}
           errorTitle="تعذّر تحميل إعدادات المواد"
@@ -160,6 +161,7 @@ export function WarehouseMaterialSettingsOverview({
         setting={editorSetting}
         open={isEditorOpen}
         onOpenChange={closeEditor}
+        canManage={canManage}
       />
     </div>
   )

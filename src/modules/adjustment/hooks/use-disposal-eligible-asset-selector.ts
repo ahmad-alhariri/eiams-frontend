@@ -67,7 +67,7 @@ export function useDisposalEligibleAssetSelector(
       }
       const page = await queryClient.fetchQuery({
         queryKey: adjustmentQueryKeys.disposalEligibleAssets(scope, query),
-        queryFn: () => adjustmentService.listDisposalEligibleAssets(query),
+        queryFn: ({ signal }) => adjustmentService.listDisposalEligibleAssets(query, { signal }),
         staleTime: OPERATIONAL_STALE_TIME,
       })
       return [...page.items]

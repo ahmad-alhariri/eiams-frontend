@@ -1,46 +1,12 @@
 import 'dayjs/locale/ar'
 import dayjs from 'dayjs'
 
-const ARABIC_DIGITS = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩']
+import { formatNumber, formatPercent, toArabicDigits } from './arabic-numbers'
+
+export { formatNumber, formatPercent, toArabicDigits }
 
 function toDate(date: Date | string) {
   return date instanceof Date ? dayjs(date) : dayjs(date)
-}
-
-/**
- * Converts Western digits in a string or number to Eastern Arabic numerals
- * (٠١٢٣٤٥٦٧٨٩). Non-digit characters pass through unchanged.
- */
-export function toArabicDigits(value: string | number) {
-  return String(value).replace(/[0-9]/g, (digit) => ARABIC_DIGITS[Number(digit)] ?? digit)
-}
-
-export interface FormatNumberOptions {
-  /** Numerals to render. Defaults to the app-wide Arabic-Indic digits. */
-  digits?: 'arabic' | 'latin'
-  maxFractionDigits?: number
-}
-
-/**
- * Formats a number with thousand grouping, e.g. "١٢٬٣٤٥٫٦٧".
- */
-export function formatNumber(value: number, options?: FormatNumberOptions) {
-  const { digits = 'arabic', maxFractionDigits = 2 } = options ?? {}
-  const grouped = new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: maxFractionDigits,
-  }).format(value)
-  if (digits === 'latin') {
-    return grouped
-  }
-  return toArabicDigits(grouped).replace(/,/g, '٬').replace(/\./g, '٫')
-}
-
-/**
- * Formats a percentage, e.g. "١٢٫٥٪".
- */
-export function formatPercent(value: number) {
-  const formatted = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value)
-  return `${toArabicDigits(formatted).replace(/\./g, '٫')}٪`
 }
 
 /**

@@ -21,7 +21,7 @@ vi.mock('@/shared/ui/toast-manager', () => ({ toast: { success: vi.fn(), error: 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
   useActiveScopeContext: () => ({ activeScopeCacheKey: { kind: 'enterprise' } }),
 }))
-vi.mock('@/modules/warehouse/hooks/use-scoped-warehouse-selector', () => ({
+vi.mock('@/shared/scopes/use-scoped-warehouse-selector', () => ({
   useScopedWarehouseSelector: () => ({
     scopeReady: true,
     loadOptions: async () =>

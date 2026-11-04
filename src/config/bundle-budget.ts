@@ -10,6 +10,11 @@
  * The budget itself lives in `bundle-budget.json` so that the check script
  * (`scripts/check-bundle-budget.mjs`) and this module read ONE committed
  * source rather than two copies of the same numbers.
+ *
+ * KEPT: the typed half of the documented bundle-budget mechanism
+ * (docs/bundle-budget.md). The script reads the JSON directly; this module is
+ * the single-source reader the tests use, so the rule stays testable without
+ * a production build.
  */
 import { readFileSync } from 'node:fs'
 

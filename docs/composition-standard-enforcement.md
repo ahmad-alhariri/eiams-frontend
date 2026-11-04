@@ -32,17 +32,21 @@ rather than by tool.
 ### Phase 1 — ESLint, lands green
 
 `eslint.config.js` gained a block scoped to the contract-only service set: every
-`*.service.ts` under a module's `services` directory plus the three shared
-transports — **16 files**. It adds `no-restricted-imports` for TanStack Query,
-Zustand, React and the toast manager, and `no-restricted-syntax` for
-`axios.create`, raw `fetch`, `.interceptors`, `new QueryClient`, cache writes and
-invalidation, `normalizeApiError`/`isConflictError`, `useNavigate`/`usePermission`,
+`*.service.ts` under a module's `services` directory plus the shared transports
+and service files — **20 files** today (`src/modules/*/services/*.service.ts`,
+`src/shared/documents/*-service.ts`, `src/shared/documents/*-transport.ts`,
+`src/shared/api/api-transport.ts`, `src/shared/api/transport.ts`). It adds
+`no-restricted-imports` for TanStack Query, Zustand, React and the toast manager
+(4 paths), and `no-restricted-syntax` (11 rules) for `axios.create`, raw
+`fetch`, `.interceptors`, a `.data` read, a direct HTTP-client call,
+`new QueryClient`, cache writes and invalidation,
+`normalizeApiError`/`isConflictError`, `useNavigate`/`usePermission`,
 and a literal `'Idempotency-Key'`.
 
-Measured before landing: **0 violations across all 16 files** for every rule, so
-this phase is a pure regression fence. It is a fence rather than a formality:
-these are exactly the imports a service acquires casually while "just fixing" a
-feature.
+Measured before landing: **0 violations across all 16 files** (the scope as it
+stood then) for every rule, so this phase is a pure regression fence. It is a
+fence rather than a formality: these are exactly the imports a service acquires
+casually while "just fixing" a feature.
 
 **The file globs are deliberately narrow, and that is load-bearing.** A
 `src/modules/**/services/**` glob also matches `auth/session-lifecycle.ts` and
@@ -69,8 +73,12 @@ Three groups, all found by measurement rather than assumed:
 
 `pathWithId` itself existed as **eight** identical three-line copies, one per
 service, and `count.service.ts` was about to become the ninth. It is now
-`src/shared/services/api-path.ts`. The eight remaining local copies are
-mechanical and recorded in `eiams-frontend-85dy` rather than rewritten here.
+`src/shared/services/api-path.ts`. The eight remaining local copies were
+mechanical and were recorded in `eiams-frontend-85dy`; they have since been
+replaced — no service defines its own `pathWithId` any more. Ten of the sixteen
+module services import the shared helper; the other six (`auth`, `return`,
+`counterpart-lookup`, `receiving`, `reports`, `reports-export`) have no
+path-parameter interpolation to delegate.
 
 ### Phase 3 — the three scans
 
@@ -132,12 +140,15 @@ stay at three or fewer — a rule that needs more exceptions is the wrong rule.
 
 ## Phase 4 — the two tautologies, and the dead helper they protected
 
-`createIdempotentRequest()` is **deleted**. It bundled key creation and header
-attachment into one object, which cannot work across this architecture: a hook
-cannot hand an Axios config to a service, because the service is the only holder
-of the client. So the split is by design — the hook mints a key and holds it, the
-service attaches the header with `withIdempotencyKey` — and the standard's rule
-was amended to describe it. The `IdempotentRequest` *type* stays; it is still
+`createIdempotentRequest()` is **not used by any feature service**. It bundled
+key creation and header attachment into one object, which cannot work across this
+architecture for a feature: a hook cannot hand an Axios config to a service,
+because the service is the only holder of the client. So the split is by design —
+the hook mints a key and holds it, the service attaches the header with
+`withIdempotencyKey` — and the standard's rule was amended to describe it. The
+helper itself still exists in `src/shared/services/mutation-safety.ts` and is
+called by the contract-smoke harness (`src/contract-smoke/authz.contract-smoke.ts`),
+which owns its own client; the `IdempotentRequest` *type* stays and is still
 widely used by the document transport.
 
 The old test file is reduced to what a source scan genuinely cannot do: assert
@@ -180,8 +191,8 @@ attempted here.
 
 ## Change log
 
-- `eslint.config.js` — service-purity block: 16-file scope, 4 restricted imports,
-  9 restricted syntax rules.
+- `eslint.config.js` — service-purity block: 20-file scope, 4 restricted imports,
+  11 restricted syntax rules.
 - `src/test/support/source-scan.ts` — **new**; hoisted scanning helpers, the
   allow-marker grammar, and the two drift guards.
 - `src/test/feature-service-composition-standard-scans.test.ts` — **new**; three
@@ -190,7 +201,8 @@ attempted here.
   document-existence guard.
 - `src/shared/services/api-path.ts` — **new**; `pathWithId`, replacing nine
   copies of a three-line helper.
-- `src/shared/services/mutation-safety.ts` — `createIdempotentRequest` deleted.
+- `src/shared/services/mutation-safety.ts` — `createIdempotentRequest` no longer
+  used by any feature service (it survives only for the contract-smoke harness).
 - `docs/feature-service-composition-standard.md` — retry-sensitive rule amended
   to the two-layer contract the architecture actually supports.
 - `count.service.ts`, `adjustment.service.ts` — path constants typed, count

@@ -1,4 +1,5 @@
-import type { ApiTransport } from '@/shared/api/api-transport'
+import type { ApiTransport, RequestContext } from '@/shared/api/api-transport'
+import { withSignal } from '@/shared/api/api-transport'
 import { toWireOneBasedPaginationParams } from '@/shared/api/pagination'
 import { apiTransport } from '@/shared/api/transport'
 import type { ApiPage } from '@/shared/api/api-contracts'
@@ -46,10 +47,10 @@ function normalizePage<T>(apiPage: ApiPage<T>): { items: ReadonlyArray<T>; meta:
       page: apiPage.page,
       pageIndex: apiPage.page,
       pageSize: apiPage.pageSize,
-      itemCount: apiPage.totalItems,
-      totalItems: apiPage.totalItems,
-      totalCount: apiPage.totalItems,
-      totalPages: apiPage.totalPages,
+      itemCount: apiPage.items?.length ?? 0,
+      totalItems: apiPage.totalItems ?? null,
+      totalCount: apiPage.totalItems ?? null,
+      totalPages: apiPage.totalPages ?? null,
       hasNextPage: apiPage.hasNextPage,
       hasPreviousPage: apiPage.hasPreviousPage,
     },
@@ -57,41 +58,51 @@ function normalizePage<T>(apiPage: ApiPage<T>): { items: ReadonlyArray<T>; meta:
 }
 
 export interface InventoryService {
-  listBalances: (query: ListInventoryBalancesQuery) => Promise<InventoryBalancePage>
-  getBalance: (balanceId: string) => Promise<InventoryBalance>
-  listMovements: (query: ListStockMovementsQuery) => Promise<StockMovementPage>
-  getMovement: (movementId: string) => Promise<StockMovement>
+  listBalances: (
+    query: ListInventoryBalancesQuery,
+    context?: RequestContext,
+  ) => Promise<InventoryBalancePage>
+  getBalance: (balanceId: string, context?: RequestContext) => Promise<InventoryBalance>
+  listMovements: (
+    query: ListStockMovementsQuery,
+    context?: RequestContext,
+  ) => Promise<StockMovementPage>
+  getMovement: (movementId: string, context?: RequestContext) => Promise<StockMovement>
 }
 
 export function createInventoryService(transport: ApiTransport): InventoryService {
   return {
-    async listBalances(query) {
+    async listBalances(query, context) {
       const page = await transport.requestPage<InventoryBalance>({
         path: INVENTORY_BALANCES_PATH,
         method: 'GET',
         query: withWirePagination(query),
+        ...withSignal(context),
       })
       return normalizePage(page) as InventoryBalancePage
     },
-    async getBalance(balanceId) {
+    async getBalance(balanceId, context) {
       const response = await transport.request<InventoryBalance>({
         path: pathWithId(INVENTORY_BALANCE_PATH, '{balanceId}', balanceId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },
-    async listMovements(query) {
+    async listMovements(query, context) {
       const page = await transport.requestPage<StockMovement>({
         path: STOCK_MOVEMENTS_PATH,
         method: 'GET',
         query: withWirePagination(query),
+        ...withSignal(context),
       })
       return normalizePage(page) as StockMovementPage
     },
-    async getMovement(movementId) {
+    async getMovement(movementId, context) {
       const response = await transport.request<StockMovement>({
         path: pathWithId(STOCK_MOVEMENT_PATH, '{movementId}', movementId),
         method: 'GET',
+        ...withSignal(context),
       })
       return response
     },

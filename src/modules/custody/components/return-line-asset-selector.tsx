@@ -3,7 +3,7 @@ import { useFormContext, useWatch } from 'react-hook-form'
 import type { ReturnEligibleItem } from '@/modules/custody/types/return.types'
 import type { DocumentLinesContainer } from '@/shared/documents/schemas/document-lines.schemas'
 import { cn } from '@/shared/utils/class-names'
-import { formatNumber } from '@/shared/utils/format'
+import { formatNumber } from '@/shared/utils/arabic-numbers'
 
 export interface ReturnLineAssetSelectorProps {
   index: number
@@ -94,7 +94,8 @@ export function ReturnLineAssetSelector({
         className="grid gap-2 rounded-md border border-dashed border-border p-3"
       >
         <span className="text-sm font-medium text-foreground">
-          الأصول المستردة للبند: {selectedAssets.length} من {quantity} (يجب أن يساوي المحدد الكمية)
+          الأصول المستردة للبند: {formatNumber(selectedAssets.length)} من {formatNumber(quantity)}{' '}
+          (يجب أن يساوي المحدد الكمية)
         </span>
         {isLoading ? (
           <p className="text-sm text-muted-foreground" aria-live="polite">
@@ -142,7 +143,8 @@ export function ReturnLineAssetSelector({
           </p>
         ) : !isLoading && countMismatch ? (
           <p role="alert" className="text-sm text-destructive">
-            المحدد {selectedAssets.length} من {quantity} — يجب أن يساوي عدد الأصول المحددة الكمية.
+            المحدد {formatNumber(selectedAssets.length)} من {formatNumber(quantity)} — يجب أن يساوي
+            عدد الأصول المحددة الكمية.
           </p>
         ) : null}
       </div>
@@ -189,7 +191,7 @@ export function ReturnLineAssetSelector({
       {!isLoading && unitItems.length > 0 ? (
         <>
           <span className="text-sm font-medium text-foreground">
-            وحدات العهدة التسلسلية المتاحة: {unitItems.length} (اختر وحدة واحدة)
+            وحدات العهدة التسلسلية المتاحة: {formatNumber(unitItems.length)} (اختر وحدة واحدة)
           </span>
           <div className="flex flex-wrap gap-2">
             {unitItems.map((item) => {
@@ -233,7 +235,7 @@ export function ReturnLineAssetSelector({
             </p>
           ) : quantity !== 1 ? (
             <p role="alert" className="text-sm text-destructive">
-              يجب أن تكون كمية الوحدة التسلسلية 1.
+              يجب أن تكون كمية الوحدة التسلسلية ١.
             </p>
           ) : null}
         </>

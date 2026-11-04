@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   applicationSourceFiles,
-  assertScannedFiles,
   assertAllowlistIsSmall,
+  assertScannedFilesMatchGit,
+  gitTrackedSourceFiles,
   readSource,
   withoutAllowMarkers,
   allowMarkersIn,
@@ -40,13 +41,13 @@ describe('error-feedback-de-duplication-standard-scans', () => {
         !f.endsWith('.test.tsx') &&
         !f.startsWith('src/shared/ui/toast-manager'),
     )
-
-  // Pin count so a broken/narrowed glob cannot silently pass.
-  // +2 since 369: `shared/layout/route-focus-announcer.tsx` and
-  // `shared/layout/route-keys.ts` are new application files. Neither raises a
-  // toast, so the no-offenders assertions below stay green.
-  const EXPECTED_SCANNED_FILES = 371
-  assertScannedFiles(SCANNED, EXPECTED_SCANNED_FILES)
+  const GIT_SCANNED = gitTrackedSourceFiles().filter(
+    (f) =>
+      (f.startsWith('src/modules/') || f.startsWith('src/shared/')) &&
+      !/\.test\.(ts|tsx)$/u.test(f) &&
+      !f.startsWith('src/shared/ui/toast-manager'),
+  )
+  assertScannedFilesMatchGit(SCANNED, GIT_SCANNED, 'error-feedback de-duplication standard scans')
 
   // Fence 1 — only api-error.ts may build the toast.error({ title, ...(detailAr === null ? {} : { description }) }) shape
   it('Fence 1: no production module outside api-error.ts builds the detailAr-guarded toast.error shape', () => {
@@ -96,8 +97,7 @@ describe('error-feedback-de-duplication-standard-scans', () => {
   // Non-vacuity: the scan actually looked at files.
   it('scan set is non-empty and pinned above 100', () => {
     expect(SCANNED.length).toBeGreaterThan(0)
-    expect(SCANNED.length).toBe(EXPECTED_SCANNED_FILES)
-    expect(EXPECTED_SCANNED_FILES).toBeGreaterThan(100)
+    expect(SCANNED.length).toBeGreaterThan(100)
   })
 
   // Fence 3 — exactly one reportApiError production definition, in api-error.ts

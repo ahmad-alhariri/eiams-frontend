@@ -12,21 +12,11 @@
  * `PUT /admin/roles/{roleId}/permissions` request bodies.
  */
 
-/**
- * Assignment scope types. `UserAssignmentScopeType` on the backend;
- * OrganizationalUnit is never an assignment scope (RESOLUTION-013).
- *
- * The backend serialises this enum through an explicit `JsonStringEnumConverter`,
- * so the wire value is the member name and never the ordinal.
- */
-export type RoleScopeType = 'Enterprise' | 'Site' | 'Warehouse'
+import type { RoleScopeType } from '@/shared/types/scope.types'
 
-/** Arabic display labels for the assignment scope types (ui-design.md, RTL-first). */
-export const ROLE_SCOPE_TYPE_LABELS_AR: Readonly<Record<RoleScopeType, string>> = {
-  Enterprise: 'مستوى المؤسسة',
-  Site: 'موقع',
-  Warehouse: 'مستودع',
-}
+/** Assignment scope vocabulary: see `@/shared/types/scope.types` (the definition moved there). */
+export type { RoleScopeType } from '@/shared/types/scope.types'
+export { ROLE_SCOPE_TYPE_LABELS_AR } from '@/shared/types/scope.types'
 
 /**
  * The single authoritative role projection. Served by the list read, the detail

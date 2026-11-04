@@ -1,7 +1,9 @@
+import { AxiosError, AxiosHeaders } from 'axios'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { MaterialUnitConversionFormDialog } from './material-unit-conversion-form-dialog'
 import type {
   Material,
   MaterialUnitConversion,
@@ -9,15 +11,6 @@ import type {
 } from '@/modules/catalog/types/catalog.types'
 import { fixtureUuid } from '@/test/msw/factories'
 
-import { MaterialUnitConversionFormDialog } from './material-unit-conversion-form-dialog'
-
-/**
- * Wire-shaped fixtures, minted locally: `catalog-wire-fixtures.ts` still mints
- * the frozen snapshot's records (`materialId`, `unitId`, a nested `unit`
- * reference, `conversionFactor`, `status`, `rowVersion`) and no longer
- * typechecks against `catalog.api-types`. The real conversion is
- * `{ id, materialId, fromUnitId, toBaseUnitId, factor }` and carries NO status.
- */
 function makeMaterial(overrides: Partial<Material> = {}): Material {
   return {
     id: fixtureUuid(60),
@@ -39,7 +32,6 @@ function makeMaterial(overrides: Partial<Material> = {}): Material {
     ...overrides,
   }
 }
-
 function makeUnit(overrides: Partial<UnitOfMeasure> = {}): UnitOfMeasure {
   return {
     id: fixtureUuid(26),
@@ -50,7 +42,6 @@ function makeUnit(overrides: Partial<UnitOfMeasure> = {}): UnitOfMeasure {
     ...overrides,
   }
 }
-
 function makeConversion(overrides: Partial<MaterialUnitConversion> = {}): MaterialUnitConversion {
   return {
     id: fixtureUuid(33),
@@ -60,6 +51,24 @@ function makeConversion(overrides: Partial<MaterialUnitConversion> = {}): Materi
     factor: 12,
     ...overrides,
   }
+}
+
+function serverError(status: number, code: string, details?: Record<string, unknown>) {
+  return new AxiosError('server message', 'ERR_BAD_RESPONSE', undefined, undefined, {
+    status,
+    statusText: '',
+    data: {
+      success: false,
+      error: {
+        code,
+        message: 'server message',
+        details: details ?? {},
+        request_id: 'req-1',
+      },
+    },
+    headers: new AxiosHeaders(),
+    config: { headers: new AxiosHeaders() },
+  })
 }
 
 describe('MaterialUnitConversionFormDialog', () => {
@@ -237,5 +246,62 @@ describe('MaterialUnitConversionFormDialog', () => {
     expect(screen.queryByLabelText('الحالة')).not.toBeInTheDocument()
     expect(screen.getByText('الوحدة البديلة')).toBeInTheDocument()
     expect(screen.getByText('كرتونة')).toBeInTheDocument()
+  })
+})
+
+describe('MaterialUnitConversionFormDialog server-error contract', () => {
+  it('renders a contract field error inline in Arabic', async () => {
+    const user = userEvent.setup()
+    // Edit mode over a seeded conversion: the create form would reject the click on
+    // its own missing from-unit validation, so this asserts the server path alone.
+    const onSubmit = vi
+      .fn()
+      .mockRejectedValue(serverError(400, 'REQUEST_VALIDATION_FAILED', { factor: ['required'] }))
+    render(
+      <MaterialUnitConversionFormDialog
+        open
+        material={makeMaterial()}
+        conversion={makeConversion()}
+        activeUnitIds={new Set()}
+        units={[makeUnit()]}
+        isUnitsLoading={false}
+        isUnitsError={false}
+        isPending={false}
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: /حفظ/i }))
+
+    const factor = screen.getByLabelText(/عامل التحويل/)
+    await waitFor(() => expect(factor).toHaveAttribute('aria-invalid', 'true'))
+    const messageId = factor.getAttribute('aria-describedby') ?? ''
+    expect(document.getElementById(messageId)?.textContent).toBe(
+      'تعذر تنفيذ الطلب. راجع البيانات المدخلة.',
+    )
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps previous generic-error outcome when no field errors map', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockRejectedValue(serverError(500, 'INTERNAL_ERROR'))
+    render(
+      <MaterialUnitConversionFormDialog
+        open
+        material={makeMaterial()}
+        conversion={makeConversion()}
+        activeUnitIds={new Set()}
+        units={[makeUnit()]}
+        isUnitsLoading={false}
+        isUnitsError={false}
+        isPending={false}
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: /حفظ/i }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByLabelText(/عامل التحويل/)).not.toHaveAttribute('aria-invalid')
   })
 })

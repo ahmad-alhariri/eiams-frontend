@@ -48,6 +48,24 @@ const UNEXPECTED_FEEDBACK: ArabicFeedback = {
   detailAr: 'حاول مرة أخرى، أو تواصل مع الدعم الفني إذا استمرت المشكلة.',
 }
 
+// UNREACHABLE BY DESIGN — kept so the auth wording stays in the codebase, but
+// it can never select the visible text.
+//
+// This map is keyed on DOT-CASE codes (`auth.invalid_credentials`), while the
+// code handed to `fallbackFeedback` has already been normalized by
+// `normalizeWireErrorCode` (`shared/api/envelope.ts:97`), which strips every
+// non-alphanumeric character and upper-cases the rest. The normalized form of
+// `auth.invalid_credentials` is `AUTH_INVALID_CREDENTIALS`, which is NOT a key
+// here — so `AUTH_FEEDBACK[code]` is always `undefined`.
+//
+// The key spaces are therefore disjoint BY CONSTRUCTION, which is what
+// guarantees a single deterministic Arabic string per error: this map can
+// never compete with the code-keyed table in `error-copy-ar.ts`.
+//
+// Closing the CONTENT gap (an unmapped auth code currently falls through to
+// the generic per-status wording) means adding entries to the
+// `error-copy-ar.ts` TABLE — never re-keying this map, which would put two
+// producers back in competition. Tracked as bead `eiams-frontend-z1hs`.
 const AUTH_FEEDBACK: Readonly<Record<string, ArabicFeedback>> = {
   'auth.invalid_credentials': {
     titleAr: 'بيانات تسجيل الدخول غير صحيحة.',
@@ -75,6 +93,16 @@ const AUTH_FEEDBACK: Readonly<Record<string, ArabicFeedback>> = {
   },
 }
 
+// SECOND SOURCE — keyed on the HTTP STATUS NUMBER, so its key space cannot
+// collide with the code-keyed table in `error-copy-ar.ts`. Consulted ONLY when
+// the code lookup misses, so a mapped code is always answered by the table
+// (PRIMARY) and never by this map.
+//
+// Where both have an entry the two texts are identical by construction, with
+// one deliberate exception — 409, where the table's `RESOURCE_CONFLICT` says
+// `تعارض في البيانات. راجع القيم المدخلة.` and this map's generic 409 says
+// `تغيرت البيانات. حدّث الصفحة ثم حاول مجدداً.`. The table wins, so the
+// generic 409 text is what a 409 with an UNMAPPED code renders.
 const STATUS_FEEDBACK: Readonly<Record<number, ArabicFeedback>> = {
   400: { titleAr: 'تعذر تنفيذ الطلب. راجع البيانات المدخلة.', detailAr: null },
   401: { titleAr: 'انتهت الجلسة. يرجى تسجيل الدخول مجدداً.', detailAr: null },
@@ -145,6 +173,18 @@ function fieldErrors(value: unknown, operationCode: string): readonly FieldError
   })
 }
 
+// THE FALLBACK CHAIN — only ever reached when the PRIMARY lookup
+// (`arabicCopyForCode`, the code-keyed table in `error-copy-ar.ts`) misses.
+//
+//   1. `AUTH_FEEDBACK[code]` — UNREACHABLE: it is keyed on dot-case, but `code`
+//      here is already normalized to UPPER_SNAKE. Kept so the branch documents
+//      itself; `api-error.test.ts` pins that it cannot fire.
+//   2. `status >= 500` — the generic server-fault wording.
+//   3. `STATUS_FEEDBACK[status]` — the generic per-status wording.
+//   4. `UNEXPECTED_FEEDBACK` — the last resort.
+//
+// The chain never competes with the primary table, so an error resolves to
+// exactly ONE Arabic string.
 function fallbackFeedback(status: number, code: string | null): ArabicFeedback {
   if (code !== null) {
     const authFeedback = AUTH_FEEDBACK[code]
@@ -207,6 +247,14 @@ function fallbackFeedback(status: number, code: string | null): ArabicFeedback {
 function problemFromWire(payload: unknown, status: number): ApiError {
   const wire = readApiError(payload)
   const code = normalizeWireErrorCode(wire?.code)
+  // THE PRECEDENCE, IN ONE PLACE. PRIMARY = the code-keyed table in
+  // `error-copy-ar.ts` (looked up by the NORMALIZED code). Only a miss falls
+  // through to `fallbackFeedback`, which is keyed by HTTP STATUS.
+  //
+  // The two key spaces are disjoint — `A_Z_0_9` codes vs integer statuses — so
+  // `??` cannot pick between two texts for one error: exactly one producer
+  // supplies the visible Arabic. `AUTH_FEEDBACK` is a third map in the chain
+  // but is unreachable (dot-case keys vs a normalized code); see its comment.
   const copy = arabicCopyForCode(code)
   const feedback = copy ?? fallbackFeedback(status, code)
 
