@@ -13,6 +13,7 @@ import {
 import { useIssueLineBalances } from '@/modules/issue/hooks/use-issue-line-balances'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { QuantityLineEditor } from '@/shared/documents/components/quantity-line-editor'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import { BalanceReadError } from '@/shared/documents/components/balance-read-error'
 import {
   buildCompleteDraftRequest,
@@ -197,6 +198,7 @@ export default function TransferDocumentFormPage() {
           >
             <h2 className="text-sm font-medium text-foreground">بنود التحويل</h2>
             <QuantityLineEditor
+              capabilityValidation={useWarehouseCapabilityValidation}
               documentType="Transfer"
               warehouseId={headerWarehouseId || undefined}
               disabled={isSubmitting}

@@ -4,9 +4,10 @@ import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
 
 import { useScopedMaterialSelector } from '@/shared/scopes/use-scoped-material-selector'
 import {
-  useWarehouseCapabilityValidation,
-  type CapabilityValidation,
-} from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
+  UNBOUND_CAPABILITY_VALIDATOR,
+  type CapabilityValidatorBinding,
+  type CapabilityValidationVerdict,
+} from '@/shared/documents/document-policy-gates'
 import {
   createEmptyAssetInput,
   createEmptyAssetLine,
@@ -65,6 +66,15 @@ export interface AssetLineEditorProps {
    * warehouse capability lookup or the Opening → Receiving operation mapping.
    */
   onCapabilityGateChange?: (gate: AssetLineCapabilityGate) => void
+  /**
+   * Optional factory binding the editor to the session's capability validator.
+   * The factory is invoked once per render with the document's warehouseId, so a
+   * caller that passes one must pass it on EVERY render (hooks contract); the
+   * production binding is the module hook the page injects. When omitted the
+   * editor binds the explicit unbound fallback — a neutral `unknown` verdict
+   * that never blocks (bare/test mounts only).
+   */
+  capabilityValidation?: (warehouseId: string | undefined) => CapabilityValidatorBinding
 }
 
 /** Aggregate capability state for the currently selected asset-line materials. */
@@ -81,7 +91,10 @@ function capabilityOperationFor(documentType: AssetLineDocumentType): Capability
 function capabilityGateForLines(
   lines: readonly Partial<AssetLineValues>[],
   operation: CapabilityOperation,
-  validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation,
+  validates: (
+    domainId: string | undefined,
+    operation: CapabilityOperation,
+  ) => CapabilityValidationVerdict,
 ): AssetLineCapabilityGate {
   let hasUnverifiedLine = false
 
@@ -289,7 +302,10 @@ interface AssetLineRowProps {
   /** Serials already captured by the other lines of the same document. */
   otherUsedSerials: readonly string[]
   scopeReady: boolean
-  validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation
+  validates: (
+    domainId: string | undefined,
+    operation: CapabilityOperation,
+  ) => CapabilityValidationVerdict
 }
 
 /**
@@ -522,6 +538,7 @@ function AssetLineRow({
  * numbers.
  */
 export function AssetLineEditor({
+  capabilityValidation,
   documentType,
   warehouseId,
   disabled = false,
@@ -535,7 +552,10 @@ export function AssetLineEditor({
   })
   const materialSelector = useScopedMaterialSelector(true)
   const { loadOptions: loadAllOptions, scopeReady } = materialSelector
-  const capabilityValidation = useWarehouseCapabilityValidation(warehouseId)
+  const capabilityValidator: CapabilityValidatorBinding =
+    capabilityValidation === undefined
+      ? UNBOUND_CAPABILITY_VALIDATOR
+      : capabilityValidation(warehouseId)
   const operation = capabilityOperationFor(documentType)
   const lines = useWatch({ control, name: namePrefix })
   const usedSerialsByLine = useMemo(() => {
@@ -543,8 +563,8 @@ export function AssetLineEditor({
     return serialsByLine.map((_serials, index) => serialsOfOtherLines(serialsByLine, index))
   }, [lines])
   const capabilityGate = useMemo(
-    () => capabilityGateForLines(lines ?? [], operation, capabilityValidation.validates),
-    [lines, operation, capabilityValidation.validates],
+    () => capabilityGateForLines(lines ?? [], operation, capabilityValidator.validates),
+    [lines, operation, capabilityValidator.validates],
   )
   const linesErrorMessage = (
     formState.errors as Record<
@@ -586,7 +606,7 @@ export function AssetLineEditor({
             operation={operation}
             otherUsedSerials={usedSerialsByLine[index] ?? []}
             scopeReady={scopeReady}
-            validates={capabilityValidation.validates}
+            validates={capabilityValidator.validates}
           />
         ))
       )}

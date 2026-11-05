@@ -7,6 +7,7 @@ import { z } from 'zod'
 
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { ReceivingPetalForm } from '@/modules/receiving/components/receiving-petal-form'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import {
   fromReceivingInfo,
   receivingInfoSchema,
@@ -170,6 +171,7 @@ export default function ReceivingDocumentFormPage() {
               documentType="Receiving"
               warehouseId={headerWarehouseId || undefined}
               disabled={isSubmitting}
+              capabilityValidation={useWarehouseCapabilityValidation}
             />
             <h3 className="border-t border-border pt-3 text-sm font-medium text-foreground">
               بنود الأصول (أصل ثابت لكل وحدة)
@@ -179,6 +181,7 @@ export default function ReceivingDocumentFormPage() {
               warehouseId={headerWarehouseId || undefined}
               disabled={isSubmitting}
               namePrefix="assetLines"
+              capabilityValidation={useWarehouseCapabilityValidation}
             />
           </section>
           {submitErrorMessage !== null ? (

@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/shared/ui/button'
 import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/async-select'
 import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
 
 /* eslint-disable react-refresh/only-export-components -- dev-only gallery demo
@@ -129,6 +130,7 @@ function AssetLineEditorDemo() {
           <AssetLineEditor
             documentType={documentType}
             warehouseId={warehouse?.value ?? undefined}
+            capabilityValidation={useWarehouseCapabilityValidation}
           />
           <div className="flex items-center gap-2">
             <Button type="submit">حفظ المسودة</Button>

@@ -28,6 +28,7 @@ import {
   documentHeaderSchema,
 } from '@/shared/documents/document-header-form'
 import { useScopedWarehouseSelector } from '@/shared/scopes/use-scoped-warehouse-selector'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import {
   assetLineSchema,
   createEmptyQuantityLine,
@@ -318,6 +319,7 @@ export default function OpeningDocumentFormPage() {
               warehouseId={headerWarehouseId || undefined}
               disabled={isSaving}
               onCapabilityGateChange={onQuantityCapabilityGateChange}
+              capabilityValidation={useWarehouseCapabilityValidation}
             />
             <h3 className="border-t border-border pt-3 text-sm font-medium text-foreground">
               بنود الأصول (أصل ثابت لكل وحدة)
@@ -328,6 +330,7 @@ export default function OpeningDocumentFormPage() {
               disabled={isSaving}
               namePrefix="assetLines"
               onCapabilityGateChange={onAssetCapabilityGateChange}
+              capabilityValidation={useWarehouseCapabilityValidation}
             />
           </section>
           {capabilityGate.status !== 'ready' ? (

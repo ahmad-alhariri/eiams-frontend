@@ -7,6 +7,7 @@ import { z } from 'zod'
 
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { IssueLineAssetSelector } from '@/modules/issue/components/issue-line-asset-selector'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import {
   IssueRecipientSection,
   issuePetalFormSchema,
@@ -221,6 +222,7 @@ export default function IssueDocumentFormPage() {
               documentType="Issue"
               warehouseId={headerWarehouseId || undefined}
               disabled={isSubmitting}
+              capabilityValidation={useWarehouseCapabilityValidation}
               balanceForLine={(index) => balanceByMaterialId.get(materialIds[index] ?? '')}
               assetSlotForLine={(index) => (
                 <IssueLineAssetSelector

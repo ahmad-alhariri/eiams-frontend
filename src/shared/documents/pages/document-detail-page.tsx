@@ -4,7 +4,6 @@ import { Link, matchPath, useLocation, useParams } from 'react-router'
 import { FormProvider, useForm } from 'react-hook-form'
 
 import { ROUTE_METADATA, ROUTE_PATHS, type RouteKey } from '@/config/routes'
-import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
 import { normalizeApiError } from '@/shared/services/api-error'
 import {
@@ -22,6 +21,7 @@ import {
   policyBlockerMessageAr,
   toPreflightLineShapes,
   type CapabilityEvaluation,
+  type CapabilityValidatorBinding,
   type DocumentPreflight,
 } from '@/shared/documents/document-policy-gates'
 import { DocumentTimelineSection } from '@/shared/documents/document-timeline-section'
@@ -124,6 +124,17 @@ export interface DocumentDetailPageProps {
    * pass a custom node (fixture events in demos/tests) to replace it.
    */
   timelineSlot?: ReactNode
+  /**
+   * Optional factory binding the shared policy gate to the session's
+   * capability validator (F-10 / eiams-frontend-zhg2). The factory is invoked
+   * once per render with the document's warehouseId, so a caller that passes
+   * one must pass it on EVERY render (hooks contract); the production binding
+   * is the module hook the route composition injects. When omitted the gate
+   * binds the explicit unbound fallback — every capability evaluation is
+   * `unknown`, identical to a capability query that never ran (the read-only
+   * detail page whose loaded lines never carry a domain).
+   */
+  capabilityValidation?: (warehouseId: string | undefined) => CapabilityValidatorBinding
 }
 
 type DocumentDetailRouteKey =
@@ -811,6 +822,7 @@ export function DocumentDetailBody({
  */
 function DocumentDetailPage({
   className,
+  capabilityValidation,
   linesSlot,
   petalSlot,
   timelineSlot,
@@ -841,8 +853,12 @@ function DocumentDetailPage({
     enabled: routeEntry !== undefined && documentId !== undefined,
     // The capability binding stays in the module (same seam as the warehouse
     // selector the header takes): the shared gate receives it instead of
-    // importing modules/warehouse itself.
-    capabilityValidation: useWarehouseCapabilityValidation,
+    // importing modules/warehouse itself. When omitted (bare/test mounts,
+    // read-only detail pages whose loaded lines never carry a domain), the
+    // gate falls back to the unbound UNBOUND_CAPABILITY_VALIDATOR — every
+    // capability evaluation is `unknown`, identical to a capability query that
+    // never ran.
+    ...(capabilityValidation === undefined ? {} : { capabilityValidation }),
   })
   // Conflict-recovery coordinator (e12-t13): same keys + same enabled flag →
   // deduped with the queries above. Owns only the recovery UI state and the

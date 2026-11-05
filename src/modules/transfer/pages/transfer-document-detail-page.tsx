@@ -3,6 +3,7 @@ import { useParams } from 'react-router'
 import { DetailField } from '@/shared/layout/detail-field'
 import DocumentDetailPage from '@/shared/documents/pages/document-detail-page'
 import { useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import type { TransferInfoResponse } from '@/shared/documents/types/document-wire.types'
 
 /**
@@ -25,6 +26,7 @@ export default function TransferDocumentDetailPage() {
 
   return (
     <DocumentDetailPage
+      capabilityValidation={useWarehouseCapabilityValidation}
       petalSlot={
         document?.transferInfo == null ? null : <TransferPetalView info={document.transferInfo} />
       }

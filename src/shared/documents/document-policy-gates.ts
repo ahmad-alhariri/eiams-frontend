@@ -42,6 +42,36 @@ import { isSignedOriginalBlocker } from '@/shared/documents/policy-blocker-codes
 
 export type PreflightGateStatus = 'pass' | 'blocked' | 'unknown'
 
+/**
+ * One (domainId, operation) capability verdict — the resolved answer the
+ * capability gate consumes. `messageAr` is filled by the binding layer from the
+ * capability validation it resolved; the pure layer only shapes the verdict.
+ */
+export type CapabilityValidationVerdict =
+  { status: 'supported' } | { status: 'blocked'; messageAr: string } | { status: 'unknown' }
+
+/**
+ * The capability validator a document surface binds to. Structurally mirrors
+ * `modules/warehouse`'s `UseWarehouseCapabilityValidationReturn`, whose hook is
+ * passed straight in by the document pages as the production binding — the
+ * shared layer owns the contract, the feature module owns the runtime.
+ */
+export interface CapabilityValidatorBinding {
+  validates: (
+    domainId: string | undefined,
+    operation: CapabilityOperation,
+  ) => CapabilityValidationVerdict
+}
+
+/**
+ * The unbound default: every capability check resolves to `unknown` — neutral,
+ * never blocking. Reachable only from bare/test mounts that pass no binding, so
+ * an unbound editor degrades exactly like a capability query that never ran.
+ */
+export const UNBOUND_CAPABILITY_VALIDATOR: CapabilityValidatorBinding = {
+  validates: () => ({ status: 'unknown' }),
+}
+
 export interface PreflightGate {
   gate: 'capability' | 'balance' | 'signedOriginal'
   status: PreflightGateStatus

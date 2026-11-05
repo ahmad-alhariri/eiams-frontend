@@ -41,6 +41,8 @@ import type {
   ListMaterialUnitConversionsQuery,
 } from '@/modules/catalog/types/catalog.api-types'
 import type { ResourceIdResponse } from '@/shared/api/api-contracts'
+import { listMaterialUnitConversions as listMaterialUnitConversionsRead } from '@/shared/api/catalog-reads'
+import { listUnitsOfMeasure as listUnitsOfMeasureRead } from '@/shared/api/catalog-reads'
 import { pathWithId } from '@/shared/services/api-path'
 
 // Real routes (the transport prefixes `/api/v1`). The 404 traps this file used
@@ -89,13 +91,6 @@ type WireQuery = Readonly<Record<string, string | number | boolean | undefined>>
  * carries a typed `search`).
  */
 
-/** Binds no filter at all — pagination only. */
-function unitsOfMeasureQuery(query: ListUnitsOfMeasureQuery): WireQuery {
-  return {
-    ...toWireOneBasedPaginationParams(query),
-  }
-}
-
 function materialDomainsQuery(query: ListMaterialDomainsQuery): WireQuery {
   return {
     ...toWireOneBasedPaginationParams(query),
@@ -128,13 +123,6 @@ function materialsQuery(query: ListMaterialsQuery): WireQuery {
     ...(query.familyId === undefined ? {} : { familyId: query.familyId }),
     ...(query.materialDomainId === undefined ? {} : { materialDomainId: query.materialDomainId }),
     ...(query.status === undefined ? {} : { status: query.status }),
-  }
-}
-
-/** Binds no filter — the material is in the path; pagination only. */
-function materialUnitConversionsQuery(query: ListMaterialUnitConversionsQuery): WireQuery {
-  return {
-    ...toWireOneBasedPaginationParams(query),
   }
 }
 
@@ -255,12 +243,7 @@ export interface CatalogService {
 export function createCatalogService(transport: ApiTransport): CatalogService {
   return {
     async listUnitsOfMeasure(query, context) {
-      return await transport.requestPage<UnitOfMeasure>({
-        path: UNITS_OF_MEASURE_PATH,
-        method: 'GET',
-        query: unitsOfMeasureQuery(query),
-        ...withSignal(context),
-      })
+      return await listUnitsOfMeasureRead(query, context)
     },
 
     async getUnitOfMeasure(unitId, context) {
@@ -473,12 +456,7 @@ export function createCatalogService(transport: ApiTransport): CatalogService {
     },
 
     async listMaterialUnitConversions(materialId, query, context) {
-      return await transport.requestPage<MaterialUnitConversion>({
-        path: pathWithId(MATERIAL_UNIT_CONVERSIONS_PATH, '{materialId}', materialId),
-        method: 'GET',
-        query: materialUnitConversionsQuery(query),
-        ...withSignal(context),
-      })
+      return await listMaterialUnitConversionsRead(materialId, query, context)
     },
 
     async getMaterialUnitConversion(materialId, materialUnitConversionId, context) {

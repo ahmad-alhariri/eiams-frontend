@@ -5,6 +5,8 @@ import {
   evaluateActionDecision,
   evaluateDocumentPreflight,
   toPreflightLineShapes,
+  UNBOUND_CAPABILITY_VALIDATOR,
+  type CapabilityValidatorBinding,
   type CapabilityEvaluation,
   type DocumentActionDecision,
   type DocumentPreflight,
@@ -16,7 +18,6 @@ import {
   useDocumentPolicyQuery,
 } from '@/shared/documents/use-document-queries'
 import type { DocumentActionType } from '@/shared/documents/types/document-action.types'
-import type { CapabilityOperation } from '@/shared/types/warehouse.wire-types'
 import type {
   DocumentPolicy,
   WarehouseDocumentDetails,
@@ -25,29 +26,9 @@ import type {
 const EMPTY_PREFLIGHT_LINES: readonly PreflightLineShape[] = []
 const EMPTY_CAPABILITY_EVALUATIONS: readonly CapabilityEvaluation[] = []
 
-/** One (domainId, operation) capability verdict, shaped like `CapabilityEvaluation`. */
-export type CapabilityValidationVerdict =
-  { status: 'supported' } | { status: 'blocked'; messageAr: string } | { status: 'unknown' }
-
-/**
- * The capability validator the document gate asks `validates(domainId,
- * operation)` of. Structurally compatible with
- * `modules/warehouse`'s `UseWarehouseCapabilityValidationReturn`, whose hook
- * is passed straight in by the document pages (`capabilityValidation:
- * useWarehouseCapabilityValidation`) — the production binding stays in the
- * module, exactly like the scoped warehouse selector the pages inject.
- */
-export interface CapabilityValidatorBinding {
-  validates: (
-    domainId: string | undefined,
-    operation: CapabilityOperation,
-  ) => CapabilityValidationVerdict
-}
-
-/** Unbound default: always `unknown` — a neutral note that never blocks. */
-const UNBOUND_CAPABILITY_VALIDATOR: CapabilityValidatorBinding = {
-  validates: () => ({ status: 'unknown' }),
-}
+export type { CapabilityValidationVerdict } from '@/shared/documents/document-policy-gates'
+export type { CapabilityValidatorBinding } from '@/shared/documents/document-policy-gates'
+export { UNBOUND_CAPABILITY_VALIDATOR } from '@/shared/documents/document-policy-gates'
 
 export interface DocumentPolicyGateOptions {
   enabled?: boolean

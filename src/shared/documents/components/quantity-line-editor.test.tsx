@@ -9,6 +9,7 @@ import { FormProvider, useForm, useWatch, type Resolver, type UseFormReturn } fr
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import { createQueryClient } from '@/shared/services/query.client'
 import { errJson, okPageJson } from '@/test/msw/envelope'
 import { createWarehouseCapability, fixtureUuid } from '@/test/msw/factories'
@@ -364,6 +365,7 @@ describe('QuantityLineEditor', () => {
         <QuantityLineEditor
           documentType="Receiving"
           warehouseId={warehouseId}
+          capabilityValidation={useWarehouseCapabilityValidation}
           onCapabilityGateChange={onCapabilityGateChange}
         />
       )),

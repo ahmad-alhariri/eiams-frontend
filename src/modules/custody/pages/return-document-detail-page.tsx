@@ -4,6 +4,7 @@ import { ROUTE_PATHS } from '@/config/routes'
 import { DetailField } from '@/shared/layout/detail-field'
 import DocumentDetailPage from '@/shared/documents/pages/document-detail-page'
 import { useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import type { ReturnInfoResponse } from '@/shared/documents/types/document-wire.types'
 
 /**
@@ -32,6 +33,7 @@ export default function ReturnDocumentDetailPage() {
 
   return (
     <DocumentDetailPage
+      capabilityValidation={useWarehouseCapabilityValidation}
       petalSlot={
         document?.returnInfo == null ? null : <ReturnPetalView info={document.returnInfo} />
       }

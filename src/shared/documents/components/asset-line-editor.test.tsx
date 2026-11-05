@@ -8,6 +8,7 @@ import { FormProvider, useForm, useWatch, type Resolver, type UseFormReturn } fr
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import { createQueryClient } from '@/shared/services/query.client'
 import { okPageJson } from '@/test/msw/envelope'
 import { wireMaterial } from '@/test/msw/catalog-wire-fixtures'
@@ -398,7 +399,15 @@ describe('AssetLineEditor', () => {
     )
     useCatalogHandlers()
     const { host } = createTestHost()
-    render(host(() => <AssetLineEditor documentType="Receiving" warehouseId={warehouseId} />))
+    render(
+      host(() => (
+        <AssetLineEditor
+          documentType="Receiving"
+          warehouseId={warehouseId}
+          capabilityValidation={useWarehouseCapabilityValidation}
+        />
+      )),
+    )
     await user.click(screen.getByRole('button', { name: 'إضافة بند أصل' }))
     await selectMaterial('طابعة ليزر')
 
@@ -432,6 +441,7 @@ describe('AssetLineEditor', () => {
         <AssetLineEditor
           documentType="Opening"
           warehouseId={warehouseId}
+          capabilityValidation={useWarehouseCapabilityValidation}
           onCapabilityGateChange={onCapabilityGateChange}
         />
       )),
@@ -509,5 +519,68 @@ describe('AssetLineEditor', () => {
     expect(screen.getByRole('button', { name: 'حذف الوحدة ١ من البند ١' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'إضافة وحدة/أصل إلى البند ١' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'حذف البند ١' })).toBeDisabled()
+  })
+})
+
+/**
+ * The capability binding is an optional factory prop with an explicit unbound
+ * fallback. An unbound validator degrades every verdict to `unknown`, which
+ * marks the line unverified and must NEVER block; a supplied binding that
+ * reports `blocked` must still block. Both directions are asserted here because
+ * a regression in either one is silent: one stops blocking when it should, the
+ * other blocks when the caller supplied nothing.
+ */
+describe('AssetLineEditor capability binding', () => {
+  type ObservedGate = { status: string; messageAr?: string }
+
+  it('treats an absent capability binding as unverified, never blocked', async () => {
+    const gates: ObservedGate[] = []
+    const { host } = createTestHost()
+
+    render(
+      host(
+        () => (
+          <AssetLineEditor
+            documentType="Receiving"
+            warehouseId={fixtureUuid(7)}
+            onCapabilityGateChange={(next) => {
+              gates.push(next)
+            }}
+          />
+        ),
+        [SEEDED_LINE],
+      ),
+    )
+
+    await waitFor(() => expect(gates.length).toBeGreaterThan(0))
+    expect(gates.at(-1)?.status).toBe('unverified')
+    expect(gates.at(-1)?.status).not.toBe('blocked')
+  })
+
+  it('blocks when the supplied binding reports blocked', async () => {
+    const gates: ObservedGate[] = []
+    const blockedMessage = 'blocked-by-supplied-binding'
+    const { host } = createTestHost()
+
+    render(
+      host(
+        () => (
+          <AssetLineEditor
+            documentType="Receiving"
+            warehouseId={fixtureUuid(7)}
+            capabilityValidation={() => ({
+              validates: () => ({ status: 'blocked', messageAr: blockedMessage }),
+            })}
+            onCapabilityGateChange={(next) => {
+              gates.push(next)
+            }}
+          />
+        ),
+        [SEEDED_LINE],
+      ),
+    )
+
+    await waitFor(() => expect(gates.length).toBeGreaterThan(0))
+    expect(gates.at(-1)).toEqual({ status: 'blocked', messageAr: blockedMessage })
   })
 })

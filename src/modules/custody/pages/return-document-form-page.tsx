@@ -16,6 +16,7 @@ import {
   returnInfoFormSchema,
 } from '@/modules/custody/schemas/return-info.schema'
 import { QuantityLineEditor } from '@/shared/documents/components/quantity-line-editor'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import {
   buildCompleteDraftRequest,
   DocumentHeaderSection,
@@ -446,6 +447,7 @@ export default function ReturnDocumentFormPage() {
           >
             <h2 className="text-sm font-medium text-foreground">بنود الإرجاع</h2>
             <QuantityLineEditor
+              capabilityValidation={useWarehouseCapabilityValidation}
               documentType="Return"
               warehouseId={headerWarehouseId || undefined}
               disabled={isSubmitting}

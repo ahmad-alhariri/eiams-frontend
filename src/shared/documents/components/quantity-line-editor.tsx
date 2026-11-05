@@ -6,14 +6,15 @@ import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
 import {
   useMaterialUnitConversionsQuery,
   useUnitsOfMeasureQuery,
-} from '@/modules/catalog/hooks/use-catalog-queries'
-import { MATERIAL_KIND_LABELS } from '@/modules/catalog/constants/catalog-labels'
-import { isMaterialKind, policyDescription } from '@/modules/catalog/constants/material-kind-policy'
+} from '@/shared/catalog/use-catalog-reference-queries'
+import { MATERIAL_KIND_LABELS } from '@/shared/catalog/material-kind-labels'
+import { isMaterialKind, policyDescription } from '@/shared/catalog/material-kind-policy'
 import { useScopedMaterialSelector } from '@/shared/scopes/use-scoped-material-selector'
 import {
-  useWarehouseCapabilityValidation,
-  type CapabilityValidation,
-} from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
+  UNBOUND_CAPABILITY_VALIDATOR,
+  type CapabilityValidatorBinding,
+  type CapabilityValidationVerdict,
+} from '@/shared/documents/document-policy-gates'
 import {
   balanceHintAr,
   deriveBaseQuantity,
@@ -91,6 +92,15 @@ export interface QuantityLineEditorProps {
    * its own rule here; the editor never learns that rule.
    */
   materialFilter?: ((material: Material) => boolean) | undefined
+  /**
+   * Optional factory binding the editor to the session's capability validator.
+   * The factory is invoked once per render with the document's warehouseId, so a
+   * caller that passes one must pass it on EVERY render (hooks contract); the
+   * production binding is the module hook the page injects. When omitted the
+   * editor binds the explicit unbound fallback — a neutral `unknown` verdict
+   * that never blocks (bare/test mounts only).
+   */
+  capabilityValidation?: (warehouseId: string | undefined) => CapabilityValidatorBinding
 }
 
 /** Aggregate capability state for the currently selected quantity-line materials. */
@@ -132,7 +142,10 @@ function capabilityOperationFor(
 function capabilityGateForLines(
   lines: readonly Partial<QuantityLineValues>[],
   operation: CapabilityOperation,
-  validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation,
+  validates: (
+    domainId: string | undefined,
+    operation: CapabilityOperation,
+  ) => CapabilityValidationVerdict,
 ): QuantityLineCapabilityGate {
   let hasUnverifiedLine = false
 
@@ -266,7 +279,10 @@ interface QuantityLineRowProps {
   operation: CapabilityOperation
   scopeReady: boolean
   unitLabel: (unitId: string) => string
-  validates: (domainId: string | undefined, operation: CapabilityOperation) => CapabilityValidation
+  validates: (
+    domainId: string | undefined,
+    operation: CapabilityOperation,
+  ) => CapabilityValidationVerdict
   /** Known balance for this line's material; undefined while loading/unknown. */
   balance?: number | null | undefined
   /** Page-supplied extra content for this line (D-IAR-01 asset selector slot). */
@@ -360,7 +376,7 @@ function QuantityLineRow({
                 scopeReady={scopeReady}
                 disabled={disabled}
               />
-              {materialKind === null ? null : (
+              {materialKind === null || materialKind === undefined ? null : (
                 <p className="text-sm text-muted-foreground">
                   نوع المادة: {MATERIAL_KIND_LABELS[materialKind]}
                   {materialKind === 'Consumable' ? null : ` — ${policyDescription(materialKind)}`}
@@ -584,6 +600,7 @@ function QuantityLineRow({
  * to the `DocumentLineInput` contract.
  */
 export function QuantityLineEditor({
+  capabilityValidation,
   documentType,
   warehouseId,
   disabled = false,
@@ -612,12 +629,15 @@ export function QuantityLineEditor({
     },
     [materialSelector, materialFilter],
   )
-  const capabilityValidation = useWarehouseCapabilityValidation(warehouseId)
+  const capabilityValidator: CapabilityValidatorBinding =
+    capabilityValidation === undefined
+      ? UNBOUND_CAPABILITY_VALIDATOR
+      : capabilityValidation(warehouseId)
   const operation = capabilityOperationFor(documentType)
   const lines = useWatch({ control, name: 'lines' })
   const capabilityGate = useMemo(
-    () => capabilityGateForLines(lines ?? [], operation, capabilityValidation.validates),
-    [lines, operation, capabilityValidation.validates],
+    () => capabilityGateForLines(lines ?? [], operation, capabilityValidator.validates),
+    [lines, operation, capabilityValidator.validates],
   )
 
   /**
@@ -662,7 +682,7 @@ export function QuantityLineEditor({
             operation={operation}
             scopeReady={materialSelector.scopeReady}
             unitLabel={unitLabel}
-            validates={capabilityValidation.validates}
+            validates={capabilityValidator.validates}
             {...(balanceForLine === undefined ? {} : { balance: balanceForLine(index) })}
             {...(assetSlotForLine === undefined ? {} : { assetSlot: assetSlotForLine(index) })}
           />

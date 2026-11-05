@@ -3,6 +3,7 @@ import { useParams } from 'react-router'
 import { ReceivingPetalView } from '@/modules/receiving/components/receiving-petal-view'
 import DocumentDetailPage from '@/shared/documents/pages/document-detail-page'
 import { useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 
 /**
  * Receiving document detail (e13-t06).
@@ -21,6 +22,7 @@ export default function ReceivingDocumentDetailPage() {
 
   return (
     <DocumentDetailPage
+      capabilityValidation={useWarehouseCapabilityValidation}
       petalSlot={
         document?.receivingInfo == null ? null : (
           <ReceivingPetalView info={document.receivingInfo} />
