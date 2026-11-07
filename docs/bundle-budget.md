@@ -52,6 +52,7 @@ Re-measure with `pnpm run build`, then sum the sizes of the files in
 | 2026-11-03 | EIAMS-FE-B5A1 | cancellable adjustment / inventory-count reads; `api-transport` becomes its own chunk | 171 | 1615502 | 344965 |
 | 2026-11-03 | Batch 5a part 2 | RequestContext/withSignal plumbing on the remaining read paths | 170 | 1616877 | 344829 |
 | 2026-11-04 | EIAMS-FE-BUNDLE (Batch 6b) | shared shell error-boundary component (`shell-error-boundary.tsx`, +51 lines) and explicit permission props on six shared editors | 170 | 1617516 | 345191 |
+| 2026-11-07 | K4.7 | material-kind constants moved to shared canonical modules (`shared/catalog/*`) with compatibility re-export shims; one additional 43B emitted chunk via lazy Catalog route deps (K4.7.2); no new route or business logic, deliberate module-boundary change not a regression; ceilings re-derived with no headroom, still a regression mechanism; `EIAMS-FE-B3` same-type governed precedent, not identical change | 171 | 1617716 | 345253 |
 
 The `e25-t04` growth is 287 bytes of Tailwind class names in the shared UI
 chunks, 44 of them in the largest chunk (`index-*.js`); its fix round adds a
