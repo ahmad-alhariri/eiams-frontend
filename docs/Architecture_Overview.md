@@ -134,18 +134,19 @@ The layers above are source boundaries too, and they are enforced in the tree:
   the sanctioned single-point shim into auth). Runtime edges into `auth`
   (session, permission and scope hooks) are treated as infrastructure and are
   sanctioned; runtime edges into a FEATURE module are not.
-- The remaining runtime shared→feature edges are in the shared document spine and
-  are an OPEN, separately-tracked item (`eiams-frontend-zhg2`): the catalog
-  material-unit-conversion query and the material-kind label/policy vocabulary in
-  `src/shared/documents/components/quantity-line-editor.tsx:6-11`; the warehouse
-  capability validation in
-  `src/shared/documents/components/asset-line-editor.tsx:6-9`,
-  `src/shared/documents/components/quantity-line-editor.tsx:13-16` and
-  `src/shared/documents/pages/document-detail-page.tsx:7`. The two scope
-  selectors under `src/shared/scopes/` bind their own module's service
-  (`use-scoped-material-selector.ts:4` → catalog,
-  `use-scoped-warehouse-selector.ts:4` → warehouse), which is why they are
-  listed separately above rather than counted as spine edges.
+- The shared document spine no longer imports a feature module (closed 2026-11-05,
+  `eiams-frontend-zhg2`): the capability validation reaches both line editors and
+  the shared detail page through an optional factory prop that the document pages
+  inject (`capabilityValidation={useWarehouseCapabilityValidation}`), the
+  material-kind label/policy vocabulary lives under `src/shared/catalog/`, and the
+  catalog unit-of-measure and unit-conversion READS live in
+  `src/shared/api/catalog-reads.ts` with the catalog hooks depending on them.
+- The two scope selectors under `src/shared/scopes/` still bind their own module
+  service (`use-scoped-material-selector.ts` -> catalog,
+  `use-scoped-warehouse-selector.ts` -> warehouse). That is a recorded decision in
+  `docs/cross-feature-dependency-matrix.md`, not an oversight: they are the
+  documented page-seam adapters, and moving those two services is a separate slice.
+
 - The two highest-fanout cross-feature scope selectors (`use-scoped-warehouse-selector`,
   `use-scoped-material-selector`) live in `src/shared/scopes/` (promoted from
   `warehouse/hooks/` and `catalog/hooks/` in 2026-11-03; they are genuinely
@@ -169,7 +170,7 @@ The layers above are source boundaries too, and they are enforced in the tree:
 
 The audit that produced this arrangement, including the findings that were
 withdrawn after verification, is in
-`docs/frontend-architecture-audit-2026-11-02.md`.
+`../../docs/archive/frontend-architecture-audit-2026-11-02.md`.
 
 ---
 

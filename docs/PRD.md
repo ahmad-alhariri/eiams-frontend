@@ -11,6 +11,8 @@
 
 > **Unification note:** This version folds the settled decisions from the architecture review (Chapter 9) directly into the body, and embeds the corrected database design (v5) in Chapter 10. Where anything is ambiguous, Chapters 9 and 10 govern.
 
+> **Canonical authority note:** Product requirements and approved decisions are maintained in the canonical shared PRD at `C:\EIAMS-SYSTEM\docs\PRD.md`. This frontend-local copy is retained so existing chapter-based references and frontend documentation traceability remain intact; it must not override the canonical shared PRD.
+
 ---
 
 ## Chapter 1 — Executive Summary
@@ -116,7 +118,7 @@ remain accountable after issue through the D-MAT-01 `MaterialQuantity` or
 The historical Schema v5 `Custody` entity manages Asset responsibility with
 one active row per asset. D-MAT-01 extends the provisional OpenAPI custody
 projection to Durable `MaterialQuantity` and `TrackedUnit` subjects, including
-partial returns. Backend implementation and ratification remain required; this
+partial returns. The decision was ratified by RESOLUTION-048 on 2026-10-26; this
 extension never represents Durable property as an Asset row.
 
 ---
@@ -136,7 +138,7 @@ extension never represents Durable property as an Asset row.
 
 - A `Role` ↔ `Permission` model via `RolePermission` (atomic permissions).
 - `UserRoleScope` grants a user's role within a **scope**: `Enterprise | Site | Warehouse`.
-- The warehouse keeper creates documents and posts them after uploading the signed copy. **There is no manager-approval step in v1** (D-WF-01).
+- The warehouse keeper creates and submits documents; the warehouse manager reviews the signed copy and posts (D-WF-01, RESOLUTION-064).
 
 ---
 
@@ -181,7 +183,7 @@ extension never represents Durable property as an Asset row.
 
 ### 6.8 Custody
 - The historical persistence model is an Asset timeline with one active row per asset, with `holder_type`/`holder_id`/`custody_kind`.
-- D-MAT-01's provisional OpenAPI adds `MaterialQuantity` and `TrackedUnit` custody subjects for Durable property and partial returns. Backend implementation and ratification remain required.
+- D-MAT-01's provisional OpenAPI adds `MaterialQuantity` and `TrackedUnit` custody subjects for Durable property and partial returns. It was ratified by RESOLUTION-048 on 2026-10-26.
 - Assignment and return are tied to documents (`issue_document_id`/`return_document_id`). Status `Active | Closed`.
 - `CustodyHistory` records state changes.
 
@@ -240,7 +242,7 @@ General rules: no transition to a disallowed state; every transition is logged i
 | **D-POLY-01** | Polymorphic FKs | `IssueTo.recipient_id` and `Custody.holder_id` remain UUID (no FK constraint) by design. **Application-layer enforcement is mandatory** — every service must validate the referenced entity exists and is active before write. A scheduled housekeeping job audits orphaned references daily. A `CHECK` trigger guards against `NULL` recipient_id/holder_id when status is Posted/Active. |
 | **D-OPEN-01** | Opening Balance | `OpeningBalance` is folded into `WarehouseDocument` as `document_type = Opening`. It uses the shared Spine lifecycle (`Draft → Submitted → Posted → Reversed`), the shared `DocumentLine` table, and `DocumentAttachment` for the signed copy. The separate `OpeningBalance` entity is removed; its columns move to `DocumentLine` with a new `opening_type` flag. |
 | **D-AST-02** | Asset status derived | `Asset.status` is **removed** from the schema. The current asset state is derived from the latest `Custody` row (if any) and the `AssetMovementHistory` ledger. A database view `v_asset_current_status` computes `InStock / Issued / InCustody / Disposed` from these two sources. This eliminates the synchronisation gap between `Asset.status` and `Custody.status`. |
-| **D-CAP-01** | Warehouse capability | `WarehouseCapability` BOOLEAN columns (`allow_receiving`, `allow_issue`, `allow_transfer`, `allow_count`) are replaced by `WarehouseCapabilityOperation` — a child table with one row per allowed operation per domain. Adding a new operation type (e.g., `Return`) in v2 requires only a new row, not an `ALTER TABLE`. |
+| **D-CAP-01** | Warehouse capability | `WarehouseCapability` BOOLEAN columns (`allow_receiving`, `allow_issue`, `allow_transfer`, `allow_count`) are replaced by `WarehouseCapabilityOperation` — a child table with one row per allowed operation per domain. Return is in v1 scope and is granted by a `WarehouseCapabilityOperation` row with `operation_type = Return` (RESOLUTION-049). |
 | **D-AUD-01** | Audit log granularity | `AuditLog.old_values` / `new_values` JSONB are replaced by a two-table model: `AuditLog` (header with optional JSONB summary) + `AuditLogEntry` (one row per changed field with `field_name`, `old_value`, `new_value`). This enables indexed per-field search and avoids unbounded JSONB bloat. |
 | **D-UOM-01** | Material unit conversion | Each Material owns one base unit. An alternate unit converts directly to that base unit by a positive per-material `DECIMAL(18,6)` factor; units have no global packaging factor. A used conversion is archived/deactivated and replaced, never overwritten or deleted, and posted lines retain conversion/factor/base-quantity snapshots. |
 
@@ -449,7 +451,6 @@ Stock-holding unit.
 | `name` | VARCHAR(200) |  |  |
 | `code` | VARCHAR(50) | UNIQUE |  |
 | `warehouse_type` | VARCHAR(50) |  |  |
-| `can_hold_stock` | BOOLEAN |  |  |
 | `status` | VARCHAR(20) |  |  |
 | `row_version` | INTEGER |  | optimistic lock |
 

@@ -33,10 +33,10 @@ jobs:
       - name: Checkout canonical backend as data
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          repository: ahmad-alhariri/eiams-backend
+          repository: tareq-11/EIAMS
           ref: main
           path: .ci/eiams-backend
-          token: ${{ secrets.EIAMS_CROSS_REPO_READ_TOKEN }}
+          token: ${{ secrets.EIAMS_BACKEND_REPO_TOKEN }}
           persist-credentials: false
 
       - name: Move the backend checkout beside the frontend
