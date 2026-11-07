@@ -7,8 +7,8 @@ import {
   useMaterialUnitConversionsQuery,
   useUnitsOfMeasureQuery,
 } from '@/modules/catalog/hooks/use-catalog-queries'
-import { MATERIAL_KIND_LABELS } from '@/modules/catalog/constants/catalog-labels'
-import { isMaterialKind, policyDescription } from '@/modules/catalog/constants/material-kind-policy'
+import { MATERIAL_KIND_LABELS } from '@/shared/catalog/material-kind-labels'
+import { isMaterialKind, policyDescription } from '@/shared/catalog/material-kind-policy'
 import { useScopedMaterialSelector } from '@/shared/scopes/use-scoped-material-selector'
 import {
   useWarehouseCapabilityValidation,
