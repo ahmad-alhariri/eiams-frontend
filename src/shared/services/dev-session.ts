@@ -1,6 +1,6 @@
 import { PERMISSION_CODES } from '@/config/permissions'
 import type { AppEnvironment } from '@/config/env'
-import type { AuthTokenResponse } from '@/modules/auth/types/session.types'
+import type { AuthTokenResponse } from '@/shared/auth/session.types'
 
 /**
  * Dev-only session fixture (transport boundary).
