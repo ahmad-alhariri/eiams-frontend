@@ -127,3 +127,19 @@ export interface MaterialDomain {
   readonly code: string
   readonly status: RecordStatus
 }
+
+/**
+ * `GET /catalog/materials` filters: `search?`, `familyId?`,
+ * `materialDomainId?`, `status?` — the material domain filter is
+ * `materialDomainId`, not `domainId`/`categoryId`, and `search` matches the
+ * material name/code server-side. `status` is {@link MaterialStatus}, so
+ * `Archived` is expressible here.
+ */
+export interface ListMaterialsQuery {
+  readonly page?: number
+  readonly pageSize?: number
+  readonly search?: string
+  readonly familyId?: Uuid
+  readonly materialDomainId?: Uuid
+  readonly status?: MaterialStatus
+}
