@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { warehouseService } from '@/modules/warehouse/services/warehouse.service'
-import type { ListWarehousesQuery, Warehouse } from '@/modules/warehouse/types/warehouse.types'
+import type { ListWarehousesQuery, Warehouse } from '@/shared/types/warehouse.wire-types'
 import {
   useWarehouseSelector,
   type WarehouseLoader,

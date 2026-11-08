@@ -487,21 +487,8 @@ export interface ListMaterialFamiliesQuery {
   readonly status?: RecordStatus
 }
 
-/**
- * `GET /catalog/materials` filters: `search?`, `familyId?`,
- * `materialDomainId?`, `status?` — the material domain filter is
- * `materialDomainId`, not `domainId`/`categoryId`, and `search` matches the
- * material name/code server-side. `status` is {@link MaterialStatus}, so
- * `Archived` is expressible here.
- */
-export interface ListMaterialsQuery {
-  readonly page?: number
-  readonly pageSize?: number
-  readonly search?: string
-  readonly familyId?: Uuid
-  readonly materialDomainId?: Uuid
-  readonly status?: MaterialStatus
-}
+/** ListMaterialsQuery lives in `shared/types/catalog.wire-types`; re-exported from here. */
+export type { ListMaterialsQuery } from '@/shared/types/catalog.wire-types'
 
 /** `GET /catalog/materials/{materialId}/unit-conversions` binds NO filter —
  *  the material comes from the path and nothing else but pagination applies. */
