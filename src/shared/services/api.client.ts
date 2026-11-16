@@ -15,7 +15,7 @@ import {
 } from '@/shared/services/session-adapter'
 import { unwrapData } from '@/shared/api/envelope'
 import type { ApiSuccessResponse } from '@/shared/api/api-contracts'
-import type { AuthTokenResponse } from '@/modules/auth/types/session.types'
+import type { AuthTokenResponse } from '@/shared/auth/session.types'
 
 /**
  * The two auth paths, declared locally rather than checked against

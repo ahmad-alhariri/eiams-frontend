@@ -1,13 +1,13 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Material, NamedReference } from '@/modules/catalog/types/catalog.types'
+import type { Material, NamedReference } from '@/shared/types/catalog.wire-types'
 import type {
   Employee,
   OrganizationalUnit,
   Site,
 } from '@/modules/organization/types/organization.types'
-import type { Warehouse } from '@/modules/warehouse/types/warehouse.types'
+import type { Warehouse } from '@/shared/types/warehouse.wire-types'
 import { useEmployeeSelector } from '@/modules/organization/selectors/employee-selector'
 import { useMaterialSelector } from '@/shared/selectors/adapters/material-selector'
 import { useNamedReferenceSelector } from '@/modules/catalog/selectors/named-reference-selector'

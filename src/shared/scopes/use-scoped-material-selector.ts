@@ -2,13 +2,12 @@ import { useCallback } from 'react'
 
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { catalogService } from '@/modules/catalog/services/catalog.service'
-import type { ListMaterialsQuery } from '@/modules/catalog/types/catalog.types'
+import type { ListMaterialsQuery, Material } from '@/shared/types/catalog.wire-types'
 import {
   useMaterialSelector,
   type MaterialLoader,
 } from '@/shared/selectors/adapters/material-selector'
 import type { EntitySelectorResult } from '@/shared/selectors/selector-adapter'
-import type { Material } from '@/modules/catalog/types/catalog.types'
 
 export interface ScopedMaterialSelectorResult extends EntitySelectorResult<Material> {
   /** False until the session has a selected active scope; callers disable the control. */

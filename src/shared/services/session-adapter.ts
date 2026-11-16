@@ -1,4 +1,4 @@
-import type { AuthTokenResponse, SessionResponse } from '@/modules/auth/types/session.types'
+import type { AuthTokenResponse, SessionResponse } from '@/shared/auth/session.types'
 
 export type SessionAdapterEvent =
   | Readonly<{
