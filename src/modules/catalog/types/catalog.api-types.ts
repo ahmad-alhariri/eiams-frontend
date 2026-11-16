@@ -54,24 +54,34 @@
 
 import type { RecordStatus, RecordStatusOrdinal, Uuid } from '@/shared/types/wire-primitives'
 import type {
+  ListMaterialUnitConversionsQuery,
+  ListUnitsOfMeasureQuery,
   Material,
   MaterialDomain,
   MaterialKind,
   MaterialStatus,
   MaterialUnitConversion,
+  MaterialUnitConversionPage,
   NamedReference,
   TrackingType,
+  UnitOfMeasure,
+  UnitOfMeasurePage,
 } from '@/shared/types/catalog.wire-types'
 
 export type { RecordStatus, RecordStatusOrdinal, Uuid }
 export type {
+  ListMaterialUnitConversionsQuery,
+  ListUnitsOfMeasureQuery,
   Material,
   MaterialDomain,
   MaterialKind,
   MaterialStatus,
   MaterialUnitConversion,
+  MaterialUnitConversionPage,
   NamedReference,
   TrackingType,
+  UnitOfMeasure,
+  UnitOfMeasurePage,
 }
 
 /**
@@ -165,14 +175,9 @@ import type { ApiPage } from '@/shared/api/api-contracts'
  * no `baseUnitId`, no `baseUnit` object: the projection is exactly
  * `{ id, name, symbol, unitType, status }`. The conversion story lives on
  * `MaterialUnitConversion` now.
+ *
+ * Re-exported above with the rest of the catalog wire contracts.
  */
-export interface UnitOfMeasure {
-  readonly id: Uuid
-  readonly name: string
-  readonly symbol: string
-  readonly unitType: string
-  readonly status: RecordStatus
-}
 
 /**
  * `POST /catalog/units-of-measure` body.
@@ -203,8 +208,6 @@ export interface UpdateUnitOfMeasureRequest {
 export interface SetUnitOfMeasureStatusRequest {
   readonly status: RecordStatusOrdinal
 }
-
-export type UnitOfMeasurePage = ApiPage<UnitOfMeasure>
 
 // ---------------------------------------------------------------------------
 // Material Domains
@@ -423,8 +426,6 @@ export interface UpdateMaterialUnitConversionRequest {
   readonly factor: number
 }
 
-export type MaterialUnitConversionPage = ApiPage<MaterialUnitConversion>
-
 // ---------------------------------------------------------------------------
 // Query types
 // ---------------------------------------------------------------------------
@@ -446,13 +447,6 @@ export type MaterialUnitConversionPage = ApiPage<MaterialUnitConversion>
  * `status` filters are STRING enum names even though `Set*Status` bodies are
  * ordinals — query binding and body binding are separate paths.
  */
-
-/** `GET /catalog/units-of-measure` binds NO filter at all — not even
- *  `status`. Only `page`/`pageSize`. */
-export interface ListUnitsOfMeasureQuery {
-  readonly page?: number
-  readonly pageSize?: number
-}
 
 /** `GET /catalog/domains` filters: `status?`. */
 export interface ListMaterialDomainsQuery {
@@ -489,10 +483,3 @@ export interface ListMaterialFamiliesQuery {
 
 /** ListMaterialsQuery lives in `shared/types/catalog.wire-types`; re-exported from here. */
 export type { ListMaterialsQuery } from '@/shared/types/catalog.wire-types'
-
-/** `GET /catalog/materials/{materialId}/unit-conversions` binds NO filter —
- *  the material comes from the path and nothing else but pagination applies. */
-export interface ListMaterialUnitConversionsQuery {
-  readonly page?: number
-  readonly pageSize?: number
-}

@@ -2,14 +2,14 @@
 
 **Status:** Enforced in CI
 **Bead:** `eiams-frontend-e25-t06`
-**Derived:** 2026-10-28, re-derived 2026-10-30 (×4) and 2026-11-02, then 2026-11-03 (×3), then 2026-11-04 (×1)
+**Derived:** 2026-10-28, re-derived 2026-10-30 (×4) and 2026-11-02, then 2026-11-03 (×3), then 2026-11-04 (×1), then 2026-11-05 (×1), then 2026-11-17 (×1)
 **Mechanism:** `scripts/check-bundle-budget.mjs` plus `src/test/lazy-route-budget.test.ts`
 
 ## What these numbers are, and what they are not
 
 No product document states a bundle size target. The numbers below are
 **regression ceilings**: they were derived from a production build (2026-10-28,
-re-derived 2026-10-30, 2026-11-02, 2026-11-03 and 2026-11-04) so that a change which quietly
+re-derived 2026-10-30, 2026-11-02, 2026-11-03, 2026-11-04, 2026-11-05 and 2026-11-17) so that a change which quietly
 inflates the shipped bundle, or quietly replaces a lazily imported route page with
 a static import, **fails the build** instead of reaching users. They are not
 performance targets and they are not a claim that the current bundle is the right
@@ -27,9 +27,9 @@ copy to drift.
 
 | Ceiling | Value | Measured from |
 | --- | --- | --- |
-| `maxJsChunkCount` | 170 | count of `dist/assets/*.js` |
-| `maxJsTotalBytes` | 1617516 | summed size of `dist/assets/*.js` |
-| `maxLargestChunkBytes` | 345191 | largest single `dist/assets/*.js` |
+| `maxJsChunkCount` | 174 | count of `dist/assets/*.js` |
+| `maxJsTotalBytes` | 1620248 | summed size of `dist/assets/*.js` |
+| `maxLargestChunkBytes` | 345600 | largest single `dist/assets/*.js` |
 | `routePageCount` | 59 | `getWiredRouteKeys().length` |
 
 Re-measure with `pnpm run build`, then sum the sizes of the files in
@@ -52,7 +52,9 @@ Re-measure with `pnpm run build`, then sum the sizes of the files in
 | 2026-11-03 | EIAMS-FE-B5A1 | cancellable adjustment / inventory-count reads; `api-transport` becomes its own chunk | 171 | 1615502 | 344965 |
 | 2026-11-03 | Batch 5a part 2 | RequestContext/withSignal plumbing on the remaining read paths | 170 | 1616877 | 344829 |
 | 2026-11-04 | EIAMS-FE-BUNDLE (Batch 6b) | shared shell error-boundary component (`shell-error-boundary.tsx`, +51 lines) and explicit permission props on six shared editors | 170 | 1617516 | 345191 |
+| 2026-11-05 | `eiams-frontend-zhg2` | bind the shared document line editors to feature runtimes at the page seam: the capability validator becomes an optional factory prop with an unbound fallback, the material-kind vocabulary moves to `src/shared/catalog/`, and the catalog unit and unit-conversion reads move to `src/shared/api/` | 174 | 1620248 | 345600 |
 | 2026-11-07 | K4.7 | material-kind constants moved to shared canonical modules (`shared/catalog/*`) with compatibility re-export shims; one additional 43B emitted chunk via lazy Catalog route deps (K4.7.2); no new route or business logic, deliberate module-boundary change not a regression; ceilings re-derived with no headroom, still a regression mechanism; `EIAMS-FE-B3` same-type governed precedent, not identical change | 171 | 1617716 | 345253 |
+| 2026-11-17 | merge of origin/main (33fe488) | main's shared-type centralization (K4.7 material-kind vocabulary, auth session types moved to shared/auth, catalog and warehouse wire-type imports) merged on top of the branch's shared-seam work; ceilings re-derived from the merged production build; no new route, routePageCount unchanged at 59 | 174 | 1620248 | 345600 |
 
 The `e25-t04` growth is 287 bytes of Tailwind class names in the shared UI
 chunks, 44 of them in the largest chunk (`index-*.js`); its fix round adds a
@@ -67,13 +69,15 @@ removed 410 bytes of duplicated submit and error-mapping code (measured total
 1,615,035 bytes), so the ceiling deliberately kept that headroom rather than
 being lowered.
 
-The committed ceilings are now 170 chunks / 1,617,516 bytes / 345,191 bytes
-largest chunk (re-derived 2026-11-04 for EIAMS-FE-BUNDLE / Batch 6b). The growth
-of +639 bytes total and +362 bytes on the largest chunk is the intended
-shared `shell-error-boundary` component and the explicit permission props on
-the six shared editors; no module, chunk or route was added, and the chunk
-count is unchanged at its ceiling of 170. The route page count is unchanged at
-59 throughout.
+The committed ceilings are now 174 chunks / 1,620,248 bytes / 345,600 bytes
+largest chunk (re-derived 2026-11-17 for the merge of origin/main 33fe488 into
+`feature/live-api-on-handwritten-contracts`). The delta against the previous
+committed ceilings (174 chunks / 1,620,248 bytes / 345,600 bytes) is zero: the
+merge adds main's shared-type centralization (the K4.7 material-kind vocabulary,
+the auth session types moved to `shared/auth`, and the catalog and warehouse
+wire-type imports) on top of the branch's shared-seam work, and none of it adds
+runtime bytes to the shipped bundle. No route was added, and the route page
+count stays 59.
 
 ## The lazy-route invariant
 

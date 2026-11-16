@@ -72,24 +72,7 @@ function useActiveScopeCacheKey() {
  * ZERO-based index converts with `toWirePaginationParams` BEFORE reaching these
  * hooks, never after.
  */
-export function useUnitsOfMeasureQuery(
-  query: ListUnitsOfMeasureQuery = {},
-  options: { enabled?: boolean } = {},
-) {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    placeholderData: keepPreviousDataInSameScope(scope),
-    queryKey: queryKeys.scoped(
-      scope ?? { kind: 'enterprise' },
-      CATALOG_RESOURCE,
-      'unitsOfMeasure',
-      query,
-    ),
-    queryFn: ({ signal }) => catalogService.listUnitsOfMeasure(query, { signal }),
-    enabled: options.enabled !== undefined ? options.enabled : scope !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
+export { useUnitsOfMeasureQuery } from '@/shared/catalog/use-catalog-reference-queries'
 
 export function useUnitOfMeasureQuery(unitId: string | undefined) {
   const scope = useActiveScopeCacheKey()
@@ -243,27 +226,4 @@ export function useMaterialQuery(materialId: string | undefined) {
   })
 }
 
-export function useMaterialUnitConversionsQuery(
-  materialId: string | undefined,
-  query: ListMaterialUnitConversionsQuery = {},
-  options: { enabled?: boolean } = {},
-) {
-  const scope = useActiveScopeCacheKey()
-  return useQuery({
-    placeholderData: keepPreviousDataInSameScope(scope),
-    queryKey: queryKeys.scoped(
-      scope ?? { kind: 'enterprise' },
-      CATALOG_RESOURCE,
-      'materials',
-      materialId,
-      'unitConversions',
-      query,
-    ),
-    queryFn: ({ signal }) =>
-      catalogService.listMaterialUnitConversions(materialId ?? '', query, { signal }),
-    enabled:
-      (options.enabled !== undefined ? options.enabled : scope !== undefined) &&
-      materialId !== undefined,
-    staleTime: MASTER_DATA_STALE_TIME,
-  })
-}
+export { useMaterialUnitConversionsQuery } from '@/shared/catalog/use-catalog-reference-queries'

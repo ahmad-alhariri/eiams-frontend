@@ -22,6 +22,7 @@ import {
   MATERIAL_KIND_OPTIONS,
   TRACKING_TYPE_LABELS,
 } from '@/modules/catalog/constants/catalog-labels'
+import { isMaterialKind } from '@/modules/catalog/constants/material-kind-policy'
 import {
   toCreateMaterialRequest,
   toUpdateMaterialRequest,
@@ -46,10 +47,6 @@ import { toast } from '@/shared/ui/toast-manager'
 import { pageRows } from '@/shared/utils/table-data'
 
 const materialColumnHelper = createColumnHelper<typeof dataTableFeatures, Material>()
-
-function isMaterialKind(value: string | null): value is MaterialKind {
-  return value === 'Consumable' || value === 'Durable' || value === 'Asset'
-}
 
 function isMaterialStatus(value: string | null): value is MaterialStatus {
   return value === 'Active' || value === 'Inactive' || value === 'Archived'

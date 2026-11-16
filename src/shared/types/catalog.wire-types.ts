@@ -8,6 +8,7 @@
  */
 
 import type { RecordStatus, Uuid } from '@/shared/types/wire-primitives'
+import type { ApiPage } from '@/shared/api/api-contracts'
 export type { NamedReference } from '@/shared/types/wire-primitives'
 
 /**
@@ -118,6 +119,44 @@ export interface MaterialUnitConversion {
   readonly fromUnitId: Uuid
   readonly toBaseUnitId: Uuid
   readonly factor: number
+}
+
+/**
+ * `{ items, page, pageSize, totalItems, totalPages, hasPreviousPage,
+ * hasNextPage, totalCount }` — the normalized page every catalog list reads.
+ * See `ApiPage<T>` in `shared/api/api-contracts.ts`.
+ */
+export type MaterialUnitConversionPage = ApiPage<MaterialUnitConversion>
+
+/**
+ * `GET /catalog/materials/{materialId}/unit-conversions` binds NO filter —
+ * the material comes from the path and nothing else but pagination applies.
+ */
+export interface ListMaterialUnitConversionsQuery {
+  readonly page?: number
+  readonly pageSize?: number
+}
+
+/**
+ * `UnitOfMeasure` — the catalog's unit-of-measure projection. `unitType` is a
+ * free-form string on the wire (backend `string`, max 50), so it is deliberately
+ * NOT narrowed to a union.
+ */
+export interface UnitOfMeasure {
+  readonly id: Uuid
+  readonly name: string
+  readonly symbol: string
+  readonly unitType: string
+  readonly status: RecordStatus
+}
+
+/** Every unit-of-measure list result IS the shared `ApiPage<UnitOfMeasure>`. */
+export type UnitOfMeasurePage = ApiPage<UnitOfMeasure>
+
+/** `GET /catalog/units-of-measure` binds NO filter at all — not even `status`. */
+export interface ListUnitsOfMeasureQuery {
+  readonly page?: number
+  readonly pageSize?: number
 }
 
 /** `{ id, name, code, status }` — canonical owner; re-exported by catalog module. */

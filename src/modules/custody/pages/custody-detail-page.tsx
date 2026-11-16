@@ -3,8 +3,8 @@ import { Link, useParams } from 'react-router'
 import { TransferCustodyDialog } from '@/modules/custody/components/transfer-custody-dialog'
 import { CustodyStatusBadge } from '@/modules/custody/components/custody-status-badge'
 import { useCustodyRowQuery } from '@/modules/custody/hooks/use-custody-row-query'
-import { MATERIAL_KIND_LABELS } from '@/modules/catalog/constants/catalog-labels'
-import { isMaterialKind, policyDescription } from '@/modules/catalog/constants/material-kind-policy'
+import { MATERIAL_KIND_LABELS } from '@/shared/catalog/material-kind-labels'
+import { isMaterialKind, policyDescription } from '@/shared/catalog/material-kind-policy'
 import { ROUTE_METADATA, ROUTE_PATHS } from '@/config/routes'
 import { arabicCopyForCode } from '@/shared/api/error-copy-ar'
 import { ErrorState } from '@/shared/feedback/error-state'
@@ -104,7 +104,9 @@ export default function CustodyDetailPage() {
                 {row.custodyKind === 'Personal' ? 'حفظ شخصي' : 'حفظ تشغيلي'}
               </DetailField>
               <DetailField label="تصنيف المادة">
-                {materialKind === null ? row.materialKind : MATERIAL_KIND_LABELS[materialKind]}
+                {isMaterialKind(materialKind)
+                  ? MATERIAL_KIND_LABELS[materialKind]
+                  : row.materialKind}
               </DetailField>
               <DetailField label="بداية العهدة" ltr>
                 {formatDateTime(row.fromUtc)}

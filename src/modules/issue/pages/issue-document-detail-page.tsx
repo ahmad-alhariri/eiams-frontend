@@ -4,6 +4,7 @@ import { recipientTypeLabelAr } from '@/modules/issue/schemas/issue-info.schema'
 import { DetailField } from '@/shared/layout/detail-field'
 import DocumentDetailPage from '@/shared/documents/pages/document-detail-page'
 import { useDocumentDetailQuery } from '@/shared/documents/use-document-queries'
+import { useWarehouseCapabilityValidation } from '@/modules/warehouse/hooks/use-warehouse-capability-validation'
 import type { IssueToResponse } from '@/shared/documents/types/document-wire.types'
 
 /**
@@ -27,6 +28,7 @@ export default function IssueDocumentDetailPage() {
 
   return (
     <DocumentDetailPage
+      capabilityValidation={useWarehouseCapabilityValidation}
       petalSlot={document?.issueTo == null ? null : <IssuePetalView info={document.issueTo} />}
     />
   )
