@@ -170,7 +170,7 @@ The layers above are source boundaries too, and they are enforced in the tree:
 
 The audit that produced this arrangement, including the findings that were
 withdrawn after verification, is in
-`docs/frontend-architecture-audit-2026-11-02.md`.
+`../../docs/archive/frontend-architecture-audit-2026-11-02.md`.
 
 ---
 

@@ -165,7 +165,7 @@ backend-authoritative requirement above.
 
 ## Amendments
 
-- **D-RBAC-03 (2026-10-04) — `Role.nameAr` is required.** The role read and
+- **Frontend-local Role Arabic Label Guidance (2026-10-04)** -- nameAr required. This is frontend-local implementation guidance, not canonical shared D-RBAC-03. Canonical shared D-RBAC-03 concerns Site-scope governance; this record must not be used as evidence of canonical approval. The role read and
   write contract carries a required Arabic display label, and the session role
   DTO carries it too. `Role.Name` remains the role code (`WH_MGR`), not a
   display label, so the Arabic-first UI had nothing to render before this. This

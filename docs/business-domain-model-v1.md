@@ -45,7 +45,7 @@ is ratified; this planning baseline makes no claim to replace that governance.
 | D-ICF-01 | `inventory-count-freeze-policy-decision.md` | V1 SoftFreeze subset and non-blocking advisory contract. | HardFreeze/NoFreeze remain v2 decisions. |
 | D-AUTH-01 | `authentication-session-scope-contract-decision.md` | Authentication token boundary, authoritative session projection, active-scope semantics, and effective role/permission calculation. | Exact permission-code vocabulary remains D-RBAC work; production security parameters require backend ratification. |
 | D-LIFE-01 | `document-lifecycle-history-contract-decision.md` | Generic and adjustment/disposal transitions, immutable lifecycle events, server-owned action policy, reason/version request boundaries, and compensating reversal semantics. | Exact permission ownership, attachment verification, audit-detail redaction, and backend persistence remain separately owned. |
-| D-MAT-01 | `material-classification-and-custody-decision.md` | Material classification, tracking, distinct asset/serial identity, and Durable-custody extension. | Exact payload and persistence shape remain OpenAPI/backend work. |
+| D-MAT-01 | `material-classification-and-custody-decision.md` | Material classification, tracking, distinct asset/serial identity, and Durable-custody extension. | Payload and persistence shape are implemented in TrackedMaterialUnit and DurableCustodyAllocation (RESOLUTION-048, 2026-10-26). |
 | D-UOM-01 | `material-unit-conversion-contract-decision.md` | Material-owned base units, per-material alternate-unit factors, immutable posted-line snapshots, and change control for packaging changes. | Generated endpoint/type names and backend ratification remain provisional. |
 
 The ERD reference to “BDM v1.0” is therefore satisfied by this repository
@@ -66,7 +66,7 @@ types and read models rather than database tables.
 | Operational documents | `WarehouseDocument`, `DocumentLine`, `DocumentAttachment`, document sequence/reference, `ReceivingInfo`, `IssueTo`, `TransferInfo` | WarehouseDocument is the document spine. Lines and attachments belong to it; the named petals supply type-specific data. Document types are Receiving, Issue, Transfer, Adjustment, Opening, and Return. A document is the provenance of every stock movement. |
 | Inventory and ledger | `InventoryBalance`, `StockMovement` | Balance is the cached signed sum of immutable movements for one warehouse/material. StockMovement belongs to a posted document and source line. No UI or service directly edits balance. |
 | Counts and adjustments | `InventoryCount`, `InventoryCountLine`, `InventoryAdjustment`, `AdjustmentLine` | A count belongs to a warehouse and has scoped snapshot/actual lines. Adjustment is document-backed, may reference a count, and has purpose-specific lines. Disposal is a special single asset-backed adjustment, not an independent undocumented asset action. |
-| Assets and custody | `Asset`, `AssetMovementHistory`, `Custody`, `CustodyHistory` | Asset belongs only to an Asset material and has immutable lifecycle events. The provisional D-MAT-01 Custody contract adds Durable MaterialQuantity/TrackedUnit subjects without making them Asset records; backend ratification remains required. Asset status and holder remain server-derived. |
+| Assets and custody | `Asset`, `AssetMovementHistory`, `Custody`, `CustodyHistory` | Asset belongs only to an Asset material and has immutable lifecycle events. The provisional D-MAT-01 Custody contract adds Durable MaterialQuantity/TrackedUnit subjects without making them Asset records; ratified by RESOLUTION-048 on 2026-10-26. Asset status and holder remain server-derived. |
 | Audit | `AuditLog`, `AuditLogEntry` | Audit records preserve who/what/when for business operations. They are not reconstructed in the frontend from current document state. |
 
 `MaterialUnitConversion` is a Catalog relationship owned by a Material. It
@@ -145,8 +145,7 @@ balances, and asset transfer are not v1 domain concepts.
   violations remain readable and require explicit server-owned remediation.
 - Historical Custody persistence represents Asset subjects. D-MAT-01's
   provisional OpenAPI adds `MaterialQuantity` and `TrackedUnit` subjects for
-  Durable custody, including partial assignment and return; backend/API-owner
-  ratification remains required and frontend code must not emulate server work.
+  Durable custody, including partial assignment and return; that decision was ratified by RESOLUTION-048 on 2026-10-26. Frontend code must not emulate server work.
 
 ### Material units and conversion
 
@@ -228,7 +227,7 @@ stop at the relevant Beads decision instead of guessing in these areas:
 | Backend-ratified endpoint paths, pagination, errors, uploads, generated types, and response envelopes | D-OAS-02 pins the provisional surface in `contracts/openapi/eiams-v1.openapi.json`; backend/API-owner ratification remains required before production integration. |
 | Exact permission-code vocabulary and RBAC mapping | `e01-t07` |
 | Document context not modeled by the sources, including Return-to-original-Issue traceability | D-OAS-02 provisionally pins `originalIssueDocumentId` and its read-only reference; backend ratification may change it only through a versioned contract update. |
-| Durable custody backend implementation and partial-return ratification | D-MAT-01 is published in provisional OpenAPI as `MaterialQuantity` and `TrackedUnit`; backend/API-owner ratification is required before production custody implementation. |
+| Durable custody backend implementation and partial-return ratification | D-MAT-01 is published in provisional OpenAPI as `MaterialQuantity` and `TrackedUnit`; that decision was ratified by RESOLUTION-048 on 2026-10-26. |
 | Material-unit conversion endpoint, payload, row-version, and posting-snapshot ratification | D-UOM-01 defines the accepted policy. The provisional API must publish the generated conversion surface and backend/API-owner ratification is required before production integration. |
 | Inventory sorting, balance detail identity, and low-stock projection backend ratification | D-INV-READ-01 defines the accepted provisional read contract. Backend/API-owner ratification remains required before production integration. |
 
