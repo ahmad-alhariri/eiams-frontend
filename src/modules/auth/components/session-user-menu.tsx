@@ -48,8 +48,13 @@ function SessionUserMenu() {
       // and still rejects when the network call fails, so the user IS signed
       // out. Reporting a failed sign-out would be false; the only honest
       // message is that the local session ended and the server revocation is
-      // unconfirmed. A 403 `auth.origin_denied` lands here too — the same
-      // safe, non-retrying outcome.
+      // unconfirmed. A 403 `REFRESH_TOKEN_ORIGIN_REJECTED` — the backend's own
+      // wire code when the refresh cookie's origin check refuses the request
+      // (`Web.Api/Infrastructure/RefreshTokenTransport.cs`) — lands here too,
+      // the same safe, non-retrying outcome. The dot-case `AUTH_FEEDBACK` keys
+      // are client-side-only and unreachable by design (see
+      // `src/shared/services/api-error.test.ts`), so no `auth.*` code can
+      // arrive here.
       const apiError = normalizeApiError(error)
       toast.warning({
         title: 'تم إنهاء الجلسة على هذا الجهاز.',
