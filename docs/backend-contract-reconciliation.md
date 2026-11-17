@@ -123,16 +123,17 @@ This:
 
 The backend is a **deliberate same-origin-only** design:
 
-- `CorsExtensions.cs:15` — `builder.SetIsOriginAllowed(_ => false)`, denying
-  every origin, with a comment saying so.
-- `SecurityConfigurationExtensions.cs:32-48` — throws at startup in **every**
-  environment if `Cors:AllowedOrigins` **or**
+- `src/Web.Api/Program.cs` — no CORS middleware is registered at all, so the
+  API never emits `Access-Control-Allow-Origin` and the browser's same-origin
+  policy applies by default.
+- `src/Web.Api/Extensions/SecurityConfigurationExtensions.cs:36-44` — throws at
+  startup in **every** environment if `Cors:AllowedOrigins` **or**
   `Authentication:RefreshTokenTransport:AllowedCookieOrigins` has any non-blank
   entry. The message is an instruction: *"Serve browser API requests through
   the UI's same-origin /api/v1 proxy and leave … empty."*
-- `RefreshTokenTransport.cs:99-105` — the real gate. `Origin` must equal
-  `{scheme}://{Host}` **of the request itself**. `Sec-Fetch-Site: cross-site` is
-  rejected outright at line 79.
+- `src/Web.Api/Infrastructure/RefreshTokenTransport.cs:99-105` — the real gate.
+  `Origin` must equal `{scheme}://{Host}` **of the request itself**.
+  `Sec-Fetch-Site: cross-site` is rejected outright at line 79.
 
 The Vite dev proxy set `changeOrigin: true`, which rewrites `Host` to
 `localhost:5000`, but `http-proxy` forwards `Origin` verbatim. The backend

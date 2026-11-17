@@ -11,4 +11,4 @@
 - `POST /api/v1/auth/refresh` with NO cookie returns **400** with wire code `USERS_INVALID_REFRESH_TOKEN` (not 401). Asserted exactly; documented as backend-contract note.
 - `POST /api/v1/auth/login` body is exactly `{username, password}` with `Content-Type: application/json`. The previous "400 REQUEST_VALIDATION_FAILED" report was caused by incorrect request code (missing/invalid Content-Type or malformed body), NOT by a missing `email` field.
 - Foreign `Origin: http://evil.origin` -> 403 `REFRESH_TOKEN_ORIGIN_REJECTED`; frontend already has copy at `src/shared/api/error-copy-ar.ts:38`. Not a divergence.
-- The backend denies all CORS origins; the suite proves reachability only through `/api/v1` proxy and records a direct cross-origin call as rejected.
+- The backend registers no CORS policy, so it never emits `Access-Control-Allow-Origin`; the suite proves reachability only through `/api/v1` proxy and records a direct cross-origin call as rejected.

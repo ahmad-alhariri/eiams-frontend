@@ -42,7 +42,7 @@ deployment facts, not application configuration.
 | | Allowlist (as originally specified) | Same-origin-only (this decision) |
 | --- | --- | --- |
 | Misconfiguration | **fails open** — a typo or `*` grants an unintended origin | **fails closed** — the API refuses to start |
-| Who can weaken it | any config editor, in any environment | requires a deliberate, reviewed code change to `CorsExtensions.cs` *and* removing the startup guard |
+| Who can weaken it | any config editor, in any environment | requires a deliberate, reviewed code change that re-adds a CORS policy to the API *and* removes the startup guard |
 | Cross-origin credentialed cookies | possible if misconfigured | structurally impossible; `Sec-Fetch-Site: cross-site` is rejected before any origin comparison |
 | Drift | a list must be updated per environment and kept in sync with hosting | nothing to keep in sync |
 
@@ -52,9 +52,9 @@ An allowlist creates a permanent thing to get wrong. This decision removes it.
 
 | Layer | Mechanism | Location |
 | --- | --- | --- |
-| CORS | `SetIsOriginAllowed(_ => false)` — every origin denied, no `Access-Control-Allow-Origin` ever emitted | `CorsExtensions.cs:15` |
-| Startup | throws if `Cors:AllowedOrigins` **or** `Authentication:RefreshTokenTransport:AllowedCookieOrigins` is non-blank, in **every** environment | `SecurityConfigurationExtensions.cs:32-48` |
-| Refresh cookie | `Origin` must equal `{scheme}://{Host}` **of the request itself**; `Sec-Fetch-Site: cross-site` rejected outright | `RefreshTokenTransport.cs:28-39, 76-106` |
+| CORS | no CORS middleware is registered in the API, so the API never emits `Access-Control-Allow-Origin` — no origin is ever granted | `src/Web.Api/Program.cs` (no CORS registration) |
+| Startup | throws if `Cors:AllowedOrigins` **or** `Authentication:RefreshTokenTransport:AllowedCookieOrigins` is non-blank, in **every** environment | `src/Web.Api/Extensions/SecurityConfigurationExtensions.cs:36-44` |
+| Refresh cookie | `Origin` must equal `{scheme}://{Host}` **of the request itself**; `Sec-Fetch-Site: cross-site` rejected outright | `src/Web.Api/Infrastructure/RefreshTokenTransport.cs:28-39, 76-106` |
 | Frontend dev proxy | rewrites a browser-supplied `Origin` to the target so the request is self-consistent; leaves a request with no `Origin` alone | `src/config/vite-dev-server.ts` |
 
 ## 5. Verification (live backend, 2026-09-29)
@@ -77,6 +77,11 @@ These mirror assertions the backend already makes in
 `Cors:AllowedOrigins:0 = http://localhost:5173` and asserts the **throw**, and
 `SameOriginBrowserMatrix_ShouldAllowRefreshAndRejectCrossOriginCsrf`, which
 asserts the preflight omits `Access-Control-Allow-Origin`.
+
+Since that verification the deny-all CORS extension was removed in favour of
+registering no CORS middleware at all; this change is source-verified against
+backend main 992d1af, and the observable behaviour asserted in the table — no
+`Access-Control-Allow-Origin` is ever emitted — is unchanged by that removal.
 
 ## 6. Consequences
 
