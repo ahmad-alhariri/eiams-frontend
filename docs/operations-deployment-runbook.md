@@ -60,11 +60,13 @@ Authentication depends on the approved D-AUTH-01 boundary:
 - access tokens are memory-only;
 - the refresh credential is a host-only `Secure`, `HttpOnly`, `SameSite=Strict`
   cookie scoped to `/api/v1/auth`;
-- HTTPS and the same-origin proxy are required for that cookie flow; and
-- token lifetimes, CORS/origin allowlists, signing-key rotation, upload
-  allowlists/limits, audit retention, and redaction rules remain backend/security
-  deployment decisions. Record their backend-owner approval; never hard-code
-  them in the frontend.
+- HTTPS and the same-origin proxy are required for that cookie flow;
+- no CORS policy and no origin allowlist exist — the API registers no CORS
+  middleware, and it refuses to start if an origin allowlist is configured;
+  and
+- token lifetimes, signing-key rotation, upload allowlists/limits, audit
+  retention, and redaction rules remain backend/security deployment decisions.
+  Record their backend-owner approval; never hard-code them in the frontend.
 
 Never attach screenshots, browser-storage exports, request headers, passwords,
 JWTs, refresh cookies, or raw `ProblemDetails` payloads to a release record,
