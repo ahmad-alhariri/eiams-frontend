@@ -16,11 +16,15 @@ export const authSessionQueryKey = ['auth', 'session'] as const
  * no browser API can say whether one exists. Without a hint the only way to
  * find out is to call `/auth/refresh`, and for a first-time visitor that
  * answers 400 USERS_INVALID_REFRESH_TOKEN — which the browser logs as a console
- * error and the backend logs as a CORS policy failure. The hint never proves a
- * session: a restore still needs a successful refresh. It is also required, so
- * a browser whose local storage was cleared while its cookie survives has to
- * sign in again. It is written on login and on a successful restore, and
- * dropped whenever the local session is cleared.
+ * error and the backend logs as a rejected refresh request, not as a CORS
+ * policy failure: the backend registers no CORS policy at all
+ * (`Web.Api/Program.cs`), and a cross-site `/auth/refresh` is refused by the
+ * refresh-cookie origin check
+ * (`Web.Api/Infrastructure/RefreshTokenTransport.cs`) instead. The hint never
+ * proves a session: a restore still needs a successful refresh. It is also
+ * required, so a browser whose local storage was cleared while its cookie
+ * survives has to sign in again. It is written on login and on a successful
+ * restore, and dropped whenever the local session is cleared.
  */
 const SESSION_HINT_STORAGE_KEY = 'eiams.auth.has-session'
 
