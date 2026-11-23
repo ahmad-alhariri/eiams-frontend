@@ -6,11 +6,19 @@ import type {
   OrganizationalUnitUpdateRequest,
 } from '@/modules/organization/types/organization.types'
 
+import {
+  isApprovedOrganizationalUnitType,
+  type OrganizationalUnitType,
+} from '@/modules/organization/constants/organization-constants'
+
 const SITE_MESSAGE = 'الموقع مطلوب.'
 const NAME_REQUIRED_MESSAGE = 'اسم الوحدة التنظيمية مطلوب.'
 const NAME_TOO_LONG_MESSAGE = 'اسم الوحدة التنظيمية يجب ألّا يتجاوز 200 محرف.'
 const TYPE_REQUIRED_MESSAGE = 'نوع الوحدة التنظيمية مطلوب.'
-const TYPE_TOO_LONG_MESSAGE = 'نوع الوحدة التنظيمية يجب ألّا يتجاوز 100 محرفاً.'
+const TYPE_TOO_LONG_MESSAGE = 'نوع الوحدة التنظيمية يجب ألّا يتجاوز 50 محرفاً.'
+const TYPE_NOT_APPROVED_MESSAGE = 'نوع الوحدة التنظيمية يجب أن يكون أحد الأنواع المعتمدة.'
+const CODE_REQUIRED_MESSAGE = 'كود الوحدة التنظيمية مطلوب.'
+const CODE_TOO_LONG_MESSAGE = 'كود الوحدة التنظيمية يجب ألّا يتجاوز 20 محرفاً.'
 
 /**
  * One form shape for both organizational-unit operations, with the create-only
@@ -20,9 +28,9 @@ const TYPE_TOO_LONG_MESSAGE = 'نوع الوحدة التنظيمية يجب أ�
  * edit dialog shows both as read-only.
  *
  * The wire names are the form names: `name` (not `nameAr`), `parentId` (not
- * `parentOrgUnitId`), and `unitType`. There is no `code` and no `rowVersion`
- * because the projection serves neither, and no `status` because neither write
- * body binds it.
+ * `parentOrgUnitId`), and `unitType`. The `code` is create-only and immutable: the create body binds it
+ * and the update body never does. There is no `rowVersion` because the projection
+ * serves none, and no `status` because neither write body binds it.
  */
 export function organizationalUnitFormSchema(isCreate: boolean) {
   return z.object({
@@ -31,10 +39,22 @@ export function organizationalUnitFormSchema(isCreate: boolean) {
     // Optional in create mode — a unit with no parent is a root.
     parentId: z.string().optional(),
     name: z.string().trim().min(1, NAME_REQUIRED_MESSAGE).max(200, NAME_TOO_LONG_MESSAGE),
-    // Free-form on the wire (backend `string`, observed live as "Department"),
-    // so it is validated for presence and length only — never narrowed to a
-    // union here.
-    unitType: z.string().trim().min(1, TYPE_REQUIRED_MESSAGE).max(100, TYPE_TOO_LONG_MESSAGE),
+    // Create-only and immutable: the code is bound by the create body and is
+    // never sent to the update body. Free text (Arabic allowed); the 20
+    // character limit is measured on the trimmed value, like the backend.
+    code: isCreate
+      ? z.string().trim().min(1, CODE_REQUIRED_MESSAGE).max(20, CODE_TOO_LONG_MESSAGE)
+      : z.string(),
+    // The six approved Arabic unit types (ORGANIZATIONAL_UNIT_TYPE_VALUES);
+    // the backend is the final authority and rejects every other value.
+    unitType: z
+      .string()
+      .trim()
+      .min(1, TYPE_REQUIRED_MESSAGE)
+      .max(50, TYPE_TOO_LONG_MESSAGE)
+      .refine((value) => isApprovedOrganizationalUnitType(value), {
+        message: TYPE_NOT_APPROVED_MESSAGE,
+      }),
   })
 }
 
@@ -46,14 +66,15 @@ export function emptyOrganizationalUnitFormValues(): OrganizationalUnitFormValue
     siteId: '',
     parentId: '',
     name: '',
+    code: '',
     unitType: '',
   }
 }
 
 /**
  * Seeds the form from an organizational-unit READ record, reading `name`,
- * `unitType`, `siteId` and `parentId` — the fields the backend serves. The
- * record has no `nameAr`, no `code`, no `parentOrgUnitId` and no `rowVersion`.
+ * `unitType`, `code`, `siteId` and `parentId` — the fields the backend
+ * serves. The record has no `nameAr`, no `parentOrgUnitId` and no `rowVersion`.
  */
 export function toOrganizationalUnitFormValues(
   unit: OrganizationalUnit | null,
@@ -63,13 +84,14 @@ export function toOrganizationalUnitFormValues(
     siteId: unit.siteId,
     parentId: unit.parentId ?? '',
     name: unit.name,
+    code: unit.code,
     unitType: unit.unitType,
   }
 }
 
 /**
  * Maps create values to `POST /organizational-units`: `siteId`, `parentId`,
- * `name`, `unitType` — and nothing else. An empty parent is sent as `null`
+ * `name`, `code`, `unitType` — and nothing else. An empty parent is sent as `null`
  * (root unit) rather than omitted, because the backend treats absent and null
  * the same and `null` states the intent on the record that is created.
  */
@@ -80,22 +102,23 @@ export function toCreateOrganizationalUnitRequest(
     siteId: values.siteId,
     parentId: values.parentId === undefined || values.parentId === '' ? null : values.parentId,
     name: values.name.trim(),
-    unitType: values.unitType.trim(),
+    code: values.code.trim(),
+    unitType: values.unitType.trim() as OrganizationalUnitType,
   }
 }
 
 /**
  * Maps edit values to `PUT /organizational-units/{id}`: `name` and `unitType`
- * only. The create-only `siteId` and `parentId` are dropped because the body
- * binds neither, and there is no concurrency token because the aggregate is not
- * versioned.
+ * only. The create-only `siteId`, `parentId` and the immutable `code` are dropped
+ * because the update body binds none of them, and there is no concurrency token
+ * because the aggregate is not versioned.
  */
 export function toUpdateOrganizationalUnitRequest(
   values: OrganizationalUnitFormValues,
 ): OrganizationalUnitUpdateRequest {
   return {
     name: values.name.trim(),
-    unitType: values.unitType.trim(),
+    unitType: values.unitType.trim() as OrganizationalUnitType,
   }
 }
 

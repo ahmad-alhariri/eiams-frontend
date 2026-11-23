@@ -32,7 +32,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
  * "this unit does not exist".
  */
 const REFERENCE_PAGE = { page: 1, pageSize: MAX_WIRE_PAGE_SIZE, status: 'Active' } as const
-const SERVER_ERROR_KEYS = ['orgUnitId', 'employeeNumber', 'fullName', 'jobTitle'] as const
+const SERVER_ERROR_KEYS = [
+  'orgUnitId',
+  'employeeNumber',
+  'fullName',
+  'jobTitle',
+  'email',
+  'phone',
+] as const
 
 /** Arabic note shown in place of an editable control on the create-only fields. */
 const CREATE_ONLY_NOTE =
@@ -66,16 +73,22 @@ export function EmployeeFormDialog({
     defaultValues: emptyEmployeeFormValues(),
   })
   const unitsQuery = useOrganizationalUnitsQuery(REFERENCE_PAGE, { enabled: open })
-  const units = useMemo(() => unitsQuery.data?.items ?? [], [unitsQuery.data])
+  // The query already asks the backend for `status: 'Active'`; this local check
+  // is defence in depth, so a stale or over-broad cached page can never offer an
+  // inactive unit as a valid assignment target. No backend guard is added here.
+  const units = useMemo(
+    () => (unitsQuery.data?.items ?? []).filter((unit) => unit.status === 'Active'),
+    [unitsQuery.data],
+  )
 
   useEffect(() => {
     if (!open) return
     form.reset(toEmployeeFormValues(employee))
   }, [employee, form, open])
 
-  const [orgUnitId, fullName] = useWatch({
+  const [orgUnitId, fullName, phone] = useWatch({
     control: form.control,
-    name: ['orgUnitId', 'fullName'],
+    name: ['orgUnitId', 'fullName', 'phone'],
   })
 
   const submit = (values: EmployeeFormValues) =>
@@ -84,6 +97,7 @@ export function EmployeeFormDialog({
   const referencesUnavailable = unitsQuery.isLoading || unitsQuery.isError
   const isSubmittable =
     fullName.trim() !== '' &&
+    phone.trim() !== '' &&
     (!isCreate || (units.length > 0 && orgUnitId !== '')) &&
     !referencesUnavailable
 
@@ -183,6 +197,50 @@ export function EmployeeFormDialog({
                 </FormItem>
               )}
             />
+            <div className="grid gap-5 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel>البريد الإلكتروني (اختياري)</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        dir="ltr"
+                        type="email"
+                        inputMode="email"
+                        disabled={isPending || referencesUnavailable}
+                        aria-invalid={fieldState.invalid || undefined}
+                        placeholder="name@example.com"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel>رقم الهاتف المحمول</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        dir="ltr"
+                        type="tel"
+                        inputMode="tel"
+                        disabled={isPending || referencesUnavailable}
+                        aria-invalid={fieldState.invalid || undefined}
+                        placeholder="+963931234567"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             <FormField
               control={form.control}
               name="orgUnitId"
@@ -206,9 +264,7 @@ export function EmployeeFormDialog({
                         <SelectItem key={unit.id} value={unit.id}>
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{unit.name}</span>
-                            {unit.unitType === '' ? null : (
-                              <span className="text-muted text-sm">{unit.unitType}</span>
-                            )}
+                            <span className="text-muted text-sm">{unit.unitType}</span>
                           </div>
                         </SelectItem>
                       ))}

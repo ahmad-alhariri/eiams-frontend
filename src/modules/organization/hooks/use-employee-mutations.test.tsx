@@ -73,19 +73,21 @@ describe('employee mutation cache invalidation', () => {
         fullName: 'موظف جديد',
         employeeNumber: 'EMP-NEW',
         jobTitle: null,
+        phone: '+963931234567',
       })
     })
 
     await waitFor(() => expect(listRequests).toBeGreaterThanOrEqual(2))
     await waitFor(() => expect(detailRequests).toBeGreaterThanOrEqual(2))
-    // `POST /employees` binds orgUnitId / fullName / employeeNumber / jobTitle:
-    // no `status` and no concurrency token.
+    // `POST /employees` binds orgUnitId / fullName / employeeNumber / jobTitle
+    // / email / phone: no `status` and no concurrency token.
     expect(createBodies).toEqual([
       {
         orgUnitId: employee.orgUnitId,
         fullName: 'موظف جديد',
         employeeNumber: 'EMP-NEW',
         jobTitle: null,
+        phone: '+963931234567',
       },
     ])
   })

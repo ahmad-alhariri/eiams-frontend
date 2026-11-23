@@ -53,7 +53,8 @@ function wireUnit(overrides: Partial<OrganizationalUnit> = {}): OrganizationalUn
     siteId: SITE_ID,
     parentId: null,
     name: 'الإدارة',
-    unitType: 'Department',
+    code: 'OU-001',
+    unitType: 'إدارة',
     status: 'Active',
     ...overrides,
   }
@@ -66,6 +67,8 @@ function wireEmployee(overrides: Partial<Employee> = {}): Employee {
     fullName: 'موظف تجريبي',
     employeeNumber: 'EMP-001',
     jobTitle: 'أمين مستودع',
+    email: 'employee@example.com',
+    phone: '+963931234567',
     status: 'Active',
     ...overrides,
   }
@@ -116,10 +119,14 @@ describe('OrganizationService', () => {
     await expect(service.listSites({ page: 2, search: 'دمشق' })).resolves.toMatchObject({
       items: [site],
     })
-    await expect(service.listOrganizationalUnits({ siteId: site.id })).resolves.toMatchObject({
+    await expect(
+      service.listOrganizationalUnits({ siteId: site.id, search: 'مالية' }),
+    ).resolves.toMatchObject({
       items: [unit],
     })
-    await expect(service.listEmployees({ status: 'Active' })).resolves.toMatchObject({
+    await expect(
+      service.listEmployees({ status: 'Active', search: 'أحمد' }),
+    ).resolves.toMatchObject({
       items: [employee],
     })
     await expect(service.listExternalParties({ search: 'خارجي' })).resolves.toMatchObject({
@@ -128,8 +135,8 @@ describe('OrganizationService', () => {
 
     expect(requestedUrls).toEqual([
       `${API_BASE_URL}/sites?page=2&search=%D8%AF%D9%85%D8%B4%D9%82`,
-      `${API_BASE_URL}/organizational-units?siteId=${SITE_ID}`,
-      `${API_BASE_URL}/employees?status=Active`,
+      `${API_BASE_URL}/organizational-units?search=%D9%85%D8%A7%D9%84%D9%8A%D8%A9&siteId=${SITE_ID}`,
+      `${API_BASE_URL}/employees?search=%D8%A3%D8%AD%D9%85%D8%AF&status=Active`,
       `${API_BASE_URL}/external-parties?search=%D8%AE%D8%A7%D8%B1%D8%AC%D9%8A`,
     ])
   })
@@ -182,13 +189,15 @@ describe('OrganizationService', () => {
       'organizationId',
       'status',
     ])
+
     expect(readSite).not.toHaveProperty('siteId')
     expect(readSite).not.toHaveProperty('nameAr')
     expect(readSite).not.toHaveProperty('address')
     expect(readSite).not.toHaveProperty('rowVersion')
 
-    // The unit serves parentId/unitType and serves no code.
+    // The unit serves parentId/unitType and now serves the immutable code.
     expect(Object.keys(readUnit).sort()).toEqual([
+      'code',
       'id',
       'name',
       'parentId',
@@ -196,17 +205,19 @@ describe('OrganizationService', () => {
       'status',
       'unitType',
     ])
+
     expect(readUnit).not.toHaveProperty('orgUnitId')
     expect(readUnit).not.toHaveProperty('parentOrgUnitId')
-    expect(readUnit).not.toHaveProperty('code')
 
     // The employee serves a flat orgUnitId and NO nested reference objects.
     expect(Object.keys(readEmployee).sort()).toEqual([
+      'email',
       'employeeNumber',
       'fullName',
       'id',
       'jobTitle',
       'orgUnitId',
+      'phone',
       'status',
     ])
     expect(readEmployee).not.toHaveProperty('employeeId')
@@ -284,11 +295,12 @@ describe('OrganizationService', () => {
       siteId: unit.siteId,
       parentId: null,
       name: unit.name,
+      code: unit.code,
       unitType: unit.unitType,
     }
     // `siteId` and `parentId` are create-only: re-siting and re-parenting are
     // not exposed, so they must not ride along on the update.
-    const updateRequest = { name: 'الإدارة المحدّثة', unitType: 'Section' }
+    const updateRequest = { name: 'الإدارة المحدّثة', unitType: 'شعبة' } as const
 
     server.use(
       http.post(`${API_BASE_URL}/organizational-units`, async ({ request: httpRequest }) => {
@@ -316,12 +328,18 @@ describe('OrganizationService', () => {
       Record<string, unknown>,
       Record<string, unknown>,
     ]
-    expect(Object.keys(sentCreate).sort()).toEqual(['name', 'parentId', 'siteId', 'unitType'])
+    expect(Object.keys(sentCreate).sort()).toEqual([
+      'code',
+      'name',
+      'parentId',
+      'siteId',
+      'unitType',
+    ])
     expect(Object.keys(sentUpdate).sort()).toEqual(['name', 'unitType'])
+    expect(sentUpdate).not.toHaveProperty('code')
     for (const body of [sentCreate, sentUpdate]) {
       expect(body).not.toHaveProperty('status')
       expect(body).not.toHaveProperty('rowVersion')
-      expect(body).not.toHaveProperty('code')
       expect(body).not.toHaveProperty('nameAr')
     }
     expect(sentUpdate).not.toHaveProperty('siteId')
@@ -339,10 +357,18 @@ describe('OrganizationService', () => {
       fullName: employee.fullName,
       employeeNumber: employee.employeeNumber,
       jobTitle: employee.jobTitle ?? null,
+      email: employee.email ?? null,
+      phone: employee.phone,
     }
     // `orgUnitId` and `employeeNumber` are create-only, so an employee cannot
-    // be re-assigned to another unit or renumbered through this contract.
-    const updateRequest = { fullName: 'موظف محدّث', jobTitle: null }
+    // be re-assigned to another unit or renumbered through this contract. Both
+    // contact fields are editable and bound by the update body.
+    const updateRequest = {
+      fullName: 'موظف محدّث',
+      jobTitle: null,
+      email: employee.email ?? null,
+      phone: employee.phone,
+    }
 
     server.use(
       http.post(`${API_BASE_URL}/employees`, async ({ request: httpRequest }) => {
@@ -367,12 +393,14 @@ describe('OrganizationService', () => {
       Record<string, unknown>,
     ]
     expect(Object.keys(sentCreate).sort()).toEqual([
+      'email',
       'employeeNumber',
       'fullName',
       'jobTitle',
       'orgUnitId',
+      'phone',
     ])
-    expect(Object.keys(sentUpdate).sort()).toEqual(['fullName', 'jobTitle'])
+    expect(Object.keys(sentUpdate).sort()).toEqual(['email', 'fullName', 'jobTitle', 'phone'])
     for (const body of [sentCreate, sentUpdate]) {
       expect(body).not.toHaveProperty('status')
       expect(body).not.toHaveProperty('rowVersion')
@@ -501,5 +529,34 @@ describe('OrganizationService', () => {
     // `code` is nested under `error` on the wire; the old fixture put it at the
     // top level of a hand-rolled body, so the normalizer resolved it to null.
     expect(normalizeApiError(error)).toMatchObject({ status: 404, code: 'SITES_NOT_FOUND' })
+  })
+
+  it('sends departure and return to their dedicated routes with no status ordinal', async () => {
+    setupService()
+    const employeeId = fixtureUuid(77)
+    const paths: string[] = []
+    const bodies: string[] = []
+
+    server.use(
+      http.put(`${API_BASE_URL}/employees/${employeeId}/depart`, async ({ request }) => {
+        paths.push(new URL(request.url).pathname)
+        bodies.push(await request.text())
+        return new HttpResponse(null, { status: 204 })
+      }),
+      http.put(`${API_BASE_URL}/employees/${employeeId}/return`, async ({ request }) => {
+        paths.push(new URL(request.url).pathname)
+        bodies.push(await request.text())
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    await expect(organizationService.departEmployee(employeeId)).resolves.toBeUndefined()
+    await expect(organizationService.returnEmployee(employeeId)).resolves.toBeUndefined()
+
+    expect(paths).toEqual([
+      `/api/v1/employees/${employeeId}/depart`,
+      `/api/v1/employees/${employeeId}/return`,
+    ])
+    expect(bodies).toEqual(['', ''])
   })
 })

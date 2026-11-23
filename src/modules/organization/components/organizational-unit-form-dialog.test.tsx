@@ -56,7 +56,8 @@ function wireUnit(overrides: Partial<OrganizationalUnit> = {}): OrganizationalUn
     siteId: SITE_ID,
     parentId: null,
     name: 'الإدارة العامة',
-    unitType: 'Department',
+    code: 'OU-ROOT',
+    unitType: 'إدارة',
     status: 'Active',
     ...overrides,
   }
@@ -74,7 +75,7 @@ afterEach(() => {
 })
 
 describe('OrganizationalUnitFormDialog', () => {
-  it('submits the create body the backend binds: siteId, parentId, name and unitType', async () => {
+  it('submits the create body the backend binds: siteId, parentId, name, code and unitType', async () => {
     const user = userEvent.setup()
     const site = wireSite()
     const parent = wireUnit({ id: fixtureUuid(61) })
@@ -103,7 +104,11 @@ describe('OrganizationalUnitFormDialog', () => {
     await user.click(await screen.findByRole('option', { name: `${site.code} — ${site.name}` }))
 
     await user.type(within(dialog).getByLabelText('اسم الوحدة التنظيمية'), 'مديرية الموارد البشرية')
-    await user.type(within(dialog).getByLabelText('نوع الوحدة التنظيمية'), 'Department')
+    await user.type(within(dialog).getByLabelText('كود الوحدة التنظيمية'), 'OU-001')
+    const unitTypeSelect = within(dialog).getByLabelText('نوع الوحدة التنظيمية')
+    await waitFor(() => expect(unitTypeSelect).toBeEnabled())
+    await user.click(unitTypeSelect)
+    await user.click(await screen.findByRole('option', { name: 'إدارة' }))
     await user.click(within(dialog).getByRole('button', { name: 'إضافة الوحدة' }))
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
@@ -111,7 +116,8 @@ describe('OrganizationalUnitFormDialog', () => {
       siteId: site.id,
       parentId: '',
       name: 'مديرية الموارد البشرية',
-      unitType: 'Department',
+      code: 'OU-001',
+      unitType: 'إدارة',
     })
 
     // `toCreateOrganizationalUnitRequest` maps the empty parent to an explicit
@@ -120,7 +126,8 @@ describe('OrganizationalUnitFormDialog', () => {
       siteId: site.id,
       parentId: null,
       name: 'مديرية الموارد البشرية',
-      unitType: 'Department',
+      code: 'OU-001',
+      unitType: 'إدارة',
     })
   })
 
@@ -160,7 +167,7 @@ describe('OrganizationalUnitFormDialog', () => {
     const values = onSubmit.mock.calls[0]![0]
     expect(toUpdateOrganizationalUnitRequest(values)).toEqual({
       name: 'الشؤون الإدارية المحدّثة',
-      unitType: 'Department',
+      unitType: 'إدارة',
     })
     expect(toUpdateOrganizationalUnitRequest(values)).not.toHaveProperty('siteId')
     expect(toUpdateOrganizationalUnitRequest(values)).not.toHaveProperty('parentId')
@@ -171,7 +178,8 @@ describe('OrganizationalUnitFormDialog', () => {
       siteId: SITE_ID,
       parentId: ROOT_ID,
       name: 'مديرية محدّثة',
-      unitType: 'Section',
+      code: 'OU-ROOT',
+      unitType: 'شعبة',
     })
 
     expect(Object.keys(updateRequest).sort()).toEqual(['name', 'unitType'])

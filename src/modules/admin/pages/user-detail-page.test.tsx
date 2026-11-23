@@ -10,6 +10,7 @@ import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import {
+  createEmployee,
   createRoleProjection,
   createSession,
   createUserRoleScope,
@@ -397,5 +398,56 @@ describe('UserDetailPage', { timeout: SUITE_TIMEOUT }, () => {
       await screen.findByRole('heading', { name: 'تعذّر تحميل تعيين المستخدم' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'إعادة المحاولة' })).toBeInTheDocument()
+  })
+
+  it('offers unlink only for a suspended account linked to an inactive employee', async () => {
+    const employeeId = '00000000-0000-4000-8000-000000000052'
+    seedEnterpriseAssignment()
+    server.use(
+      http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
+        okJson(
+          createUserDetail({
+            id: USER_ID,
+            status: 'Suspended',
+            employeeId,
+            employeeName: 'موظف مرتبط',
+          }),
+        ),
+      ),
+      http.get(`${API_BASE_URL}/employees`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/employees/${employeeId}`, () =>
+        okJson(createEmployee({ id: employeeId, status: 'Inactive' })),
+      ),
+    )
+
+    render(<UserDetailPage />, { wrapper: PageWrapper })
+
+    expect(await screen.findByRole('button', { name: 'فصل الموظف' })).toBeInTheDocument()
+  })
+
+  it('hides unlink while the linked employee is still active', async () => {
+    const employeeId = '00000000-0000-4000-8000-000000000053'
+    seedEnterpriseAssignment()
+    server.use(
+      http.get(`${API_BASE_URL}/admin/users/${USER_ID}`, () =>
+        okJson(
+          createUserDetail({
+            id: USER_ID,
+            status: 'Suspended',
+            employeeId,
+            employeeName: 'موظف نشط مرتبط',
+          }),
+        ),
+      ),
+      http.get(`${API_BASE_URL}/employees`, () => okPageJson([])),
+      http.get(`${API_BASE_URL}/employees/${employeeId}`, () =>
+        okJson(createEmployee({ id: employeeId, status: 'Active' })),
+      ),
+    )
+
+    render(<UserDetailPage />, { wrapper: PageWrapper })
+
+    await screen.findByText('موظف نشط مرتبط')
+    expect(screen.queryByRole('button', { name: 'فصل الموظف' })).not.toBeInTheDocument()
   })
 })

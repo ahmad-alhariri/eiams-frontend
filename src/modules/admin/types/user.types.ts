@@ -162,6 +162,14 @@ export interface SetUserStatusRequest {
   readonly expectedRowVersion: number
 }
 
+/**
+ * One-shot User → Employee link. The backend accepts only an `employeeId` body;
+ * a second link (even to the same employee) is refused with 409 (LDR-04).
+ */
+export interface LinkUserToEmployeeRequest {
+  readonly employeeId: string
+}
+
 /** Server-side filters for the directory. `page` is 1-based, as the backend binds it. */
 export interface ListUsersRequest {
   readonly search?: string

@@ -141,6 +141,31 @@ describe('EmployeeDetailPage', () => {
     expect(receivedBody).toEqual({
       fullName: 'موظف محدّث',
       jobTitle: employee.jobTitle,
+      email: employee.email ?? null,
+      phone: employee.phone,
     })
+  })
+
+  it('departs an employee through the dedicated route after an Arabic confirmation', async () => {
+    permissions.canManage = true
+    const user = userEvent.setup()
+    const employee = createEmployee({ id: EMPLOYEE_ID, status: 'Active' })
+    let departCalls = 0
+
+    server.use(
+      http.get(`${API_BASE_URL}/employees/${EMPLOYEE_ID}`, () => okJson(employee)),
+      http.put(`${API_BASE_URL}/employees/${EMPLOYEE_ID}/depart`, () => {
+        departCalls++
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    render(<EmployeeDetailPage />, { wrapper: PageWrapper })
+
+    await user.click(await screen.findByRole('button', { name: 'إنهاء الخدمة' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/سيُعطَّل الموظف ويُوقف حسابه المرتبط/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'إنهاء الخدمة' }))
+    await waitFor(() => expect(departCalls).toBe(1))
   })
 })

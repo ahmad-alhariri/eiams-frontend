@@ -181,6 +181,9 @@ export interface OrganizationService {
   createEmployee: (request: EmployeeCreateRequest) => Promise<ResourceIdResponse>
   updateEmployee: (employeeId: string, request: EmployeeUpdateRequest) => Promise<void>
   setEmployeeStatus: (employeeId: string, request: SetEmployeeStatusRequest) => Promise<void>
+  /** Dedicated lifecycle routes; neither touches the 0/1 status wire encoding directly. */
+  departEmployee: (employeeId: string) => Promise<void>
+  returnEmployee: (employeeId: string) => Promise<void>
   listExternalParties: (
     query: ListExternalPartiesQuery,
     context?: RequestContext,
@@ -364,6 +367,20 @@ export function createOrganizationService(transport: ApiTransport): Organization
         path: `${pathWithId(EMPLOYEE_PATH, '{employeeId}', employeeId)}/status`,
         method: 'PUT',
         body: request,
+      })
+    },
+
+    async departEmployee(employeeId) {
+      await transport.requestEmpty({
+        path: `${pathWithId(EMPLOYEE_PATH, '{employeeId}', employeeId)}/depart`,
+        method: 'PUT',
+      })
+    },
+
+    async returnEmployee(employeeId) {
+      await transport.requestEmpty({
+        path: `${pathWithId(EMPLOYEE_PATH, '{employeeId}', employeeId)}/return`,
+        method: 'PUT',
       })
     },
 

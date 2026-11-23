@@ -206,6 +206,47 @@ const DOMAIN: Readonly<Record<string, ArabicErrorCopy>> = {
     titleAr: 'لا تملك صلاحية إدارة الجهات.',
     detailAr: null,
   },
+  // --- Organizational units. The create/update/status routes emit these codes
+  // as a whole-request failure (409 conflict / 403 forbidden), not as a per-field
+  // error, so the wording belongs here as a dialog-level title. `Forbidden` also
+  // covers a unit outside the caller's active site scope: naming the scope is
+  // more useful here than the generic permission wording.
+  ORGANIZATIONAL_UNITS_CODE_NOT_UNIQUE: {
+    titleAr: 'رمز الوحدة التنظيمية مستخدم مسبقاً.',
+    detailAr: 'الرمز مستخدم بالفعل لوحدة نشطة أخرى في الموقع نفسه.',
+  },
+  ORGANIZATIONAL_UNITS_FORBIDDEN: {
+    titleAr: 'لا تملك صلاحية إدارة الوحدات التنظيمية في هذا النطاق.',
+    detailAr: null,
+  },
+  ORGANIZATIONAL_UNITS_NOT_FOUND: {
+    titleAr: 'لم يتم العثور على الوحدة التنظيمية.',
+    detailAr: null,
+  },
+  ORGANIZATIONAL_UNITS_SITE_NOT_FOUND: {
+    titleAr: 'لم يتم العثور على الموقع المحدّد.',
+    detailAr: null,
+  },
+  ORGANIZATIONAL_UNITS_PARENT_NOT_FOUND: {
+    titleAr: 'لم يتم العثور على الوحدة الأم المحدّدة.',
+    detailAr: null,
+  },
+  ORGANIZATIONAL_UNITS_PARENT_IN_DIFFERENT_SITE: {
+    titleAr: 'الوحدة الأم لا تتبع الموقع المحدّد.',
+    detailAr: null,
+  },
+  ORGANIZATIONAL_UNITS_UNIT_TYPE_NOT_SUPPORTED: {
+    titleAr: 'نوع الوحدة التنظيمية غير معتمد.',
+    detailAr: null,
+  },
+  ORGANIZATIONAL_UNITS_PARENT_TYPE_NOT_HIGHER: {
+    titleAr: 'نوع الوحدة الأم يجب أن يكون أعلى من نوع الوحدة.',
+    detailAr: null,
+  },
+  ORGANIZATIONAL_UNITS_TYPE_CHANGE_NOT_COMPATIBLE: {
+    titleAr: 'نوع الوحدة غير متوافق مع الوحدات التابعة المباشرة.',
+    detailAr: null,
+  },
   WAREHOUSES_CODE_NOT_UNIQUE: {
     titleAr: 'رمز المستودع مستخدم مسبقاً.',
     detailAr: null,
@@ -751,6 +792,26 @@ const EXPORT: Readonly<Record<string, ArabicErrorCopy>> = {
   EXPORT_TIMEOUT: { titleAr: 'انتهى وقت تصدير التقرير.', detailAr: null },
   EXPORT_NO_FILE: { titleAr: 'لم يتم إرجاع ملف من عنوان التحميل.', detailAr: null },
 }
+
+/**
+ * Domain-specific guidance for an organizational-unit 409 whose wire code is
+ * NOT one of the mapped codes above (the status command can fail for a state
+ * conflict the backend does not give a dedicated code). These are passed to
+ * `reportApiError({ conflictGuidanceAr })`, which uses them ONLY when the code
+ * lookup produced no `detailAr` — a mapped code always keeps its own approved
+ * text. The shared fallback in `api-error.ts` therefore still applies to every
+ * other 409 in the application; this guidance is scoped to these mutations.
+ *
+ * The two directions speak about DIFFERENT conflicts: deactivation is blocked
+ * by live references (employees / active descendants), reactivation by a parent
+ * that is still inactive or a code another active unit now owns.
+ */
+export const DEACTIVATE_ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR =
+  'تعذّر تعطيل الوحدة. تأكد من عدم وجود موظفين مرتبطين بها أو وحدات تابعة نشطة، ثم أعد المحاولة.'
+export const REACTIVATE_ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR =
+  'تعذّر تنشيط الوحدة. تأكد من أن الوحدة الأم نشطة وأن رمز الوحدة غير مستخدم من وحدة نشطة أخرى، ثم أعد المحاولة.'
+export const ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR =
+  'تعارض في بيانات الوحدة التنظيمية. راجع الرمز والوحدة الأم ثم أعد المحاولة.'
 
 const ALL: Readonly<Record<string, ArabicErrorCopy>> = { ...REQUEST, ...AUTH, ...DOMAIN, ...EXPORT }
 

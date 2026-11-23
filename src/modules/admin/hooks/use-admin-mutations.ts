@@ -4,7 +4,11 @@ import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-con
 import { adminService } from '@/modules/admin/services/admin.service'
 import { authSessionQueryKey } from '@/modules/auth/services/session-lifecycle'
 import { queryKeys, RESOURCES } from '@/shared/services/query-keys'
-import type { SetUserStatusRequest, UpdateUserRequest } from '@/modules/admin/types/user.types'
+import type {
+  LinkUserToEmployeeRequest,
+  SetUserStatusRequest,
+  UpdateUserRequest,
+} from '@/modules/admin/types/user.types'
 import type {
   ReplaceRolePermissionsRequest,
   ReplaceUserRoleScopeRequest,
@@ -18,6 +22,8 @@ type ReplaceRolePermissionsVariables = {
 }
 type UpdateUserVariables = { userId: string; request: UpdateUserRequest }
 type SetUserStatusVariables = { userId: string; request: SetUserStatusRequest }
+type LinkEmployeeVariables = { userId: string; request: LinkUserToEmployeeRequest }
+type UnlinkEmployeeVariables = { userId: string; employeeId: string }
 type ReplaceUserRoleScopeVariables = { userId: string; request: ReplaceUserRoleScopeRequest }
 
 function useInvalidateAdmin() {
@@ -95,6 +101,35 @@ export function useSetUserStatusMutation() {
     mutationFn: ({ userId, request }: SetUserStatusVariables) =>
       adminService.setUserStatus(userId, request),
     onSuccess: invalidate,
+    onError: invalidate,
+  })
+}
+
+/** One-shot employee link. Invalidates admin AND organization data on success. */
+export function useLinkUserToEmployeeMutation() {
+  const invalidate = useInvalidateAdmin()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, request }: LinkEmployeeVariables) =>
+      adminService.linkUserToEmployee(userId, request),
+    onSuccess: async () => {
+      await invalidate()
+      await queryClient.invalidateQueries({ queryKey: [RESOURCES.organization, 'employees'] })
+    },
+  })
+}
+
+/** Permanent unlink; reloads authoritative state on success and on rejection. */
+export function useUnlinkUserFromEmployeeMutation() {
+  const invalidate = useInvalidateAdmin()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, employeeId }: UnlinkEmployeeVariables) =>
+      adminService.unlinkUserFromEmployee(userId, employeeId),
+    onSuccess: async () => {
+      await invalidate()
+      await queryClient.invalidateQueries({ queryKey: [RESOURCES.organization, 'employees'] })
+    },
     onError: invalidate,
   })
 }

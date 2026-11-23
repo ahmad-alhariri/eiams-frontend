@@ -2,7 +2,10 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
-import { OrganizationalUnitTree } from '@/modules/organization/components/organizational-unit-tree'
+import {
+  countDescendantOrganizationalUnits,
+  OrganizationalUnitTree,
+} from '@/modules/organization/components/organizational-unit-tree'
 import { buildOrganizationalUnitTree } from '@/modules/organization/components/organizational-unit-tree.model'
 import type { OrganizationalUnit } from '@/modules/organization/types/organization.types'
 import { fixtureUuid } from '@/test/msw/factories'
@@ -10,9 +13,9 @@ import { fixtureUuid } from '@/test/msw/factories'
 const SITE_ID = fixtureUuid(50)
 
 /**
- * A unit in the REAL wire shape: `id`, `name`, `unitType`, `parentId`. The
- * shared `createOrganizationalUnit` factory still returns the fiction
- * (`orgUnitId`, `nameAr`, `parentOrgUnitId`, `code`, `rowVersion`), which is why
+ * A unit in the REAL wire shape: `id`, `name`, `code`, `unitType`, `parentId`. The
+ * The shared `createOrganizationalUnit` factory serves the same real shape
+ * (`id`, `siteId`, `parentId`, `name`, `code`, `unitType`), which is why
  * the tree builder keyed its map on `undefined` and flattened every hierarchy
  * into a list of roots.
  */
@@ -22,7 +25,8 @@ function wireUnit(overrides: Partial<OrganizationalUnit> = {}): OrganizationalUn
     siteId: SITE_ID,
     parentId: null,
     name: 'الإدارة العامة',
-    unitType: 'Department',
+    code: 'OU-ROOT',
+    unitType: 'إدارة',
     status: 'Active',
     ...overrides,
   }
@@ -35,7 +39,7 @@ describe('OrganizationalUnitTree', () => {
       id: fixtureUuid(2),
       parentId: root.id,
       name: 'مديرية الشؤون الإدارية',
-      unitType: 'Section',
+      unitType: 'شعبة',
     })
 
     expect(buildOrganizationalUnitTree([root, child])).toEqual([
@@ -112,12 +116,35 @@ describe('OrganizationalUnitTree', () => {
     )
   })
 
-  it('renders the wire `name` as the label and `unitType` as the secondary line', () => {
-    const root = wireUnit({ id: fixtureUuid(8), name: 'مديرية مالية', unitType: 'Finance' })
+  it('renders the wire `name` as the label and the immutable `code` as the secondary line', () => {
+    const root = wireUnit({ id: fixtureUuid(8), name: 'مديرية مالية', code: 'OU-FIN' })
 
     render(<OrganizationalUnitTree units={[root]} />)
 
     expect(screen.getByText('مديرية مالية')).toBeInTheDocument()
-    expect(screen.getByText('Finance')).toBeInTheDocument()
+    expect(screen.getByText('OU-FIN')).toBeInTheDocument()
+  })
+
+  it('counts every descendant of a unit for the deactivation warning', () => {
+    const root = wireUnit({ id: fixtureUuid(9) })
+    const child = wireUnit({ id: fixtureUuid(10), parentId: root.id })
+    const grandchild = wireUnit({ id: fixtureUuid(11), parentId: child.id })
+    const siblingBranch = wireUnit({ id: fixtureUuid(12), parentId: root.id })
+    const unrelated = wireUnit({ id: fixtureUuid(13) })
+    const units = [root, child, grandchild, siblingBranch, unrelated]
+
+    expect(countDescendantOrganizationalUnits(units, root)).toBe(3)
+    expect(countDescendantOrganizationalUnits(units, child)).toBe(1)
+    expect(countDescendantOrganizationalUnits(units, grandchild)).toBe(0)
+  })
+
+  it('does not loop or over-count when a parent reference is cyclic', () => {
+    const first = wireUnit({ id: fixtureUuid(14), parentId: fixtureUuid(15) })
+    const second = wireUnit({ id: fixtureUuid(15), parentId: first.id })
+
+    // The forest builder breaks the cycle by promoting `first` to a root with
+    // `second` as its only child; the reverse link is dropped, so the walk
+    // terminates and counts one descendant instead of recursing forever.
+    expect(countDescendantOrganizationalUnits([first, second], first)).toBe(1)
   })
 })

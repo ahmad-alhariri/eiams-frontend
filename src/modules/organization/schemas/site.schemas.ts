@@ -9,10 +9,11 @@ import type {
 const UUID_MESSAGE = 'يجب إدخال معرّف الجهة بصيغة صحيحة.'
 const CODE_REQUIRED_MESSAGE = 'رمز الموقع مطلوب.'
 const CODE_TOO_LONG_MESSAGE = 'رمز الموقع يجب ألّا يتجاوز 50 محرفًا.'
-const NAME_REQUIRED_MESSAGE = 'اسم الموقع يجب أن يتكون من حرفين على الأقل.'
+const NAME_REQUIRED_MESSAGE = 'اسم الموقع مطلوب.'
 const NAME_TOO_LONG_MESSAGE = 'اسم الموقع يجب ألّا يتجاوز 200 محرف.'
-const LOCATION_TOO_LONG_MESSAGE = 'العنوان يجب ألّا يتجاوز 500 محرف.'
-const GOVERNORATE_TOO_LONG_MESSAGE = 'المحافظة يجب ألّا يتجاوز 100 محرف.'
+const LOCATION_TOO_LONG_MESSAGE = 'العنوان يجب ألّا يتجاوز 300 محرف.'
+const GOVERNORATE_TOO_LONG_MESSAGE = 'المحافظة يجب ألّا تتجاوز 20 محرفاً.'
+const GOVERNORATE_FORMAT_MESSAGE = 'رمز المحافظة يجب أن يحتوي على حروف أو أرقام أو _ أو - فقط.'
 
 /**
  * One form shape for both site operations, with the create-only fields required
@@ -40,9 +41,14 @@ export function siteFormSchema(isCreate: boolean) {
       ? z.string().trim().min(1, CODE_REQUIRED_MESSAGE).max(50, CODE_TOO_LONG_MESSAGE)
       : z.string().trim().max(50, CODE_TOO_LONG_MESSAGE),
     // Both bodies bind `name`, so both modes require it.
-    name: z.string().trim().min(2, NAME_REQUIRED_MESSAGE).max(200, NAME_TOO_LONG_MESSAGE),
-    location: z.string().trim().max(500, LOCATION_TOO_LONG_MESSAGE).optional(),
-    governorateCode: z.string().trim().max(100, GOVERNORATE_TOO_LONG_MESSAGE).optional(),
+    name: z.string().trim().min(1, NAME_REQUIRED_MESSAGE).max(200, NAME_TOO_LONG_MESSAGE),
+    location: z.string().trim().max(300, LOCATION_TOO_LONG_MESSAGE).optional(),
+    governorateCode: z
+      .string()
+      .trim()
+      .max(20, GOVERNORATE_TOO_LONG_MESSAGE)
+      .refine((value) => value === '' || /^[A-Za-z0-9_-]+$/.test(value), GOVERNORATE_FORMAT_MESSAGE)
+      .optional(),
   })
 }
 
