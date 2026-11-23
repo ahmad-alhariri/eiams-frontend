@@ -27,12 +27,13 @@ import {
 } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
+import { ORGANIZATIONAL_UNIT_TYPE_OPTIONS } from '../constants/organization-constants'
 
 const REFERENCE_PAGE = { page: 0, pageSize: 200 } as const
-const SERVER_ERROR_KEYS = ['siteId', 'parentId', 'name', 'unitType'] as const
+const SERVER_ERROR_KEYS = ['siteId', 'parentId', 'name', 'code', 'unitType'] as const
 
 /** Arabic note shown in place of an editable control on the create-only fields. */
-const CREATE_ONLY_NOTE = 'يُحدَّد الموقع والوحدة الأب عند إنشاء الوحدة ولا يمكن تعديلهما بعد ذلك.'
+const CREATE_ONLY_NOTE = 'يُحدَّد الموقع والوحدة الأب عند إنشاء الوحدة ولا يمكن تعديلها بعد ذلك، كما أن كود الوحدة غير قابل للتعديل بعد الإنشاء.'
 
 function organizationalUnitLabel(unit: OrganizationalUnit): string {
   return `${unit.unitType} — ${unit.name}`
@@ -76,8 +77,8 @@ export interface OrganizationalUnitFormDialogProps {
  * they render disabled and carry the record's own values;
  * `toUpdateOrganizationalUnitRequest` drops them. Re-siting and re-parenting are
  * not exposed by this contract. `unitType` is free text because the backend
- * types it as a plain string. There is no status control and no code field:
- * neither write body binds them and the projection serves no code.
+ * types it as a plain string. There is no status control: neither write body
+ * binds it. The code is create-only and immutable after creation.
  */
 export function OrganizationalUnitFormDialog({
   unit: organizationalUnit,
@@ -96,9 +97,9 @@ export function OrganizationalUnitFormDialog({
     defaultValues: emptyOrganizationalUnitFormValues(),
   })
 
-  const [siteId, name, unitType] = useWatch({
+  const [siteId, name, code, unitType] = useWatch({
     control: form.control,
-    name: ['siteId', 'name', 'unitType'],
+    name: ['siteId', 'name', 'code', 'unitType'],
   })
 
   useEffect(() => {
@@ -125,7 +126,7 @@ export function OrganizationalUnitFormDialog({
   const isSubmittable =
     name.trim() !== '' &&
     unitType.trim() !== '' &&
-    (!isCreate || siteId !== '') &&
+    (!isCreate || (code.trim() !== '' && siteId !== '')) &&
     !referencesUnavailable
 
   return (
@@ -136,7 +137,7 @@ export function OrganizationalUnitFormDialog({
           <DialogDescription>
             {isCreate
               ? 'أدخل بيانات الوحدة التنظيمية الجديدة ضمن نطاق العمل الحالي.'
-              : 'عدّل اسم الوحدة ونوعها ضمن نطاق العمل الحالي. الموقع والوحدة الأب غير قابلين للتعديل بعد الإنشاء.'}
+              : 'عدّل اسم الوحدة ونوعها ضمن نطاق العمل الحالي. الموقع والوحدة الأب وكود الوحدة غير قابلة للتعديل بعد الإنشاء.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -194,15 +195,45 @@ export function OrganizationalUnitFormDialog({
               <FormField
                 control={form.control}
                 name="unitType"
-                render={({ field }) => (
+                render={({ field, fieldState }) => (
                   <FormItem>
                     <FormLabel>نوع الوحدة التنظيمية</FormLabel>
+                    <Select
+                      value={field.value === '' ? null : field.value}
+                      disabled={isPending || referencesUnavailable}
+                      onValueChange={(value) => field.onChange(value ?? '')}
+                    >
+                      <FormControl>
+                        <SelectTrigger
+                          aria-label="نوع الوحدة التنظيمية"
+                          aria-invalid={fieldState.invalid || undefined}
+                        >
+                          <SelectValue placeholder="اختر نوع الوحدة" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {ORGANIZATIONAL_UNIT_TYPE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="code"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>كود الوحدة التنظيمية</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
-                        disabled={isPending || referencesUnavailable}
-                        // standard-allow: latin-attribute-example — the unit name example belongs to an English-language field
-                        placeholder="مثال: Department"
+                        disabled={isPending || referencesUnavailable || !isCreate}
+                        placeholder="مثال: كود-١"
                       />
                     </FormControl>
                     <FormMessage />

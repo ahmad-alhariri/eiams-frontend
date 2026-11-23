@@ -69,7 +69,7 @@ const activeEmployee: Employee = createEmployee({
 const activeOrgUnit: OrganizationalUnit = createOrganizationalUnit({
   name: 'قسم المستودعات',
   siteId: siteRef.id,
-  unitType: 'Department',
+  unitType: 'إدارة',
   status: 'Active',
 })
 
@@ -402,7 +402,7 @@ describe('useOrgUnitSelector', () => {
     expect(option.disabled).toBe(false)
     // This projection serves no `code`; `unitType` is the secondary line the
     // org-unit tree renders in its place.
-    expect(option.payload?.unitType).toBe('Department')
+    expect(option.payload?.unitType).toBe('إدارة')
 
     expect(result.current.options.toOption({ ...activeOrgUnit, status: 'Inactive' }).disabled).toBe(
       true,

@@ -250,9 +250,7 @@ export function WarehouseFormDialog({
                         <SelectItem key={unit.id} value={unit.id}>
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{unit.name}</span>
-                            {unit.unitType === '' ? null : (
-                              <span className="text-muted text-sm">{unit.unitType}</span>
-                            )}
+                            <span className="text-muted text-sm">{unit.unitType}</span>
                           </div>
                         </SelectItem>
                       ))}

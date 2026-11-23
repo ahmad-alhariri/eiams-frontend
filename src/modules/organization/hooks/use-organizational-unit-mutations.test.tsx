@@ -2,12 +2,28 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { http } from 'msw'
 import { type PropsWithChildren } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/shared/services/query.client'
-import { okJson, okPageJson } from '@/test/msw/envelope'
+import { errJson, okJson, okPageJson } from '@/test/msw/envelope'
 import { createOrganizationalUnit } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
+import { toast } from '@/shared/ui/toast-manager'
+import {
+  DEACTIVATE_ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR,
+  REACTIVATE_ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR,
+} from '@/shared/api/error-copy-ar'
+
+vi.mock('@/shared/ui/toast-manager', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    dismiss: vi.fn(),
+    promise: vi.fn(),
+  },
+}))
 
 const activeScope = vi.hoisted(() => ({
   key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
@@ -19,6 +35,7 @@ vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
 
 import { useOrganizationalUnitsQuery, useOrganizationalUnitQuery } from './use-organization-queries'
 import {
+  useCreateOrganizationalUnitMutation,
   useSetOrganizationalUnitStatusMutation,
   useUpdateOrganizationalUnitMutation,
 } from './use-organizational-unit-mutations'
@@ -73,7 +90,7 @@ describe('organizational-unit mutation cache invalidation', () => {
     await act(async () => {
       await result.current.update.mutateAsync({
         orgUnitId: unit.id,
-        request: { name: 'الوحدة المحدّثة', unitType: 'Section' },
+        request: { name: 'الوحدة المحدّثة', unitType: 'شعبة' },
       })
     })
 
@@ -81,7 +98,7 @@ describe('organizational-unit mutation cache invalidation', () => {
     await waitFor(() => expect(detailRequests).toBeGreaterThanOrEqual(2))
     // `PUT /organizational-units/{id}` binds name and unitType only: neither
     // `siteId` nor `parentId` (re-siting and re-parenting are not exposed).
-    expect(updateBodies).toEqual([{ name: 'الوحدة المحدّثة', unitType: 'Section' }])
+    expect(updateBodies).toEqual([{ name: 'الوحدة المحدّثة', unitType: 'شعبة' }])
   })
 
   it('sends an integer status command body in BOTH directions, with no version guard', async () => {
@@ -163,5 +180,142 @@ describe('organizational-unit mutation cache invalidation', () => {
 
     expect(statusBodies).toEqual([{ status: 1 }])
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
+  })
+})
+
+describe('organizational-unit mutation Arabic error feedback', () => {
+  beforeEach(() => {
+    vi.mocked(toast.error).mockClear()
+  })
+
+  it('reports a 409 code conflict with the mapped Arabic copy, and does not invalidate on the failure', async () => {
+    const unit = createOrganizationalUnit()
+    let statusAttempts = 0
+    let listRequests = 0
+
+    server.use(
+      http.get(`${API_BASE_URL}/organizational-units`, () => {
+        listRequests += 1
+        return okPageJson([unit])
+      }),
+      http.put(`${API_BASE_URL}/organizational-units/${unit.id}/status`, () => {
+        statusAttempts += 1
+        return statusAttempts === 1
+          ? errJson(409, {
+              code: 'OrganizationalUnits.CodeNotUnique',
+              message: 'code already used',
+            })
+          : new Response(null, { status: 204 })
+      }),
+    )
+
+    const { result } = renderHook(
+      () => ({
+        list: useOrganizationalUnitsQuery({ page: 1, pageSize: 10 }),
+        setStatus: useSetOrganizationalUnitStatusMutation(),
+      }),
+      { wrapper: createWrapper() },
+    )
+
+    await waitFor(() => expect(result.current.list.data?.items).toHaveLength(1))
+    const before = listRequests
+
+    await expect(
+      result.current.setStatus.mutateAsync({ orgUnitId: unit.id, status: 'Active' }),
+    ).rejects.toBeDefined()
+
+    // The code-keyed table wins over the generic 409 fallback.
+    expect(toast.error).toHaveBeenCalledWith({
+      title: 'رمز الوحدة التنظيمية مستخدم مسبقاً.',
+      description: 'الرمز مستخدم بالفعل لوحدة نشطة أخرى في الموقع نفسه.',
+    })
+    expect(listRequests).toBe(before)
+
+    // Cache invalidation is preserved: the successful retry refetches the list.
+    await act(async () => {
+      await result.current.setStatus.mutateAsync({ orgUnitId: unit.id, status: 'Active' })
+    })
+    await waitFor(() => expect(listRequests).toBeGreaterThan(before))
+  })
+
+  it('reports a 403 forbidden/out-of-scope with the org-unit Arabic title', async () => {
+    const unit = createOrganizationalUnit()
+    server.use(
+      http.put(`${API_BASE_URL}/organizational-units/${unit.id}/status`, () =>
+        errJson(403, { code: 'OrganizationalUnits.Forbidden', message: 'forbidden' }),
+      ),
+    )
+
+    const { result } = renderHook(() => useSetOrganizationalUnitStatusMutation(), {
+      wrapper: createWrapper(),
+    })
+
+    await expect(
+      result.current.mutateAsync({ orgUnitId: unit.id, status: 'Inactive' }),
+    ).rejects.toBeDefined()
+    expect(toast.error).toHaveBeenCalledWith({
+      title: 'لا تملك صلاحية إدارة الوحدات التنظيمية في هذا النطاق.',
+    })
+  })
+
+  it.each([
+    ['Inactive', DEACTIVATE_ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR],
+    ['Active', REACTIVATE_ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR],
+  ] as const)(
+    'uses direction-specific Arabic guidance for an unmapped 409 while %s',
+    async (status, guidance) => {
+      const unit = createOrganizationalUnit()
+      server.use(
+        http.put(`${API_BASE_URL}/organizational-units/${unit.id}/status`, () =>
+          errJson(409, { code: 'ORGANIZATIONAL_UNITS_STATE_CONFLICT', message: 'conflict' }),
+        ),
+      )
+
+      const { result } = renderHook(() => useSetOrganizationalUnitStatusMutation(), {
+        wrapper: createWrapper(),
+      })
+
+      await expect(
+        result.current.mutateAsync({ orgUnitId: unit.id, status }),
+      ).rejects.toBeDefined()
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.objectContaining({ description: guidance }),
+      )
+    },
+  )
+
+  it('invalidates the organizational-units list after a create succeeds', async () => {
+    const unit = createOrganizationalUnit()
+    let listRequests = 0
+
+    server.use(
+      http.get(`${API_BASE_URL}/organizational-units`, () => {
+        listRequests += 1
+        return okPageJson([unit])
+      }),
+      http.post(`${API_BASE_URL}/organizational-units`, () => okJson({ id: unit.id })),
+    )
+
+    const { result } = renderHook(
+      () => ({
+        list: useOrganizationalUnitsQuery({ page: 1, pageSize: 10 }),
+        create: useCreateOrganizationalUnitMutation(),
+      }),
+      { wrapper: createWrapper() },
+    )
+
+    await waitFor(() => expect(result.current.list.data?.items).toHaveLength(1))
+    const before = listRequests
+
+    await act(async () => {
+      await result.current.create.mutateAsync({
+        siteId: unit.siteId,
+        name: 'وحدة جديدة',
+        code: 'OU-NEW',
+        unitType: 'شعبة',
+      })
+    })
+
+    await waitFor(() => expect(listRequests).toBeGreaterThan(before))
   })
 })

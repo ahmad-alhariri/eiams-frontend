@@ -10,11 +10,25 @@ import { createOrganizationalUnit, fixtureUuid } from '@/test/msw/factories'
 import { server } from '@/test/msw/server'
 
 const activeScope = vi.hoisted(() => ({
-  key: { kind: 'enterprise' as const } as { kind: 'enterprise' } | undefined,
+  key: { kind: 'enterprise' } as { kind: 'enterprise' | 'warehouse'; id?: string } | undefined,
+  scopeType: 'Enterprise' as 'Enterprise' | 'Warehouse',
 }))
 
 vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
-  useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
+  useActiveScopeContext: () => ({
+    activeScopeCacheKey: activeScope.key,
+    activeScope: { scopeType: activeScope.scopeType, scopeId: activeScope.key?.id ?? null },
+  }),
+}))
+
+// The status/edit controls are permission-gated; tests that click them need the
+// operator to hold `organization.manage`.
+vi.mock('@/modules/auth/hooks/use-permission', () => ({
+  usePermission: () => ({
+    has: () => true,
+    hasAll: () => true,
+    hasAny: () => true,
+  }),
 }))
 
 import OrganizationalUnitsPage from './organizational-units-page'
@@ -33,6 +47,7 @@ function createWrapper(options: { retry?: false } = {}) {
 
 afterEach(() => {
   activeScope.key = { kind: 'enterprise' }
+  activeScope.scopeType = 'Enterprise'
 })
 
 describe('OrganizationalUnitsPage', () => {
@@ -42,7 +57,7 @@ describe('OrganizationalUnitsPage', () => {
       id: fixtureUuid(2),
       parentId: root.id,
       name: 'مديرية الشؤون الإدارية',
-      unitType: 'Directorate',
+      unitType: 'مديرية',
     })
     let receivedPage: string | null = null
     let receivedPageSize: string | null = null
@@ -186,5 +201,85 @@ describe('OrganizationalUnitsPage', () => {
 
     await waitFor(() => expect(attempts).toBe(2))
     expect(await screen.findByText(recovered.name)).toBeInTheDocument()
+  })
+
+  it('shows only Active units under a Warehouse scope and asks the backend for the same filter', async () => {
+    activeScope.key = { kind: 'warehouse', id: fixtureUuid(7) }
+    activeScope.scopeType = 'Warehouse'
+    const active = createOrganizationalUnit({
+      id: fixtureUuid(1),
+      name: 'وحدة نشطة',
+      status: 'Active',
+    })
+    const inactive = createOrganizationalUnit({
+      id: fixtureUuid(2),
+      name: 'وحدة معطلة',
+      status: 'Inactive',
+    })
+    let receivedStatus: string | null = null
+
+    server.use(
+      http.get(`${API_BASE_URL}/organizational-units`, ({ request }) => {
+        receivedStatus = new URL(request.url).searchParams.get('status')
+        // The fixture deliberately returns an inactive row: backend filtering
+        // is authoritative but the display must not trust an over-broad page.
+        return okPageJson([active, inactive])
+      }),
+    )
+
+    render(<OrganizationalUnitsPage />, { wrapper: createWrapper() })
+
+    expect(await screen.findByText(active.name)).toBeInTheDocument()
+    expect(screen.queryByText(inactive.name)).not.toBeInTheDocument()
+    expect(receivedStatus).toBe('Active')
+    expect(screen.getByRole('note')).toHaveTextContent('الوحدات النشطة فقط')
+  })
+
+  it('warns that every descendant is deactivated when confirming a parent unit', async () => {
+    const user = userEvent.setup()
+    const root = createOrganizationalUnit({ id: fixtureUuid(31), name: 'الإدارة العامة' })
+    const child = createOrganizationalUnit({
+      id: fixtureUuid(32),
+      parentId: root.id,
+      name: 'المديرية',
+    })
+    const grandchild = createOrganizationalUnit({
+      id: fixtureUuid(33),
+      parentId: child.id,
+      name: 'الشعبة',
+    })
+
+    server.use(
+      http.get(`${API_BASE_URL}/organizational-units`, () => okPageJson([root, child, grandchild])),
+    )
+
+    render(<OrganizationalUnitsPage />, { wrapper: createWrapper() })
+    await screen.findByText(root.name)
+    await user.click(screen.getByRole('button', { name: `تعطيل ${root.name}` }))
+
+    const confirmation = await screen.findByRole('alertdialog')
+    expect(within(confirmation).getByText(/جميع الوحدات التابعة/)).toBeInTheDocument()
+    expect(within(confirmation).getByText(/عدد الوحدات التابعة: 2/)).toBeInTheDocument()
+  })
+
+  it('explains parent and code conflicts in the reactivation confirmation', async () => {
+    const user = userEvent.setup()
+    const inactive = createOrganizationalUnit({
+      id: fixtureUuid(41),
+      name: 'وحدة معطلة',
+      status: 'Inactive',
+    })
+
+    server.use(
+      http.get(`${API_BASE_URL}/organizational-units`, () => okPageJson([inactive])),
+    )
+
+    render(<OrganizationalUnitsPage />, { wrapper: createWrapper() })
+    await screen.findByText(inactive.name)
+    await user.click(screen.getByRole('button', { name: `تنشيط ${inactive.name}` }))
+
+    const confirmation = await screen.findByRole('alertdialog')
+    expect(within(confirmation).getByText(/الوحدة الأم نشطة/)).toBeInTheDocument()
+    expect(within(confirmation).getByText(/رمز الوحدة لا يتعارض/)).toBeInTheDocument()
   })
 })

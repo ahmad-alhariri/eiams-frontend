@@ -1,6 +1,6 @@
 ﻿import { createAxiosTransport } from '@/shared/api/axios-transport'
 import axios from 'axios'
-import { http } from 'msw'
+import { http, HttpResponse } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createAdminService } from '@/modules/admin/services/admin.service'
@@ -367,5 +367,48 @@ describe('AdminService', () => {
       code: 'USERS_NOT_FOUND',
       titleAr: 'لم يتم العثور على البيانات المطلوبة.',
     })
+  })
+
+  it('links a user to an employee with only the employeeId body', async () => {
+    const service = setupService()
+    const userId = '00000000-0000-4000-8000-0000000000a1'
+    const employeeId = '00000000-0000-4000-8000-0000000000b1'
+    let path = ''
+    let body: unknown = null
+
+    server.use(
+      http.put(`${API_BASE_URL}/admin/users/${userId}/employee`, async ({ request }) => {
+        path = new URL(request.url).pathname
+        body = await request.json()
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    await expect(service.linkUserToEmployee(userId, { employeeId })).resolves.toBeUndefined()
+    expect(path).toBe(`/api/v1/admin/users/${userId}/employee`)
+    expect(body).toEqual({ employeeId })
+  })
+
+  it('unlinks at the two-parameter route with an empty body', async () => {
+    const service = setupService()
+    const userId = '00000000-0000-4000-8000-0000000000a2'
+    const employeeId = '00000000-0000-4000-8000-0000000000b2'
+    let path = ''
+    let rawBody = 'not-sent'
+
+    server.use(
+      http.put(
+        `${API_BASE_URL}/admin/users/${userId}/employee/${employeeId}/unlink`,
+        async ({ request }) => {
+          path = new URL(request.url).pathname
+          rawBody = await request.text()
+          return new HttpResponse(null, { status: 204 })
+        },
+      ),
+    )
+
+    await expect(service.unlinkUserFromEmployee(userId, employeeId)).resolves.toBeUndefined()
+    expect(path).toBe(`/api/v1/admin/users/${userId}/employee/${employeeId}/unlink`)
+    expect(rawBody).toBe('')
   })
 })

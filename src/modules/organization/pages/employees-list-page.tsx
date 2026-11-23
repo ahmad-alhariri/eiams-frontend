@@ -8,6 +8,8 @@ import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { EmployeeFormDialog } from '@/modules/organization/components/employee-form-dialog'
 import {
   useCreateEmployeeMutation,
+  useDepartEmployeeMutation,
+  useReturnEmployeeMutation,
   useSetEmployeeStatusMutation,
   useUpdateEmployeeMutation,
 } from '@/modules/organization/hooks/use-employee-mutations'
@@ -77,6 +79,7 @@ function EmployeesListPage() {
   const [status, setStatus] = useState<RecordStatus | undefined>()
   const [dialogEmployee, setDialogEmployee] = useState<Employee | null | undefined>(undefined)
   const [statusTarget, setStatusTarget] = useState<Employee | null>(null)
+  const [lifecycleTarget, setLifecycleTarget] = useState<Employee | null>(null)
 
   const employeesQueryInput = useMemo<ListEmployeesQuery>(
     () => ({
@@ -99,6 +102,8 @@ function EmployeesListPage() {
   const createMutation = useCreateEmployeeMutation()
   const updateMutation = useUpdateEmployeeMutation()
   const statusMutation = useSetEmployeeStatusMutation()
+  const departMutation = useDepartEmployeeMutation()
+  const returnMutation = useReturnEmployeeMutation()
   const submitFeedback = useSubmitFeedback()
 
   // `orgUnitId` is flat on the wire; the label is joined from the units list.
@@ -177,6 +182,30 @@ function EmployeesListPage() {
     setStatusTarget(null)
   }, [statusMutation, statusTarget, submitFeedback])
 
+  /**
+   * Departure/return are dedicated server operations that also suspend or reactivate the
+   * linked account atomically. The client never sends the 0/1 status ordinal for these.
+   */
+  const confirmLifecycleChange = useCallback(async () => {
+    if (lifecycleTarget === null) return
+    const isDepart = lifecycleTarget.status === 'Active'
+
+    try {
+      await submitFeedback(async () => {
+        if (isDepart) {
+          await departMutation.mutateAsync(lifecycleTarget.id)
+          toast.success({ title: 'تم إنهاء خدمة الموظف وإيقاف حسابه المرتبط.' })
+        } else {
+          await returnMutation.mutateAsync(lifecycleTarget.id)
+          toast.success({ title: 'تمت إعادة الموظف وتنشيط حسابه المرتبط.' })
+        }
+      })
+      setLifecycleTarget(null)
+    } catch {
+      // Feedback already rendered in Arabic; keep the dialog open with authoritative state.
+    }
+  }, [departMutation, lifecycleTarget, returnMutation, submitFeedback])
+
   const submitForm = useCallback(
     async (values: EmployeeFormValues) => {
       const employee = dialogEmployee ?? null
@@ -225,6 +254,17 @@ function EmployeesListPage() {
           header: 'المسمى الوظيفي',
           cell: (info) => info.getValue() ?? '—',
         }),
+        employeeColumnHelper.accessor('email', {
+          id: 'email',
+          header: 'البريد الإلكتروني',
+          cell: (info) =>
+            info.getValue() ? <span dir="ltr">{info.getValue()}</span> : '—',
+        }),
+        employeeColumnHelper.accessor('phone', {
+          id: 'phone',
+          header: 'رقم الهاتف المحمول',
+          cell: (info) => <span dir="ltr">{info.getValue()}</span>,
+        }),
         employeeColumnHelper.accessor(
           (employee) => orgUnitNameById.get(employee.orgUnitId) ?? '—',
           { id: 'orgUnit', header: 'الوحدة التنظيمية' },
@@ -260,6 +300,15 @@ function EmployeesListPage() {
                         onClick={() => setStatusTarget(row.original)}
                       >
                         {isActive ? <IconUserOff aria-hidden /> : <IconCheck aria-hidden />}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`${isActive ? 'إنهاء خدمة' : 'إعادة'} ${row.original.fullName}`}
+                        onClick={() => setLifecycleTarget(row.original)}
+                      >
+                        {isActive ? 'إنهاء الخدمة' : 'إعادة'}
                       </Button>
                     </div>
                   )
@@ -371,6 +420,22 @@ function EmployeesListPage() {
         variant={isStatusTargetActive ? 'destructive' : 'confirm'}
         busy={statusMutation.isPending}
         onConfirm={() => void confirmStatusChange()}
+      />
+      <ConfirmDialog
+        open={lifecycleTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setLifecycleTarget(null)
+        }}
+        title={lifecycleTarget?.status === 'Active' ? 'إنهاء خدمة الموظف' : 'إعادة الموظف'}
+        message={
+          lifecycleTarget?.status === 'Active'
+            ? 'سيُعطَّل الموظف ويُوقف حسابه المرتبط، مع الحفاظ على جميع المراجع والسجلات السابقة.'
+            : 'سيُعاد تنشيط الموظف وحسابه المرتبط، مع الإبقاء على نفس السجلات والربط.'
+        }
+        confirmLabel={lifecycleTarget?.status === 'Active' ? 'إنهاء الخدمة' : 'إعادة الموظف'}
+        variant={lifecycleTarget?.status === 'Active' ? 'destructive' : 'confirm'}
+        busy={departMutation.isPending || returnMutation.isPending}
+        onConfirm={() => void confirmLifecycleChange()}
       />
     </OrganizationPageShell>
   )

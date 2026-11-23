@@ -3,6 +3,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useActiveScopeContext } from '@/modules/auth/hooks/use-active-scope-context'
 import { organizationService } from '@/modules/organization/services/organization.service'
 import { queryKeys, RESOURCES } from '@/shared/services/query-keys'
+import { reportApiError } from '@/shared/services/api-error'
+import {
+  DEACTIVATE_ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR,
+  ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR,
+  REACTIVATE_ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR,
+} from '@/shared/api/error-copy-ar'
 import {
   statusCommandValue,
   type OrganizationalUnitCreateRequest,
@@ -62,6 +68,12 @@ export function useCreateOrganizationalUnitMutation() {
     // response value — it invalidates the whole `organizational-units` resource
     // key, list and detail alike, because the key prefix matches both.
     onSuccess: invalidate,
+    // A rejected create is reported ONCE here, so the page need not wrap these
+    // mutations in `useSubmitFeedback` (which would produce a second toast).
+    // The code-keyed Arabic table supplies mapped titles; the guidance below is
+    // used only by a 409 whose code carries no detail of its own.
+    onError: (error: unknown) =>
+      reportApiError(error, { conflictGuidanceAr: ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR }),
   })
 }
 
@@ -74,6 +86,8 @@ export function useUpdateOrganizationalUnitMutation() {
     // `undefined`. The handler takes no arguments at all rather than an ignored
     // `_data`.
     onSuccess: invalidate,
+    onError: (error: unknown) =>
+      reportApiError(error, { conflictGuidanceAr: ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR }),
   })
 }
 
@@ -97,5 +111,15 @@ export function useSetOrganizationalUnitStatusMutation() {
         status: statusCommandValue[status],
       }),
     onSuccess: invalidate,
+    // TanStack hands the ORIGINAL variables to onError, so the direction is
+    // known without reading the row again: deactivation conflicts are about
+    // live references, reactivation conflicts about the parent and the code.
+    onError: (error: unknown, variables: SetOrganizationalUnitStatusVariables) =>
+      reportApiError(error, {
+        conflictGuidanceAr:
+          variables.status === 'Inactive'
+            ? DEACTIVATE_ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR
+            : REACTIVATE_ORGANIZATIONAL_UNIT_CONFLICT_GUIDANCE_AR,
+      }),
   })
 }

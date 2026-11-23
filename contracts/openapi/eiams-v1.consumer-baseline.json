@@ -278,6 +278,22 @@
       "responseProperties": []
     },
     {
+      "path": "/admin/users/{userId}/employee",
+      "method": "PUT",
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
+      "path": "/admin/users/{userId}/employee/{employeeId}/unlink",
+      "method": null,
+      "sources": [
+        "src/modules/admin/services/admin.service.ts"
+      ],
+      "responseProperties": []
+    },
+    {
       "path": "/admin/users/{userId}",
       "method": "GET",
       "sources": [

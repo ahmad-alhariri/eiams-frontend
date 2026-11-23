@@ -56,6 +56,8 @@ export type { ResourceIdResponse } from '@/shared/api/api-contracts'
 
 import type { ApiPage } from '@/shared/api/api-contracts'
 
+import type { OrganizationalUnitType } from '../constants/organization-constants'
+
 // ---------------------------------------------------------------------------
 // Pagination
 // ---------------------------------------------------------------------------
@@ -163,14 +165,18 @@ export type SitePage = ApiPage<Site>
 // Organizational Units
 // ---------------------------------------------------------------------------
 
-/** `unitType` is a free-form string on the wire (backend `string`, not an enum);
- *  observed live as "Department". Deliberately not narrowed to a union. */
+/** unitType is the approved organizational unit type: one of the six Arabic
+ *  values (see ORGANIZATIONAL_UNIT_TYPE_VALUES), highest level first. The
+ *  backend is the final authority and rejects every other value. */
 export interface OrganizationalUnit {
   readonly id: Uuid
   readonly siteId: Uuid
   readonly parentId?: Uuid | null
   readonly name: string
-  readonly unitType: string
+  /** Immutable identifier set once at creation: free text, at most 20
+   *  characters after trimming, unique per Site among the active units. */
+  readonly code: string
+  readonly unitType: OrganizationalUnitType
   readonly status: RecordStatus
 }
 
@@ -178,15 +184,16 @@ export interface OrganizationalUnitCreateRequest {
   readonly siteId: Uuid
   readonly parentId?: Uuid | null
   readonly name: string
-  readonly unitType: string
+  readonly code: string
+  readonly unitType: OrganizationalUnitType
 }
 
-/** `PUT /organizational-units/{id}` accepts neither `siteId` nor `parentId`:
+/** `PUT /organizational-units/{id}` accepts neither `siteId`, `parentId` nor the immutable `code`:
  *  re-parenting and re-siting are not exposed by the API. Not versioned — so no
  *  `expectedRowVersion` either (see `SiteUpdateRequest`). */
 export interface OrganizationalUnitUpdateRequest {
   readonly name: string
-  readonly unitType: string
+  readonly unitType: OrganizationalUnitType
 }
 
 /** `PUT /organizational-units/{id}/status` body — see {@link RecordStatusCommandValue}. */
@@ -208,6 +215,10 @@ export interface Employee {
   readonly fullName: string
   readonly employeeNumber: string
   readonly jobTitle?: string | null
+  /** Optional, globally unique among non-empty values; `null` when not supplied. */
+  readonly email?: string | null
+  /** Mandatory Syrian mobile number in canonical international form (`+9639XXXXXXXX`). */
+  readonly phone: string
   readonly status: RecordStatus
 }
 
@@ -216,14 +227,19 @@ export interface EmployeeCreateRequest {
   readonly fullName: string
   readonly employeeNumber: string
   readonly jobTitle?: string | null
+  readonly email?: string | null
+  readonly phone: string
 }
 
 /** `PUT /employees/{id}` accepts neither `orgUnitId` nor `employeeNumber`:
  *  the employee number is permanently immutable, and a transfer is a different
- *  operation, not an edit. Not versioned — no `expectedRowVersion`. */
+ *  operation, not an edit. Both contact fields ARE editable. Not versioned —
+ *  no `expectedRowVersion`. */
 export interface EmployeeUpdateRequest {
   readonly fullName: string
   readonly jobTitle?: string | null
+  readonly email?: string | null
+  readonly phone: string
 }
 
 /** `PUT /employees/{id}/status` body — see {@link RecordStatusCommandValue}. */

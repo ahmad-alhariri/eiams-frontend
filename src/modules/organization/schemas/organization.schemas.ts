@@ -8,7 +8,7 @@ import type {
 
 const CODE_REQUIRED_MESSAGE = 'رمز الجهة مطلوب.'
 const CODE_TOO_LONG_MESSAGE = 'رمز الجهة يجب ألّا يتجاوز 50 محرفاً.'
-const NAME_REQUIRED_MESSAGE = 'اسم الجهة يجب أن يتكون من حرفين على الأقل.'
+const NAME_REQUIRED_MESSAGE = 'اسم الجهة مطلوب.'
 const NAME_TOO_LONG_MESSAGE = 'اسم الجهة يجب ألّا يتجاوز 200 محرف.'
 
 /**
@@ -30,7 +30,7 @@ export function organizationFormSchema(isCreate: boolean) {
       ? z.string().trim().min(1, CODE_REQUIRED_MESSAGE).max(50, CODE_TOO_LONG_MESSAGE)
       : z.string().trim().max(50, CODE_TOO_LONG_MESSAGE),
     // Both bodies bind `name`, so both modes require it.
-    name: z.string().trim().min(2, NAME_REQUIRED_MESSAGE).max(200, NAME_TOO_LONG_MESSAGE),
+    name: z.string().trim().min(1, NAME_REQUIRED_MESSAGE).max(200, NAME_TOO_LONG_MESSAGE),
   })
 }
 

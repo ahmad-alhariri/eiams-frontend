@@ -114,6 +114,7 @@ function demoEmployee(
     employeeNumber,
     fullName,
     ...(jobTitle === null ? {} : { jobTitle }),
+    phone: '+963931234567',
     status,
   }
 }

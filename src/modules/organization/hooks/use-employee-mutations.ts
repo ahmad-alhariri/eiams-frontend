@@ -89,3 +89,24 @@ export function useSetEmployeeStatusMutation() {
     onSuccess: invalidate,
   })
 }
+
+/**
+ * Departure and return are dedicated server operations, not a client-side choice of
+ * status ordinal: the backend also suspends/reactivates the linked user account in the
+ * same transaction. Both routes answer an empty body, so callers invalidate and re-read.
+ */
+export function useDepartEmployeeMutation() {
+  const invalidate = useInvalidateEmployees()
+  return useMutation({
+    mutationFn: (employeeId: string) => organizationService.departEmployee(employeeId),
+    onSuccess: invalidate,
+  })
+}
+
+export function useReturnEmployeeMutation() {
+  const invalidate = useInvalidateEmployees()
+  return useMutation({
+    mutationFn: (employeeId: string) => organizationService.returnEmployee(employeeId),
+    onSuccess: invalidate,
+  })
+}

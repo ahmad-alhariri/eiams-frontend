@@ -27,9 +27,11 @@ describe('organizationFormSchema', () => {
     expect(schema.safeParse({ name: 'جهة', code: 'x'.repeat(51) }).error?.issues[0]?.message).toBe(
       'رمز الجهة يجب ألّا يتجاوز 50 محرفاً.',
     )
-    expect(schema.safeParse({ name: 'ه', code: 'ORG-001' }).error?.issues[0]?.message).toBe(
-      'اسم الجهة يجب أن يتكون من حرفين على الأقل.',
+    expect(schema.safeParse({ name: '', code: 'ORG-001' }).error?.issues[0]?.message).toBe(
+      'اسم الجهة مطلوب.',
     )
+    // One character is valid: the backend uses NotEmpty(), not a two-character minimum.
+    expect(schema.safeParse({ name: 'ه', code: 'ORG-001' }).success).toBe(true)
     expect(
       schema.safeParse({ name: 'ا'.repeat(201), code: 'ORG-001' }).error?.issues[0]?.message,
     ).toBe('اسم الجهة يجب ألّا يتجاوز 200 محرف.')

@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { IconArrowRight } from '@tabler/icons-react'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router'
 
@@ -15,7 +15,15 @@ import {
 } from '@/modules/admin/components/user-role-scopes-editor'
 import { userDisplayName } from '@/modules/admin/types/user.types'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
-import { useReplaceUserRoleScopeMutation } from '@/modules/admin/hooks/use-admin-mutations'
+import {
+  useLinkUserToEmployeeMutation,
+  useReplaceUserRoleScopeMutation,
+  useUnlinkUserFromEmployeeMutation,
+} from '@/modules/admin/hooks/use-admin-mutations'
+import {
+  useEmployeeQuery,
+  useEmployeesQuery,
+} from '@/modules/organization/hooks/use-organization-queries'
 import {
   useRolesQuery,
   useUserQuery,
@@ -36,6 +44,15 @@ import { DetailField } from '@/shared/layout/detail-field'
 import { PageHeader } from '@/shared/layout/page-header'
 import { normalizeApiError } from '@/shared/services/api-error'
 import { Button } from '@/shared/ui/button'
+import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { toast } from '@/shared/ui/toast-manager'
 import { formatUuid } from '@/shared/utils/format'
 
@@ -60,7 +77,30 @@ function UserDetailPage() {
   const roleScopeQuery = useUserRoleScopeQuery(userId)
   const rolesQuery = useRolesQuery(canSelectRoles)
   const replaceMutation = useReplaceUserRoleScopeMutation()
+  const linkMutation = useLinkUserToEmployeeMutation()
+  const unlinkMutation = useUnlinkUserFromEmployeeMutation()
   const submitFeedback = useSubmitFeedback()
+
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false)
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
+  const [unlinkDialogOpen, setUnlinkDialogOpen] = useState(false)
+
+  const linkedEmployeeId = userQuery.data?.employeeId ?? null
+  const employeeQuery = useEmployeeQuery(linkedEmployeeId ?? undefined)
+  // Active employees are the only valid link targets; the server enforces scope and LDR-04.
+  const employeesQuery = useEmployeesQuery({ page: 1, pageSize: 100, status: 'Active' })
+  const linkableEmployees = useMemo(
+    () => (employeesQuery.data?.items ?? []).filter((employee) => employee.status === 'Active'),
+    [employeesQuery.data],
+  )
+
+  // Rendering-only gate. The backend remains authoritative: it also requires the
+  // employee to be Inactive and the account to be Suspended when the write arrives.
+  const canOfferUnlink =
+    canManage &&
+    linkedEmployeeId !== null &&
+    userQuery.data?.status === 'Suspended' &&
+    employeeQuery.data?.status === 'Inactive'
   const form = useForm<UserRoleScopeFormValues>({
     resolver: zodResolver(userRoleScopeSchema),
     defaultValues: {
@@ -153,6 +193,37 @@ function UserDetailPage() {
     void userQuery.refetch()
     void roleScopeQuery.refetch()
     if (canSelectRoles) void rolesQuery.refetch()
+    void employeeQuery.refetch()
+  }
+
+  const submitLink = async () => {
+    if (userId === undefined || selectedEmployeeId === '') return
+    try {
+      await submitFeedback(async () => {
+        await linkMutation.mutateAsync({
+          userId,
+          request: { employeeId: selectedEmployeeId },
+        })
+        toast.success({ title: 'تم ربط الموظف بحساب المستخدم.' })
+      })
+      setLinkDialogOpen(false)
+      setSelectedEmployeeId('')
+    } catch {
+      // The shared feedback hook already rendered the Arabic error; leave the dialog open.
+    }
+  }
+
+  const confirmUnlink = async () => {
+    if (userId === undefined || linkedEmployeeId === null) return
+    try {
+      await submitFeedback(async () => {
+        await unlinkMutation.mutateAsync({ userId, employeeId: linkedEmployeeId })
+        toast.success({ title: 'تم فصل الموظف عن الحساب نهائياً.' })
+      })
+      setUnlinkDialogOpen(false)
+    } catch {
+      // A rejected unlink keeps the dialog open and the authoritative state visible.
+    }
   }
 
   return (
@@ -210,6 +281,35 @@ function UserDetailPage() {
             </div>
           </ContentCard>
 
+          <ContentCard
+            title="ربط الموظف"
+            description="الربط عملية لمرة واحدة. الفصل نهائي ولا يمكن إعادة ربط الموظف بعده."
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <DetailField label="الموظف المرتبط">
+                {linkedEmployeeId === null
+                  ? 'لا يوجد موظف مرتبط'
+                  : (userQuery.data.employeeName ?? formatUuid(linkedEmployeeId))}
+              </DetailField>
+              {canManage ? (
+                linkedEmployeeId === null ? (
+                  <Button type="button" onClick={() => setLinkDialogOpen(true)}>
+                    ربط موظف
+                  </Button>
+                ) : canOfferUnlink ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    loading={unlinkMutation.isPending}
+                    onClick={() => setUnlinkDialogOpen(true)}
+                  >
+                    فصل الموظف
+                  </Button>
+                ) : null
+              ) : null}
+            </div>
+          </ContentCard>
+
           <UserRoleScopeEditor
             canManage={canManage}
             canSelectRoles={canSelectRoles}
@@ -221,6 +321,53 @@ function UserDetailPage() {
             loadScopeOptions={scopeSelector.loadOptions}
             scopeSelectorReady={scopeSelector.scopeReady}
             scopeLabelAr={scopeLabelAr}
+          />
+
+          <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+            <DialogContent dir="rtl">
+              <DialogHeader>
+                <DialogTitle>ربط موظف بالحساب</DialogTitle>
+              </DialogHeader>
+              <Select
+                value={selectedEmployeeId}
+                onValueChange={(value) => setSelectedEmployeeId(value ?? '')}
+              >
+                <SelectTrigger aria-label="اختر الموظف">
+                  <SelectValue placeholder="اختر الموظف" />
+                </SelectTrigger>
+                <SelectContent>
+                  {linkableEmployees.map((employee) => (
+                    <SelectItem key={employee.id} value={employee.id}>
+                      {employee.fullName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  loading={linkMutation.isPending}
+                  disabled={selectedEmployeeId === ''}
+                  onClick={() => void submitLink()}
+                >
+                  تأكيد الربط
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setLinkDialogOpen(false)}>
+                  إلغاء
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <ConfirmDialog
+            open={unlinkDialogOpen}
+            onOpenChange={setUnlinkDialogOpen}
+            title="فصل الموظف عن الحساب نهائياً"
+            message="سيُفصل الموظف عن هذا الحساب ولا يمكن ربطه بأي حساب آخر بعد ذلك. تأكد من تعطيل الموظف وإيقاف الحساب قبل المتابعة."
+            confirmLabel="فصل الموظف نهائياً"
+            variant="destructive"
+            busy={unlinkMutation.isPending}
+            onConfirm={() => void confirmUnlink()}
           />
         </div>
       )}

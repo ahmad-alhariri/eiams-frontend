@@ -1,12 +1,30 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AxiosError, AxiosHeaders } from 'axios'
+import { http } from 'msw'
 import type { PropsWithChildren } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { EmployeeFormDialog } from './employee-form-dialog'
-import { createEmployee } from '@/test/msw/factories'
+import { createEmployee, createOrganizationalUnit, fixtureUuid } from '@/test/msw/factories'
+import { okPageJson } from '@/test/msw/envelope'
+import { server } from '@/test/msw/server'
+
+const activeScope = vi.hoisted(() => ({
+  // No scope by default: the two edit-mode tests below are about server field
+  // errors and must keep the reference query disabled, as before this suite was
+  // given a scope mock. The create-mode test opts in explicitly.
+  key: undefined as { kind: 'enterprise' } | undefined,
+}))
+
+vi.mock('@/modules/auth/hooks/use-active-scope-context', () => ({
+  useActiveScopeContext: () => ({ activeScopeCacheKey: activeScope.key }),
+}))
+
+afterEach(() => {
+  activeScope.key = undefined
+})
 
 /**
  * `normalizeApiError` renders the APPROVED Arabic for the operation's code
@@ -95,5 +113,46 @@ describe('EmployeeFormDialog server-error contract', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByLabelText('اسم الموظف')).not.toHaveAttribute('aria-invalid')
     expect(screen.queryByText(FIELD_ERROR_AR)).not.toBeInTheDocument()
+  })
+
+  it('offers only Active organizational units as assignment targets', async () => {
+    activeScope.key = { kind: 'enterprise' }
+    const user = userEvent.setup()
+    const active = createOrganizationalUnit({
+      id: fixtureUuid(60),
+      name: 'وحدة نشطة للتعيين',
+    })
+    const inactive = createOrganizationalUnit({
+      id: fixtureUuid(61),
+      name: 'وحدة معطلة للتعيين',
+      status: 'Inactive',
+    })
+    let receivedStatus: string | null = null
+
+    server.use(
+      http.get('/api/v1/organizational-units', ({ request }) => {
+        receivedStatus = new URL(request.url).searchParams.get('status')
+        // Deliberately returns an inactive row: the display must not trust an
+        // over-broad cached page even though the query asks the backend for Active.
+        return okPageJson([active, inactive])
+      }),
+    )
+
+    render(
+      <EmployeeFormDialog
+        open
+        employee={null}
+        isPending={false}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+      { wrapper: createWrapper() },
+    )
+
+    await waitFor(() => expect(receivedStatus).toBe('Active'))
+    await user.click(await screen.findByRole('combobox', { name: 'الوحدة التنظيمية' }))
+
+    expect(await screen.findByRole('option', { name: /وحدة نشطة للتعيين/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /وحدة معطلة للتعيين/ })).not.toBeInTheDocument()
   })
 })

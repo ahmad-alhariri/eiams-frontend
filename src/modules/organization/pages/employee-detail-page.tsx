@@ -5,7 +5,11 @@ import { useNavigate, useParams } from 'react-router'
 import { ROUTE_PATHS } from '@/config/routes'
 import { usePermission } from '@/modules/auth/hooks/use-permission'
 import { EmployeeFormDialog } from '@/modules/organization/components/employee-form-dialog'
-import { useUpdateEmployeeMutation } from '@/modules/organization/hooks/use-employee-mutations'
+import {
+  useDepartEmployeeMutation,
+  useReturnEmployeeMutation,
+  useUpdateEmployeeMutation,
+} from '@/modules/organization/hooks/use-employee-mutations'
 import {
   useEmployeeQuery,
   useOrganizationalUnitsQuery,
@@ -25,6 +29,7 @@ import { OrganizationPageShell } from '@/modules/organization/components/organiz
 import { PageHeader } from '@/shared/layout/page-header'
 import { useSubmitFeedback } from '@/shared/hooks/use-submit-feedback'
 import { Button } from '@/shared/ui/button'
+import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { toast } from '@/shared/ui/toast-manager'
 
 /**
@@ -53,8 +58,11 @@ function EmployeeDetailPage() {
   const employeeQuery = useEmployeeQuery(employeeId)
   const unitsQuery = useOrganizationalUnitsQuery(REFERENCE_PAGE)
   const updateMutation = useUpdateEmployeeMutation()
+  const departMutation = useDepartEmployeeMutation()
+  const returnMutation = useReturnEmployeeMutation()
   const submitFeedback = useSubmitFeedback()
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [lifecycleAction, setLifecycleAction] = useState<'depart' | 'return' | null>(null)
   const employee = employeeQuery.data
   const canManage = has('organization.manage')
   const returnToEmployees = useCallback(
@@ -82,6 +90,28 @@ function EmployeeDetailPage() {
     },
     [employee, submitFeedback, updateMutation],
   )
+
+  /**
+   * Departure and return are dedicated server operations: the backend also suspends or
+   * reactivates the linked account atomically. The client never sends the 0/1 ordinal here.
+   */
+  const confirmLifecycle = useCallback(async () => {
+    if (employee === undefined || lifecycleAction === null) return
+    try {
+      await submitFeedback(async () => {
+        if (lifecycleAction === 'depart') {
+          await departMutation.mutateAsync(employee.id)
+          toast.success({ title: 'تم إنهاء خدمة الموظف وإيقاف حسابه المرتبط.' })
+        } else {
+          await returnMutation.mutateAsync(employee.id)
+          toast.success({ title: 'تمت إعادة الموظف وتنشيط حسابه المرتبط.' })
+        }
+      })
+      setLifecycleAction(null)
+    } catch {
+      // The shared feedback hook already showed the Arabic error; keep the dialog open.
+    }
+  }, [departMutation, employee, lifecycleAction, returnMutation, submitFeedback])
 
   if (employeeId === undefined || employeeId === '')
     return (
@@ -135,10 +165,22 @@ function EmployeeDetailPage() {
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {canManage ? (
-            <Button type="button" onClick={() => setIsEditDialogOpen(true)}>
-              <IconEdit aria-hidden data-icon="inline-start" />
-              تعديل الموظف
-            </Button>
+            <>
+              <Button type="button" onClick={() => setIsEditDialogOpen(true)}>
+                <IconEdit aria-hidden data-icon="inline-start" />
+                تعديل الموظف
+              </Button>
+              <Button
+                type="button"
+                variant={employee.status === 'Active' ? 'destructive' : 'outline'}
+                loading={departMutation.isPending || returnMutation.isPending}
+                onClick={() =>
+                  setLifecycleAction(employee.status === 'Active' ? 'depart' : 'return')
+                }
+              >
+                {employee.status === 'Active' ? 'إنهاء الخدمة' : 'إعادة الموظف'}
+              </Button>
+            </>
           ) : null}
           <Button type="button" variant="outline" onClick={returnToEmployees}>
             <IconArrowRight aria-hidden data-icon="inline-start" />
@@ -154,6 +196,12 @@ function EmployeeDetailPage() {
             {employee.employeeNumber}
           </DetailField>
           <DetailField label="المسمى الوظيفي">{employee.jobTitle ?? '—'}</DetailField>
+          <DetailField label="البريد الإلكتروني" ltr>
+            {employee.email ?? '—'}
+          </DetailField>
+          <DetailField label="رقم الهاتف المحمول" ltr>
+            {employee.phone}
+          </DetailField>
           <DetailField label="الحالة">
             <StatusBadge entity="record" status={employee.status} />
           </DetailField>
@@ -173,6 +221,22 @@ function EmployeeDetailPage() {
           if (!open) setIsEditDialogOpen(false)
         }}
         onSubmit={submitForm}
+      />
+      <ConfirmDialog
+        open={lifecycleAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setLifecycleAction(null)
+        }}
+        title={lifecycleAction === 'depart' ? 'إنهاء خدمة الموظف' : 'إعادة الموظف'}
+        message={
+          lifecycleAction === 'depart'
+            ? 'سيُعطَّل الموظف ويُوقف حسابه المرتبط، مع الحفاظ على جميع المراجع والسجلات السابقة.'
+            : 'سيُعاد تنشيط الموظف وحسابه المرتبط، مع الإبقاء على نفس السجلات والربط.'
+        }
+        confirmLabel={lifecycleAction === 'depart' ? 'إنهاء الخدمة' : 'إعادة الموظف'}
+        variant={lifecycleAction === 'depart' ? 'destructive' : 'confirm'}
+        busy={departMutation.isPending || returnMutation.isPending}
+        onConfirm={() => void confirmLifecycle()}
       />
     </OrganizationPageShell>
   )

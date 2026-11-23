@@ -7,6 +7,7 @@ import type { ListUsersQuery } from '@/modules/admin/types/admin.types'
 import type {
   CreatedUser,
   CreateUserRequest,
+  LinkUserToEmployeeRequest,
   SetUserStatusRequest,
   UpdateUserRequest,
   UserDetailProjection,
@@ -48,6 +49,14 @@ const USER_PATH = '/admin/users/{userId}'
  * role and assignment routes — the generated paths map predates it.
  */
 const USER_STATUS_PATH = '/admin/users/{userId}/status'
+
+/**
+ * Employee-link lifecycle. The link is one-shot (LDR-04): the unlink route is a separate,
+ * permanently destructive endpoint guarded by the backend lifecycle preconditions.
+ * Declared locally for the same reason as the status route.
+ */
+const USER_EMPLOYEE_PATH = '/admin/users/{userId}/employee'
+const USER_EMPLOYEE_UNLINK_PATH = '/admin/users/{userId}/employee/{employeeId}/unlink'
 
 // Declared locally rather than with `satisfies keyof paths`: the generated `paths`
 // map is the stale provisional artifact, and it still advertises the one-at-a-time
@@ -103,6 +112,10 @@ export interface AdminService {
   updateUser: (userId: string, request: UpdateUserRequest) => Promise<void>
   /** Activate or suspend; also answers an empty body. */
   setUserStatus: (userId: string, request: SetUserStatusRequest) => Promise<void>
+  /** One-shot link; answers an empty body. Re-linking is rejected server-side (LDR-04). */
+  linkUserToEmployee: (userId: string, request: LinkUserToEmployeeRequest) => Promise<void>
+  /** Permanent unlink; answers an empty body and forbids re-linking that employee. */
+  unlinkUserFromEmployee: (userId: string, employeeId: string) => Promise<void>
   /**
    * The user's sole assignment, or `null` when they have none yet.
    *
@@ -254,6 +267,23 @@ export function createAdminService(transport: ApiTransport): AdminService {
         path: pathWithId(USER_STATUS_PATH, '{userId}', userId),
         method: 'PUT',
         body: request,
+      })
+    },
+    async linkUserToEmployee(userId, request) {
+      await transport.requestEmpty({
+        path: pathWithId(USER_EMPLOYEE_PATH, '{userId}', userId),
+        method: 'PUT',
+        body: request,
+      })
+    },
+    async unlinkUserFromEmployee(userId, employeeId) {
+      await transport.requestEmpty({
+        path: pathWithId(
+          pathWithId(USER_EMPLOYEE_UNLINK_PATH, '{userId}', userId),
+          '{employeeId}',
+          employeeId,
+        ),
+        method: 'PUT',
       })
     },
     async getUserRoleScope(userId, context) {

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -15,9 +15,29 @@ const VALID_ISSUE_UUID = '00000000-0000-4000-8000-000000000155'
  * reads the sibling checkout and fails loudly when the file is absent or the
  * two caps drift apart — the whole point is catching drift, never skipping.
  */
+const frontendRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..')
+const frontendParent = dirname(frontendRoot)
+
+/**
+ * The backend checkout must sit beside the frontend one. A plain checkout is
+ * named eiams-backend; a git worktree of the same repository carries the
+ * eiams-backend-<suffix> shape, so both are accepted. The exact eiams-backend
+ * name wins when several candidates exist.
+ */
+function resolveBackendRoot(): string {
+  const candidates = existsSync(frontendParent)
+    ? readdirSync(frontendParent, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith('eiams-backend'))
+        .map((entry) => entry.name)
+    : []
+  const exact = candidates.find((name) => name === 'eiams-backend')
+  const chosen = exact ?? candidates.sort()[0]
+  return chosen ? resolve(frontendParent, chosen) : resolve(frontendParent, 'eiams-backend')
+}
+
 const backendReturnInfoPath = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../../../../eiams-backend/src/Domain/ReturnInfos/ReturnInfo.cs',
+  resolveBackendRoot(),
+  'src/Domain/ReturnInfos/ReturnInfo.cs',
 )
 
 describe('return-info schema (FIX-R1 / FIX-R4 / FIX-R5)', () => {
