@@ -275,12 +275,8 @@ describe('organizational-unit mutation Arabic error feedback', () => {
         wrapper: createWrapper(),
       })
 
-      await expect(
-        result.current.mutateAsync({ orgUnitId: unit.id, status }),
-      ).rejects.toBeDefined()
-      expect(toast.error).toHaveBeenCalledWith(
-        expect.objectContaining({ description: guidance }),
-      )
+      await expect(result.current.mutateAsync({ orgUnitId: unit.id, status })).rejects.toBeDefined()
+      expect(toast.error).toHaveBeenCalledWith(expect.objectContaining({ description: guidance }))
     },
   )
 

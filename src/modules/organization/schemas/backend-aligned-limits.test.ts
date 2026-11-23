@@ -21,15 +21,15 @@ const EMPLOYEE_VALUES = {
 
 describe('frontend validation limits aligned to backend validators (K-4)', () => {
   it('Site: location max 300, governorate max 20 with the backend ASCII format', () => {
-    expect(siteFormSchema(true).safeParse({ ...SITE_VALUES, location: 'ع'.repeat(300) }).success).toBe(
+    expect(
+      siteFormSchema(true).safeParse({ ...SITE_VALUES, location: 'ع'.repeat(300) }).success,
+    ).toBe(true)
+    expect(
+      siteFormSchema(true).safeParse({ ...SITE_VALUES, location: 'ع'.repeat(301) }).success,
+    ).toBe(false)
+    expect(siteFormSchema(true).safeParse({ ...SITE_VALUES, governorateCode: 'DIM' }).success).toBe(
       true,
     )
-    expect(siteFormSchema(true).safeParse({ ...SITE_VALUES, location: 'ع'.repeat(301) }).success).toBe(
-      false,
-    )
-    expect(
-      siteFormSchema(true).safeParse({ ...SITE_VALUES, governorateCode: 'DIM' }).success,
-    ).toBe(true)
     expect(
       siteFormSchema(true).safeParse({ ...SITE_VALUES, governorateCode: 'A'.repeat(21) }).success,
     ).toBe(false)

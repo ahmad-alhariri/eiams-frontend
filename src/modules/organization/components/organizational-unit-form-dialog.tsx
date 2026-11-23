@@ -33,7 +33,8 @@ const REFERENCE_PAGE = { page: 0, pageSize: 200 } as const
 const SERVER_ERROR_KEYS = ['siteId', 'parentId', 'name', 'code', 'unitType'] as const
 
 /** Arabic note shown in place of an editable control on the create-only fields. */
-const CREATE_ONLY_NOTE = 'يُحدَّد الموقع والوحدة الأب عند إنشاء الوحدة ولا يمكن تعديلها بعد ذلك، كما أن كود الوحدة غير قابل للتعديل بعد الإنشاء.'
+const CREATE_ONLY_NOTE =
+  'يُحدَّد الموقع والوحدة الأب عند إنشاء الوحدة ولا يمكن تعديلها بعد ذلك، كما أن كود الوحدة غير قابل للتعديل بعد الإنشاء.'
 
 function organizationalUnitLabel(unit: OrganizationalUnit): string {
   return `${unit.unitType} — ${unit.name}`

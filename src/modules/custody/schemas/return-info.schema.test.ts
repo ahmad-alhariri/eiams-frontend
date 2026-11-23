@@ -35,10 +35,7 @@ function resolveBackendRoot(): string {
   return chosen ? resolve(frontendParent, chosen) : resolve(frontendParent, 'eiams-backend')
 }
 
-const backendReturnInfoPath = resolve(
-  resolveBackendRoot(),
-  'src/Domain/ReturnInfos/ReturnInfo.cs',
-)
+const backendReturnInfoPath = resolve(resolveBackendRoot(), 'src/Domain/ReturnInfos/ReturnInfo.cs')
 
 describe('return-info schema (FIX-R1 / FIX-R4 / FIX-R5)', () => {
   it('locks the frontend reason cap to the backend domain cap of 200', () => {

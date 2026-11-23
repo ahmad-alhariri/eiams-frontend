@@ -16,8 +16,7 @@ const EMAIL_INVALID_MESSAGE = 'البريد الإلكتروني غير صحيح
 const EMAIL_ASCII_MESSAGE = 'يجب أن يحتوي البريد الإلكتروني على محارف ASCII فقط.'
 const EMAIL_TOO_LONG_MESSAGE = 'يجب ألّا يتجاوز البريد الإلكتروني 256 محرفاً.'
 const PHONE_REQUIRED_MESSAGE = 'رقم الهاتف المحمول مطلوب.'
-const PHONE_INVALID_MESSAGE =
-  'أدخل رقمًا سوريًا صحيحًا بصيغة 0931234567 أو +963931234567.'
+const PHONE_INVALID_MESSAGE = 'أدخل رقمًا سوريًا صحيحًا بصيغة 0931234567 أو +963931234567.'
 const PHONE_TOO_LONG_MESSAGE = 'يجب ألّا يتجاوز رقم الهاتف 20 محرفاً.'
 
 /** Mirrors the backend `EmployeeContactRules` — the backend is the final reference (K-4). */
@@ -58,7 +57,10 @@ const employeeEmailSchema = z
   .trim()
   .max(EMPLOYEE_EMAIL_MAX_LENGTH, EMAIL_TOO_LONG_MESSAGE)
   .refine((value) => value === '' || z.email().safeParse(value).success, EMAIL_INVALID_MESSAGE)
-  .refine((value) => Array.from(value).every((char) => char.charCodeAt(0) <= 0x7f), EMAIL_ASCII_MESSAGE)
+  .refine(
+    (value) => Array.from(value).every((char) => char.charCodeAt(0) <= 0x7f),
+    EMAIL_ASCII_MESSAGE,
+  )
 
 /**
  * One form shape for both employee operations, with the create-only fields

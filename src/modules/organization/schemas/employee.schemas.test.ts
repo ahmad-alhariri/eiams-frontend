@@ -63,12 +63,12 @@ describe('employeeFormSchema', () => {
 
   it('requires a phone and rejects a non-Syrian-mobile number', () => {
     expect(employeeFormSchema(true).safeParse({ ...VALID_VALUES, phone: '' }).success).toBe(false)
-    expect(employeeFormSchema(true).safeParse({ ...VALID_VALUES, phone: '09312345678' }).success).toBe(
-      false,
-    )
-    expect(employeeFormSchema(true).safeParse({ ...VALID_VALUES, phone: '+96311234567' }).success).toBe(
-      false,
-    )
+    expect(
+      employeeFormSchema(true).safeParse({ ...VALID_VALUES, phone: '09312345678' }).success,
+    ).toBe(false)
+    expect(
+      employeeFormSchema(true).safeParse({ ...VALID_VALUES, phone: '+96311234567' }).success,
+    ).toBe(false)
   })
 
   it('accepts national and international input and normalises it to canonical form', () => {
@@ -83,15 +83,15 @@ describe('employeeFormSchema', () => {
 
   it('treats email as optional but enforces format and the ASCII restriction when supplied', () => {
     expect(employeeFormSchema(true).safeParse({ ...VALID_VALUES, email: '' }).success).toBe(true)
-    expect(employeeFormSchema(true).safeParse({ ...VALID_VALUES, email: 'a@example.com' }).success).toBe(
-      true,
-    )
-    expect(employeeFormSchema(true).safeParse({ ...VALID_VALUES, email: 'not-an-email' }).success).toBe(
-      false,
-    )
-    expect(employeeFormSchema(true).safeParse({ ...VALID_VALUES, email: 'مثال@example.com' }).success).toBe(
-      false,
-    )
+    expect(
+      employeeFormSchema(true).safeParse({ ...VALID_VALUES, email: 'a@example.com' }).success,
+    ).toBe(true)
+    expect(
+      employeeFormSchema(true).safeParse({ ...VALID_VALUES, email: 'not-an-email' }).success,
+    ).toBe(false)
+    expect(
+      employeeFormSchema(true).safeParse({ ...VALID_VALUES, email: 'مثال@example.com' }).success,
+    ).toBe(false)
     expect(
       employeeFormSchema(true).safeParse({ ...VALID_VALUES, email: `${'a'.repeat(252)}@b.co` })
         .success,

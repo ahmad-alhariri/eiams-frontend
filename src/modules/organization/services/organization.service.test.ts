@@ -53,7 +53,7 @@ function wireUnit(overrides: Partial<OrganizationalUnit> = {}): OrganizationalUn
     siteId: SITE_ID,
     parentId: null,
     name: 'الإدارة',
-    code: "OU-001",
+    code: 'OU-001',
     unitType: 'إدارة',
     status: 'Active',
     ...overrides,
@@ -328,7 +328,13 @@ describe('OrganizationService', () => {
       Record<string, unknown>,
       Record<string, unknown>,
     ]
-    expect(Object.keys(sentCreate).sort()).toEqual(['code', 'name', 'parentId', 'siteId', 'unitType'])
+    expect(Object.keys(sentCreate).sort()).toEqual([
+      'code',
+      'name',
+      'parentId',
+      'siteId',
+      'unitType',
+    ])
     expect(Object.keys(sentUpdate).sort()).toEqual(['name', 'unitType'])
     expect(sentUpdate).not.toHaveProperty('code')
     for (const body of [sentCreate, sentUpdate]) {

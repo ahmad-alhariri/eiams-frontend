@@ -56,7 +56,7 @@ function wireUnit(overrides: Partial<OrganizationalUnit> = {}): OrganizationalUn
     siteId: SITE_ID,
     parentId: null,
     name: 'الإدارة العامة',
-    code: "OU-ROOT",
+    code: 'OU-ROOT',
     unitType: 'إدارة',
     status: 'Active',
     ...overrides,
@@ -126,7 +126,7 @@ describe('OrganizationalUnitFormDialog', () => {
       siteId: site.id,
       parentId: null,
       name: 'مديرية الموارد البشرية',
-      'code': 'OU-001',
+      code: 'OU-001',
       unitType: 'إدارة',
     })
   })

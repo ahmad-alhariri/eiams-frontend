@@ -631,7 +631,7 @@ export function createOrganizationalUnit(
       id: fixtureUuid(52),
       siteId: fixtureUuid(50),
       parentId: null,
-      code: "OU-001",
+      code: 'OU-001',
       name: 'الإدارة',
       unitType: 'إدارة',
       status: 'Active',

@@ -270,9 +270,7 @@ describe('OrganizationalUnitsPage', () => {
       status: 'Inactive',
     })
 
-    server.use(
-      http.get(`${API_BASE_URL}/organizational-units`, () => okPageJson([inactive])),
-    )
+    server.use(http.get(`${API_BASE_URL}/organizational-units`, () => okPageJson([inactive])))
 
     render(<OrganizationalUnitsPage />, { wrapper: createWrapper() })
     await screen.findByText(inactive.name)

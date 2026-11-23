@@ -6,7 +6,10 @@ import type {
   OrganizationalUnitUpdateRequest,
 } from '@/modules/organization/types/organization.types'
 
-import { isApprovedOrganizationalUnitType, type OrganizationalUnitType } from '@/modules/organization/constants/organization-constants'
+import {
+  isApprovedOrganizationalUnitType,
+  type OrganizationalUnitType,
+} from '@/modules/organization/constants/organization-constants'
 
 const SITE_MESSAGE = 'الموقع مطلوب.'
 const NAME_REQUIRED_MESSAGE = 'اسم الوحدة التنظيمية مطلوب.'

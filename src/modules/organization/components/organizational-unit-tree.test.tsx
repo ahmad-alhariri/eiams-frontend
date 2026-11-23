@@ -25,7 +25,7 @@ function wireUnit(overrides: Partial<OrganizationalUnit> = {}): OrganizationalUn
     siteId: SITE_ID,
     parentId: null,
     name: 'الإدارة العامة',
-    code: "OU-ROOT",
+    code: 'OU-ROOT',
     unitType: 'إدارة',
     status: 'Active',
     ...overrides,
@@ -116,13 +116,13 @@ describe('OrganizationalUnitTree', () => {
     )
   })
 
-  it("renders the wire `name` as the label and the immutable `code` as the secondary line", () => {
-    const root = wireUnit({ id: fixtureUuid(8), name: "مديرية مالية", code: "OU-FIN" })
+  it('renders the wire `name` as the label and the immutable `code` as the secondary line', () => {
+    const root = wireUnit({ id: fixtureUuid(8), name: 'مديرية مالية', code: 'OU-FIN' })
 
     render(<OrganizationalUnitTree units={[root]} />)
 
     expect(screen.getByText('مديرية مالية')).toBeInTheDocument()
-    expect(screen.getByText("OU-FIN")).toBeInTheDocument()
+    expect(screen.getByText('OU-FIN')).toBeInTheDocument()
   })
 
   it('counts every descendant of a unit for the deactivation warning', () => {

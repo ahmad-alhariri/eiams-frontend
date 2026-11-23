@@ -257,8 +257,7 @@ function EmployeesListPage() {
         employeeColumnHelper.accessor('email', {
           id: 'email',
           header: 'البريد الإلكتروني',
-          cell: (info) =>
-            info.getValue() ? <span dir="ltr">{info.getValue()}</span> : '—',
+          cell: (info) => (info.getValue() ? <span dir="ltr">{info.getValue()}</span> : '—'),
         }),
         employeeColumnHelper.accessor('phone', {
           id: 'phone',

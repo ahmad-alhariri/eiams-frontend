@@ -200,8 +200,8 @@ function OrganizationalUnitsPage() {
             role="note"
             className="mt-3 rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground"
           >
-            في نطاق المستودع تُعرض الوحدات النشطة فقط. الخادم هو المرجع النهائي لحالة الوحدة
-            وصلاحية الاطلاع عليها.
+            في نطاق المستودع تُعرض الوحدات النشطة فقط. الخادم هو المرجع النهائي لحالة الوحدة وصلاحية
+            الاطلاع عليها.
           </p>
         ) : null}
 
@@ -223,7 +223,10 @@ function OrganizationalUnitsPage() {
           />
         ) : null}
 
-        {!unitsQuery.isLoading && !unitsQuery.isError && page !== undefined && visibleUnits.length === 0 ? (
+        {!unitsQuery.isLoading &&
+        !unitsQuery.isError &&
+        page !== undefined &&
+        visibleUnits.length === 0 ? (
           <EmptyState
             icon={<IconSitemap className="size-12" />}
             title="لا توجد وحدات تنظيمية"
