@@ -69,17 +69,17 @@ INSERT INTO public.sites (id, organization_id, name, code, location, status, cre
 -- Data for Name: organizational_units; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.organizational_units (id, site_id, parent_id, name, unit_type, status, created_at_utc, updated_at_utc, created_by, updated_by) VALUES ('5bc08419-76a0-4062-9b51-21fae897a1aa', 'eef92f30-1f3c-4f65-b8ad-1c6dd178d22d', NULL, 'Operations Division', 'Division', 'Active', '2026-10-05 14:23:35.223396+00', NULL, '1c9fa3f1-2262-47d9-839b-faec4d01505e', NULL);
-INSERT INTO public.organizational_units (id, site_id, parent_id, name, unit_type, status, created_at_utc, updated_at_utc, created_by, updated_by) VALUES ('3d2f0464-5629-4957-a90b-8a37ecd5cb44', '59c0be8a-0cd7-4329-99e3-845715297127', NULL, 'Central Unit 1791241674491', 'Department', 'Active', '2026-10-05 23:07:54.635501+00', NULL, '1c9fa3f1-2262-47d9-839b-faec4d01505e', NULL);
-INSERT INTO public.organizational_units (id, site_id, parent_id, name, unit_type, status, created_at_utc, updated_at_utc, created_by, updated_by) VALUES ('91c6d193-c1ce-4b72-8fe1-1da8bca5a066', '7000f2d5-5943-44ed-b461-6256511a5e9e', NULL, 'Alepo Unit 1791241674491', 'Department', 'Active', '2026-10-05 23:07:54.721146+00', NULL, '1c9fa3f1-2262-47d9-839b-faec4d01505e', NULL);
-INSERT INTO public.organizational_units (id, site_id, parent_id, name, unit_type, status, created_at_utc, updated_at_utc, created_by, updated_by) VALUES ('3796fa73-b87b-4251-a217-60104a7a1bdb', 'bb1db6c8-2729-4bca-9f85-47f4103055d2', NULL, 'Latakia Unit 1791241674491', 'Department', 'Active', '2026-10-05 23:07:54.770965+00', NULL, '1c9fa3f1-2262-47d9-839b-faec4d01505e', NULL);
+INSERT INTO public.organizational_units (id, site_id, parent_id, name, unit_type, status, created_at_utc, updated_at_utc, created_by, updated_by, code) VALUES ('5bc08419-76a0-4062-9b51-21fae897a1aa', 'eef92f30-1f3c-4f65-b8ad-1c6dd178d22d', NULL, 'Operations Division', 'قسم', 'Active', '2026-10-05 14:23:35.223396+00', NULL, '1c9fa3f1-2262-47d9-839b-faec4d01505e', NULL, 'OPS');
+INSERT INTO public.organizational_units (id, site_id, parent_id, name, unit_type, status, created_at_utc, updated_at_utc, created_by, updated_by, code) VALUES ('3d2f0464-5629-4957-a90b-8a37ecd5cb44', '59c0be8a-0cd7-4329-99e3-845715297127', NULL, 'Central Unit 1791241674491', 'إدارة', 'Active', '2026-10-05 23:07:54.635501+00', NULL, '1c9fa3f1-2262-47d9-839b-faec4d01505e', NULL, 'CEN');
+INSERT INTO public.organizational_units (id, site_id, parent_id, name, unit_type, status, created_at_utc, updated_at_utc, created_by, updated_by, code) VALUES ('91c6d193-c1ce-4b72-8fe1-1da8bca5a066', '7000f2d5-5943-44ed-b461-6256511a5e9e', NULL, 'Alepo Unit 1791241674491', 'إدارة', 'Active', '2026-10-05 23:07:54.721146+00', NULL, '1c9fa3f1-2262-47d9-839b-faec4d01505e', NULL, 'ALE');
+INSERT INTO public.organizational_units (id, site_id, parent_id, name, unit_type, status, created_at_utc, updated_at_utc, created_by, updated_by, code) VALUES ('3796fa73-b87b-4251-a217-60104a7a1bdb', 'bb1db6c8-2729-4bca-9f85-47f4103055d2', NULL, 'Latakia Unit 1791241674491', 'إدارة', 'Active', '2026-10-05 23:07:54.770965+00', NULL, '1c9fa3f1-2262-47d9-839b-faec4d01505e', NULL, 'LAT');
 
 
 --
 -- Data for Name: employees; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.employees (id, org_unit_id, full_name, employee_number, job_title, status, created_at_utc, updated_at_utc, created_by, updated_by) VALUES ('c66dc86b-e482-4434-8731-47da038674ea', '5bc08419-76a0-4062-9b51-21fae897a1aa', 'E2E Fixture Holder', 'E2E-FIX-EMP-01', 'E2E Custody Holder', 'Active', '2026-10-22 08:08:13.01785+00', NULL, '1c9fa3f1-2262-47d9-839b-faec4d01505e', NULL);
+INSERT INTO public.employees (id, org_unit_id, full_name, employee_number, job_title, status, created_at_utc, updated_at_utc, created_by, updated_by, email, phone) VALUES ('c66dc86b-e482-4434-8731-47da038674ea', '5bc08419-76a0-4062-9b51-21fae897a1aa', 'E2E Fixture Holder', 'E2E-FIX-EMP-01', 'E2E Custody Holder', 'Active', '2026-10-22 08:08:13.01785+00', NULL, '1c9fa3f1-2262-47d9-839b-faec4d01505e', NULL, NULL, '+963992191310');
 
 
 --
